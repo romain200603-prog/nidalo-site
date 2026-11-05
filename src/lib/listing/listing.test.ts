@@ -144,6 +144,8 @@ describe('Textes de la fiche', () => {
   it('en-tête : chiffres clés et prix au m²', () => {
     const row = testRow({ rooms: 3, bedrooms: 2, floor: 0 });
     expect(headerFacts(row, 'purchase').map((f) => `${f.value} ${f.caption}`)).toEqual(['62 m² Surface', '3 Pièces', '2 Chambres', 'RDC Étage']);
+    expect(headerFacts(testRow({ floor: 1 }), 'purchase').find((f) => f.caption === 'Étage')?.value).toBe('1er');
+    expect(headerFacts(testRow({ floor: 4 }), 'purchase').find((f) => f.caption === 'Étage')?.value).toBe('4e');
     expect(priceSecondary(testRow({ price: 238_000, living_area: 62 }))).toBe(`3${s}839${nb}€/m²`);
     expect(priceSecondary(testRow({ transaction: 'rent' }))).toBe('/mois hors charges');
     const hotel = testRow({ property_type: 'hotel', asset_details: { hotel: { _0: { rooms: 24, stars: 3, scope: 'wallsAndBusiness' } } } });

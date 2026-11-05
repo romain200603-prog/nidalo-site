@@ -94,7 +94,7 @@ export function headerFacts(row: ListingRow, kind: CardKind): HeaderFact[] {
   }
   if (row.rooms !== null) facts.push({ value: `${row.rooms}`, caption: row.rooms > 1 ? 'Pièces' : 'Pièce' });
   if (row.bedrooms !== null) facts.push({ value: `${row.bedrooms}`, caption: row.bedrooms > 1 ? 'Chambres' : 'Chambre' });
-  if (row.floor !== null) facts.push({ value: row.floor === 0 ? 'RDC' : `${row.floor}e`, caption: 'Étage' });
+  if (row.floor !== null) facts.push({ value: row.floor === 0 ? 'RDC' : row.floor === 1 ? '1er' : `${row.floor}e`, caption: 'Étage' });
   return facts;
 }
 
