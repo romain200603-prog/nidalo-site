@@ -1,3 +1,4 @@
+import { assetDetails, rentalInfo, scopeLabel, type HotelScope } from './listingJson';
 import type { PropertyType, SearchMode } from './labels';
 import { LISTING_COLUMNS, PUBLIC_STATUSES, type ListingRow } from './listings';
 import { searchNormalized, type Coordinate, type PlaceKind } from './places';
@@ -51,7 +52,37 @@ export type SearchDraft = {
   minGrossYieldPercent: number | null;
   minNetYieldPercent: number | null;
   minMonthlyCashFlow: number | null;
+  /** Investir : travaux maximum (0 = aucun travaux), immeuble mixte (logements et commerces). */
+  maxWorksAmount: number | null;
+  mixedBuilding: boolean;
+  /** Location : meublée, non meublée, ou indifférent (`null`). */
+  furnished: boolean | null;
+  /** Hôtels : ce que comprend le prix (murs et fonds, murs seuls, fonds seul). */
+  hotelScope: HotelScope | null;
 };
+
+/** « Type d'investissement » de l'accueil : une vue des types et de l'immeuble mixte (comme l'app). */
+export type InvestmentKind = 'classic' | 'building' | 'mixedBuilding' | 'commercial' | 'office';
+
+/** « Légers uniquement » : jusqu'à 15 000 € de travaux (SearchDraft.lightWorksLimit). */
+export const LIGHT_WORKS_LIMIT = 15_000;
+
+export function investmentKind(draft: Pick<SearchDraft, 'types' | 'mixedBuilding'>): InvestmentKind {
+  if (draft.mixedBuilding) return 'mixedBuilding';
+  if (draft.types.length === 1) {
+    const [only] = draft.types;
+    if (only === 'building' || only === 'commercial' || only === 'office') return only;
+  }
+  return 'classic';
+}
+
+/** Choisir un type d'investissement réécrit les types et l'immeuble mixte, comme le setter de l'app. */
+export function withInvestmentKind(draft: SearchDraft, kind: InvestmentKind): SearchDraft {
+  const assetKind = draft.types.length === 1 && ['building', 'commercial', 'office'].includes(draft.types[0]);
+  let types = assetKind ? [] : draft.types;
+  if (kind === 'building' || kind === 'commercial' || kind === 'office') types = [kind];
+  return { ...draft, types, mixedBuilding: kind === 'mixedBuilding' };
+}
 
 export type SearchLocation =
   | { kind: 'anywhere' }
@@ -137,7 +168,20 @@ export function defaultDraft(mode: SearchMode = 'buy'): SearchDraft {
     minGrossYieldPercent: null,
     minNetYieldPercent: null,
     minMonthlyCashFlow: null,
+    maxWorksAmount: null,
+    mixedBuilding: false,
+    furnished: null,
+    hotelScope: null,
   };
+}
+
+/**
+ * Changer de mode : comme dans l'app, chaque mode garde ses propres critères (un budget de vente ne devient pas un
+ * loyer). Sur le site, le lieu suit le changement de mode.
+ */
+export function switchMode(current: SearchDraft, mode: SearchMode, remembered?: SearchDraft): SearchDraft {
+  const base = remembered && remembered.mode === mode ? remembered : defaultDraft(mode);
+  return { ...base, mode, place: current.place, chosen: current.chosen, radiusKm: current.radiusKm, area: current.area };
 }
 
 /** Lieu choisi, s'il correspond encore au texte du champ. */
@@ -175,7 +219,20 @@ export function locationFor(draft: SearchDraft): SearchLocation {
 export function propertyTypesFor(draft: SearchDraft): PropertyType[] {
   const allowed = MODE_PROPERTY_TYPES[draft.mode];
   const chosen = draft.types.filter((type) => allowed.includes(type));
+  // Investir, « Immeuble mixte » : les immeubles s'ajoutent aux types choisis.
+  if (draft.mode === 'invest' && draft.mixedBuilding && !chosen.includes('building')) chosen.push('building');
   return chosen.length ? chosen : allowed;
+}
+
+/**
+ * Nombre de chambres d'un hôtel. L'app filtre sur la colonne `rooms`, mais la publication enregistre les chambres
+ * d'un hôtel dans ses détails (asset_details.hotel.rooms) : le site lit d'abord celles-ci, pour ne pas écarter
+ * les vrais hôtels.
+ */
+export function hotelRoomCount(row: Pick<ListingRow, 'asset_details' | 'rooms'>): number | null {
+  const fromDetails = Number(assetDetails(row, 'hotel')?.rooms);
+  if (Number.isFinite(fromDetails) && fromDetails > 0) return Math.trunc(fromDetails);
+  return row.rooms ?? null;
 }
 
 export function transactionFor(mode: SearchMode): 'sale' | 'rent' {
@@ -263,16 +320,30 @@ export function matches(row: ListingRow, draft: SearchDraft, highlights: Highlig
   const [areaMin, areaMax] = range(draft.livingAreaMin, draft.livingAreaMax);
   if (areaMin !== null && livingArea < areaMin) return false;
   if (areaMax !== null && livingArea > areaMax) return false;
-  // En location, le nombre de pièces ne concerne que les logements.
+  // En location, le nombre de pièces et l'ameublement ne concernent que les logements.
   const appliesHousingCriteria = draft.mode !== 'rent' || isDwelling(row.property_type);
-  if (appliesHousingCriteria && draft.roomsMin !== null && !(row.rooms !== null && row.rooms >= draft.roomsMin)) return false;
+  if (draft.roomsMin !== null) {
+    const rooms = draft.mode === 'hotel' ? hotelRoomCount(row) : row.rooms;
+    if (appliesHousingCriteria && !(rooms !== null && rooms >= draft.roomsMin)) return false;
+  }
+  if (draft.mode === 'rent' && draft.furnished !== null && appliesHousingCriteria && rentalInfo(row)?.isFurnished !== draft.furnished) return false;
   // Résidentiel écarte les biens vendus loués (ils sont dans Investir).
   if (draft.mode === 'buy' && row.rental_info?.isLeased === true) return false;
+  if (draft.mode === 'hotel' && draft.hotelScope !== null && row.property_type === 'hotel') {
+    if (assetDetails(row, 'hotel')?.scope !== draft.hotelScope) return false;
+  }
   if (draft.mode === 'invest') {
+    // Immeuble mixte sans immeuble choisi : un immeuble doit avoir des logements et des commerces.
+    if (draft.mixedBuilding && !draft.types.includes('building') && row.property_type === 'building') {
+      const building = assetDetails(row, 'building');
+      if (!(Number(building?.residentialUnits) > 0 && Number(building?.commercialUnits) > 0)) return false;
+    }
     if (!highlights) return false;
     if (draft.minGrossYieldPercent !== null && validPercent(draft.minGrossYieldPercent) && highlights.grossYield < draft.minGrossYieldPercent / 100) return false;
     if (draft.minNetYieldPercent !== null && validPercent(draft.minNetYieldPercent) && highlights.netYield < draft.minNetYieldPercent / 100) return false;
     if (draft.minMonthlyCashFlow !== null && highlights.monthlyCashFlow < draft.minMonthlyCashFlow) return false;
+    // Travaux non renseignés : on ne peut pas écarter l'annonce.
+    if (draft.maxWorksAmount !== null && row.works_amount !== null && Number(row.works_amount) > draft.maxWorksAmount) return false;
   }
   return true;
 }
@@ -319,7 +390,8 @@ export async function fetchCandidates(draft: SearchDraft): Promise<ListingRow[]>
   if (priceMax !== null) request = request.lte('price', priceMax);
   const [areaMin] = range(draft.livingAreaMin, draft.livingAreaMax);
   if (areaMin !== null) request = request.gte('living_area', areaMin);
-  if (draft.roomsMin !== null) request = request.gte('rooms', draft.roomsMin);
+  // Hôtels : les chambres sont lues dans les détails de l'annonce, pas sur le serveur (voir hotelRoomCount).
+  if (draft.roomsMin !== null && draft.mode !== 'hotel') request = request.gte('rooms', draft.roomsMin);
   const location = locationFor(draft);
   let box: BoundingBox | null = null;
   if (location.kind === 'area') box = location.box;
@@ -410,6 +482,16 @@ export function draftFromParams(params: URLSearchParams): SearchDraft {
     draft.minGrossYieldPercent = amount(params.get('brutMin'));
     draft.minNetYieldPercent = amount(params.get('netMin'));
     draft.minMonthlyCashFlow = signedAmount(params.get('cashflowMin'));
+    draft.maxWorksAmount = amount(params.get('travauxMax'));
+    draft.mixedBuilding = params.get('mixte') === '1';
+  }
+  if (draft.mode === 'rent') {
+    const furnished = params.get('meuble');
+    draft.furnished = furnished === '1' ? true : furnished === '0' ? false : null;
+  }
+  if (draft.mode === 'hotel') {
+    const scope = params.get('vente');
+    draft.hotelScope = scope === 'wallsAndBusiness' || scope === 'wallsOnly' || scope === 'businessOnly' ? scope : null;
   }
   return draft;
 }
@@ -443,7 +525,11 @@ export function paramsFromDraft(draft: SearchDraft): URLSearchParams {
     if (draft.minGrossYieldPercent !== null) params.set('brutMin', String(draft.minGrossYieldPercent));
     if (draft.minNetYieldPercent !== null) params.set('netMin', String(draft.minNetYieldPercent));
     if (draft.minMonthlyCashFlow !== null) params.set('cashflowMin', String(draft.minMonthlyCashFlow));
+    if (draft.maxWorksAmount !== null) params.set('travauxMax', String(draft.maxWorksAmount));
+    if (draft.mixedBuilding) params.set('mixte', '1');
   }
+  if (draft.mode === 'rent' && draft.furnished !== null) params.set('meuble', draft.furnished ? '1' : '0');
+  if (draft.mode === 'hotel' && draft.hotelScope !== null) params.set('vente', draft.hotelScope);
   return params;
 }
 
@@ -454,7 +540,10 @@ export function activeFilterCount(draft: SearchDraft): number {
     draft.mode === 'invest' ? draft.minGrossYieldPercent : null,
     draft.mode === 'invest' ? draft.minNetYieldPercent : null,
     draft.mode === 'invest' ? draft.minMonthlyCashFlow : null,
-  ].filter((v) => v !== null).length + (draft.types.length ? 1 : 0);
+    draft.mode === 'invest' ? draft.maxWorksAmount : null,
+    draft.mode === 'rent' ? draft.furnished : null,
+    draft.mode === 'hotel' ? draft.hotelScope : null,
+  ].filter((v) => v !== null).length + (draft.types.length ? 1 : 0) + (draft.mode === 'invest' && draft.mixedBuilding ? 1 : 0);
 }
 
 
@@ -508,6 +597,10 @@ export function filterChips(draft: SearchDraft): FilterChip[] {
     const [one, many] = draft.mode === 'hotel' ? ['chambre', 'chambres'] : ['pièce', 'pièces'];
     add('rooms', draft.roomsMin > 1 ? `${draft.roomsMin} ${many} et +` : `1 ${one} et +`, (d) => ({ ...d, roomsMin: null }));
   }
+  if (draft.mode === 'hotel' && draft.hotelScope !== null) add('scope', scopeLabel(draft.hotelScope), (d) => ({ ...d, hotelScope: null }));
+  if (draft.mode === 'rent' && draft.furnished !== null) {
+    add('furnished', draft.furnished ? 'Meublée' : 'Non meublée', (d) => ({ ...d, furnished: null }));
+  }
   if (invest) {
     if (draft.minNetYieldPercent !== null && validPercent(draft.minNetYieldPercent)) {
       add('net', `Net : ${percentLabel(draft.minNetYieldPercent)}`, (d) => ({ ...d, minNetYieldPercent: null }));
@@ -518,6 +611,10 @@ export function filterChips(draft: SearchDraft): FilterChip[] {
       add('cashflow', `Cash-flow : ${sign}${euroFormat.format(Math.abs(v))}`, (d) => ({ ...d, minMonthlyCashFlow: null }));
     }
     if (draft.downPayment !== null) add('downPayment', `Apport : ${compactPrice(draft.downPayment)}`, (d) => ({ ...d, downPayment: null }));
+    if (draft.maxWorksAmount !== null) {
+      add('works', draft.maxWorksAmount === 0 ? 'Sans travaux' : `Travaux : ${compactPrice(draft.maxWorksAmount)} max`, (d) => ({ ...d, maxWorksAmount: null }));
+    }
+    if (draft.mixedBuilding) add('investmentKind', 'Immeuble mixte', (d) => ({ ...d, mixedBuilding: false }));
   }
   return chips;
 }

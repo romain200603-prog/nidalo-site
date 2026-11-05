@@ -1,5 +1,4 @@
-import { Page } from '../components/Layout';
+import { HomePage } from '../pages/HomePage';
 import { mount } from './mount';
 
-// Accueil : écrit d'après l'accueil de l'app (étape suivante).
-mount(<Page section="home"><div className="wrap" /></Page>);
+mount(<HomePage />);

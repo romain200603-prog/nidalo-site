@@ -33,6 +33,7 @@ const base = `http://127.0.0.1:${server.address().port}`;
 const listings = JSON.parse(await readFile(join(root, 'scripts/fixtures/listings.json'), 'utf8'));
 const photos = {};
 for (const name of ['photo0.jpg', 'photo1.jpg', 'photo2.jpg']) photos[name] = await readFile(join(root, 'scripts/fixtures', name));
+const tile = await readFile(join(root, 'scripts/fixtures/tile.png'));
 const communes = [
   { nom: 'Lyon', code: '69123', codesPostaux: ['69001', '69002', '69003'], population: 520000, centre: { type: 'Point', coordinates: [4.835, 45.758] }, departement: { nom: 'Rhône' } },
   { nom: 'Lyons-la-Forêt', code: '27377', codesPostaux: ['27480'], population: 750, centre: { type: 'Point', coordinates: [1.47, 49.4] }, departement: { nom: 'Eure' } },
@@ -54,8 +55,13 @@ async function mock(context) {
   });
   await context.route('https://geo.api.gouv.fr/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(communes) }));
-  await context.route('https://data.geopf.fr/**', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ type: 'FeatureCollection', features: [] }) }));
+  await context.route('https://data.geopf.fr/**', (route) => {
+    // Photo aérienne de l'IGN : une tuile unie ; recherche de lieux : aucun résultat.
+    if (route.request().url().includes('/wmts?')) {
+      return route.fulfill({ status: 200, contentType: 'image/png', headers: { 'access-control-allow-origin': '*' }, body: tile });
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ type: 'FeatureCollection', features: [] }) });
+  });
   await context.route('https://tiles.openfreemap.org/planet', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
       body: JSON.stringify({ tilejson: '3.0.0', tiles: ['https://tiles.openfreemap.org/planet/{z}/{x}/{y}.pbf'], minzoom: 0, maxzoom: 14, vector_layers: [], attribution: 'OpenFreeMap © OpenMapTiles Data from OpenStreetMap' }) }));
@@ -84,7 +90,30 @@ try {
   // Ordinateur
   const desktop = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, locale: 'fr-FR' });
   await mock(desktop);
-  let page = await open(desktop, '/recherche/?mode=buy', 'recherche-ordinateur');
+  // Accueil : sections, menu d'un critère, montant saisi, puis la recherche.
+  let page = await open(desktop, '/', 'accueil-ordinateur');
+  await page.waitForSelector('.home-search-card');
+  await page.waitForSelector('.home-section');
+  await page.screenshot({ path: join(out, 'accueil-ordinateur.png'), fullPage: true });
+  await page.click('.criterion-tile >> nth=0');
+  await page.waitForSelector('dialog.selection-dialog[open]');
+  await page.screenshot({ path: join(out, 'accueil-menu-ordinateur.png') });
+  await page.click('dialog[open] .selection-row >> nth=4');
+  await page.click('dialog[open] .selection-foot .btn');
+  const budget = (await page.textContent('.criterion-tile >> nth=0 >> .criterion-value'))?.replace(/\s/g, ' ');
+  if (budget !== '300 000 €') problems.push(`accueil : budget affiché « ${budget} » au lieu de « 300 000 € »`);
+  await page.click('.mode-tab >> nth=1');
+  const rent = await page.textContent('.criterion-tile >> nth=0 >> .criterion-value');
+  if (rent !== 'Indifférent') problems.push(`accueil : le loyer de Location reprend « ${rent} »`);
+  await page.click('.criterion-tile >> nth=0');
+  await page.fill('dialog[open] .selection-custom input', '850');
+  await page.click('dialog[open] .selection-foot .btn');
+  await page.click('.home-search-button');
+  await page.waitForURL(/\/recherche\/\?mode=rent&prixMax=850/);
+  await page.waitForSelector('.listing-card, .state');
+  await page.close();
+
+  page = await open(desktop, '/recherche/?mode=buy', 'recherche-ordinateur');
   await page.waitForSelector('.listing-card');
   await page.waitForSelector('.map-marker', { timeout: 15000 });
   await page.waitForTimeout(400);
@@ -112,6 +141,19 @@ try {
   // Téléphone
   const phone = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
   await mock(phone);
+  page = await open(phone, '/', 'accueil-telephone');
+  await page.waitForSelector('.home-section');
+  await page.screenshot({ path: join(out, 'accueil-telephone.png') });
+  await page.screenshot({ path: join(out, 'accueil-telephone-long.png'), fullPage: true });
+  await page.click('.criterion-tile >> nth=1');
+  await page.waitForSelector('dialog.selection-dialog[open]');
+  await page.click('dialog[open] .selection-row >> nth=1');
+  await page.click('dialog[open] .selection-row >> nth=2');
+  await page.screenshot({ path: join(out, 'accueil-menu-telephone.png') });
+  await page.click('dialog[open] .selection-foot .btn');
+  const types = await page.textContent('.criterion-tile >> nth=1 >> .criterion-value');
+  if (types !== '2 types de bien') problems.push(`accueil : types affichés « ${types} »`);
+  await page.close();
   page = await open(phone, '/recherche/?mode=buy', 'recherche-telephone');
   await page.waitForSelector('.listing-card');
   await page.screenshot({ path: join(out, 'recherche-telephone.png') });

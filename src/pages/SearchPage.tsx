@@ -20,6 +20,7 @@ import { placeShortName, type PlaceSuggestion } from '../lib/places';
 import {
   activeFilterCount, boxAround, defaultDraft, draftFromParams, effectiveSort, filterChips, locationFor, paramsFromDraft,
   placeLabel, search, SORT_LABELS, sortOptions, type Result, type SearchDraft, type SortOrder,
+  switchMode,
 } from '../lib/search';
 import { GOOD_YIELD } from '../lib/cardContent';
 
@@ -35,6 +36,9 @@ function countLabel(count: number, mode: SearchMode): string {
   return count === 1 ? `1 ${noun}` : `${count} ${noun}s`;
 }
 
+/** La liste montre les 100 premiers biens, comme l'app ; la carte les montre tous. */
+const LIST_LIMIT = 100;
+
 /** Aperçu du bien choisi sur la carte (MapPropertyPreviewCard de l'app). */
 function MapPreview({ result, mode, onClose }: { result: Result; mode: SearchMode; onClose: () => void }) {
   const { row, highlights } = result;
@@ -43,7 +47,7 @@ function MapPreview({ result, mode, onClose }: { result: Result; mode: SearchMod
   const isLeased = (row.rental_info as { isLeased?: boolean } | null)?.isLeased === true;
   return (
     <div className="map-preview">
-      <a className="map-preview-link" href={listingPath(row.id)}>
+      <a className="map-preview-link" href={listingPath(row.id, mode)}>
         <span className="map-preview-photo"><ListingPhoto photo={sortedPhotos(row)[0]} /></span>
         <span className="map-preview-text">
           {highlights ? (
@@ -76,6 +80,8 @@ export function SearchPage() {
   const [frame, setFrame] = useState<MapFrame>({ token: 0, box: null, points: [] });
   const [attempt, setAttempt] = useState(0);
   const resultsHeading = useRef<HTMLHeadingElement>(null);
+  /** Derniers critères de chaque mode, repris quand on y revient (comme l'app). */
+  const byMode = useRef<Partial<Record<SearchMode, SearchDraft>>>({});
   const key = paramsFromDraft(draft).toString();
 
   /** Applique une recherche : adresse de la page (bouton Retour du navigateur), puis résultats. */
@@ -154,7 +160,11 @@ export function SearchPage() {
           <div className="search-head">
             <h1>Votre recherche</h1>
             <p className="search-sub">Trouvez le bien adapté à votre projet</p>
-            <ModeTabs mode={draft.mode} onChange={(mode) => apply({ ...draft, mode, types: [], sort: 'newest' })} className="mode-tabs-search" />
+            <ModeTabs mode={draft.mode} onChange={(mode) => {
+              if (mode === draft.mode) return;
+              byMode.current[draft.mode] = draft;
+              apply(switchMode(draft, mode, byMode.current[mode]));
+            }} className="mode-tabs-search" />
             <div className="search-place-row">
               <PlaceField
                 label="Lieu de la recherche"
@@ -224,7 +234,7 @@ export function SearchPage() {
           )}
           {status.kind === 'ready' && results.length > 0 && (
             <div className="results-list">
-              {results.map(({ row, highlights }) => (
+              {results.slice(0, LIST_LIMIT).map(({ row, highlights }) => (
                 <ListingCard key={row.id} row={row} content={cardContent(row, draft.mode, highlights)}
                   selected={row.id === selectedId} onHover={setHoveredId} headingLevel="h3" />
               ))}

@@ -21,10 +21,10 @@ export function propertyTypeLabel(type: string): string {
 /** Les quatre façons de chercher, comme sur l'accueil de l'app. */
 export type SearchMode = 'buy' | 'rent' | 'invest' | 'hotel';
 
-export const SEARCH_MODES: { mode: SearchMode; label: string; icon: 'house' | 'key' | 'trend' | 'bed' }[] = [
+export const SEARCH_MODES: { mode: SearchMode; label: string; icon: 'house' | 'key' | 'bars' | 'bed' }[] = [
   { mode: 'buy', label: 'Résidentiel', icon: 'house' },
   { mode: 'rent', label: 'Location', icon: 'key' },
-  { mode: 'invest', label: 'Investir', icon: 'trend' },
+  { mode: 'invest', label: 'Investir', icon: 'bars' },
   { mode: 'hotel', label: 'Hôtels', icon: 'bed' },
 ];
 

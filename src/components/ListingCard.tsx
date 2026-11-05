@@ -65,7 +65,7 @@ export function ListingCard({ row, content, selected = false, onHover, headingLe
   const gross = content.panelFacts.find((fact) => fact.kind === 'grossYield');
   const grossValue = gross && gross.kind === 'grossYield' ? gross.value : null;
   const Heading = headingLevel;
-  const href = listingPath(row.id);
+  const href = listingPath(row.id, content.kind === 'investment' ? 'invest' : null);
   const isLeased = (row.rental_info as { isLeased?: boolean } | null)?.isLeased === true;
   return (
     <article

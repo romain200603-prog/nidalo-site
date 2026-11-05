@@ -12,6 +12,11 @@ type Props = {
   label: string;
   placeholder?: string;
   className?: string;
+  /**
+   * `home` : champ « Où cherchez-vous ? » de l'accueil (épingle, libellé visible, chevron) ;
+   * `search` : champ de la page de recherche (loupe, libellé lu par les lecteurs d'écran).
+   */
+  variant?: 'search' | 'home';
   /** Pour les tests : remplace l'appel aux services publics. */
   fetcher?: typeof placeSuggestions;
 };
@@ -31,7 +36,7 @@ function Highlighted({ text, query }: { text: string; query: string }) {
 }
 
 /** Champ « Ville, code postal » avec suggestions, comme le champ de recherche de l'app. */
-export function PlaceField({ value, onChange, onChoose, onSubmit, label, placeholder = 'Ville, code postal, quartier…', className, fetcher = placeSuggestions }: Props) {
+export function PlaceField({ value, onChange, onChoose, onSubmit, label, placeholder = 'Ville, code postal, quartier…', className, variant = 'search', fetcher = placeSuggestions }: Props) {
   const id = useId();
   const listId = `${id}-liste`;
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
@@ -100,9 +105,9 @@ export function PlaceField({ value, onChange, onChoose, onSubmit, label, placeho
   }
 
   return (
-    <div className={`place-field ${className ?? ''}`}>
-      <label className="visually-hidden" htmlFor={id}>{label}</label>
-      <Icon name="search" className="icon place-field-icon" />
+    <div className={`place-field${variant === 'home' ? ' place-field-home' : ''} ${className ?? ''}`}>
+      <label className={variant === 'home' ? 'place-field-caption' : 'visually-hidden'} htmlFor={id}>{label}</label>
+      <Icon name={variant === 'home' ? 'pin' : 'search'} className="icon place-field-icon" />
       <input
         id={id}
         type="text"
@@ -130,6 +135,7 @@ export function PlaceField({ value, onChange, onChoose, onSubmit, label, placeho
           blurTimer.current = window.setTimeout(() => setOpen(false), 120);
         }}
       />
+      {variant === 'home' && !value && <Icon name="chevronRight" className="icon place-field-chevron" />}
       {value && (
         <button
           type="button"

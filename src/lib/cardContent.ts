@@ -3,14 +3,19 @@ import { formatArea, formatFraction, formatNumber, formatPrice, formatSignedAmou
 import type { ListingRow } from './listings';
 import type { SearchMode } from './labels';
 import { pricePerSquareMeter, type Highlights } from './search';
+import {
+  assetDetails, bool, date, hotelScope, int, num, rentalInfo, scopeLabel, sourced,
+  type HotelScope, type Json, type Rental, type Sourced,
+} from './listingJson';
+
+// Lecteurs gardés ici aussi : d'autres pages les importent depuis ce module.
+export { assetDetails, rentalInfo, scopeLabel, type HotelScope, type Rental, type Sourced };
 
 // Contenu d'une fiche d'annonce, comme l'app : ImmoDomain/Listing/ListingCardContent.swift (quels faits, dans
 // quel ordre) et Features/Listings/ListingCardFormatting.swift (texte, icône, couleur).
 
 export type CardKind = 'purchase' | 'rental' | 'investment' | 'hotel' | 'commercial' | 'office' | 'land' | 'building';
 export type CardPrice = { kind: 'sale' | 'rentIncludingCharges' | 'rentExcludingCharges'; value: number };
-export type Sourced = { value: number; origin: 'seller' | 'estimated' | 'user' };
-export type HotelScope = 'wallsAndBusiness' | 'wallsOnly' | 'businessOnly';
 
 export type KeyFact =
   | { kind: 'rooms'; value: number }
@@ -57,74 +62,6 @@ export type CardContent = {
   panelFacts: KeyFact[];
   badge: CardBadge | null;
 };
-
-// MARK: - Lecture des champs JSON de l'annonce
-
-type Json = Record<string, unknown>;
-
-function num(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  const n = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
-function int(value: unknown): number | null {
-  const n = num(value);
-  return n === null ? null : Math.trunc(n);
-}
-
-function bool(value: unknown): boolean | null {
-  return typeof value === 'boolean' ? value : null;
-}
-
-function date(value: unknown): Date | null {
-  if (typeof value !== 'string' && typeof value !== 'number') return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function sourced(value: unknown): Sourced | null {
-  if (!value || typeof value !== 'object') return null;
-  const v = num((value as Json).value);
-  const origin = (value as Json).origin;
-  if (v === null) return null;
-  return { value: v, origin: origin === 'estimated' || origin === 'user' ? origin : 'seller' };
-}
-
-/** Détails propres au type (encodage de l'app : `{"hotel": {"_0": {...}}}`). */
-export function assetDetails(row: Pick<ListingRow, 'asset_details'>, kind: 'hotel' | 'commercial' | 'office' | 'land' | 'building'): Json | null {
-  const raw = row.asset_details as Json | null;
-  const wrapped = raw?.[kind];
-  if (!wrapped || typeof wrapped !== 'object') return null;
-  const inner = (wrapped as Json)._0 ?? wrapped;
-  return inner && typeof inner === 'object' ? (inner as Json) : null;
-}
-
-export type Rental = {
-  isLeased: boolean;
-  currentMonthlyRent: number | null;
-  potentialMonthlyRent: number | null;
-  leaseEndDate: Date | null;
-  availableFrom: Date | null;
-  isFurnished: boolean | null;
-  recoverableMonthlyCharges: number | null;
-  securityDeposit: number | null;
-};
-
-export function rentalInfo(row: Pick<ListingRow, 'rental_info'>): Rental | null {
-  const r = row.rental_info as Json | null;
-  if (!r || typeof r !== 'object') return null;
-  return {
-    isLeased: r.isLeased === true,
-    currentMonthlyRent: num(r.currentMonthlyRent),
-    potentialMonthlyRent: num(r.potentialMonthlyRent),
-    leaseEndDate: date(r.leaseEndDate),
-    availableFrom: date(r.availableFrom),
-    isFurnished: bool(r.isFurnished),
-    recoverableMonthlyCharges: num(r.recoverableMonthlyCharges),
-    securityDeposit: num(r.securityDeposit),
-  };
-}
 
 // MARK: - Gabarit et faits
 
@@ -179,9 +116,6 @@ function tenancyFacts(row: ListingRow, highlights: Highlights | null): KeyFact[]
   return facts;
 }
 
-function hotelScope(value: unknown): HotelScope | null {
-  return value === 'wallsAndBusiness' || value === 'wallsOnly' || value === 'businessOnly' ? value : null;
-}
 
 function keyFacts(row: ListingRow, kind: CardKind, highlights: Highlights | null): KeyFact[] {
   const facts: KeyFact[] = [];
@@ -365,13 +299,6 @@ export function availability(date: Date, now = new Date()): string {
   return date > now ? `Disponible le ${dayMonth.format(date)}` : 'Disponible immédiatement';
 }
 
-export function scopeLabel(scope: HotelScope): string {
-  switch (scope) {
-    case 'wallsAndBusiness': return 'Murs et fonds';
-    case 'wallsOnly': return 'Murs seuls';
-    default: return 'Fonds de commerce seul';
-  }
-}
 
 export function formatFact(fact: KeyFact, now = new Date()): FormattedFact {
   const f = (icon: IconName, text: string, tone: Tone = 'neutral', isEstimate = false): FormattedFact => ({ icon, text, tone, isEstimate });

@@ -23,6 +23,12 @@ const LABEL_LAYERS = ['noms-rues', 'noms-eau', 'noms-plans-eau', 'gares-noms', '
 
 export type MapFrame = { token: number; box: BoundingBox | null; points: Coordinate[] };
 
+/**
+ * Comme dans l'app (MapSession), la carte s'ouvre en vue satellite et garde le dernier choix tant que la page est
+ * ouverte. Rien n'est enregistré sur l'appareil.
+ */
+const mapSession = { isSatellite: true };
+
 type Props = {
   results: Result[];
   showsYield: boolean;
@@ -53,7 +59,7 @@ export function ResultsMap({ results, showsYield, selectedId, hoveredId, onSelec
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [, setTick] = useState(0);
-  const [satellite, setSatellite] = useState(false);
+  const [satellite, setSatellite] = useState(() => mapSession.isSatellite);
   const planColors = useRef<Record<string, { text: unknown; halo: unknown }>>({});
   const onUserMoveRef = useRef(onUserMove);
   onUserMoveRef.current = onUserMove;
@@ -133,6 +139,8 @@ export function ResultsMap({ results, showsYield, selectedId, hoveredId, onSelec
     if (bounds) map.fitBounds(bounds, { padding, duration: 0, maxZoom: 14 });
     else map.fitBounds(FRANCE, { padding, duration: 0 });
   }, [frame.token, ready]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { mapSession.isSatellite = satellite; }, [satellite]);
 
   // Plan ou photo aérienne.
   useEffect(() => {
