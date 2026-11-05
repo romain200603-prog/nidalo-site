@@ -1,0 +1,50 @@
+[
+  {
+    "id": "6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1a01", "owner_id": "00000000-0000-4000-8000-0000000000aa", "status": "active",
+    "transaction": "sale", "property_type": "apartment", "publish_category": "residential",
+    "title": "Appartement lumineux avec balcon", "description": "Annonce de test inventée pour vérifier le site.",
+    "price": 238000, "monthly_charges": 120, "annual_property_tax": 980, "works_amount": null, "agency_fees_amount": null,
+    "agency_fees_paid_by": null, "previous_price": null, "country_code": "FR", "postal_code": "69003", "city": "Lyon 3e",
+    "insee_code": "69383", "location_precision": "approximate", "public_latitude": 45.7597, "public_longitude": 4.8491,
+    "public_street": null, "living_area": 62, "land_area": null, "rooms": 3, "bedrooms": 2, "floor": 3, "total_floors": 6,
+    "has_elevator": true, "outdoor_spaces": ["balcony"], "parking": "none", "year_built": 1972, "is_new_build": false,
+    "has_cellar": true, "condition": "good", "accepts_video_visits": true, "energy_class": "C", "climate_class": "C",
+    "primary_energy_consumption": 160, "annual_energy_cost_min": 820, "annual_energy_cost_max": 1150,
+    "diagnostic_date": "2026-03-02", "rental_info": null, "asset_details": null,
+    "published_at": "2026-11-03T16:22:45Z", "created_at": "2026-11-03T16:00:00Z", "updated_at": "2026-11-03T16:22:45Z",
+    "listing_photos": [
+      { "id": "p1", "storage_path": "test/photo0.jpg", "position": 0, "width": 1400, "height": 800 },
+      { "id": "p2", "storage_path": "test/photo1.jpg", "position": 1, "width": 1400, "height": 800 }
+    ]
+  },
+  {
+    "id": "6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1a02", "owner_id": "00000000-0000-4000-8000-0000000000ab", "status": "active",
+    "transaction": "sale", "property_type": "apartment", "publish_category": "investment",
+    "title": "T2 vendu loué près du métro", "description": "Annonce de test inventée pour vérifier le site.",
+    "price": 185000, "monthly_charges": 95, "annual_property_tax": 760, "works_amount": null, "agency_fees_amount": null,
+    "agency_fees_paid_by": null, "previous_price": 195000, "country_code": "FR", "postal_code": "69100", "city": "Villeurbanne",
+    "insee_code": "69266", "location_precision": "approximate", "public_latitude": 45.7719, "public_longitude": 4.8902,
+    "public_street": null, "living_area": 45, "land_area": null, "rooms": 2, "bedrooms": 1, "floor": 1, "total_floors": 4,
+    "has_elevator": false, "outdoor_spaces": [], "parking": "none", "year_built": 1965, "is_new_build": false,
+    "has_cellar": false, "condition": "good", "accepts_video_visits": false, "energy_class": "D", "climate_class": "D",
+    "primary_energy_consumption": 230, "annual_energy_cost_min": 700, "annual_energy_cost_max": 980,
+    "diagnostic_date": "2026-02-10", "rental_info": { "isLeased": true, "currentMonthlyRent": 850 }, "asset_details": null,
+    "published_at": "2026-11-03T10:02:35Z", "created_at": "2026-11-03T09:00:00Z", "updated_at": "2026-11-03T10:02:35Z",
+    "listing_photos": [ { "id": "p3", "storage_path": "test/photo2.jpg", "position": 0, "width": 1400, "height": 800 } ]
+  },
+  {
+    "id": "6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1a03", "owner_id": "00000000-0000-4000-8000-0000000000ac", "status": "active",
+    "transaction": "rent", "property_type": "apartment", "publish_category": "rental",
+    "title": "Studio meublé", "description": "Annonce de test inventée pour vérifier le site.",
+    "price": 640, "monthly_charges": 50, "annual_property_tax": null, "works_amount": null, "agency_fees_amount": null,
+    "agency_fees_paid_by": null, "previous_price": null, "country_code": "FR", "postal_code": "69007", "city": "Lyon 7e",
+    "insee_code": "69387", "location_precision": "exact", "public_latitude": 45.7485, "public_longitude": 4.8412,
+    "public_street": "Rue de test", "living_area": 24, "land_area": null, "rooms": 1, "bedrooms": 0, "floor": 2, "total_floors": 5,
+    "has_elevator": true, "outdoor_spaces": [], "parking": "none", "year_built": 1990, "is_new_build": false,
+    "has_cellar": false, "condition": "good", "accepts_video_visits": true, "energy_class": "E", "climate_class": "E",
+    "primary_energy_consumption": 280, "annual_energy_cost_min": 500, "annual_energy_cost_max": 700,
+    "diagnostic_date": "2026-01-15", "rental_info": { "isFurnished": true, "availableFrom": "2026-12-01T00:00:00Z" }, "asset_details": null,
+    "published_at": "2026-11-04T08:00:00Z", "created_at": "2026-11-04T07:00:00Z", "updated_at": "2026-11-04T08:00:00Z",
+    "listing_photos": []
+  }
+]

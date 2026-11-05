@@ -1,0 +1,1175 @@
+{
+ "version": 8,
+ "name": "immo — carte aux couleurs des maquettes 05/06",
+ "metadata": {
+  "source": "design/specs/carte.md §5 et §12 (couleurs échantillonnées)"
+ },
+ "sources": {
+  "openmaptiles": {
+   "type": "vector",
+   "url": "https://tiles.openfreemap.org/planet"
+  },
+  "ign-photos": {
+   "type": "raster",
+   "tiles": [
+    "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/jpeg&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}"
+   ],
+   "tileSize": 256,
+   "maxzoom": 19,
+   "attribution": "© IGN – Géoplateforme"
+  }
+ },
+ "glyphs": "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+ "layers": [
+  {
+   "id": "fond",
+   "type": "background",
+   "paint": {
+    "background-color": "#ECEEE8"
+   }
+  },
+  {
+   "id": "satellite",
+   "type": "raster",
+   "source": "ign-photos",
+   "layout": {
+    "visibility": "none"
+   },
+   "paint": {
+    "raster-fade-duration": 150
+   }
+  },
+  {
+   "id": "parcs",
+   "type": "fill",
+   "source": "openmaptiles",
+   "source-layer": "park",
+   "filter": [
+    "match",
+    [
+     "geometry-type"
+    ],
+    [
+     "MultiPolygon",
+     "Polygon"
+    ],
+    true,
+    false
+   ],
+   "paint": {
+    "fill-color": "#CFE6C2"
+   }
+  },
+  {
+   "id": "bois",
+   "type": "fill",
+   "source": "openmaptiles",
+   "source-layer": "landcover",
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "MultiPolygon",
+      "Polygon"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "wood",
+      "grass"
+     ],
+     true,
+     false
+    ]
+   ],
+   "paint": {
+    "fill-color": "#C7E0B7",
+    "fill-opacity": 0.7
+   }
+  },
+  {
+   "id": "ilots",
+   "type": "fill",
+   "source": "openmaptiles",
+   "source-layer": "landuse",
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "MultiPolygon",
+      "Polygon"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "residential",
+      "suburb",
+      "neighbourhood",
+      "commercial",
+      "retail"
+     ],
+     true,
+     false
+    ]
+   ],
+   "paint": {
+    "fill-color": "#F3F4EF",
+    "fill-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     10,
+     0.4,
+     14,
+     0.8
+    ]
+   }
+  },
+  {
+   "id": "eau",
+   "type": "fill",
+   "source": "openmaptiles",
+   "source-layer": "water",
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "MultiPolygon",
+      "Polygon"
+     ],
+     true,
+     false
+    ],
+    [
+     "!=",
+     [
+      "get",
+      "brunnel"
+     ],
+     "tunnel"
+    ]
+   ],
+   "paint": {
+    "fill-color": "#9ECDF3",
+    "fill-antialias": true
+   }
+  },
+  {
+   "id": "cours-eau",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "waterway",
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "!=",
+     [
+      "get",
+      "brunnel"
+     ],
+     "tunnel"
+    ]
+   ],
+   "paint": {
+    "line-color": "#9ECDF3",
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.4
+     ],
+     [
+      "zoom"
+     ],
+     10,
+     0.5,
+     16,
+     4
+    ]
+   }
+  },
+  {
+   "id": "batiments",
+   "type": "fill",
+   "source": "openmaptiles",
+   "source-layer": "building",
+   "minzoom": 14,
+   "paint": {
+    "fill-color": "#E2E3DC",
+    "fill-outline-color": "#D2D4CC",
+    "fill-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     14,
+     0.6,
+     15.5,
+     1
+    ]
+   }
+  },
+  {
+   "id": "voies-ferrees",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "transportation",
+   "minzoom": 12,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "rail",
+      "transit"
+     ],
+     true,
+     false
+    ],
+    [
+     "!=",
+     [
+      "get",
+      "brunnel"
+     ],
+     "tunnel"
+    ]
+   ],
+   "paint": {
+    "line-color": "#C9CCD2",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     12,
+     0.8,
+     16,
+     1.6
+    ],
+    "line-dasharray": [
+     3,
+     2
+    ]
+   }
+  },
+  {
+   "id": "rues-lisere",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "transportation",
+   "minzoom": 12,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "minor",
+      "service"
+     ],
+     true,
+     false
+    ],
+    [
+     "!=",
+     [
+      "get",
+      "brunnel"
+     ],
+     "tunnel"
+    ]
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#D3D6DC",
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.4
+     ],
+     [
+      "zoom"
+     ],
+     12,
+     1.2,
+     13,
+     1.8,
+     18,
+     14
+    ]
+   }
+  },
+  {
+   "id": "rues",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "transportation",
+   "minzoom": 12,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "minor",
+      "service"
+     ],
+     true,
+     false
+    ],
+    [
+     "!=",
+     [
+      "get",
+      "brunnel"
+     ],
+     "tunnel"
+    ]
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#FFFFFF",
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.4
+     ],
+     [
+      "zoom"
+     ],
+     12,
+     0.7,
+     13,
+     1.1,
+     18,
+     12
+    ]
+   }
+  },
+  {
+   "id": "axes-lisere",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "transportation",
+   "minzoom": 9,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "primary",
+      "secondary",
+      "tertiary",
+      "trunk",
+      "motorway"
+     ],
+     true,
+     false
+    ],
+    [
+     "!=",
+     [
+      "get",
+      "brunnel"
+     ],
+     "tunnel"
+    ]
+   ],
+   "layout": {
+    "line-cap": "butt",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#E8D6A8",
+     "#D3D6DC"
+    ],
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.4
+     ],
+     [
+      "zoom"
+     ],
+     9,
+     [
+      "*",
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "motorway",
+        "trunk"
+       ],
+       1.6,
+       "primary",
+       1.3,
+       "secondary",
+       1.1,
+       0.9
+      ],
+      1.2
+     ],
+     13,
+     [
+      "*",
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "motorway",
+        "trunk"
+       ],
+       1.6,
+       "primary",
+       1.3,
+       "secondary",
+       1.1,
+       0.9
+      ],
+      6.35
+     ],
+     18,
+     [
+      "*",
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "motorway",
+        "trunk"
+       ],
+       1.6,
+       "primary",
+       1.3,
+       "secondary",
+       1.1,
+       0.9
+      ],
+      26
+     ]
+    ]
+   }
+  },
+  {
+   "id": "axes",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "transportation",
+   "minzoom": 9,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "primary",
+      "secondary",
+      "tertiary",
+      "trunk",
+      "motorway"
+     ],
+     true,
+     false
+    ],
+    [
+     "!=",
+     [
+      "get",
+      "brunnel"
+     ],
+     "tunnel"
+    ]
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#FDF3D8",
+     "#FFFFFF"
+    ],
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.4
+     ],
+     [
+      "zoom"
+     ],
+     9,
+     [
+      "*",
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "motorway",
+        "trunk"
+       ],
+       1.6,
+       "primary",
+       1.3,
+       "secondary",
+       1.1,
+       0.9
+      ],
+      0.8
+     ],
+     13,
+     [
+      "*",
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "motorway",
+        "trunk"
+       ],
+       1.6,
+       "primary",
+       1.3,
+       "secondary",
+       1.1,
+       0.9
+      ],
+      4.95
+     ],
+     18,
+     [
+      "*",
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "motorway",
+        "trunk"
+       ],
+       1.6,
+       "primary",
+       1.3,
+       "secondary",
+       1.1,
+       0.9
+      ],
+      23
+     ]
+    ]
+   }
+  },
+  {
+   "id": "noms-rues",
+   "type": "symbol",
+   "source": "openmaptiles",
+   "source-layer": "transportation_name",
+   "minzoom": 14,
+   "filter": [
+    "match",
+    [
+     "geometry-type"
+    ],
+    [
+     "LineString",
+     "MultiLineString"
+    ],
+    true,
+    false
+   ],
+   "layout": {
+    "symbol-placement": "line",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:fr"
+     ],
+     [
+      "get",
+      "name:latin"
+     ],
+     [
+      "get",
+      "name"
+     ]
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     14,
+     10,
+     18,
+     13
+    ],
+    "text-max-angle": 30
+   },
+   "paint": {
+    "text-color": "#7A808C",
+    "text-halo-color": "#FFFFFF",
+    "text-halo-width": 1.4
+   }
+  },
+  {
+   "id": "noms-eau",
+   "type": "symbol",
+   "source": "openmaptiles",
+   "source-layer": "waterway",
+   "minzoom": 12,
+   "layout": {
+    "symbol-placement": "line",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:fr"
+     ],
+     [
+      "get",
+      "name:latin"
+     ],
+     [
+      "get",
+      "name"
+     ]
+    ],
+    "text-font": [
+     "Noto Sans Italic"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     12,
+     10,
+     16,
+     13
+    ],
+    "text-letter-spacing": 0.1,
+    "symbol-spacing": 400
+   },
+   "paint": {
+    "text-color": "#4E8CC6",
+    "text-halo-color": "#FFFFFF",
+    "text-halo-width": 1
+   }
+  },
+  {
+   "id": "noms-plans-eau",
+   "type": "symbol",
+   "source": "openmaptiles",
+   "source-layer": "water_name",
+   "minzoom": 11,
+   "layout": {
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:fr"
+     ],
+     [
+      "get",
+      "name:latin"
+     ],
+     [
+      "get",
+      "name"
+     ]
+    ],
+    "text-font": [
+     "Noto Sans Italic"
+    ],
+    "text-size": 12,
+    "text-max-width": 8
+   },
+   "paint": {
+    "text-color": "#4E8CC6",
+    "text-halo-color": "#FFFFFF",
+    "text-halo-width": 1
+   }
+  },
+  {
+   "id": "gares-points",
+   "type": "circle",
+   "source": "openmaptiles",
+   "source-layer": "poi",
+   "minzoom": 13,
+   "filter": [
+    "all",
+    [
+     "==",
+     [
+      "get",
+      "class"
+     ],
+     "railway"
+    ],
+    [
+     "match",
+     [
+      "get",
+      "subclass"
+     ],
+     [
+      "station",
+      "halt",
+      "subway"
+     ],
+     true,
+     false
+    ]
+   ],
+   "paint": {
+    "circle-radius": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     13,
+     3,
+     16,
+     5
+    ],
+    "circle-color": [
+     "match",
+     [
+      "get",
+      "subclass"
+     ],
+     "subway",
+     "#2C58C5",
+     "#4B5566"
+    ],
+    "circle-stroke-color": "#FFFFFF",
+    "circle-stroke-width": 1.5
+   }
+  },
+  {
+   "id": "gares-noms",
+   "type": "symbol",
+   "source": "openmaptiles",
+   "source-layer": "poi",
+   "minzoom": 14,
+   "filter": [
+    "all",
+    [
+     "==",
+     [
+      "get",
+      "class"
+     ],
+     "railway"
+    ],
+    [
+     "match",
+     [
+      "get",
+      "subclass"
+     ],
+     [
+      "station",
+      "halt",
+      "subway"
+     ],
+     true,
+     false
+    ]
+   ],
+   "layout": {
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:fr"
+     ],
+     [
+      "get",
+      "name:latin"
+     ],
+     [
+      "get",
+      "name"
+     ]
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": 11,
+    "text-offset": [
+     0,
+     1.1
+    ],
+    "text-anchor": "top",
+    "text-max-width": 8,
+    "text-optional": true
+   },
+   "paint": {
+    "text-color": "#4B5566",
+    "text-halo-color": "#FFFFFF",
+    "text-halo-width": 1.2
+   }
+  },
+  {
+   "id": "parcs-noms",
+   "type": "symbol",
+   "source": "openmaptiles",
+   "source-layer": "poi",
+   "minzoom": 14,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    [
+     "park"
+    ],
+    true,
+    false
+   ],
+   "layout": {
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:fr"
+     ],
+     [
+      "get",
+      "name:latin"
+     ],
+     [
+      "get",
+      "name"
+     ]
+    ],
+    "text-font": [
+     "Noto Sans Italic"
+    ],
+    "text-size": 11,
+    "text-max-width": 8
+   },
+   "paint": {
+    "text-color": "#4F7D3A",
+    "text-halo-color": "#FFFFFF",
+    "text-halo-width": 1.2
+   }
+  },
+  {
+   "id": "quartiers",
+   "type": "symbol",
+   "source": "openmaptiles",
+   "source-layer": "place",
+   "minzoom": 11,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    [
+     "suburb",
+     "quarter",
+     "neighbourhood"
+    ],
+    true,
+    false
+   ],
+   "layout": {
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:fr"
+     ],
+     [
+      "get",
+      "name:latin"
+     ],
+     [
+      "get",
+      "name"
+     ]
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-transform": "none",
+    "text-letter-spacing": 0,
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     11,
+     11,
+     13,
+     13,
+     16,
+     15
+    ],
+    "text-max-width": 14,
+    "text-padding": 4
+   },
+   "paint": {
+    "text-color": "#5B6270",
+    "text-halo-color": "#FFFFFF",
+    "text-halo-width": 1.2
+   }
+  },
+  {
+   "id": "villes",
+   "type": "symbol",
+   "source": "openmaptiles",
+   "source-layer": "place",
+   "maxzoom": 14,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    [
+     "city",
+     "town",
+     "village"
+    ],
+    true,
+    false
+   ],
+   "layout": {
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:fr"
+     ],
+     [
+      "get",
+      "name:latin"
+     ],
+     [
+      "get",
+      "name"
+     ]
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-transform": "none",
+    "text-letter-spacing": 0,
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     6,
+     11,
+     12,
+     17,
+     14,
+     20
+    ],
+    "text-max-width": 14
+   },
+   "paint": {
+    "text-color": "#3E4553",
+    "text-halo-color": "#FFFFFF",
+    "text-halo-width": 1.2
+   }
+  }
+ ]
+}

@@ -1,0 +1,1 @@
+import{a as e,p as t}from"../app-zSEyV8vj.js";import{t as n}from"../mount-BkGn5dct.js";var r=t();n((0,r.jsx)(e,{section:`search`,children:(0,r.jsx)(`div`,{className:`wrap`})}));
