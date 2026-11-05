@@ -18,8 +18,8 @@ const pages = [
   '404',
 ];
 
-/** Nom de l'éditeur pour les mentions légales (en attente de Romain). Vide : le texte garde {{EDITEUR}}. */
-const EDITOR_NAME = process.env.NIDALO_EDITEUR ?? '';
+/** Nom de l'éditeur pour les mentions légales, donné par Romain le 5 novembre 2026. */
+const EDITOR_NAME = process.env.NIDALO_EDITEUR ?? 'Romain Badel';
 
 const SUPABASE = 'https://izzsoitqtzzswkpvdozd.supabase.co';
 
