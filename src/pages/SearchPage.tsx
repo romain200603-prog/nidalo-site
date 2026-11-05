@@ -11,7 +11,7 @@ import type { MapFrame } from '../components/ResultsMap';
 const ResultsMap = lazy(() => import('../components/ResultsMap').then((m) => ({ default: m.ResultsMap })));
 import { FiltersDialog } from './FiltersDialog';
 import { cardContent, formatCardPrice } from '../lib/cardContent';
-import { formatArea, formatFraction } from '../lib/format';
+import { formatArea } from '../lib/format';
 import { highlightsFor } from '../lib/highlights';
 import type { SearchMode } from '../lib/labels';
 import { sortedPhotos } from '../lib/listings';
@@ -22,12 +22,23 @@ import {
   placeLabel, search, SORT_LABELS, sortOptions, type Result, type SearchDraft, type SortOrder,
   switchMode,
 } from '../lib/search';
-import { GOOD_YIELD } from '../lib/cardContent';
+import { GOOD_YIELD, grossYieldText } from '../lib/cardContent';
 
 type Status = { kind: 'loading' } | { kind: 'ready'; results: Result[] } | { kind: 'error' };
 
 function readDraft(): SearchDraft {
   return draftFromParams(new URLSearchParams(window.location.search));
+}
+
+/** « vue=carte » : la carte plein écran du téléphone est ouverte (gardée au retour d'une annonce). */
+function readMapOpen(): boolean {
+  return new URLSearchParams(window.location.search).get('vue') === 'carte';
+}
+
+function pageQuery(draft: SearchDraft, mapOpen: boolean): string {
+  const params = paramsFromDraft(draft);
+  if (mapOpen) params.set('vue', 'carte');
+  return params.toString();
 }
 
 function countLabel(count: number, mode: SearchMode): string {
@@ -52,7 +63,7 @@ function MapPreview({ result, mode, onClose }: { result: Result; mode: SearchMod
         <span className="map-preview-text">
           {highlights ? (
             <span className={`map-preview-chip yield ${highlights.grossYield >= GOOD_YIELD ? 'tone-positive' : 'tone-caution'}`}>
-              {formatFraction(highlights.grossYield)}
+              {grossYieldText(highlights)}
             </span>
           ) : (
             <span className="map-preview-chip">{cardTag(content.kind, isLeased)}</span>
@@ -75,7 +86,9 @@ export function SearchPage() {
   const [status, setStatus] = useState<Status>({ kind: 'loading' });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [mapOpen, setMapOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(readMapOpen);
+  const mapOpenRef = useRef(mapOpen);
+  mapOpenRef.current = mapOpen;
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [frame, setFrame] = useState<MapFrame>({ token: 0, box: null, points: [] });
   const [attempt, setAttempt] = useState(0);
@@ -88,7 +101,7 @@ export function SearchPage() {
   const apply = useCallback((next: SearchDraft) => {
     setDraft(next);
     setPlaceText(next.place);
-    const query = paramsFromDraft(next).toString();
+    const query = pageQuery(next, mapOpenRef.current);
     if (query !== window.location.search.slice(1)) window.history.pushState(null, '', `?${query}`);
   }, []);
 
@@ -97,6 +110,7 @@ export function SearchPage() {
       const next = readDraft();
       setDraft(next);
       setPlaceText(next.place);
+      setMapOpen(readMapOpen());
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
@@ -124,6 +138,16 @@ export function SearchPage() {
   useEffect(() => {
     document.title = `${draft.place ? `${placeLabel(draft)} · ` : ''}Rechercher un bien · Nidalo`;
   }, [draft]);
+
+  // L'adresse suit la carte du téléphone (sans nouvelle entrée d'historique), pour la retrouver au retour d'une annonce.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if ((params.get('vue') === 'carte') === mapOpen) return;
+    if (mapOpen) params.set('vue', 'carte');
+    else params.delete('vue');
+    const query = params.toString();
+    window.history.replaceState(null, '', query ? `?${query}` : window.location.pathname);
+  }, [mapOpen]);
 
   // La carte en plein écran (téléphone) se ferme avec Échap.
   useEffect(() => {
@@ -269,10 +293,18 @@ export function SearchPage() {
       <FiltersDialog
         open={filtersOpen}
         draft={draft}
+        remembered={byMode.current}
         onClose={() => setFiltersOpen(false)}
-        onApply={(next) => {
+        onApply={(next, drafts) => {
           setFiltersOpen(false);
+          Object.assign(byMode.current, drafts);
           apply(next);
+        }}
+        onShowMap={(next, drafts) => {
+          setFiltersOpen(false);
+          Object.assign(byMode.current, drafts);
+          apply(next);
+          setMapOpen(true);
         }}
       />
     </Page>

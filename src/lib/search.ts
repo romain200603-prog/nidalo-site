@@ -1,4 +1,4 @@
-import { assetDetails, rentalInfo, scopeLabel, type HotelScope } from './listingJson';
+import { assetDetails, int, rentalInfo, scopeLabel, sourced, type HotelScope } from './listingJson';
 import type { PropertyType, SearchMode } from './labels';
 import { LISTING_COLUMNS, PUBLIC_STATUSES, type ListingRow } from './listings';
 import { searchNormalized, type Coordinate, type PlaceKind } from './places';
@@ -59,7 +59,62 @@ export type SearchDraft = {
   furnished: boolean | null;
   /** Hôtels : ce que comprend le prix (murs et fonds, murs seuls, fonds seul). */
   hotelScope: HotelScope | null;
+
+  // Critères des filtres (feuille « Filtres de recherche » de l'app), vides par défaut.
+  /** Chambres minimum (logements). */
+  bedroomsMin: number | null;
+  /** Classe énergie la moins bonne acceptée (« D » = A à D). */
+  worstEnergyClass: EnergyClass | null;
+  excludesGroundFloor: boolean;
+  floorMin: number | null;
+  floorMax: number | null;
+  yearBuiltMin: number | null;
+  yearBuiltMax: number | null;
+  requiresElevator: boolean;
+  /** Au moins un de ces extérieurs (vide = indifférent). */
+  outdoorSpaces: OutdoorSpace[];
+  requiresParking: boolean;
+  /** Résidentiel : neuf, ancien ou indifférent ; prix au m² ; critères de terrain. */
+  isNewBuild: boolean | null;
+  pricePerSquareMeterMin: number | null;
+  pricePerSquareMeterMax: number | null;
+  requiresDocumentedBuildability: boolean;
+  requiresServiced: boolean;
+  zoning: string;
+  /** Location : charges mensuelles maximum ; disponible au plus tard le (AAAA-MM-JJ). */
+  maxMonthlyCharges: number | null;
+  availableBy: string | null;
+  /** Investir : taxe foncière, loyer déclaré, situation locative, loyer actuel, charges annuelles, lots. */
+  maxAnnualPropertyTax: number | null;
+  requiresDeclaredRent: boolean;
+  leasedOnly: boolean;
+  vacantOnly: boolean;
+  minCurrentMonthlyRent: number | null;
+  maxAnnualCharges: number | null;
+  minUnits: number | null;
+  maxVacantUnits: number | null;
+  /** Hôtels : classement, chiffre d'affaires, EBITDA, résultat d'exploitation, taux d'occupation (en %). */
+  minHotelStars: number | null;
+  minAnnualRevenue: number | null;
+  minEbitda: number | null;
+  minOperatingIncome: number | null;
+  minOccupancyRatePercent: number | null;
 };
+
+/** Classe énergie (DPE), de A (meilleure) à G. */
+export type EnergyClass = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G';
+export const ENERGY_CLASSES: EnergyClass[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+
+export type OutdoorSpace = 'balcony' | 'terrace' | 'garden';
+export const OUTDOOR_SPACES: OutdoorSpace[] = ['balcony', 'terrace', 'garden'];
+export const OUTDOOR_LABELS: Record<OutdoorSpace, string> = { balcony: 'Balcon', terrace: 'Terrasse', garden: 'Jardin' };
+/** Noms dans l'adresse de la page. */
+const OUTDOOR_PARAMS: Record<OutdoorSpace, string> = { balcony: 'balcon', terrace: 'terrasse', garden: 'jardin' };
+
+/** « DPE A à D », « DPE A ». */
+export function energyRangeLabel(worst: EnergyClass): string {
+  return worst === 'A' ? 'DPE A' : `DPE A à ${worst}`;
+}
 
 /** « Type d'investissement » de l'accueil : une vue des types et de l'immeuble mixte (comme l'app). */
 export type InvestmentKind = 'classic' | 'building' | 'mixedBuilding' | 'commercial' | 'office';
@@ -96,6 +151,8 @@ export type Highlights = {
   netYield: number;
   monthlyCashFlow: number;
   isRentEstimated: boolean;
+  /** Textes de l'app, arrondis comme elle (« 6,2 % », « −629 € ») ; à défaut, arrondis du navigateur. */
+  text?: { grossYield: string; netYield: string; monthlyCashFlow: string; monthlyRentFromYield: string };
 };
 
 export const FETCH_LIMIT = 500;
@@ -122,8 +179,6 @@ export const SORT_LABELS: Record<SortOrder, string> = {
   cashFlowDescending: 'Cash-flow',
 };
 export const DEFAULT_RADIUS_METERS = 10_000;
-/** Apport par défaut d'Investir (comme l'accueil de l'app). */
-export const DEFAULT_DOWN_PAYMENT = 50_000;
 
 /** Types proposés par mode ; aucun type choisi = tous ceux du mode. */
 export const MODE_PROPERTY_TYPES: Record<SearchMode, PropertyType[]> = {
@@ -172,7 +227,43 @@ export function defaultDraft(mode: SearchMode = 'buy'): SearchDraft {
     mixedBuilding: false,
     furnished: null,
     hotelScope: null,
+    bedroomsMin: null,
+    worstEnergyClass: null,
+    excludesGroundFloor: false,
+    floorMin: null,
+    floorMax: null,
+    yearBuiltMin: null,
+    yearBuiltMax: null,
+    requiresElevator: false,
+    outdoorSpaces: [],
+    requiresParking: false,
+    isNewBuild: null,
+    pricePerSquareMeterMin: null,
+    pricePerSquareMeterMax: null,
+    requiresDocumentedBuildability: false,
+    requiresServiced: false,
+    zoning: '',
+    maxMonthlyCharges: null,
+    availableBy: null,
+    maxAnnualPropertyTax: null,
+    requiresDeclaredRent: false,
+    leasedOnly: false,
+    vacantOnly: false,
+    minCurrentMonthlyRent: null,
+    maxAnnualCharges: null,
+    minUnits: null,
+    maxVacantUnits: null,
+    minHotelStars: null,
+    minAnnualRevenue: null,
+    minEbitda: null,
+    minOperatingIncome: null,
+    minOccupancyRatePercent: null,
   };
+}
+
+/** « Réinitialiser les filtres de cette catégorie » : tout est vidé sauf le lieu et le rayon (comme l'app). */
+export function resetFilters(draft: SearchDraft): SearchDraft {
+  return { ...defaultDraft(draft.mode), place: draft.place, chosen: draft.chosen, radiusKm: draft.radiusKm, area: draft.area };
 }
 
 /**
@@ -245,6 +336,97 @@ function range(min: number | null, max: number | null): [number | null, number |
   return [min, max];
 }
 
+const isUnbounded = ([min, max]: [number | null, number | null]) => min === null && max === null;
+
+/** Bornes incluses ; une borne absente est ignorée. */
+function inRange(value: number, [min, max]: [number | null, number | null]): boolean {
+  return (min === null || value >= min) && (max === null || value <= max);
+}
+
+/** Étages cherchés : « Hors rez-de-chaussée » relève le minimum à 1 (comme `query(for:)`). */
+export function floorRange(draft: Pick<SearchDraft, 'floorMin' | 'floorMax' | 'excludesGroundFloor'>): [number | null, number | null] {
+  const lowest = Math.max(draft.floorMin ?? 0, draft.excludesGroundFloor ? 1 : 0);
+  return range(lowest > 0 ? lowest : null, draft.floorMax);
+}
+
+/** Pourcentage saisi en fraction (7 → 0,07) ; `null` s'il est hors 0–100 % (le champ affiche son erreur). */
+function fraction(percent: number | null): number | null {
+  return percent !== null && validPercent(percent) ? percent / 100 : null;
+}
+
+/** Fin de la journée choisie (« au plus tard le » inclut ce jour), à l'heure du navigateur. */
+export function endOfDay(day: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 23, 59, 59, 999);
+  return Number.isNaN(date.getTime()) || date.getDate() !== Number(match[3]) ? null : date.getTime();
+}
+
+const requiresEnergyDiagnostic = (type: string) => type !== 'land' && type !== 'parking';
+const PARKING_KINDS = ['outdoorSpace', 'indoorSpace', 'garage'];
+
+function energyRank(value: string | null): number | null {
+  const index = ENERGY_CLASSES.indexOf(value as EnergyClass);
+  return index < 0 ? null : index;
+}
+
+/** Critères hôteliers appliqués (comme `HotelCriteria`) ; `null` si aucun. */
+function hotelCriteria(draft: SearchDraft) {
+  const criteria = {
+    minStars: draft.minHotelStars,
+    minAnnualRevenue: draft.minAnnualRevenue,
+    minEbitda: draft.minEbitda,
+    minOperatingIncome: draft.minOperatingIncome,
+    minOccupancyRate: fraction(draft.minOccupancyRatePercent),
+    scope: draft.hotelScope,
+  };
+  return Object.values(criteria).every((v) => v === null) ? null : criteria;
+}
+
+/** L'hôtel répond-il aux seuils ? Un seuil posé écarte l'hôtel qui ne communique pas la donnée. */
+function hotelMatches(row: ListingRow, draft: SearchDraft): boolean {
+  const criteria = hotelCriteria(draft);
+  if (!criteria) return true;
+  const hotel = assetDetails(row, 'hotel');
+  if (!hotel) return false;
+  const atLeast = (value: number | null, min: number | null) => min === null || (value !== null && value >= min);
+  return atLeast(int(hotel.stars), criteria.minStars)
+    && atLeast(sourced(hotel.annualRevenue)?.value ?? null, criteria.minAnnualRevenue)
+    && atLeast(sourced(hotel.ebitda)?.value ?? null, criteria.minEbitda)
+    && atLeast(sourced(hotel.operatingIncome)?.value ?? null, criteria.minOperatingIncome)
+    && atLeast(sourced(hotel.occupancyRate)?.value ?? null, criteria.minOccupancyRate)
+    && (criteria.scope === null || hotel.scope === criteria.scope);
+}
+
+/** Lots d'un immeuble (comme `BuildingCriteria`) : une donnée non déclarée écarte l'immeuble. */
+function buildingMatches(row: ListingRow, draft: SearchDraft): boolean {
+  // Immeuble mixte sans immeuble choisi : l'immeuble doit avoir des logements et des commerces.
+  const mixedOnly = draft.mixedBuilding && !draft.types.includes('building');
+  if (draft.minUnits === null && draft.maxVacantUnits === null && !mixedOnly) return true;
+  const building = assetDetails(row, 'building');
+  if (!building) return false;
+  const residential = int(building.residentialUnits);
+  const commercial = int(building.commercialUnits);
+  const total = residential === null && commercial === null ? null : (residential ?? 0) + (commercial ?? 0);
+  if (draft.minUnits !== null && !(total !== null && total >= draft.minUnits)) return false;
+  const vacant = int(building.vacantUnits);
+  if (draft.maxVacantUnits !== null && !(vacant !== null && vacant <= draft.maxVacantUnits)) return false;
+  if (mixedOnly && (!residential || !commercial)) return false;
+  return true;
+}
+
+/** Critères de terrain (Résidentiel) : seulement pour les terrains ; donnée absente = exclu. */
+function landMatches(row: ListingRow, draft: SearchDraft): boolean {
+  const zone = draft.zoning.trim();
+  if (!draft.requiresDocumentedBuildability && !draft.requiresServiced && !zone) return true;
+  const land = assetDetails(row, 'land');
+  if (!land) return false;
+  if (draft.requiresDocumentedBuildability && (land.buildability === null || land.buildability === undefined)) return false;
+  if (draft.requiresServiced && land.isServiced !== true) return false;
+  if (zone && !(typeof land.zoning === 'string' && searchNormalized(land.zoning).startsWith(searchNormalized(zone)))) return false;
+  return true;
+}
+
 /** Zone rectangulaire autour d'un point (vérifiée ensuite à la distance exacte). */
 export function boxAround(center: Coordinate, radiusMeters: number): BoundingBox {
   const latitudeDelta = radiusMeters / 111_320;
@@ -310,40 +492,76 @@ export function pricePerSquareMeter(row: Pick<ListingRow, 'transaction' | 'livin
 export function matches(row: ListingRow, draft: SearchDraft, highlights: Highlights | null, options: { ignoreLocation?: boolean } = {}): boolean {
   if (!(PUBLIC_STATUSES as readonly string[]).includes(row.status)) return false;
   if (row.transaction !== transactionFor(draft.mode)) return false;
-  if (!propertyTypesFor(draft).includes(row.property_type as PropertyType)) return false;
+  const type = row.property_type;
+  if (!propertyTypesFor(draft).includes(type as PropertyType)) return false;
   if (!options.ignoreLocation && !locationContains(locationFor(draft), row)) return false;
   const price = Number(row.price);
-  const [priceMin, priceMax] = range(draft.priceMin, draft.priceMax);
-  if (priceMin !== null && price < priceMin) return false;
-  if (priceMax !== null && price > priceMax) return false;
-  const livingArea = Number(row.living_area);
-  const [areaMin, areaMax] = range(draft.livingAreaMin, draft.livingAreaMax);
-  if (areaMin !== null && livingArea < areaMin) return false;
-  if (areaMax !== null && livingArea > areaMax) return false;
-  // En location, le nombre de pièces et l'ameublement ne concernent que les logements.
-  const appliesHousingCriteria = draft.mode !== 'rent' || isDwelling(row.property_type);
-  if (draft.roomsMin !== null) {
+  if (!inRange(price, range(draft.priceMin, draft.priceMax))) return false;
+  if (!inRange(Number(row.living_area), range(draft.livingAreaMin, draft.livingAreaMax))) return false;
+  const isRent = draft.mode === 'rent';
+  // En location, pièces, chambres et ameublement ne concernent que les logements ;
+  // le DPE, seulement les biens qui y sont soumis (pas un parking ni un terrain).
+  const appliesHousingCriteria = !isRent || isDwelling(type);
+  if (appliesHousingCriteria && draft.roomsMin !== null) {
     const rooms = draft.mode === 'hotel' ? hotelRoomCount(row) : row.rooms;
-    if (appliesHousingCriteria && !(rooms !== null && rooms >= draft.roomsMin)) return false;
+    if (!(rooms !== null && rooms >= draft.roomsMin)) return false;
   }
-  if (draft.mode === 'rent' && draft.furnished !== null && appliesHousingCriteria && rentalInfo(row)?.isFurnished !== draft.furnished) return false;
-  // Résidentiel écarte les biens vendus loués (ils sont dans Investir).
-  if (draft.mode === 'buy' && row.rental_info?.isLeased === true) return false;
-  if (draft.mode === 'hotel' && draft.hotelScope !== null && row.property_type === 'hotel') {
-    if (assetDetails(row, 'hotel')?.scope !== draft.hotelScope) return false;
+  if (appliesHousingCriteria && draft.bedroomsMin !== null && !(row.bedrooms !== null && row.bedrooms >= draft.bedroomsMin)) return false;
+  const floors = floorRange(draft);
+  if (!isUnbounded(floors) && !(row.floor !== null && inRange(row.floor, floors))) return false;
+  if (draft.worstEnergyClass !== null && (!isRent || requiresEnergyDiagnostic(type))) {
+    const rank = energyRank(row.energy_class);
+    if (rank === null || rank > ENERGY_CLASSES.indexOf(draft.worstEnergyClass)) return false;
   }
-  if (draft.mode === 'invest') {
-    // Immeuble mixte sans immeuble choisi : un immeuble doit avoir des logements et des commerces.
-    if (draft.mixedBuilding && !draft.types.includes('building') && row.property_type === 'building') {
-      const building = assetDetails(row, 'building');
-      if (!(Number(building?.residentialUnits) > 0 && Number(building?.commercialUnits) > 0)) return false;
+  if (draft.requiresElevator && row.has_elevator !== true) return false;
+  if (draft.outdoorSpaces.length && !draft.outdoorSpaces.some((space) => (row.outdoor_spaces ?? []).includes(space))) return false;
+  if (draft.requiresParking && !PARKING_KINDS.includes(row.parking)) return false;
+  if (isRent && draft.furnished !== null && appliesHousingCriteria && rentalInfo(row)?.isFurnished !== draft.furnished) return false;
+  const years = range(draft.yearBuiltMin, draft.yearBuiltMax);
+  if (!isUnbounded(years) && !(row.year_built !== null && inRange(row.year_built, years))) return false;
+  if (draft.mode === 'buy') {
+    // Neuf ou ancien : un bien sans précision compte comme ancien (comme l'app).
+    if (draft.isNewBuild !== null && (row.is_new_build ?? false) !== draft.isNewBuild) return false;
+    // Résidentiel écarte les biens vendus loués (ils sont dans Investir).
+    if (rentalInfo(row)?.isLeased === true) return false;
+    if (type === 'land' && !landMatches(row, draft)) return false;
+    const perSquareMeter = range(draft.pricePerSquareMeterMin, draft.pricePerSquareMeterMax);
+    if (!isUnbounded(perSquareMeter)) {
+      // Surface du terrain pour un terrain, habitable sinon ; sans surface, le prix au m² est inconnu.
+      const area = Number(type === 'land' ? row.land_area : row.living_area);
+      if (!(area > 0 && inRange(price / area, perSquareMeter))) return false;
     }
+  }
+  if (isRent) {
+    if (draft.maxMonthlyCharges !== null && !(row.monthly_charges !== null && Number(row.monthly_charges) <= draft.maxMonthlyCharges)) return false;
+    if (draft.availableBy !== null) {
+      const latest = endOfDay(draft.availableBy);
+      const from = rentalInfo(row)?.availableFrom ?? null;
+      if (latest !== null && !(from !== null && from.getTime() <= latest)) return false;
+    }
+  }
+  // Critères hôteliers et d'immeuble : seulement pour ces types.
+  if (draft.mode === 'hotel' && type === 'hotel' && !hotelMatches(row, draft)) return false;
+  if (draft.mode === 'invest' && type === 'building' && !buildingMatches(row, draft)) return false;
+  if (draft.mode === 'invest') {
     if (!highlights) return false;
-    if (draft.minGrossYieldPercent !== null && validPercent(draft.minGrossYieldPercent) && highlights.grossYield < draft.minGrossYieldPercent / 100) return false;
-    if (draft.minNetYieldPercent !== null && validPercent(draft.minNetYieldPercent) && highlights.netYield < draft.minNetYieldPercent / 100) return false;
+    const minGross = fraction(draft.minGrossYieldPercent);
+    const minNet = fraction(draft.minNetYieldPercent);
+    if (minGross !== null && highlights.grossYield < minGross) return false;
+    if (minNet !== null && highlights.netYield < minNet) return false;
     if (draft.minMonthlyCashFlow !== null && highlights.monthlyCashFlow < draft.minMonthlyCashFlow) return false;
-    // Travaux non renseignés : on ne peut pas écarter l'annonce.
+    // Travaux et taxe foncière non renseignés : on ne peut pas écarter l'annonce.
     if (draft.maxWorksAmount !== null && row.works_amount !== null && Number(row.works_amount) > draft.maxWorksAmount) return false;
+    if (draft.maxAnnualPropertyTax !== null && row.annual_property_tax !== null && Number(row.annual_property_tax) > draft.maxAnnualPropertyTax) return false;
+    if (draft.requiresDeclaredRent && highlights.isRentEstimated) return false;
+    const rental = rentalInfo(row);
+    if (draft.leasedOnly && rental?.isLeased !== true) return false;
+    if (draft.vacantOnly && rental?.isLeased === true) return false;
+    if (draft.minCurrentMonthlyRent !== null) {
+      const rent = rental?.currentMonthlyRent ?? null;
+      if (!(rent !== null && rent >= draft.minCurrentMonthlyRent)) return false;
+    }
+    if (draft.maxAnnualCharges !== null && !(row.monthly_charges !== null && Number(row.monthly_charges) * 12 <= draft.maxAnnualCharges)) return false;
   }
   return true;
 }
@@ -477,21 +695,70 @@ export function draftFromParams(params: URLSearchParams): SearchDraft {
   draft.types = (params.get('types') ?? '').split(',').filter((t): t is PropertyType => TYPES.includes(t as PropertyType));
   const sort = params.get('tri') as SortOrder | null;
   if (sort && SORTS.includes(sort)) draft.sort = sort;
+  const whole = (name: string) => {
+    const n = amount(params.get(name));
+    return n === null ? null : Math.round(n);
+  };
+  const flag = (name: string) => params.get(name) === '1';
+  // Chaque mode ne lit que les critères que ses filtres proposent (pas de critère invisible).
+  if (draft.mode !== 'hotel') {
+    draft.bedroomsMin = whole('chambresMin');
+    const dpe = params.get('dpe')?.toUpperCase() as EnergyClass | undefined;
+    draft.worstEnergyClass = dpe && ENERGY_CLASSES.includes(dpe) ? dpe : null;
+    draft.yearBuiltMin = whole('anneeMin');
+    draft.yearBuiltMax = whole('anneeMax');
+    draft.requiresElevator = flag('ascenseur');
+  }
+  if (draft.mode === 'buy' || draft.mode === 'rent') {
+    draft.floorMin = whole('etageMin');
+    draft.floorMax = whole('etageMax');
+    draft.excludesGroundFloor = flag('horsRdc');
+    const outdoor = (params.get('exterieur') ?? '').split(',');
+    draft.outdoorSpaces = OUTDOOR_SPACES.filter((space) => outdoor.includes(OUTDOOR_PARAMS[space]));
+  }
+  draft.requiresParking = flag('parking');
+  if (draft.mode === 'buy') {
+    const isNew = params.get('neuf');
+    draft.isNewBuild = isNew === '1' ? true : isNew === '0' ? false : null;
+    draft.pricePerSquareMeterMin = amount(params.get('prixM2Min'));
+    draft.pricePerSquareMeterMax = amount(params.get('prixM2Max'));
+    draft.requiresDocumentedBuildability = flag('constructible');
+    draft.requiresServiced = flag('viabilise');
+    draft.zoning = (params.get('plu') ?? '').trim().slice(0, 12);
+  }
   if (draft.mode === 'invest') {
     draft.downPayment = amount(params.get('apport'));
     draft.minGrossYieldPercent = amount(params.get('brutMin'));
     draft.minNetYieldPercent = amount(params.get('netMin'));
     draft.minMonthlyCashFlow = signedAmount(params.get('cashflowMin'));
     draft.maxWorksAmount = amount(params.get('travauxMax'));
-    draft.mixedBuilding = params.get('mixte') === '1';
+    draft.mixedBuilding = flag('mixte');
+    draft.maxAnnualPropertyTax = amount(params.get('taxeMax'));
+    draft.requiresDeclaredRent = flag('loyerDeclare');
+    const situation = params.get('situation');
+    draft.leasedOnly = situation === 'loue';
+    draft.vacantOnly = situation === 'libre';
+    draft.minCurrentMonthlyRent = amount(params.get('loyerMin'));
+    draft.maxAnnualCharges = amount(params.get('chargesAnMax'));
+    draft.minUnits = whole('lotsMin');
+    draft.maxVacantUnits = whole('vacantsMax');
   }
   if (draft.mode === 'rent') {
     const furnished = params.get('meuble');
     draft.furnished = furnished === '1' ? true : furnished === '0' ? false : null;
+    draft.maxMonthlyCharges = amount(params.get('chargesMax'));
+    const available = params.get('dispo');
+    draft.availableBy = available && endOfDay(available) !== null ? available : null;
   }
   if (draft.mode === 'hotel') {
     const scope = params.get('vente');
     draft.hotelScope = scope === 'wallsAndBusiness' || scope === 'wallsOnly' || scope === 'businessOnly' ? scope : null;
+    const stars = whole('etoilesMin');
+    draft.minHotelStars = stars !== null && stars >= 1 && stars <= 5 ? stars : null;
+    draft.minAnnualRevenue = amount(params.get('caMin'));
+    draft.minEbitda = amount(params.get('ebitdaMin'));
+    draft.minOperatingIncome = amount(params.get('resultatMin'));
+    draft.minOccupancyRatePercent = amount(params.get('occupationMin'));
   }
   return draft;
 }
@@ -520,32 +787,67 @@ export function paramsFromDraft(draft: SearchDraft): URLSearchParams {
   if (draft.roomsMin !== null) params.set('piecesMin', String(draft.roomsMin));
   if (draft.types.length) params.set('types', draft.types.join(','));
   if (draft.sort !== defaultDraft(draft.mode).sort) params.set('tri', draft.sort);
-  if (draft.mode === 'invest') {
-    if (draft.downPayment !== null) params.set('apport', String(draft.downPayment));
-    if (draft.minGrossYieldPercent !== null) params.set('brutMin', String(draft.minGrossYieldPercent));
-    if (draft.minNetYieldPercent !== null) params.set('netMin', String(draft.minNetYieldPercent));
-    if (draft.minMonthlyCashFlow !== null) params.set('cashflowMin', String(draft.minMonthlyCashFlow));
-    if (draft.maxWorksAmount !== null) params.set('travauxMax', String(draft.maxWorksAmount));
-    if (draft.mixedBuilding) params.set('mixte', '1');
+  const set = (name: string, value: number | null) => { if (value !== null) params.set(name, String(value)); };
+  const setFlag = (name: string, on: boolean) => { if (on) params.set(name, '1'); };
+  if (draft.mode !== 'hotel') {
+    set('chambresMin', draft.bedroomsMin);
+    if (draft.worstEnergyClass) params.set('dpe', draft.worstEnergyClass);
+    set('anneeMin', draft.yearBuiltMin);
+    set('anneeMax', draft.yearBuiltMax);
+    setFlag('ascenseur', draft.requiresElevator);
   }
-  if (draft.mode === 'rent' && draft.furnished !== null) params.set('meuble', draft.furnished ? '1' : '0');
-  if (draft.mode === 'hotel' && draft.hotelScope !== null) params.set('vente', draft.hotelScope);
+  if (draft.mode === 'buy' || draft.mode === 'rent') {
+    set('etageMin', draft.floorMin);
+    set('etageMax', draft.floorMax);
+    setFlag('horsRdc', draft.excludesGroundFloor);
+    const outdoor = OUTDOOR_SPACES.filter((space) => draft.outdoorSpaces.includes(space));
+    if (outdoor.length) params.set('exterieur', outdoor.map((space) => OUTDOOR_PARAMS[space]).join(','));
+  }
+  setFlag('parking', draft.requiresParking);
+  if (draft.mode === 'buy') {
+    if (draft.isNewBuild !== null) params.set('neuf', draft.isNewBuild ? '1' : '0');
+    set('prixM2Min', draft.pricePerSquareMeterMin);
+    set('prixM2Max', draft.pricePerSquareMeterMax);
+    setFlag('constructible', draft.requiresDocumentedBuildability);
+    setFlag('viabilise', draft.requiresServiced);
+    if (draft.zoning.trim()) params.set('plu', draft.zoning.trim());
+  }
+  if (draft.mode === 'invest') {
+    set('apport', draft.downPayment);
+    set('brutMin', draft.minGrossYieldPercent);
+    set('netMin', draft.minNetYieldPercent);
+    set('cashflowMin', draft.minMonthlyCashFlow);
+    set('travauxMax', draft.maxWorksAmount);
+    setFlag('mixte', draft.mixedBuilding);
+    set('taxeMax', draft.maxAnnualPropertyTax);
+    setFlag('loyerDeclare', draft.requiresDeclaredRent);
+    if (draft.leasedOnly) params.set('situation', 'loue');
+    else if (draft.vacantOnly) params.set('situation', 'libre');
+    set('loyerMin', draft.minCurrentMonthlyRent);
+    set('chargesAnMax', draft.maxAnnualCharges);
+    set('lotsMin', draft.minUnits);
+    set('vacantsMax', draft.maxVacantUnits);
+  }
+  if (draft.mode === 'rent') {
+    if (draft.furnished !== null) params.set('meuble', draft.furnished ? '1' : '0');
+    set('chargesMax', draft.maxMonthlyCharges);
+    if (draft.availableBy) params.set('dispo', draft.availableBy);
+  }
+  if (draft.mode === 'hotel') {
+    if (draft.hotelScope !== null) params.set('vente', draft.hotelScope);
+    set('etoilesMin', draft.minHotelStars);
+    set('caMin', draft.minAnnualRevenue);
+    set('ebitdaMin', draft.minEbitda);
+    set('resultatMin', draft.minOperatingIncome);
+    set('occupationMin', draft.minOccupancyRatePercent);
+  }
   return params;
 }
 
-/** Nombre de filtres posés (pastille du bouton Filtres). */
+/** Nombre de filtres posés (pastille du bouton Filtres) : autant que de pastilles, comme l'app. */
 export function activeFilterCount(draft: SearchDraft): number {
-  return [
-    draft.priceMin, draft.priceMax, draft.livingAreaMin, draft.livingAreaMax, draft.roomsMin,
-    draft.mode === 'invest' ? draft.minGrossYieldPercent : null,
-    draft.mode === 'invest' ? draft.minNetYieldPercent : null,
-    draft.mode === 'invest' ? draft.minMonthlyCashFlow : null,
-    draft.mode === 'invest' ? draft.maxWorksAmount : null,
-    draft.mode === 'rent' ? draft.furnished : null,
-    draft.mode === 'hotel' ? draft.hotelScope : null,
-  ].filter((v) => v !== null).length + (draft.types.length ? 1 : 0) + (draft.mode === 'invest' && draft.mixedBuilding ? 1 : 0);
+  return filterChips(draft).length;
 }
-
 
 // MARK: - Pastilles des critères (SearchFilterChips.swift)
 
@@ -575,46 +877,108 @@ const TYPE_NAMES: Record<PropertyType, string> = {
   office: 'Bureaux', parking: 'Parking', hotel: 'Hôtel', other: 'Autre',
 };
 
-const percentLabel = (value: number) => `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(value)} %`;
+const roundPercent = (value: number) => `${thousands.format(value)} %`;
+const shortDay = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
 
-/** Pastilles des critères appliqués, du plus important au plus fin (le lieu est dans le champ). */
+/** « 7 % », « 6,5 % » : rendement de l'accueil (SearchCriterionOptions.yieldLabel). */
+function yieldPercent(percent: number): string {
+  const digits = Number.isInteger(percent) ? 0 : 1;
+  return `${new Intl.NumberFormat('fr-FR', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(percent)} %`;
+}
+
+/** Montant signé d'un cash-flow : « +120 € », « −85 € », « 0 € » (Formatters.signedAmount). */
+function signedEuros(value: number): string {
+  const formatted = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Math.abs(value));
+  return value > 0 ? `+${formatted}` : value < 0 ? `−${formatted}` : formatted;
+}
+
+/** Pastilles des critères appliqués, dans l'ordre de l'app (le lieu est dans le champ). */
 export function filterChips(draft: SearchDraft): FilterChip[] {
   const chips: FilterChip[] = [];
   const add = (id: string, label: string | null, remove: (d: SearchDraft) => SearchDraft) => { if (label) chips.push({ id, label, remove }); };
-  const invest = draft.mode === 'invest';
+  const { mode } = draft;
+  const invest = mode === 'invest';
   if (draft.radiusKm !== null) add('radius', `Rayon : ${draft.radiusKm} km`, (d) => ({ ...d, radiusKm: null }));
-  const perMonth = draft.mode === 'rent';
+  const perMonth = mode === 'rent';
   const budget = rangeLabel(draft.priceMin, draft.priceMax, perMonth ? (n) => euroFormat.format(n) : compactPrice);
   add('budget', budget && `${perMonth ? 'Loyer' : 'Budget'} : ${budget}`, (d) => ({ ...d, priceMin: null, priceMax: null }));
-  if (invest && draft.minGrossYieldPercent !== null && validPercent(draft.minGrossYieldPercent)) {
-    add('gross', `Rendement : ${percentLabel(draft.minGrossYieldPercent)}`, (d) => ({ ...d, minGrossYieldPercent: null }));
+  if (mode === 'buy') {
+    const perSquare = rangeLabel(draft.pricePerSquareMeterMin, draft.pricePerSquareMeterMax, (n) => `${euroFormat.format(n)}/m²`);
+    add('pricePerSquareMeter', perSquare && `Prix au m² : ${perSquare}`, (d) => ({ ...d, pricePerSquareMeterMin: null, pricePerSquareMeterMax: null }));
   }
-  const types = MODE_PROPERTY_TYPES[draft.mode].filter((t) => draft.types.includes(t));
-  if (draft.mode !== 'hotel' && types.length) add('types', types.map((t) => TYPE_NAMES[t]).join(', '), (d) => ({ ...d, types: [] }));
-  const area = rangeLabel(draft.livingAreaMin, draft.livingAreaMax, (n) => `${areaFormat.format(n)} m²`);
+  if (invest && draft.minGrossYieldPercent !== null && validPercent(draft.minGrossYieldPercent)) {
+    add('gross', `Rendement : ${yieldPercent(draft.minGrossYieldPercent)}`, (d) => ({ ...d, minGrossYieldPercent: null }));
+  }
+  const types = MODE_PROPERTY_TYPES[mode].filter((t) => draft.types.includes(t));
+  if (mode !== 'hotel' && types.length) add('types', types.map((t) => TYPE_NAMES[t]).join(', '), (d) => ({ ...d, types: [] }));
+  const area = rangeLabel(draft.livingAreaMin, draft.livingAreaMax, (n) => `${areaFormat.format(n)} m²`);
   add('area', area && `Surface : ${area}`, (d) => ({ ...d, livingAreaMin: null, livingAreaMax: null }));
   if (draft.roomsMin !== null) {
-    const [one, many] = draft.mode === 'hotel' ? ['chambre', 'chambres'] : ['pièce', 'pièces'];
+    const [one, many] = mode === 'hotel' ? ['chambre', 'chambres'] : ['pièce', 'pièces'];
     add('rooms', draft.roomsMin > 1 ? `${draft.roomsMin} ${many} et +` : `1 ${one} et +`, (d) => ({ ...d, roomsMin: null }));
   }
-  if (draft.mode === 'hotel' && draft.hotelScope !== null) add('scope', scopeLabel(draft.hotelScope), (d) => ({ ...d, hotelScope: null }));
-  if (draft.mode === 'rent' && draft.furnished !== null) {
-    add('furnished', draft.furnished ? 'Meublée' : 'Non meublée', (d) => ({ ...d, furnished: null }));
+  if (mode === 'buy' && draft.isNewBuild !== null) add('newBuild', draft.isNewBuild ? 'Neuf' : 'Ancien', (d) => ({ ...d, isNewBuild: null }));
+  if (mode === 'hotel') {
+    if (draft.minHotelStars !== null) {
+      add('stars', `${draft.minHotelStars} étoile${draft.minHotelStars > 1 ? 's' : ''} et +`, (d) => ({ ...d, minHotelStars: null }));
+    }
+    if (draft.hotelScope !== null) add('scope', scopeLabel(draft.hotelScope), (d) => ({ ...d, hotelScope: null }));
+    if (draft.minAnnualRevenue !== null) add('revenue', `CA : ${compactPrice(draft.minAnnualRevenue)} min`, (d) => ({ ...d, minAnnualRevenue: null }));
+    if (draft.minEbitda !== null) add('ebitda', `EBITDA : ${compactPrice(draft.minEbitda)} min`, (d) => ({ ...d, minEbitda: null }));
+    if (draft.minOperatingIncome !== null) {
+      add('operatingIncome', `Résultat d'exploitation : ${compactPrice(draft.minOperatingIncome)} min`, (d) => ({ ...d, minOperatingIncome: null }));
+    }
+    if (draft.minOccupancyRatePercent !== null && validPercent(draft.minOccupancyRatePercent)) {
+      add('occupancy', `Occupation : ${roundPercent(draft.minOccupancyRatePercent)} min`, (d) => ({ ...d, minOccupancyRatePercent: null }));
+    }
+  }
+  if (mode !== 'hotel' && draft.bedroomsMin !== null) {
+    add('bedrooms', draft.bedroomsMin > 1 ? `${draft.bedroomsMin} chambres et +` : '1 chambre et +', (d) => ({ ...d, bedroomsMin: null }));
+  }
+  if (mode === 'rent') {
+    if (draft.furnished !== null) add('furnished', draft.furnished ? 'Meublée' : 'Non meublée', (d) => ({ ...d, furnished: null }));
+    if (draft.maxMonthlyCharges !== null) add('charges', `Charges : ${euroFormat.format(draft.maxMonthlyCharges)} max`, (d) => ({ ...d, maxMonthlyCharges: null }));
+    const latest = draft.availableBy ? endOfDay(draft.availableBy) : null;
+    if (latest !== null) add('available', `Dispo. avant le ${shortDay.format(latest)}`, (d) => ({ ...d, availableBy: null }));
   }
   if (invest) {
     if (draft.minNetYieldPercent !== null && validPercent(draft.minNetYieldPercent)) {
-      add('net', `Net : ${percentLabel(draft.minNetYieldPercent)}`, (d) => ({ ...d, minNetYieldPercent: null }));
+      add('net', `Net : ${roundPercent(draft.minNetYieldPercent)}`, (d) => ({ ...d, minNetYieldPercent: null }));
     }
-    if (draft.minMonthlyCashFlow !== null) {
-      const v = draft.minMonthlyCashFlow;
-      const sign = v > 0 ? '+' : v < 0 ? '−' : '';
-      add('cashflow', `Cash-flow : ${sign}${euroFormat.format(Math.abs(v))}`, (d) => ({ ...d, minMonthlyCashFlow: null }));
-    }
+    if (draft.minMonthlyCashFlow !== null) add('cashflow', `Cash-flow : ${signedEuros(draft.minMonthlyCashFlow)}`, (d) => ({ ...d, minMonthlyCashFlow: null }));
     if (draft.downPayment !== null) add('downPayment', `Apport : ${compactPrice(draft.downPayment)}`, (d) => ({ ...d, downPayment: null }));
     if (draft.maxWorksAmount !== null) {
       add('works', draft.maxWorksAmount === 0 ? 'Sans travaux' : `Travaux : ${compactPrice(draft.maxWorksAmount)} max`, (d) => ({ ...d, maxWorksAmount: null }));
     }
-    if (draft.mixedBuilding) add('investmentKind', 'Immeuble mixte', (d) => ({ ...d, mixedBuilding: false }));
+    if (draft.maxAnnualPropertyTax !== null) {
+      add('tax', `Taxe foncière : ${compactPrice(draft.maxAnnualPropertyTax)} max`, (d) => ({ ...d, maxAnnualPropertyTax: null }));
+    }
+    // Situation locative et immeuble mixte (les types d'actif ont déjà leur pastille).
+    if (draft.leasedOnly) add('leased', 'Vendu loué', (d) => ({ ...d, leasedOnly: false }));
+    if (draft.vacantOnly) add('vacant', 'Bien libre', (d) => ({ ...d, vacantOnly: false }));
+    if (draft.mixedBuilding) add('investmentKind', 'Immeuble mixte', (d) => withInvestmentKind(d, 'classic'));
+    if (draft.requiresDeclaredRent) add('declaredRent', 'Loyer déclaré', (d) => ({ ...d, requiresDeclaredRent: false }));
   }
+  if (draft.worstEnergyClass !== null) add('energy', energyRangeLabel(draft.worstEnergyClass), (d) => ({ ...d, worstEnergyClass: null }));
+  const floors = rangeLabel(draft.floorMin, draft.floorMax, (n) => `${n}e`);
+  add('floorRange', floors && `Étage : ${floors}`, (d) => ({ ...d, floorMin: null, floorMax: null }));
+  const years = rangeLabel(draft.yearBuiltMin, draft.yearBuiltMax, (n) => String(n));
+  add('year', years && `Construction : ${years}`, (d) => ({ ...d, yearBuiltMin: null, yearBuiltMax: null }));
+  if (mode === 'buy') {
+    if (draft.requiresDocumentedBuildability) add('buildable', 'Constructibilité documentée', (d) => ({ ...d, requiresDocumentedBuildability: false }));
+    if (draft.requiresServiced) add('serviced', 'Viabilisé', (d) => ({ ...d, requiresServiced: false }));
+    if (draft.zoning.trim()) add('zoning', `Zone ${draft.zoning.trim()}`, (d) => ({ ...d, zoning: '' }));
+  }
+  if (invest && draft.minCurrentMonthlyRent !== null) {
+    add('currentRent', `Loyer actuel : ${euroFormat.format(draft.minCurrentMonthlyRent)} min`, (d) => ({ ...d, minCurrentMonthlyRent: null }));
+  }
+  if (invest && draft.maxAnnualCharges !== null) {
+    add('annualCharges', `Charges : ${compactPrice(draft.maxAnnualCharges)}/an max`, (d) => ({ ...d, maxAnnualCharges: null }));
+  }
+  if (draft.excludesGroundFloor) add('floor', 'Hors rez-de-chaussée', (d) => ({ ...d, excludesGroundFloor: false }));
+  if (draft.requiresElevator) add('elevator', 'Ascenseur', (d) => ({ ...d, requiresElevator: false }));
+  const outdoor = OUTDOOR_SPACES.filter((space) => draft.outdoorSpaces.includes(space));
+  if (outdoor.length) add('outdoor', outdoor.map((space) => OUTDOOR_LABELS[space]).join(' ou '), (d) => ({ ...d, outdoorSpaces: [] }));
+  if (draft.requiresParking) add('parking', 'Parking', (d) => ({ ...d, requiresParking: false }));
   return chips;
 }

@@ -6,7 +6,7 @@ import { PlaceField } from '../components/PlaceField';
 import { ListingPhoto } from '../components/PhotoPager';
 import { SelectionDialog } from '../components/SelectionDialog';
 import { FiltersDialog } from './FiltersDialog';
-import { GOOD_YIELD } from '../lib/cardContent';
+import { GOOD_YIELD, grossYieldText } from '../lib/cardContent';
 import { formatArea, formatFraction, formatPrice } from '../lib/format';
 import { highlightsFor } from '../lib/highlights';
 import { homeTiles, moreCriteriaHint, type CriterionTileSpec } from '../lib/homeCriteria';
@@ -22,8 +22,10 @@ import { defaultDraft, paramsFromDraft, switchMode, type Highlights, type Search
 
 const MODES: SearchMode[] = ['buy', 'rent', 'invest', 'hotel'];
 
-function searchHref(draft: SearchDraft): string {
-  return `${PATHS.search}?${paramsFromDraft(draft).toString()}`;
+function searchHref(draft: SearchDraft, mapOpen = false): string {
+  const params = paramsFromDraft(draft);
+  if (mapOpen) params.set('vue', 'carte');
+  return `${PATHS.search}?${params.toString()}`;
 }
 
 /** Tuile de critère : icône, petit libellé, valeur en gras et chevron ; ouvre le menu de sélection. */
@@ -100,15 +102,16 @@ function Price({ row }: { row: ListingRow }) {
 
 /** Grande carte « Opportunités du moment » : photo, rentabilité, étiquette, titre, lieu, prix, loyer, point fort. */
 function OpportunityCard({ row, highlights }: { row: ListingRow; highlights: Highlights | null }) {
-  const monthlyRent = highlights ? Math.round((Number(row.price) * highlights.grossYield) / 12) : null;
+  // Loyer tiré du rendement brut, arrondi à l'euro comme l'app (MonthlyRentLine).
+  const monthlyRent = highlights ? highlights.text?.monthlyRentFromYield ?? formatPrice(Math.round((Number(row.price) * highlights.grossYield) / 12)) : null;
   return (
     <article className="home-card opportunity-card">
       <div className="opportunity-photo">
         <ListingPhoto photo={sortedPhotos(row)[0]} />
         {highlights && (
           <span className={`home-yield ${highlights.grossYield >= GOOD_YIELD ? 'tone-positive' : 'tone-caution'}`}
-            aria-label={`Rentabilité brute ${formatFraction(highlights.grossYield)}`}>
-            {formatFraction(highlights.grossYield)}
+            aria-label={`Rentabilité brute ${grossYieldText(highlights)}`}>
+            {grossYieldText(highlights)}
           </span>
         )}
       </div>
@@ -119,8 +122,8 @@ function OpportunityCard({ row, highlights }: { row: ListingRow; highlights: Hig
         <Price row={row} />
         <div className="opportunity-foot">
           {monthlyRent !== null && (
-            <span className="home-rent" aria-label={`Loyer estimé ${formatPrice(monthlyRent)} par mois`}>
-              <Icon name="chart" />{formatPrice(monthlyRent)}/mois
+            <span className="home-rent" aria-label={`Loyer estimé ${monthlyRent} par mois`}>
+              <Icon name="chart" />{monthlyRent}/mois
             </span>
           )}
           {highlights && highlights.grossYield >= GOOD_YIELD && <Tag text="Bon rendement" tone="positive" />}
@@ -267,10 +270,16 @@ export function HomePage() {
       <FiltersDialog
         open={filtersOpen}
         draft={draft}
+        remembered={drafts}
         onClose={() => setFiltersOpen(false)}
         onApply={(next) => {
+          // Depuis l'accueil, « Afficher N annonces » ouvre la liste des résultats de la catégorie.
           setFiltersOpen(false);
           window.location.assign(searchHref(next));
+        }}
+        onShowMap={(next) => {
+          setFiltersOpen(false);
+          window.location.assign(searchHref(next, true));
         }}
       />
     </Page>

@@ -5,11 +5,11 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { Icon } from './Icon';
 import { ListingPhoto } from './PhotoPager';
 import { clusters } from '../lib/clustering';
-import { formatFraction, formatPinPrice } from '../lib/format';
+import { formatPinPrice } from '../lib/format';
 import { sortedPhotos } from '../lib/listings';
 import type { Coordinate } from '../lib/places';
 import type { BoundingBox, Result } from '../lib/search';
-import { GOOD_YIELD } from '../lib/cardContent';
+import { GOOD_YIELD, grossYieldText } from '../lib/cardContent';
 
 // Moteur de carte servi par le site lui-même (pas de code téléchargé ailleurs).
 setWorkerUrl(workerUrl);
@@ -241,7 +241,7 @@ export function ResultsMap({ results, showsYield, selectedId, hoveredId, onSelec
                   <span className="map-marker-photo"><ListingPhoto photo={sortedPhotos(row)[0]} /></span>
                   <span className="map-marker-price">
                     {price}
-                    {isSelected && showsYield && highlights && <span className="map-marker-yield">{formatFraction(highlights.grossYield)}</span>}
+                    {isSelected && showsYield && highlights && <span className="map-marker-yield">{grossYieldText(highlights)}</span>}
                   </span>
                 </span>
                 <span className={`map-marker-dot${good ? ' good' : ''}`} />

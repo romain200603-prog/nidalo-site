@@ -25,12 +25,12 @@ export type KeyFact =
   | { kind: 'monthlyCharges'; value: number }
   | { kind: 'furnished'; value: boolean }
   | { kind: 'availableFrom'; value: Date }
-  | { kind: 'grossYield'; value: number }
-  | { kind: 'netYield'; value: number }
+  | { kind: 'grossYield'; value: number; text?: string }
+  | { kind: 'netYield'; value: number; text?: string }
   | { kind: 'currentRent'; value: number }
   | { kind: 'leaseEnd'; value: Date }
   | { kind: 'potentialRent'; value: number }
-  | { kind: 'estimatedCashFlow'; value: number }
+  | { kind: 'estimatedCashFlow'; value: number; text?: string }
   | { kind: 'yieldToCompute' }
   | { kind: 'hotelRooms'; value: number }
   | { kind: 'hotelStars'; value: number }
@@ -92,13 +92,18 @@ function landPricePerSquareMeter(row: ListingRow): number | null {
   return Math.round(Number(row.price) / land);
 }
 
+/** Indicateurs du moteur, avec les textes arrondis comme l'app. */
+const grossFact = (h: Highlights): KeyFact => ({ kind: 'grossYield', value: h.grossYield, text: h.text?.grossYield });
+const netFact = (h: Highlights): KeyFact => ({ kind: 'netYield', value: h.netYield, text: h.text?.netYield });
+const cashFlowFact = (h: Highlights): KeyFact => ({ kind: 'estimatedCashFlow', value: h.monthlyCashFlow, text: h.text?.monthlyCashFlow });
+
 function investmentFacts(row: ListingRow, highlights: Highlights | null): KeyFact[] {
   if (!highlights) return [{ kind: 'yieldToCompute' }];
-  const facts: KeyFact[] = [{ kind: 'grossYield', value: highlights.grossYield }];
+  const facts: KeyFact[] = [grossFact(highlights)];
   const rental = rentalInfo(row);
   if (rental?.currentMonthlyRent != null) facts.push({ kind: 'currentRent', value: rental.currentMonthlyRent });
   else if (rental?.potentialMonthlyRent != null) facts.push({ kind: 'potentialRent', value: rental.potentialMonthlyRent });
-  facts.push({ kind: 'estimatedCashFlow', value: highlights.monthlyCashFlow });
+  facts.push(cashFlowFact(highlights));
   return facts;
 }
 
@@ -107,7 +112,7 @@ function tenancyFacts(row: ListingRow, highlights: Highlights | null): KeyFact[]
   if (!rental) return [];
   if (rental.isLeased && rental.currentMonthlyRent !== null) {
     const facts: KeyFact[] = [{ kind: 'leased', annualRent: rental.currentMonthlyRent * 12 }];
-    if (highlights) facts.push({ kind: 'grossYield', value: highlights.grossYield });
+    if (highlights) facts.push(grossFact(highlights));
     return facts;
   }
   if (rental.isLeased) return [{ kind: 'leased', annualRent: null }];
@@ -156,7 +161,7 @@ function keyFacts(row: ListingRow, kind: CardKind, highlights: Highlights | null
       const scope = hotelScope(hotel?.scope);
       push(scope ? { kind: 'hotelScope', value: scope } : null);
       // Murs loués à un exploitant : le rendement immobilier, s'il est calculable.
-      if (scope === 'wallsOnly' && highlights) facts.push({ kind: 'grossYield', value: highlights.grossYield });
+      if (scope === 'wallsOnly' && highlights) facts.push(grossFact(highlights));
       const stars = int(hotel?.stars);
       push(stars === null ? null : { kind: 'hotelStars', value: stars });
       break;
@@ -200,7 +205,7 @@ function keyFacts(row: ListingRow, kind: CardKind, highlights: Highlights | null
         push(vacant !== null && vacant > 0 ? { kind: 'vacantUnits', value: vacant } : null);
       }
       if (rental?.currentMonthlyRent != null) facts.push({ kind: 'annualRent', value: rental.currentMonthlyRent * 12 });
-      if (highlights) facts.push({ kind: 'grossYield', value: highlights.grossYield });
+      if (highlights) facts.push(grossFact(highlights));
       break;
     }
   }
@@ -211,16 +216,16 @@ function investmentPanelFacts(row: ListingRow, highlights: Highlights | null): K
   if (!highlights) return [{ kind: 'yieldToCompute' }];
   const rental = rentalInfo(row);
   if (rental?.isLeased && rental.currentMonthlyRent !== null) {
-    const facts: KeyFact[] = [{ kind: 'grossYield', value: highlights.grossYield }, { kind: 'currentRent', value: rental.currentMonthlyRent }];
+    const facts: KeyFact[] = [grossFact(highlights), { kind: 'currentRent', value: rental.currentMonthlyRent }];
     if (rental.leaseEndDate) facts.push({ kind: 'leaseEnd', value: rental.leaseEndDate });
     if (rental.isFurnished !== null) facts.push({ kind: 'furnished', value: rental.isFurnished });
-    facts.push({ kind: 'estimatedCashFlow', value: highlights.monthlyCashFlow });
+    facts.push(cashFlowFact(highlights));
     return facts;
   }
   const facts: KeyFact[] = [
-    { kind: 'grossYield', value: highlights.grossYield },
-    { kind: 'netYield', value: highlights.netYield },
-    { kind: 'estimatedCashFlow', value: highlights.monthlyCashFlow },
+    grossFact(highlights),
+    netFact(highlights),
+    cashFlowFact(highlights),
   ];
   if (rental?.currentMonthlyRent != null) facts.push({ kind: 'annualRent', value: rental.currentMonthlyRent * 12 });
   else if (rental?.potentialMonthlyRent != null) facts.push({ kind: 'potentialRent', value: rental.potentialMonthlyRent });
@@ -275,6 +280,8 @@ export type FormattedFact = { icon: IconName; text: string; tone: Tone; isEstima
 /** Seuil du bon rendement brut : vert à partir de 7 %, orange en dessous. */
 export const GOOD_YIELD = 0.07;
 export const yieldTone = (grossYield: number): Tone => (grossYield >= GOOD_YIELD ? 'positive' : 'caution');
+/** « 6,2 % », arrondi comme l'app quand le moteur l'a calculé. */
+export const grossYieldText = (h: Highlights): string => h.text?.grossYield ?? formatFraction(h.grossYield);
 
 const monthYear = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' });
 const dayMonth = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long' });
@@ -310,16 +317,16 @@ export function formatFact(fact: KeyFact, now = new Date()): FormattedFact {
     case 'monthlyCharges': return f('euro', `Charges : ${formatPrice(fact.value)}/mois`);
     case 'furnished': return f('bedDouble', fact.value ? 'Meublé' : 'Non meublé');
     case 'availableFrom': return f('calendar', availability(fact.value, now));
-    case 'grossYield': return f('percent', `Rendement brut : ${formatFraction(fact.value)}`, yieldTone(fact.value));
-    case 'netYield': return f('percent', `Rendement net (est.) : ${formatFraction(fact.value)}`, yieldTone(fact.value), true);
+    case 'grossYield': return f('percent', `Rendement brut : ${fact.text ?? formatFraction(fact.value)}`, yieldTone(fact.value));
+    case 'netYield': return f('percent', `Rendement net (est.) : ${fact.text ?? formatFraction(fact.value)}`, yieldTone(fact.value), true);
     case 'leaseEnd': return f('fileText', `Bail en cours : jusqu’en ${monthYear.format(fact.value)}`);
     case 'occupancyRate':
       return f('percent', `Taux d’occupation : ${formatFraction(fact.value.value, 0)}`, 'neutral', fact.value.origin === 'estimated');
     case 'currentRent': return f('home', `Loyer actuel : ${formatPrice(fact.value)}/mois`);
     case 'potentialRent': return f('home', `Loyer potentiel : ${formatPrice(fact.value)}/mois`, 'muted', true);
     case 'estimatedCashFlow': {
-      const rounded = Math.round(fact.value);
-      return f('wallet', `Cash-flow estimé : ${formatSignedAmount(rounded)}/mois`, fact.value > 0 ? 'positive' : fact.value < 0 ? 'negative' : 'neutral', true);
+      const amount = fact.text ?? formatSignedAmount(Math.round(fact.value));
+      return f('wallet', `Cash-flow estimé : ${amount}/mois`, fact.value > 0 ? 'positive' : fact.value < 0 ? 'negative' : 'neutral', true);
     }
     case 'yieldToCompute': return f('percent', 'Rendement : à calculer (loyer non renseigné)', 'muted');
     case 'hotelRooms': return f('bedDouble', `${fact.value} chambres`);

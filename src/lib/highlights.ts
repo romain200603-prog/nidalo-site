@@ -1,11 +1,25 @@
+import { investmentForRow } from './investment';
 import type { ListingRow } from './listings';
 import type { Highlights } from './search';
 
 /**
- * Indicateurs de rentabilité d'une annonce (rendement brut, net, cash-flow), calculés comme l'app : hypothèses
- * standard, et l'apport de la recherche Investir s'il est choisi. Branché sur le moteur de calcul de l'app
- * (src/lib/investment) dès qu'il est recopié.
+ * Indicateurs de rentabilité d'une annonce (rendement brut, net, cash-flow), calculés par le moteur de l'app
+ * (src/lib/investment) : hypothèses standard (crédit sur 20 ans à 3,5 %, l'apport couvre les frais de notaire), ou
+ * l'apport saisi dans la recherche Investir. null quand l'app n'en affiche pas : location, aucun loyer connu, prix nul.
  */
-export function highlightsFor(_row: ListingRow, _downPayment: number | null): Highlights | null {
-  return null;
+export function highlightsFor(row: ListingRow, downPayment: number | null): Highlights | null {
+  const investment = investmentForRow(row, { downPayment });
+  if (!investment) return null;
+  return {
+    grossYield: investment.grossYield,
+    netYield: investment.netYield,
+    monthlyCashFlow: investment.monthlyCashFlow,
+    isRentEstimated: investment.isRentEstimated,
+    text: {
+      grossYield: investment.text.grossYield,
+      netYield: investment.text.netYield,
+      monthlyCashFlow: investment.text.monthlyCashFlow,
+      monthlyRentFromYield: investment.text.monthlyRentFromYield,
+    },
+  };
 }

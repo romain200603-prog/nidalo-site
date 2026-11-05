@@ -9,7 +9,8 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const { chromium, devices } = require('playwright');
 const root = resolve(fileURLToPath(import.meta.url), '../..');
-const docs = join(root, 'docs');
+// Dossier du site construit : docs/ par défaut, ou NIDALO_DOCS (construction à part, sans toucher docs/).
+const docs = resolve(process.env.NIDALO_DOCS ?? join(root, 'docs'));
 const out = resolve(process.argv[2] ?? join(root, 'scripts', 'captures'));
 await mkdir(out, { recursive: true });
 
@@ -69,6 +70,16 @@ async function mock(context) {
 }
 
 const problems = [];
+
+/** Le bouton des filtres finit par donner le nombre d'annonces (« Afficher 2 annonces », « Aucune annonce »). */
+async function checkApplyButton(page, name) {
+  try {
+    await page.waitForFunction(() => /^(Afficher \d[\d\s]* annonces?|Afficher 1 annonce|Aucune annonce)$/
+      .test(document.querySelector('dialog[open] .filters-apply .btn')?.textContent?.trim() ?? ''), null, { timeout: 8000 });
+  } catch {
+    problems.push(`${name} : bouton « ${await page.textContent('dialog[open] .filters-apply .btn')} »`);
+  }
+}
 async function open(context, path, name) {
   const page = await context.newPage();
   page.on('console', (msg) => {
@@ -94,6 +105,8 @@ try {
   let page = await open(desktop, '/', 'accueil-ordinateur');
   await page.waitForSelector('.home-search-card');
   await page.waitForSelector('.home-section');
+  const yieldChip = await page.locator('.opportunity-card .home-yield').first().textContent().catch(() => null);
+  if (yieldChip?.replace(/\s/g, ' ') !== '5,5 %') problems.push(`accueil : rendement de l'opportunité « ${yieldChip} » au lieu de « 5,5 % »`);
   await page.screenshot({ path: join(out, 'accueil-ordinateur.png'), fullPage: true });
   await page.click('.criterion-tile >> nth=0');
   await page.waitForSelector('dialog.selection-dialog[open]');
@@ -129,8 +142,40 @@ try {
   await page.waitForFunction(() => location.search.includes('lieu=Lyon'));
   await page.click('.filters-button');
   await page.waitForSelector('dialog.filters-dialog[open]');
+  await checkApplyButton(page, 'filtres ordinateur');
+  // Un critère choisi apparaît en pastille retirable ; le DPE affiche sa fourchette.
+  await page.getByRole('group', { name: 'Pièces minimum' }).getByRole('button', { name: '3', exact: true }).click();
+  await page.getByRole('button', { name: 'DPE C', exact: true }).click();
+  const dpe = await page.getByRole('group', { name: 'DPE maximum accepté' }).locator('.field-value').textContent();
+  if (dpe !== 'DPE A à C') problems.push(`filtres : DPE affiché « ${dpe} » au lieu de « DPE A à C »`);
+  const chips = await page.locator('dialog[open] .active-chip').allTextContents();
+  if (!chips.some((c) => /pièce/.test(c)) || !chips.some((c) => /DPE/.test(c))) problems.push(`filtres : pastilles « ${chips.join(' | ')} »`);
   await page.screenshot({ path: join(out, 'filtres-ordinateur.png') });
-  await page.keyboard.press('Escape');
+  // Investir : rentabilité, situation locative ; puis Hôtels.
+  await page.click('dialog[open] .filters-modes .mode-tab >> nth=2');
+  await page.getByRole('heading', { name: 'Rentabilité' }).scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: join(out, 'filtres-investir-ordinateur.png') });
+  await page.click('dialog[open] .filters-modes .mode-tab >> nth=3');
+  await page.getByRole('heading', { name: 'Établissement et exploitation' }).scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: join(out, 'filtres-hotels-ordinateur.png') });
+  await page.click('dialog[open] .filters-modes .mode-tab >> nth=2');
+  await page.getByLabel('Rendement brut minimum').fill('5');
+  await checkApplyButton(page, 'filtres Investir');
+  await page.click('dialog[open] .filters-apply .btn');
+  await page.waitForFunction(() => location.search.includes('mode=invest') && location.search.includes('brutMin=5'));
+  if (await page.locator('dialog.filters-dialog[open]').count()) problems.push('filtres : la fenêtre reste ouverte après « Afficher »');
+  await page.close();
+
+  // Investir : chiffres du moteur de l'app sur la fiche du bien loué (850 €/mois pour 185 000 €).
+  page = await open(desktop, '/recherche/?mode=invest', 'investir-ordinateur');
+  await page.waitForSelector('.listing-card');
+  const investCard = (await page.textContent('.listing-card'))?.replace(/\s/g, ' ') ?? '';
+  for (const expected of [/Rendement brut\s*5,5 %/, /Loyer actuel\s*850 €\/mois/, /Cash-flow estimé\s*−474 €\/mois/]) {
+    if (!expected.test(investCard)) problems.push(`investir : ${expected} absent de la fiche (« ${investCard.slice(0, 200)} »)`);
+  }
+  await page.screenshot({ path: join(out, 'investir-ordinateur.png') });
   for (const [path, name] of [['/aide/', 'aide'], ['/favoris/', 'favoris'], ['/page-inexistante/', '404']]) {
     const p = await open(desktop, path, name);
     await p.screenshot({ path: join(out, `${name}-ordinateur.png`) });
@@ -168,10 +213,31 @@ try {
   await page.click('.map-close');
   await page.click('.filters-button');
   await page.waitForSelector('dialog.filters-dialog[open]');
+  await checkApplyButton(page, 'filtres téléphone');
   await page.screenshot({ path: join(out, 'filtres-telephone.png') });
+  await page.evaluate(() => document.querySelector('dialog[open] .filters-scroll')?.scrollTo(0, 1e6));
+  await page.screenshot({ path: join(out, 'filtres-telephone-bas.png') });
+  // « Voir sur la carte » : applique les filtres et ouvre la carte, gardée dans l'adresse.
+  await page.evaluate(() => document.querySelector('dialog[open] .filters-scroll')?.scrollTo(0, 0));
+  await page.click('dialog[open] .filters-map-link');
+  await page.waitForSelector('.map-column.is-open');
+  if (!page.url().includes('vue=carte')) problems.push(`carte : adresse sans « vue=carte » (${page.url()})`);
+  await page.click('.map-close');
+  if (page.url().includes('vue=carte')) problems.push(`carte : « vue=carte » reste après fermeture (${page.url()})`);
   page = await open(phone, '/recherche/?mode=rent', 'location-telephone');
   await page.waitForSelector('.listing-card');
   await page.screenshot({ path: join(out, 'location-telephone.png'), fullPage: true });
+  // Location : charges et date de disponibilité (interrupteur, puis calendrier dans un mois).
+  await page.click('.filters-button');
+  await page.waitForSelector('dialog.filters-dialog[open]');
+  await page.getByRole('switch', { name: 'Disponible au plus tard le' }).check();
+  const day = await page.inputValue('dialog[open] .date-input');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) problems.push(`location : date de disponibilité « ${day} »`);
+  await page.getByRole('heading', { name: 'Charges et disponibilité' }).scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: join(out, 'filtres-location-telephone.png') });
+  const rentChips = await page.locator('dialog[open] .active-chip').allTextContents();
+  if (!rentChips.some((c) => /^Dispo\. avant le /.test(c))) problems.push(`location : pastilles « ${rentChips.join(' | ')} »`);
   await phone.close();
 } finally {
   await browser.close();

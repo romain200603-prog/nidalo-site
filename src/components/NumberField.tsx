@@ -2,14 +2,15 @@ import { useId, useRef, type ChangeEvent } from 'react';
 
 const grouping = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 });
 
-/** « 250000 » → « 250 000 » (espaces fines insécables), comme les champs de nombres de l'app. */
-export function groupDigits(raw: string, allowDecimal: boolean, allowNegative: boolean): string {
+/** « 250000 » → « 250 000 » (espaces fines insécables), comme les champs de nombres de l'app ; sans espaces pour
+ * une année (`groups` à false). */
+export function groupDigits(raw: string, allowDecimal: boolean, allowNegative: boolean, groups = true): string {
   const negative = allowNegative && /^\s*[-−]/.test(raw);
   let cleaned = raw.replace(/[^\d,.]/g, '').replace('.', ',');
   if (!allowDecimal) cleaned = cleaned.replace(/,.*/, '');
   const [whole, decimals] = cleaned.split(',');
   const digits = (whole ?? '').replace(/^0+(?=\d)/, '');
-  const grouped = digits ? grouping.format(Number(digits)).replace(/\s/g, ' ') : '';
+  const grouped = digits ? !groups ? digits : grouping.format(Number(digits)).replace(/\s/g, ' ') : '';
   const sign = negative ? '−' : '';
   if (decimals !== undefined) return `${sign}${grouped || '0'},${decimals.replace(/,/g, '').slice(0, 2)}`;
   return `${sign}${grouped}`;
@@ -33,19 +34,21 @@ type Props = {
   allowNegative?: boolean;
   hint?: string;
   error?: string | null;
+  /** Milliers espacés (« 250 000 ») ; à false pour une année. */
+  groups?: boolean;
 };
 
-export function NumberField({ label, value, onChange, unit, placeholder, allowDecimal = false, allowNegative = false, hint, error }: Props) {
+export function NumberField({ label, value, onChange, unit, placeholder, allowDecimal = false, allowNegative = false, hint, error, groups = true }: Props) {
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
-  const shown = value === null ? '' : groupDigits(String(value).replace('.', ',').replace('-', '−'), allowDecimal, allowNegative);
+  const shown = value === null ? '' : groupDigits(String(value).replace('.', ',').replace('-', '−'), allowDecimal, allowNegative, groups);
 
   function handle(event: ChangeEvent<HTMLInputElement>) {
     const el = event.target;
     const caret = el.selectionStart ?? el.value.length;
     // Nombre de chiffres avant le curseur, pour le remettre au même endroit après le regroupement.
     const digitsBefore = el.value.slice(0, caret).replace(/[^\d,]/g, '').length;
-    const text = groupDigits(el.value, allowDecimal, allowNegative);
+    const text = groupDigits(el.value, allowDecimal, allowNegative, groups);
     const next = parseGrouped(text);
     onChange(text === '' || text === '−' ? null : next);
     requestAnimationFrame(() => {
@@ -70,7 +73,7 @@ export function NumberField({ label, value, onChange, unit, placeholder, allowDe
           ref={input}
           id={id}
           type="text"
-          inputMode={allowDecimal ? 'decimal' : 'numeric'}
+          inputMode={allowNegative ? 'text' : allowDecimal ? 'decimal' : 'numeric'}
           autoComplete="off"
           placeholder={placeholder ?? 'Indifférent'}
           value={shown}
