@@ -1,5 +1,7 @@
-import { Page } from '../components/Layout';
 import { mount } from './mount';
+import { ListingPage } from '../pages/ListingPage';
+import '../styles/listing.css';
 
-// Page d'une annonce : écrite d'après la fiche de l'app (étape suivante).
-mount(<Page section="search"><div className="wrap" /></Page>);
+// Page d'une annonce : /annonce/?id=…(&mode=invest), d'après la fiche de l'app.
+document.body.classList.add('page-listing');
+mount(<ListingPage />);

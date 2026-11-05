@@ -1,0 +1,199 @@
+{
+ "_note": "Données inventées pour scripts/check-listing.mjs (fiche d’une annonce). Aucune personne ni adresse réelle.",
+ "listings": [
+  {
+   "id": "6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1a04",
+   "owner_id": "00000000-0000-4000-8000-0000000000ab",
+   "status": "active",
+   "transaction": "sale",
+   "property_type": "hotel",
+   "publish_category": "hotel",
+   "title": "Hôtel 3 étoiles de 24 chambres",
+   "description": "Hôtel en activité au centre-ville, vendu murs et fonds.\n\nAnnonce de test inventée pour vérifier le site.",
+   "price": 1890000,
+   "monthly_charges": null,
+   "annual_property_tax": 14500,
+   "works_amount": null,
+   "agency_fees_amount": 60000,
+   "agency_fees_paid_by": "seller",
+   "previous_price": null,
+   "country_code": "FR",
+   "postal_code": "74000",
+   "city": "Annecy",
+   "insee_code": "74010",
+   "location_precision": "exact",
+   "public_latitude": 45.8992,
+   "public_longitude": 6.1294,
+   "public_street": null,
+   "living_area": 980,
+   "land_area": null,
+   "rooms": null,
+   "bedrooms": null,
+   "floor": null,
+   "total_floors": 4,
+   "has_elevator": true,
+   "outdoor_spaces": [
+    "terrace"
+   ],
+   "parking": "outdoorSpace",
+   "year_built": 1930,
+   "is_new_build": false,
+   "has_cellar": null,
+   "condition": "good",
+   "accepts_video_visits": false,
+   "energy_class": "D",
+   "climate_class": "D",
+   "primary_energy_consumption": 230,
+   "annual_energy_cost_min": null,
+   "annual_energy_cost_max": null,
+   "diagnostic_date": "2025-09-15",
+   "rental_info": null,
+   "asset_details": {
+    "hotel": {
+     "_0": {
+      "rooms": 24,
+      "stars": 3,
+      "scope": "wallsAndBusiness",
+      "annualRevenue": {
+       "value": 1180000,
+       "origin": "seller"
+      },
+      "ebitda": {
+       "value": 236000,
+       "origin": "seller"
+      },
+      "occupancyRate": {
+       "value": 0.78,
+       "origin": "seller"
+      },
+      "financialYear": 2025,
+      "operatingStatus": "operating",
+      "amenities": [
+       "restaurant",
+       "bar",
+       "parking"
+      ]
+     }
+    }
+   },
+   "published_at": "2026-10-20T09:30:00Z",
+   "created_at": "2026-10-20T09:00:00Z",
+   "updated_at": "2026-10-20T09:30:00Z",
+   "listing_photos": [
+    {
+     "id": "h1",
+     "storage_path": "test/photo2.jpg",
+     "position": 0,
+     "width": 1400,
+     "height": 800
+    },
+    {
+     "id": "h2",
+     "storage_path": "test/photo0.jpg",
+     "position": 1,
+     "width": 1400,
+     "height": 800
+    },
+    {
+     "id": "h3",
+     "storage_path": "test/photo1.jpg",
+     "position": 2,
+     "width": 1400,
+     "height": 800
+    }
+   ]
+  },
+  {
+   "id": "6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1a05",
+   "owner_id": "00000000-0000-4000-8000-0000000000ac",
+   "status": "active",
+   "transaction": "sale",
+   "property_type": "house",
+   "publish_category": "residential",
+   "title": "Maison de ville à rénover avec jardin",
+   "description": "Maison mitoyenne sur deux niveaux, jardin à l’arrière.\nTravaux à prévoir.\n\nAnnonce de test inventée pour vérifier le site.",
+   "price": 165000,
+   "monthly_charges": null,
+   "annual_property_tax": 1250,
+   "works_amount": null,
+   "agency_fees_amount": null,
+   "agency_fees_paid_by": null,
+   "previous_price": null,
+   "country_code": "FR",
+   "postal_code": "42000",
+   "city": "Saint-Étienne",
+   "insee_code": "42218",
+   "location_precision": "approximate",
+   "public_latitude": 45.4397,
+   "public_longitude": 4.3872,
+   "public_street": null,
+   "living_area": 88,
+   "land_area": 120,
+   "rooms": 4,
+   "bedrooms": 3,
+   "floor": null,
+   "total_floors": 2,
+   "has_elevator": null,
+   "outdoor_spaces": [
+    "garden"
+   ],
+   "parking": "garage",
+   "year_built": 1955,
+   "is_new_build": false,
+   "has_cellar": true,
+   "condition": "toRenovate",
+   "accepts_video_visits": false,
+   "energy_class": "F",
+   "climate_class": "F",
+   "primary_energy_consumption": 390,
+   "annual_energy_cost_min": 2100,
+   "annual_energy_cost_max": 2800,
+   "diagnostic_date": "2026-01-10",
+   "rental_info": {
+    "isLeased": false,
+    "potentialMonthlyRent": 890
+   },
+   "asset_details": null,
+   "published_at": "2026-11-01T08:00:00Z",
+   "created_at": "2026-11-01T07:45:00Z",
+   "updated_at": "2026-11-01T08:00:00Z",
+   "listing_photos": [
+    {
+     "id": "m1",
+     "storage_path": "test/photo1.jpg",
+     "position": 0,
+     "width": 1400,
+     "height": 800
+    }
+   ]
+  }
+ ],
+ "profiles": [
+  {
+   "user_id": "00000000-0000-4000-8000-0000000000aa",
+   "public_name": "Claire Essai",
+   "avatar_path": null,
+   "account_type": "individual",
+   "member_since": "2025-03-01",
+   "agency_id": null,
+   "agency_name": null,
+   "agency_logo_path": null,
+   "agency_postal_code": null,
+   "agency_city": null,
+   "agency_phone": null
+  },
+  {
+   "user_id": "00000000-0000-4000-8000-0000000000ab",
+   "public_name": "Paul Démo",
+   "avatar_path": null,
+   "account_type": "professional",
+   "member_since": "2024-06-01",
+   "agency_id": "00000000-0000-4000-8000-0000000000f1",
+   "agency_name": "Agence Démo Immobilier",
+   "agency_logo_path": null,
+   "agency_postal_code": "69002",
+   "agency_city": "Lyon",
+   "agency_phone": null
+  }
+ ]
+}
