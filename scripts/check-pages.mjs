@@ -262,6 +262,15 @@ async function mock(context, { signedIn = false, listingRows = listings, account
       }
       return json(route, 204);
     }
+    if (['rpc/my_offers', 'rpc/my_visit_requests', 'agenda_visits', 'rpc/start_listing_conversation', 'rpc/make_offer', 'rpc/create_visit_request'].includes(table)) {
+      // Fiche d'une annonce sur ordinateur : offres, demandes de visite et agenda du compte (vides ici ; les actions
+      // sont vérifiées par scripts/check-listing.mjs). Rien de cela sans compte, ni sous 1024 px.
+      const width = pageWidth(request);
+      if (width !== null && width < 1024) problems.push(`téléphone : ${table} demandé (rien ne doit changer sous 1024 px)`);
+      if (!signedIn) problems.push(`sans compte : ${table} demandé`);
+      else if (!['rpc/my_offers', 'rpc/my_visit_requests', 'agenda_visits'].includes(table)) problems.push(`${table} appelé sans action de la personne`);
+      return json(route, 200, []);
+    }
     if (signedIn && table in tables) {
       if (request.method() !== 'GET' && request.method() !== 'HEAD') {
         let body = null;
@@ -676,8 +685,9 @@ try {
   }
   await page.close();
   page = await open(signed, `/annonce/?id=${listings[0].id}`, 'annonce-connecte');
-  await page.waitForSelector('.gallery-action[aria-pressed]');
-  if ((await page.getAttribute('.gallery-action[aria-pressed]', 'aria-pressed')) !== 'true') problems.push('annonce : le cœur d\'un favori n\'est pas rempli');
+  // Sur ordinateur, le cœur des favoris est « Enregistrer », à côté du titre (fiche de l'étape 3).
+  await page.waitForSelector('.dl-save[aria-pressed]');
+  if ((await page.getAttribute('.dl-save[aria-pressed]', 'aria-pressed')) !== 'true') problems.push('annonce : le cœur d\'un favori n\'est pas rempli');
   await page.close();
   await signed.close();
 

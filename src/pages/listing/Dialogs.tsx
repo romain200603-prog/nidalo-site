@@ -87,6 +87,9 @@ const ACCOUNT_TITLES: Record<AccountAction, string> = {
   offer: 'Faire une offre',
 };
 
+/** Ce que le téléphone dit d'une action qui demande un compte : elle arrive bientôt sur le site, l'app le fait déjà. */
+export const ACCOUNT_SOON_MESSAGE = 'Bientôt sur le site, avec votre compte Nidalo. En attendant, c’est déjà possible dans l’app Nidalo, avec le même compte.';
+
 /**
  * Sans compte sur le site (phase 1) : l'action arrive bientôt, et l'app le fait déjà. Pas de lien vers l'app :
  * elle n'ouvre pas encore une annonce depuis un lien (ImmoApp.swift ne gère que les invitations et la connexion).
@@ -98,7 +101,7 @@ export function AccountDialog({ action, isAgency, onClose }: { action: AccountAc
       open={action !== null}
       onClose={onClose}
       title={title}
-      message="Bientôt sur le site, avec votre compte Nidalo. En attendant, c’est déjà possible dans l’app Nidalo, avec le même compte."
+      message={ACCOUNT_SOON_MESSAGE}
       actions={[{ label: 'Fermer', onClick: onClose, tone: 'primary' }]}
     />
   );

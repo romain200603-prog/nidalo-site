@@ -1,4 +1,6 @@
+import type { SearchMode } from '../labels';
 import type { ListingRow } from '../listings';
+import { listingPath } from '../paths';
 import { hotelOf } from './fields';
 
 // Texte du bouton « Partager », comme l'app (ImmoDomain/Listing/ListingShare.swift) : titre et lieu (ville et code
@@ -62,4 +64,30 @@ export function shareText(row: ShareRow): ShareText {
     subject: `${row.title} à ${city} · ${price}`,
     previewTitle: `${row.title} · ${price}`,
   };
+}
+
+/** Issue du bouton « Partager » : rien à ajouter (partagé ou annulé), lien copié, ou lien à copier à la main. */
+export type ShareOutcome = 'done' | 'copied' | { link: string };
+
+/**
+ * « Partager » : partage du navigateur avec le texte de l'app et le lien de la page ; sans lui (ou s'il échoue
+ * autrement qu'en étant annulé), le lien est copié ; sinon il est rendu, pour être copié à la main.
+ */
+export async function shareListing(row: ShareRow & Pick<ListingRow, 'id'>, mode: SearchMode | null): Promise<ShareOutcome> {
+  const { text, subject } = shareText(row);
+  const url = new URL(listingPath(row.id, mode), window.location.origin).toString();
+  if (typeof navigator.share === 'function') {
+    try {
+      await navigator.share({ title: subject, text, url });
+      return 'done';
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return 'done';
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    return 'copied';
+  } catch {
+    return { link: url };
+  }
 }

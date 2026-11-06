@@ -1,7 +1,6 @@
-import { Icon } from '../components/Icon';
 import type { IconName } from '../components/iconPaths';
 import { Page, type Section } from '../components/Layout';
-import { PATHS } from '../lib/paths';
+import { SoonCard } from '../components/SoonCard';
 import { mount } from './mount';
 
 // Messages et publication arrivent sur le site aux étapes suivantes ; en attendant, dans l'app.
@@ -20,16 +19,6 @@ const page = PAGES[document.body.dataset.section ?? ''] ?? PAGES.messages;
 
 mount(
   <Page section={page.section}>
-    <div className="wrap wrap-narrow">
-      <div className="card state">
-        <Icon name={page.icon} />
-        <h1>{page.title}</h1>
-        <p>{page.text}</p>
-        <a className="btn btn-primary" href={PATHS.search}>
-          <Icon name="search" />
-          Chercher un bien
-        </a>
-      </div>
-    </div>
+    <SoonCard icon={page.icon} title={page.title} text={page.text} />
   </Page>,
 );

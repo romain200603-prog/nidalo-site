@@ -1,0 +1,291 @@
+/* Fiche d'un bien sur ordinateur (maquette 2 de Romain), à partir de 1024 px. Tout est dans @media (min-width: 1024px)
+   et sous .dl (DesktopListing) : en dessous de 1024 px, la fiche du téléphone ne change pas. Mesures de la maquette
+   à 1440 px : contenu de 1200 px, colonne de gauche de 780 px, colonne de droite de 380 px, 40 px entre les deux. */
+
+@media (min-width: 1024px) {
+  /* Couleurs des cartes de catégorie (Spec) ramenées à celles de l'ordinateur. */
+  .dl {
+    --spec-navy: var(--d-text);
+    --spec-gray: var(--d-grey);
+    --spec-rule: var(--d-separator);
+    --spec-card-border: var(--d-card-border);
+    padding-bottom: 8px;
+    color: var(--d-text);
+  }
+  .dl-inner { width: min(var(--d-content), 100% - 2 * var(--d-margin)); margin: 0 auto; }
+  .dl :is(.dl-back, .dl-tool, .dl-button, .dl-pill, .dl-pill-wide, .dl-visit-agenda, .dl-screen-close, .dl-option, .dl-chip,
+    .dl-submit, .dl-secondary, .dl-link-button, .gallery-page, .gallery-all, .btn, .dl-toast-box a):focus-visible,
+  .dl a.dl-visit-card:focus-visible { outline: 3px solid var(--d-blue); outline-offset: 2px; }
+
+  /* ——— Haut : retour, catégorie, titre (36), ville, puis Partager · Enregistrer · Comparer ——— */
+  .dl .dl-back { margin-top: 20px; gap: 4px; padding: 0 6px 0 0; color: var(--d-grey); font-size: 14px; font-weight: 500; line-height: 20px; }
+  .dl .dl-back .icon { width: 16px; height: 16px; }
+  .dl .dl-back:hover { color: var(--d-blue); }
+  .dl-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-top: 10px; }
+  .dl-head-text { min-width: 0; }
+  .dl-category { margin: 0; color: var(--d-blue); font-size: 11.5px; font-weight: 600; letter-spacing: 0.05em; line-height: 16px; }
+  .dl-title { margin: 6px 0 0; color: var(--d-text); font-size: 36px; font-weight: 700; letter-spacing: -0.01em; line-height: 44px; overflow-wrap: anywhere; }
+  .dl-place { margin: 5px 0 0; display: flex; align-items: center; gap: 6px; color: var(--d-grey); font-size: 15px; line-height: 20px; }
+  .dl-place .icon { flex: none; width: 16px; height: 16px; }
+  .dl-tools { flex: none; display: flex; gap: 10px; }
+  .dl-tool { display: inline-flex; align-items: center; gap: 9px; height: var(--d-button-height); padding: 0 18px; border: 1px solid var(--d-field-border); border-radius: var(--d-button-radius); background: #FFFFFF; color: var(--d-text); font: inherit; font-size: 15px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+  .dl-tool .icon { flex: none; width: 18px; height: 18px; }
+  .dl-tool:hover { background: var(--d-hover); }
+  .dl-tool.is-active { border-color: var(--d-blue-line); background: var(--d-blue-light); color: var(--d-blue); }
+
+  /* ——— Galerie : 466 px, la grande photo (2/3) et deux photos l'une sur l'autre ; une seule photo sous 3 ——— */
+  .dl-gallery { margin-top: 19px; }
+  .dl .gallery { height: 466px; border-radius: var(--d-card-radius); background: transparent; }
+  .dl .gallery-strip { gap: 10px; overflow: hidden; border-radius: var(--d-card-radius); }
+  .dl .gallery-one .gallery-strip, .dl .gallery-two .gallery-strip, .dl .gallery-empty .gallery-strip { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+  .dl .gallery-two .gallery-page:nth-child(2) { display: none; }
+  .dl .gallery-empty { height: 466px; }
+  .dl .gallery-empty .gallery-page, .dl .gallery .photo-empty { background: var(--d-separator); color: var(--d-chevron); }
+  .dl .gallery-all { right: 14px; bottom: 14px; gap: 8px; height: 40px; padding: 0 14px; border-radius: 10px; color: var(--d-text); font-size: 15px; font-weight: 600; box-shadow: 0 2px 10px rgba(36, 45, 56, 0.16); }
+  .dl .gallery-all .icon { color: var(--d-text); }
+  .dl .gallery-all:hover { background: var(--d-hover); }
+
+  /* ——— Contenu : deux colonnes, celle de droite reste à l'écran ——— */
+  .dl-body { display: grid; grid-template-columns: minmax(0, 1fr) 380px; column-gap: 40px; align-items: start; margin-top: 32px; }
+  .dl-main { min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+  .dl-aside { position: sticky; top: 24px; }
+
+  /* Prix (40/800) et prix au m², ou « /mois hors charges ». */
+  .dl-price-line { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 12px; }
+  .dl-price-value { color: var(--d-text); font-size: 40px; font-weight: 800; letter-spacing: -0.02em; line-height: 48px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .dl-price-secondary { color: var(--d-grey); font-size: 16px; font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .dl-condition { margin: 4px 0 0; color: var(--d-grey); font-size: 14px; font-weight: 500; }
+
+  /* Chiffres clés : une carte, une case par chiffre. */
+  .dl-facts { margin: 0; display: grid; overflow: hidden; border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; }
+  .dl-fact { min-width: 0; display: flex; flex-direction: column-reverse; align-items: center; justify-content: center; gap: 3px; padding: 18px 10px 19px; }
+  .dl-fact + .dl-fact { border-left: 1px solid var(--d-card-border); }
+  .dl-fact dd { max-width: 100%; margin: 0; overflow: hidden; color: var(--d-text); font-size: 20px; font-weight: 700; line-height: 24px; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .dl-fact dt { color: var(--d-grey); font-size: 14px; line-height: 20px; white-space: nowrap; }
+
+  /* Cartes de la catégorie : titre 24, sous-titre 15, bandeau #3C5CB0, encadrés blancs. */
+  .dl .spec-stack { gap: 20px; }
+  .dl .spec-card { padding: 25px 26px 26px; border-color: var(--d-card-border); border-radius: var(--d-card-radius); color: var(--d-text); }
+  .dl .spec-header-icon { display: none; }
+  .dl .spec-header-text { gap: 6px; }
+  .dl .spec-header h2, .dl .spec-card-title, .dl .spec-simulator-title { color: var(--d-text); font-size: 24px; font-weight: 700; letter-spacing: -0.01em; line-height: 30px; }
+  .dl .spec-header p { color: var(--d-grey); font-size: 15px; font-weight: 400; line-height: 20px; }
+  .dl .spec-banner { margin-top: 19px; padding: 22px 26px; border-radius: var(--d-card-radius); background: var(--d-blue); }
+  .dl .spec-banner-col { gap: 0; }
+  .dl .spec-banner-left { padding-right: 26px; box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.28); }
+  .dl .spec-banner-hotel .spec-banner-left { padding-right: 26px; }
+  .dl .spec-banner-right { padding-left: 26px; }
+  .dl .spec-banner-label, .dl .spec-banner-detail { color: #E4E9F6; font-size: 15px; font-weight: 400; line-height: 20px; }
+  .dl .spec-banner-value { height: 48px; margin-top: 4px; gap: 8px; font-size: 40px; }
+  .dl .spec-banner-value.has-unit { margin-bottom: 0; }
+  .dl .spec-banner-amount { font-weight: 800; letter-spacing: -0.02em; line-height: 48px; }
+  .dl .spec-banner-unit { font-size: 0.45em; font-weight: 700; }
+  .dl .spec-banner-detail { margin-top: 10px; }
+  .dl .spec-banner-hotel .spec-banner-value { height: 44px; font-size: 34px; }
+  .dl .spec-banner-hotel .spec-banner-amount { line-height: 44px; }
+  .dl .spec-value-box, .dl .spec-value-box.is-positive, .dl .spec-value-box.is-negative { margin-top: 15px; padding: 16px 20px; border-color: var(--d-card-border); border-radius: 14px; background: #FFFFFF; }
+  .dl .spec-value-title { color: var(--d-text); font-size: 16px; font-weight: 700; line-height: 22px; }
+  .dl .spec-value-subtitle { color: var(--d-grey); font-size: 14px; font-weight: 400; line-height: 20px; }
+  .dl .spec-box-value { font-size: 22px; font-weight: 800; line-height: 28px; }
+  .dl .spec-value-caption { gap: 6px; height: 22px; font-size: 16px; font-weight: 700; }
+  .dl .spec-value-caption .icon { width: 16px; height: 16px; }
+  .dl .spec-block-title h3, .dl .spec-simulator h3 { color: var(--d-text); font-size: 17px; font-weight: 700; }
+  .dl .spec-bar-label, .dl .spec-segment-title { color: var(--d-text); font-size: 15px; }
+  .dl .spec-segment-title { color: var(--d-grey); }
+  .dl .spec-bar-amount, .dl .spec-total-label { color: var(--d-text); }
+  .dl .spec-segments { border-radius: var(--d-button-radius); background: var(--d-separator); }
+  .dl .spec-segment { border-radius: 9px; font-size: 15px; font-weight: 600; }
+  .dl .spec-segment[aria-pressed="true"] { color: var(--d-blue); box-shadow: 0 1px 3px rgba(36, 45, 56, 0.12); }
+  .dl .spec-segment:focus-visible { outline: 2px solid var(--d-blue); outline-offset: 1px; }
+  .dl .spec-kpi-title, .dl .spec-kpi-value { color: var(--d-text); }
+
+  /* Carte « Visite » (agendaCard de l'app). */
+  .dl-visit-card { display: flex; align-items: center; gap: 14px; padding: 18px 22px; border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; color: var(--d-text); text-decoration: none; transition: box-shadow 0.15s ease, transform 0.15s ease; }
+  a.dl-visit-card:hover { box-shadow: var(--d-card-hover-shadow); transform: translateY(-2px); }
+  .dl-visit-icon { flex: none; width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--d-blue-light); color: var(--d-blue); }
+  .dl-visit-icon .icon { width: 20px; height: 20px; }
+  .dl-visit-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .dl-visit-title { color: var(--d-text); font-size: 17px; font-weight: 700; line-height: 22px; }
+  .dl-visit-subtitle { color: var(--d-grey); font-size: 14px; line-height: 20px; }
+  .dl-visit-agenda { flex: none; display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 999px; background: var(--d-blue-light); color: var(--d-blue); font-size: 14px; font-weight: 600; text-decoration: none; }
+  .dl-visit-agenda:hover { background: #E2E8F6; }
+  .dl-visit-chevron { flex: none; width: 18px; height: 18px; color: var(--d-chevron); }
+
+  /* Sections de l'app : cartes blanches, titre 24/700, texte 15. */
+  .dl .section-card { gap: 16px; padding: 25px 26px 26px; border-color: var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; }
+  .dl .section-card h2 { color: var(--d-text); font-size: 24px; font-weight: 700; letter-spacing: -0.01em; line-height: 30px; }
+  .dl .feature-rows, .dl .origin-rows { gap: 12px; }
+  .dl .feature-row { font-size: 15px; font-weight: 400; }
+  .dl .feature-row dt, .dl .origin-row dt { color: var(--d-grey); font-size: 15px; font-weight: 400; }
+  .dl .feature-row dd { color: var(--d-text); font-weight: 600; }
+  .dl .origin-amount { color: var(--d-text); font-size: 15px; }
+  .dl .origin-chip { background: var(--d-blue-light); color: var(--d-blue); }
+  .dl .info-note { background: var(--d-blue-light); color: var(--d-icon); font-size: 14px; line-height: 20px; }
+  .dl .description-text { color: var(--d-text); font-size: 15px; font-weight: 400; line-height: 24px; }
+  .dl .features { gap: 24px; }
+  .dl .features-column { gap: 14px; }
+  .dl .features-item { gap: 2px; }
+  .dl .features-item dt { color: var(--d-grey); font-size: 14px; font-weight: 400; }
+  .dl .features-item dd { color: var(--d-text); font-size: 15px; font-weight: 600; }
+  .dl .features-rule, .dl .energy-rule { background: var(--d-card-border); }
+  .dl .energy-title { color: var(--d-grey); font-size: 15px; font-weight: 600; }
+  .dl .energy-none, .dl .energy-lines { color: var(--d-grey); font-size: 14px; }
+  .dl .publisher-name { color: var(--d-text); font-size: 17px; }
+  .dl .publisher-line { color: var(--d-grey); font-size: 14px; }
+  .dl .publisher-avatar:not(.pro) { background: var(--d-blue-light); color: var(--d-blue); }
+  .dl .publisher-avatar.pro { background: var(--d-text); }
+  .dl .publisher-badge { border-color: var(--d-card-border); background: var(--d-bg); color: var(--d-grey); }
+  .dl .publisher-badge.pro { border-color: transparent; background: var(--d-blue); color: #FFFFFF; }
+  .dl .btn-block { min-height: 48px; border-radius: var(--d-button-radius); font-size: 15px; font-weight: 600; }
+  .dl .btn-primary { background: var(--d-blue); }
+  .dl .btn-primary:hover { background: var(--d-blue-hover); }
+  .dl .btn-light { background: var(--d-blue-light); color: var(--d-blue); }
+  .dl .btn-light:hover { background: #E2E8F6; }
+  .dl .location { gap: 12px; }
+  .dl .mini-map { height: 260px; border-radius: 14px; }
+  .dl .location-caption { color: var(--d-grey); font-size: 14px; }
+  .dl .listing-footnote { color: var(--d-grey); font-size: 13px; }
+
+  /* ——— Colonne de droite : offre, vendeur, boutons de 48 px, visite ——— */
+  .dl-aside-card { display: flex; flex-direction: column; gap: 18px; padding: 22px; border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; }
+  .dl-pill { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--d-blue-light); color: var(--d-blue); font: inherit; font-size: 14.5px; font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer; }
+  .dl-pill .icon { flex: none; width: 18px; height: 18px; }
+  .dl-pill:hover { background: #E2E8F6; }
+  .dl-pill:disabled { opacity: 0.6; cursor: default; }
+  .dl-seller { display: flex; align-items: center; gap: 14px; min-width: 0; }
+  .dl-seller .publisher-avatar { font-size: 18px; }
+  .dl-seller .publisher-avatar:not(.pro) { background: var(--d-blue-light); color: var(--d-blue); }
+  .dl-seller-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .dl-seller-name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; color: var(--d-text); font-size: 17px; font-weight: 700; line-height: 22px; overflow-wrap: anywhere; }
+  .dl-seller .publisher-badge { padding: 2px 6px; border-radius: 5px; font-size: 11px; letter-spacing: 0.02em; }
+  .dl-seller-line { color: var(--d-grey); font-size: 14px; line-height: 20px; }
+  .dl-actions { display: flex; flex-direction: column; gap: 10px; }
+  .dl-button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 48px; padding: 0 16px; border: 0; border-radius: var(--d-button-radius); font: inherit; font-size: 15px; font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer; }
+  .dl-button .icon { flex: none; width: 20px; height: 20px; }
+  .dl-button-filled { background: var(--d-blue); color: #FFFFFF; }
+  .dl-button-filled:hover { background: var(--d-blue-hover); }
+  .dl-button-light { background: var(--d-blue-light); color: var(--d-blue); }
+  .dl-button-light:hover { background: #E2E8F6; }
+  .dl-button-white { border: 1px solid var(--d-field-border); background: #FFFFFF; color: var(--d-text); }
+  .dl-button-white:hover { background: var(--d-hover); }
+  .dl-button:disabled { opacity: 0.6; cursor: default; }
+  .dl-pill-wide { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 10px 14px; border-radius: var(--d-button-radius); background: var(--d-blue-light); color: var(--d-blue); font-size: 15px; font-weight: 600; line-height: 20px; text-decoration: none; }
+  .dl-pill-wide.is-confirmed { background: var(--d-green-pill); color: var(--d-green-text); }
+  .dl-pill-wide .icon { flex: none; width: 18px; height: 18px; }
+  .dl-pill-wide:hover { text-decoration: underline; }
+
+  /* ——— Toast : lien copié, comparaison (« Voir ») ——— */
+  .dl-toast { position: fixed; z-index: 40; left: 50%; bottom: 24px; transform: translateX(-50%); pointer-events: none; }
+  .dl-toast-box { display: inline-flex; align-items: center; gap: 10px; min-height: 50px; padding: 0 18px; border-radius: 14px; background: var(--d-blue); color: #FFFFFF; font-size: 15px; font-weight: 600; white-space: nowrap; box-shadow: 0 10px 28px rgba(36, 45, 56, 0.22); pointer-events: auto; animation: dl-toast-in 0.2s ease-out both; }
+  .dl-toast-box .icon { flex: none; width: 18px; height: 18px; }
+  .dl-toast-box a { margin-left: 6px; color: #FFFFFF; font-weight: 700; text-decoration: underline; }
+
+  /* ——— Écrans « Demander une visite » et « Faire une offre » : colonne de 640 px ——— */
+  .dl-screen { padding-top: 32px; padding-bottom: 16px; }
+  .dl-screen-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+  .dl-screen-titles { min-width: 0; }
+  .dl-screen-titles h1 { margin: 0; color: var(--d-text); font-size: 32px; font-weight: 700; letter-spacing: -0.01em; line-height: 40px; outline: none; }
+  .dl-screen-titles p { margin: 6px 0 0; color: var(--d-grey); font-size: 15px; line-height: 22px; overflow-wrap: anywhere; }
+  .dl-screen-close { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border: 1px solid var(--d-card-border); border-radius: 50%; background: #FFFFFF; color: var(--d-text); cursor: pointer; }
+  .dl-screen-close:hover { background: var(--d-hover); }
+  .dl-screen-close .icon { width: 18px; height: 18px; }
+  .dl-form-card { display: flex; flex-direction: column; gap: 22px; padding: 24px; border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; }
+  .dl-form-stack { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
+  .dl-field { min-width: 0; display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; border: 0; }
+  .dl-label { padding: 0; color: var(--d-text); font-size: 14px; font-weight: 600; line-height: 20px; }
+  .dl-amount { display: flex; align-items: center; gap: 8px; height: 56px; padding: 0 16px; border: 1px solid var(--d-field-border); border-radius: 14px; background: #FFFFFF; }
+  .dl-amount:focus-within { border-color: var(--d-blue); box-shadow: 0 0 0 3px rgba(60, 92, 176, 0.16); }
+  .dl-amount input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: 0; background: transparent; color: var(--d-text); font: inherit; font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .dl-amount input::placeholder { color: var(--d-help); font-weight: 700; }
+  .dl-amount span { color: var(--d-grey); font-size: 20px; font-weight: 700; }
+  .dl-gap { margin: 0; color: var(--d-text); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .dl-gap.is-below { color: var(--d-grey); }
+  .dl-textarea { width: 100%; min-height: 84px; padding: 12px 14px; border: 1px solid var(--d-field-border); border-radius: 14px; background: #FFFFFF; color: var(--d-text); font: inherit; font-size: 15px; line-height: 22px; resize: vertical; }
+  .dl-textarea:focus { border-color: var(--d-blue); outline: 0; box-shadow: 0 0 0 3px rgba(60, 92, 176, 0.16); }
+  .dl-textarea::placeholder { color: var(--d-help); }
+  .dl-chip { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--d-blue-light); color: var(--d-blue); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .dl-chip:hover { background: #E2E8F6; }
+  .dl-chip .icon { width: 14px; height: 14px; }
+  .dl-options { display: flex; gap: 8px; }
+  .dl-option { flex: 1 1 0; min-width: 0; height: 44px; padding: 0 8px; border: 1px solid var(--d-field-border); border-radius: var(--d-button-radius); background: #FFFFFF; color: var(--d-text); font: inherit; font-size: 15px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+  .dl-option:hover { background: var(--d-hover); }
+  .dl-option[aria-pressed="true"] { border-color: var(--d-blue); background: var(--d-blue); color: #FFFFFF; font-weight: 700; }
+  .dl-error { margin: 0; color: var(--d-red); font-size: 14px; font-weight: 600; }
+  .dl-submit { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 52px; padding: 0 20px; border: 0; border-radius: 14px; background: var(--d-blue); color: #FFFFFF; font: inherit; font-size: 16px; font-weight: 700; text-decoration: none; cursor: pointer; }
+  .dl-submit:hover { background: var(--d-blue-hover); }
+  .dl-submit.is-dim { opacity: 0.5; }
+  .dl-submit:disabled { cursor: default; }
+  .dl-submit .icon { width: 18px; height: 18px; }
+  .dl-secondary { width: 100%; height: 52px; border: 1px solid var(--d-field-border); border-radius: 14px; background: #FFFFFF; color: var(--d-text); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+  .dl-secondary:hover { background: var(--d-hover); }
+  .dl-form-note { margin: 0; color: var(--d-grey); font-size: 13px; line-height: 19px; }
+  .dl-screen-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+  .dl-spinner { width: 18px; height: 18px; border: 2px solid rgba(255, 255, 255, 0.45); border-top-color: #FFFFFF; border-radius: 50%; animation: dl-spin 0.8s linear infinite; }
+
+  /* Demande de visite : le bien, la mention, les créneaux, le type de visite, le message. */
+  .dl-form-card.dl-visit-listing { flex-direction: row; align-items: center; gap: 14px; padding: 14px; }
+  .dl-visit-thumb { flex: none; width: 64px; height: 64px; overflow: hidden; border-radius: 12px; background: var(--d-separator); }
+  .dl-visit-thumb .photo-empty { background: var(--d-separator); color: var(--d-chevron); }
+  .dl-visit-thumb .photo-empty .icon { width: 22px; height: 22px; }
+  .dl-visit-listing-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .dl-visit-listing-title { display: -webkit-box; overflow: hidden; color: var(--d-text); font-size: 16px; font-weight: 700; line-height: 22px; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+  .dl-visit-listing-city { overflow: hidden; color: var(--d-grey); font-size: 14px; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+  .dl-visit-listing-price { color: var(--d-text); font-size: 15px; font-weight: 700; line-height: 20px; font-variant-numeric: tabular-nums; }
+  .dl-notice { margin: 0; display: flex; align-items: flex-start; gap: 10px; padding: 14px 16px; border-radius: 14px; background: var(--d-blue-light); color: var(--d-text); font-size: 14px; font-weight: 500; line-height: 20px; }
+  .dl-notice .icon { flex: none; width: 18px; height: 18px; margin-top: 1px; color: var(--d-blue); }
+  .dl-form-section { gap: 16px; }
+  .dl-form-section h2 { margin: 0; display: flex; align-items: center; gap: 10px; color: var(--d-text); font-size: 17px; font-weight: 700; line-height: 22px; }
+  .dl-form-section h2 .icon { flex: none; width: 18px; height: 18px; color: var(--d-icon); }
+  .dl-slot { display: flex; flex-direction: column; gap: 8px; }
+  .dl-slot-row { display: flex; align-items: center; gap: 10px; }
+  .dl-date { height: 44px; padding: 0 12px; border: 1px solid var(--d-field-border); border-radius: var(--d-button-radius); background: #FFFFFF; color: var(--d-text); font: inherit; font-size: 15px; font-weight: 600; }
+  .dl-date:focus, .dl-time select:focus { outline: 0; }
+  .dl-date:focus-visible { border-color: var(--d-blue); box-shadow: 0 0 0 3px rgba(60, 92, 176, 0.16); }
+  .dl-time { position: relative; display: inline-flex; align-items: center; height: 40px; margin-left: auto; border-radius: 999px; background: var(--d-blue-light); color: var(--d-blue); }
+  .dl-time:focus-within { box-shadow: 0 0 0 3px rgba(60, 92, 176, 0.24); }
+  .dl-time > .icon:first-child { position: absolute; left: 12px; width: 16px; height: 16px; pointer-events: none; }
+  .dl-time select { height: 100%; padding: 0 34px 0 36px; border: 0; border-radius: 999px; appearance: none; background: transparent; color: var(--d-blue); font: inherit; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; cursor: pointer; }
+  .dl-time-chevron { position: absolute; right: 12px; width: 14px; height: 14px; pointer-events: none; }
+  .dl-link-button { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; padding: 4px 0; border: 0; background: transparent; color: var(--d-blue); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .dl-link-button.is-strong { font-size: 15px; font-weight: 700; }
+  .dl-link-button .icon { width: 18px; height: 18px; }
+  .dl-link-button:hover { text-decoration: underline; }
+  .dl-help { margin: 0; color: var(--d-grey); font-size: 13px; line-height: 19px; }
+
+  /* Confirmation « Demande envoyée ». */
+  .dl-form-card.dl-sent { gap: 12px; margin-top: 16px; }
+  .dl-sent-head { display: flex; align-items: center; gap: 12px; }
+  .dl-sent-icon { flex: none; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: 12px; background: var(--d-blue-light); color: var(--d-blue); }
+  .dl-sent-icon .icon { width: 20px; height: 20px; }
+  .dl-sent-titles { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+  .dl-sent-title { color: var(--d-text); font-size: 17px; font-weight: 700; line-height: 22px; }
+  .dl-status-badge { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .dl-status-badge.is-pending { background: rgba(180, 83, 9, 0.12); color: #B45309; }
+  .dl-sent-text { margin: 0; color: var(--d-grey); font-size: 14px; line-height: 21px; }
+  .dl-sent-slots { margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; list-style: none; }
+  .dl-sent-slots li { display: flex; align-items: center; gap: 8px; color: var(--d-text); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .dl-sent-slots .icon { flex: none; width: 16px; height: 16px; color: var(--d-icon); }
+
+  /* Chargement de la fiche : mêmes places que la fiche. */
+  .listing-loading .listing-gallery-wrap { width: min(var(--d-content), 100% - 2 * var(--d-margin)); max-width: none; margin: 161px auto 0; padding: 0; }
+  .listing-loading .gallery-skeleton { height: 466px; border-radius: var(--d-card-radius); }
+  .listing-loading .listing-body { width: min(var(--d-content), 100% - 2 * var(--d-margin)); max-width: none; margin: 32px auto 0; padding: 0; column-gap: 40px; }
+
+  @keyframes dl-toast-in { from { opacity: 0; transform: translateY(8px); } }
+  @keyframes dl-spin { to { transform: rotate(360deg); } }
+}
+
+@media (min-width: 1024px) and (prefers-reduced-motion: reduce) {
+  .dl-toast-box { animation: none; }
+  .dl-spinner { animation-duration: 2.4s; }
+  .dl-visit-card { transition: none; }
+  a.dl-visit-card:hover { transform: none; }
+}
+
+/* Entre 1024 et 1279 px : marges de 32 px, colonnes plus proches, outils plus serrés. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .dl-body, .listing-loading .listing-body { column-gap: 32px; }
+  .dl-tools { gap: 8px; }
+  .dl-tool { gap: 8px; padding: 0 14px; }
+  .dl-head { gap: 16px; }
+}

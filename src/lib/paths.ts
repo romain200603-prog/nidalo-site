@@ -30,8 +30,22 @@ export function accountPath(view: AccountView | null = null, extra: Record<strin
  * ouvert depuis Investir est un « INVESTISSEMENT LOCATIF », depuis Résidentiel une « VENTE ». Seul Investir change
  * la catégorie, donc seul ce mode est gardé dans l'adresse.
  */
-export function listingPath(id: string, mode: SearchMode | null = null): string {
-  return `/annonce/?id=${encodeURIComponent(id)}${mode === 'invest' ? '&mode=invest' : ''}`;
+export function listingPath(id: string, mode: SearchMode | null = null, view: ListingScreen | null = null): string {
+  return `/annonce/?id=${encodeURIComponent(id)}${mode === 'invest' ? '&mode=invest' : ''}${view ? `&vue=${view}` : ''}`;
+}
+
+/** Écrans de la fiche sur ordinateur, chacun à son adresse : « Demander une visite » et « Faire une offre ». */
+export type ListingScreen = 'visite' | 'offre';
+
+/** Écran ouvert d'après l'adresse de la fiche (`null` : la fiche elle-même). */
+export function listingScreenFromParams(params: URLSearchParams): ListingScreen | null {
+  const view = params.get('vue');
+  return view === 'visite' || view === 'offre' ? view : null;
+}
+
+/** Comparaison des biens (CompareView), avec la catégorie Investir si la fiche venait de là. */
+export function comparePath(mode: SearchMode | null = null): string {
+  return mode === 'invest' ? '/comparer/?mode=invest' : '/comparer/';
 }
 
 /**

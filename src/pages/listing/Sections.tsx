@@ -141,7 +141,7 @@ export function Energy({ energyClass, climateClass, lines }: { energyClass: stri
 }
 
 /** Photo ou logo, sinon les initiales : rond pour un particulier, carré arrondi pour une agence. */
-function Avatar({ publisher }: { publisher: Publisher }) {
+export function Avatar({ publisher }: { publisher: Publisher }) {
   const [failed, setFailed] = useState(false);
   return (
     <span className={`publisher-avatar${publisher.isProfessional ? ' pro' : ''}`} aria-hidden="true">
@@ -153,12 +153,15 @@ function Avatar({ publisher }: { publisher: Publisher }) {
   );
 }
 
-/** « Votre interlocuteur » : sans page de profil en phase 1 (pas de « Voir le profil »), contact par l'app. */
+/**
+ * « Votre interlocuteur » : sans page de profil en phase 1 (pas de « Voir le profil »). Sans `onContact` (sa propre
+ * annonce, comme l'app), pas de bouton de contact.
+ */
 export function PublisherCard({ publisher, fees, activeCount, onContact }: {
   publisher: Publisher;
   fees: string | null;
   activeCount: number | null;
-  onContact: () => void;
+  onContact?: () => void;
 }) {
   const lines = activeCount !== null ? [...publisher.lines, activeCountLine(activeCount)] : publisher.lines;
   return (
@@ -179,9 +182,11 @@ export function PublisherCard({ publisher, fees, activeCount, onContact }: {
             <FeatureRow title="Honoraires" value={fees} />
           </dl>
         )}
-        <button type="button" className="btn btn-primary btn-block" onClick={onContact}>
-          {publisher.isProfessional ? 'Contacter l\'agence' : 'Contacter le vendeur'}
-        </button>
+        {onContact && (
+          <button type="button" className="btn btn-primary btn-block" onClick={onContact}>
+            {publisher.isProfessional ? 'Contacter l\'agence' : 'Contacter le vendeur'}
+          </button>
+        )}
       </div>
     </SectionCard>
   );

@@ -1,78 +1,38 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { Icon } from '../components/Icon';
 import { Page } from '../components/Layout';
+import { SoonCard } from '../components/SoonCard';
 import { cardKind } from '../lib/cardContent';
+import { useDesktop } from '../lib/desktop';
 import { formatArea, formatPrice } from '../lib/format';
 import { fetchListing, ListingNotFound, placeLine, sortedPhotos, UUID_PATTERN, type ListingRow } from '../lib/listings';
-import { HotelPerformance, RentalCost } from '../lib/investment';
-import { hotelOf, num, rentalDetails } from '../lib/listing/fields';
+import { hotelOf } from '../lib/listing/fields';
 import { FINANCING_OPTIONS, profitabilityFor, profitabilityView, STANDARD_CHOICE } from '../lib/listing/profitability';
 import { fetchActiveCount, fetchPublisher, type Publisher } from '../lib/listing/publisher';
 import {
   CATEGORY_LABELS, energyLetter, energyLines, featureRows, feesLabel, footnote, headerFacts, hotelActivity, priceSecondary,
   rentalRows, saleCondition,
 } from '../lib/listing/rows';
-import { shareText } from '../lib/listing/share';
-import { listingModeFromParams, listingPath, PATHS } from '../lib/paths';
+import { shareListing } from '../lib/listing/share';
+import { listingModeFromParams, listingScreenFromParams, PATHS } from '../lib/paths';
 import { recordView } from '../lib/recentlyViewed';
 import type { SearchMode } from '../lib/labels';
 import { ActionBar } from './listing/ActionBar';
 import { HotelSection, ProfitabilityCard, RentalCostCard } from './listing/CategoryCards';
-import { AccountDialog, AlertDialog, NoPhoneDialog, type AccountAction } from './listing/Dialogs';
+import { backTarget, coordinateOf, hotelPerformanceOf, rentalCostOf } from './listing/data';
+import { DesktopListing } from './listing/DesktopListing';
+import { ACCOUNT_SOON_MESSAGE, AccountDialog, AlertDialog, NoPhoneDialog, type AccountAction } from './listing/Dialogs';
 import { Gallery } from './listing/Gallery';
 import { LocationSection } from './listing/Location';
 import { Description, Energy, Features, Footnote, HotelActivity, PracticalInfo, PublisherCard } from './listing/Sections';
 import { HeaderCard, VisitCard } from './listing/TopCards';
 
-// Fiche d'une annonce (ListingDetailView.swift), sans compte : mêmes sections, dans le même ordre ; ce qui demande
-// un compte (écrire, visiter, offre, favori) ouvre une fenêtre qui renvoie vers l'app.
+// Fiche d'une annonce (ListingDetailView.swift). Téléphone : mêmes sections, dans le même ordre ; ce qui demande un
+// compte (écrire, visiter, offre) ouvre une fenêtre qui renvoie vers l'app. Ordinateur (≥ 1024 px) : DesktopListing,
+// avec les actions de l'app ; ses écrans « Demander une visite » et « Faire une offre » (&vue=…) restent « bientôt »
+// sur téléphone.
 
 type State = { status: 'loading' } | { status: 'notFound' } | { status: 'error' } | { status: 'ready'; row: ListingRow };
-
-/** Retour : la recherche d'où l'on vient (même site), sinon la recherche. */
-function backTarget(): { href: string; label: string; fromSearch: boolean } {
-  try {
-    const referrer = document.referrer ? new URL(document.referrer) : null;
-    if (referrer && referrer.origin === window.location.origin && referrer.pathname.startsWith(PATHS.search)) {
-      return { href: referrer.pathname + referrer.search, label: 'Retour à la recherche', fromSearch: true };
-    }
-  } catch {
-    // Adresse illisible : la recherche par défaut.
-  }
-  return { href: PATHS.search, label: 'Chercher un bien', fromSearch: false };
-}
-
-/** Coût de la location, à partir du loyer hors charges (ListingDetailView.swift 502–509). */
-function rentalCostOf(row: ListingRow): RentalCost | null {
-  const price = Number(row.price);
-  if (row.transaction !== 'rent' || !(price > 0)) return null;
-  const rental = rentalDetails(row);
-  const area = Number(row.living_area);
-  const fees = num(row.agency_fees_amount);
-  return new RentalCost({
-    rentExcludingCharges: price,
-    charges: num(row.monthly_charges),
-    area: area > 0 ? area : null,
-    isFurnished: rental?.isFurnished ?? null,
-    declaredDeposit: rental?.securityDeposit ?? null,
-    agencyFees: row.agency_fees_paid_by === 'buyer' && fees !== null && fees > 0 ? fees : null,
-  });
-}
-
-/** Rentabilité hôtelière : seulement avec le chiffre d'affaires et l'EBITDA du vendeur (512–516). */
-function hotelPerformanceOf(row: ListingRow): HotelPerformance | null {
-  const hotel = hotelOf(row);
-  const revenue = hotel?.annualRevenue?.value;
-  const ebitda = hotel?.ebitda?.value;
-  if (!hotel || revenue == null || ebitda == null || !(revenue > 0)) return null;
-  return new HotelPerformance({ annualRevenue: revenue, ebitda, rooms: hotel.rooms, occupancyRate: hotel.occupancyRate?.value ?? null });
-}
-
-function coordinateOf(row: ListingRow) {
-  const latitude = num(row.public_latitude);
-  const longitude = num(row.public_longitude);
-  return latitude === null || longitude === null ? null : { latitude, longitude };
-}
 
 function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }) {
   const [account, setAccount] = useState<AccountAction | null>(null);
@@ -124,22 +84,9 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
 
   /** Partage du navigateur (texte de l'app et lien de la page) ; sinon le lien est copié. */
   const share = useCallback(async () => {
-    const { text, subject } = shareText(row);
-    const url = new URL(listingPath(row.id, mode), window.location.origin).toString();
-    if (typeof navigator.share === 'function') {
-      try {
-        await navigator.share({ title: subject, text, url });
-        return;
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return;
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(url);
-      setToast('Lien de l’annonce copié');
-    } catch {
-      setCopyLink(url);
-    }
+    const outcome = await shareListing(row, mode);
+    if (outcome === 'copied') setToast('Lien de l’annonce copié');
+    else if (typeof outcome === 'object') setCopyLink(outcome.link);
   }, [row, mode]);
 
   const onBack = (event: MouseEvent<HTMLAnchorElement>) => {
@@ -251,10 +198,26 @@ function Loading() {
   );
 }
 
+/** « Demander une visite » et « Faire une offre » sur téléphone : pas encore sur le site (brief, règle 6). */
+const PHONE_SCREENS = {
+  visite: { icon: 'calendarPlus', title: 'Demander une visite' },
+  offre: { icon: 'handshake', title: 'Faire une offre' },
+} as const;
+
 export function ListingPage() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const id = params.get('id') ?? '';
   const mode = listingModeFromParams(params);
+  const desktop = useDesktop();
+  // L'adresse est relue à chaque affichage : sur ordinateur, la fiche y ajoute &vue=… (écrans de visite et d'offre) ;
+  // retour ou avance dans l'historique, ou fenêtre rétrécie, le téléphone montre alors « bientôt ».
+  const [, setVisit] = useState(0);
+  useEffect(() => {
+    const onPop = () => setVisit((n) => n + 1);
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+  const phoneScreen = desktop ? null : listingScreenFromParams(new URLSearchParams(window.location.search));
   const [state, setState] = useState<State>(() => (UUID_PATTERN.test(id) ? { status: 'loading' } : { status: 'notFound' }));
   const [attempt, setAttempt] = useState(0);
 
@@ -274,13 +237,27 @@ export function ListingPage() {
   }, [state.status]);
 
   // Fiche ouverte : la barre du bas de l'app est masquée (hidesTabBar), place à la barre d'actions.
+  const ready = state.status === 'ready' && phoneScreen === null;
   useEffect(() => {
-    document.body.classList.toggle('page-listing-ready', state.status === 'ready');
-  }, [state.status]);
+    document.body.classList.toggle('page-listing-ready', ready);
+  }, [ready]);
+
+  useEffect(() => {
+    if (phoneScreen) document.title = `${PHONE_SCREENS[phoneScreen].title} · Nidalo`;
+  }, [phoneScreen]);
+
+  if (phoneScreen) {
+    const soon = PHONE_SCREENS[phoneScreen];
+    return (
+      <Page section="search" mode={mode}>
+        <SoonCard icon={soon.icon} title={soon.title} text={ACCOUNT_SOON_MESSAGE} />
+      </Page>
+    );
+  }
 
   return (
-    <Page section="search">
-      {state.status === 'ready' && <ListingView row={state.row} mode={mode} />}
+    <Page section="search" mode={mode}>
+      {state.status === 'ready' && (desktop ? <DesktopListing row={state.row} mode={mode} /> : <ListingView row={state.row} mode={mode} />)}
       {state.status === 'loading' && <Loading />}
       {state.status === 'notFound' && (
         <div className="wrap">

@@ -1,0 +1,82 @@
+/* Comparer (/comparer/) sur ordinateur, à partir de 1024 px, dans la colonne de 640 px. Tout est dans
+   @media (min-width: 1024px) : en dessous, la page montre l'écran « bientôt », sans ces styles. Couleurs et mesures de
+   l'écran Comparer de l'app (CompareView.swift), en taille ordinateur. */
+
+@media (min-width: 1024px) {
+  .cmp { padding-top: 32px; padding-bottom: 16px; color: var(--d-text); }
+  .cmp :is(.cmp-close, .cmp-remove, .cmp-title, .cmp-make-reference, .cmp-add, .cmp-clear, .cmp-discover):focus-visible { outline: 3px solid var(--d-blue); outline-offset: 2px; }
+  .cmp-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .cmp-titles { min-width: 0; }
+  .cmp-titles h1 { margin: 0; color: var(--d-text); font-size: 32px; font-weight: 700; letter-spacing: -0.01em; line-height: 40px; }
+  .cmp-titles p { margin: 6px 0 0; color: var(--d-grey); font-size: 15px; line-height: 22px; }
+  .cmp-close { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px; border: 1px solid var(--d-card-border); border-radius: 999px; background: #FFFFFF; color: var(--d-text); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+  .cmp-close:hover { background: var(--d-hover); }
+  .cmp-close .icon { width: 16px; height: 16px; }
+
+  .cmp-content { display: flex; flex-direction: column; gap: 14px; margin-top: 24px; }
+  .cmp-mixed { margin: 0; display: flex; align-items: center; gap: 8px; color: var(--d-grey); font-size: 14px; line-height: 20px; }
+  .cmp-mixed .icon { flex: none; width: 16px; height: 16px; }
+
+  /* Tableau : critères à gauche, un bien par colonne ; la colonne de référence en bleu clair. */
+  .cmp-card { overflow: hidden; border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; }
+  .cmp-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+  .cmp-col-criterion { width: 148px; }
+  .cmp-table th, .cmp-table td { padding: 12px 10px; font-weight: inherit; text-align: left; vertical-align: top; }
+  .cmp-table .is-reference { background: var(--d-blue-light); }
+  .cmp-table .cmp-head { padding: 12px 10px 14px; }
+  .cmp-photo { position: relative; display: block; height: 96px; overflow: hidden; border-radius: 12px; background: var(--d-separator); }
+  .cmp-photo .photo-empty { background: var(--d-separator); color: var(--d-chevron); }
+  .cmp-photo .photo-empty .icon { width: 26px; height: 26px; }
+  .cmp-star { position: absolute; top: 6px; left: 6px; width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--d-blue); color: #FFFFFF; }
+  .cmp-star .icon { width: 13px; height: 13px; fill: currentColor; }
+  .cmp-remove { position: absolute; top: 4px; right: 4px; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 50%; background: #FFFFFF; color: var(--d-text); box-shadow: 0 1px 3px rgba(36, 45, 56, 0.18); cursor: pointer; }
+  .cmp-remove:hover { background: var(--d-hover); }
+  .cmp-remove .icon { width: 14px; height: 14px; }
+  .cmp-title { display: -webkit-box; margin-top: 8px; overflow: hidden; color: var(--d-text); font-size: 14px; font-weight: 700; line-height: 19px; text-decoration: none; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+  .cmp-title:hover { color: var(--d-blue); text-decoration: underline; }
+  .cmp-city { display: block; margin-top: 2px; overflow: hidden; color: var(--d-grey); font-size: 13px; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }
+  .cmp-reference { display: block; margin-top: 6px; color: var(--d-blue); font-size: 13px; font-weight: 700; line-height: 18px; }
+  .cmp-make-reference { margin-top: 6px; padding: 0; border: 0; background: none; color: var(--d-blue); font: inherit; font-size: 13px; font-weight: 600; line-height: 18px; text-align: left; cursor: pointer; }
+  .cmp-make-reference:hover { text-decoration: underline; }
+  .cmp-table .cmp-criterion { padding-left: 14px; border-top: 1px solid var(--d-separator); color: var(--d-text); font-size: 13.5px; font-weight: 500; line-height: 18px; }
+  .cmp-criterion .icon { width: 16px; height: 16px; margin-right: 8px; vertical-align: -3px; color: var(--d-icon); }
+  .cmp-table .cmp-cell { border-top: 1px solid var(--d-separator); }
+  .cmp-value { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .cmp-value-text { min-width: 0; overflow: hidden; color: var(--d-text); font-size: 14.5px; font-weight: 700; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .cmp-estimate { flex: none; color: var(--d-grey); font-size: 11px; font-weight: 600; }
+  .cmp-missing { color: var(--d-help); font-size: 13px; line-height: 20px; }
+  .cmp-delta { display: inline-flex; align-items: center; height: 20px; margin-top: 4px; padding: 0 7px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .cmp-delta.is-favorable { background: rgba(87, 121, 101, 0.12); color: var(--d-green); }
+  .cmp-delta.is-unfavorable { background: rgba(192, 57, 43, 0.1); color: var(--d-red); }
+  .cmp-delta.is-neutral { background: rgba(117, 128, 139, 0.12); color: var(--d-grey); }
+  .cmp-energy { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 24px; border-radius: 6px; font-size: 14px; font-weight: 800; }
+  .cmp-notes { margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; list-style: none; }
+  .cmp-notes li { display: flex; align-items: flex-start; gap: 6px; color: var(--d-text); font-size: 13px; line-height: 18px; }
+  .cmp-notes .icon { flex: none; width: 14px; height: 14px; margin-top: 2px; }
+  .cmp-notes .is-strength .icon { color: var(--d-green); }
+  .cmp-notes .is-warning .icon { color: var(--d-red); }
+  .cmp-no-gap { margin: 0; color: var(--d-grey); font-size: 13px; line-height: 18px; }
+
+  .cmp-add { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: var(--d-button-height); border-radius: var(--d-button-radius); background: var(--d-blue-light); color: var(--d-blue); font-size: 15px; font-weight: 600; text-decoration: none; }
+  .cmp-add:hover { background: #E2E8F6; }
+  .cmp-add .icon { width: 18px; height: 18px; }
+  .cmp-clear { height: 40px; border: 0; border-radius: var(--d-button-radius); background: transparent; color: var(--d-red); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+  .cmp-clear:hover { background: rgba(192, 57, 43, 0.06); }
+
+  /* Comparaison vide (emptyState de l'app). */
+  .cmp-empty { display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 24px; padding: 48px 32px; border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; text-align: center; }
+  .cmp-empty-icon { width: 72px; height: 72px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--d-blue-light); color: var(--d-blue); }
+  .cmp-empty-icon .icon { width: 34px; height: 34px; }
+  .cmp-empty h2 { margin: 0; color: var(--d-text); font-size: 20px; font-weight: 700; line-height: 26px; }
+  .cmp-empty p { max-width: 420px; margin: 0; color: var(--d-grey); font-size: 15px; line-height: 22px; }
+  .cmp-discover { display: inline-flex; align-items: center; height: 48px; padding: 0 24px; border: 0; border-radius: 14px; background: var(--d-blue); color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 700; text-decoration: none; cursor: pointer; }
+  .cmp-discover:hover { background: var(--d-blue-hover); }
+
+  .cmp-loading { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 48px; color: var(--d-grey); font-size: 15px; }
+  .cmp-spinner { width: 20px; height: 20px; border: 2px solid var(--d-blue-line); border-top-color: var(--d-blue); border-radius: 50%; animation: cmp-spin 0.8s linear infinite; }
+  @keyframes cmp-spin { to { transform: rotate(360deg); } }
+}
+
+@media (min-width: 1024px) and (prefers-reduced-motion: reduce) {
+  .cmp-spinner { animation-duration: 2.4s; }
+}

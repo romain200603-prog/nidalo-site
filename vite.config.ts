@@ -8,6 +8,7 @@ const pages = [
   'index',
   'recherche/index',
   'annonce/index',
+  'comparer/index',
   'favoris/index',
   'messages/index',
   'publier/index',

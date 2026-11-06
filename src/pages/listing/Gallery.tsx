@@ -86,13 +86,15 @@ function PhotoViewer({ photos, start, onClose }: { photos: PhotoRow[]; start: nu
   );
 }
 
-export function Gallery({ photos, onShare, listingId, back }: {
+export function Gallery({ photos, onShare, listingId, back, actions = true }: {
   photos: PhotoRow[];
   onShare: () => void;
   /** Annonce du cœur (ajouter demande un compte). */
   listingId: string;
   /** Retour à la recherche, posé sur la photo (téléphone). */
   back: { href: string; label: string; onClick?: (event: MouseEvent<HTMLAnchorElement>) => void };
+  /** Retour, partage et cœur posés sur la photo ; la fiche sur ordinateur les met à côté du titre. */
+  actions?: boolean;
 }) {
   const strip = useRef<HTMLDivElement>(null);
   const [page, setPage] = useState(0);
@@ -138,15 +140,19 @@ export function Gallery({ photos, onShare, listingId, back }: {
           </button>
         </>
       )}
-      <a className="gallery-back" href={back.href} onClick={back.onClick} aria-label={back.label} title={back.label}>
-        <Icon name="chevronLeft" />
-      </a>
-      <div className="gallery-actions">
-        <button type="button" className="gallery-action" onClick={onShare} aria-label="Partager l'annonce" title="Partager l'annonce">
-          <ExtraIcon name="shareUp" />
-        </button>
-        <HeartButton listingId={listingId} className="gallery-action" />
-      </div>
+      {actions && (
+        <>
+          <a className="gallery-back" href={back.href} onClick={back.onClick} aria-label={back.label} title={back.label}>
+            <Icon name="chevronLeft" />
+          </a>
+          <div className="gallery-actions">
+            <button type="button" className="gallery-action" onClick={onShare} aria-label="Partager l'annonce" title="Partager l'annonce">
+              <ExtraIcon name="shareUp" />
+            </button>
+            <HeartButton listingId={listingId} className="gallery-action" />
+          </div>
+        </>
+      )}
       <PhotoViewer
         photos={photos}
         start={viewer}
