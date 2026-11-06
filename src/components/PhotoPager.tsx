@@ -30,7 +30,13 @@ export function ListingPhoto({ photo, alt = '', eager = false }: { photo: PhotoR
 }
 
 /** Photos à faire défiler d'un balayage, avec les points de position (comme `PhotoPager` de l'app). */
-export function PhotoPager({ photos, label, showsDots = true }: { photos: PhotoRow[]; label: string; showsDots?: boolean }) {
+export function PhotoPager({ photos, label, showsDots = true, onPageChange }: {
+  photos: PhotoRow[];
+  label: string;
+  showsDots?: boolean;
+  /** Photo affichée (compteur « 2/5 » des favoris). */
+  onPageChange?: (page: number) => void;
+}) {
   const [page, setPage] = useState(0);
   const strip = useRef<HTMLDivElement>(null);
   if (photos.length <= 1) return <ListingPhoto photo={photos[0]} alt={label} />;
@@ -47,7 +53,11 @@ export function PhotoPager({ photos, label, showsDots = true }: { photos: PhotoR
         ref={strip}
         onScroll={(event) => {
           const el = event.currentTarget;
-          setPage(Math.round(el.scrollLeft / Math.max(1, el.clientWidth)));
+          const next = Math.round(el.scrollLeft / Math.max(1, el.clientWidth));
+          if (next !== page) {
+            setPage(next);
+            onPageChange?.(next);
+          }
         }}
       >
         {photos.map((photo, index) => (

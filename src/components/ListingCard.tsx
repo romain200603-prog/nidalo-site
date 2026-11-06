@@ -1,5 +1,6 @@
 import { Icon } from './Icon';
 import { PhotoPager } from './PhotoPager';
+import { HeartButton } from './account/HeartButton';
 import {
   cardLocation, formatCardPrice, formatFacts, yieldTone, type CardContent, type CardKind, type FormattedFact,
 } from '../lib/cardContent';
@@ -86,6 +87,7 @@ export function ListingCard({ row, content, selected = false, onHover, headingLe
             <span className="visually-hidden"> de rendement brut</span>
           </span>
         )}
+        <HeartButton listingId={row.id} />
       </div>
       <div className="listing-card-body">
         <div className="listing-card-top">

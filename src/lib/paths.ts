@@ -11,7 +11,17 @@ export const PATHS = {
   help: '/aide/',
   privacy: '/confidentialite/',
   legal: '/mentions-legales/',
+  terms: '/conditions/',
 } as const;
+
+/** Écrans de Mon compte : `/compte/?vue=informations`. */
+export type AccountView = 'informations' | 'annonces' | 'recherches' | 'confidentialite' | 'legal' | 'securite' | 'supprimer' | 'bientot';
+
+export function accountPath(view: AccountView | null = null, extra: Record<string, string> = {}): string {
+  const params = new URLSearchParams(view ? { vue: view, ...extra } : extra);
+  const query = params.toString();
+  return query ? `${PATHS.account}?${query}` : PATHS.account;
+}
 
 /**
  * Page d'une annonce. Comme dans l'app, la catégorie affichée dépend du mode de recherche : un appartement à vendre

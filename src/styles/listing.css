@@ -363,16 +363,6 @@ body.page-listing-ready .tabbar { display: none; }
 .full-map-chevron { width: 16px; height: 16px; color: #A3B0C2; }
 
 /* ——— Fenêtres ——— */
-.listing-dialog { padding: 0; border: 0; color: var(--ink); }
-.listing-dialog::backdrop { background: rgba(10, 26, 68, 0.45); }
-.alert-dialog { width: min(400px, calc(100vw - 32px)); border-radius: 20px; background: var(--card); box-shadow: 0 24px 60px rgba(10, 26, 68, 0.3); }
-.alert-body { display: flex; flex-direction: column; gap: 10px; padding: 22px 20px 18px; text-align: center; }
-.alert-body h2 { font-size: 18px; font-weight: 800; }
-.alert-body p { margin: 0; color: var(--text-secondary); font-size: 15px; }
-.alert-actions { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
-.alert-actions .btn { width: 100%; font-weight: 700; }
-.btn-quiet { background: transparent; color: var(--text-secondary); }
-.btn-quiet:hover { background: var(--chip); }
 .copy-link { width: 100%; height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--page); color: var(--ink); font: inherit; font-size: 14px; }
 
 .listing-toast { position: fixed; z-index: 40; left: 50%; bottom: calc(46px + 6px + 16px + env(safe-area-inset-bottom)); margin: 0; display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px; background: var(--ink); color: #FFFFFF; font-size: 14px; font-weight: 600; white-space: nowrap; opacity: 0; transform: translate(-50%, 8px); pointer-events: none; transition: opacity 0.2s, transform 0.2s; }

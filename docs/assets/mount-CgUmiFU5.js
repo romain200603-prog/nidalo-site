@@ -1,0 +1,1 @@
+import{F as e,L as t,t as n}from"./client-CS0vfzSk.js";var r=e(),i=n(),a=t();function o(e){let t=document.getElementById(`root`);if(!t)throw Error(`Élément #root absent`);(0,i.createRoot)(t).render((0,a.jsx)(r.StrictMode,{children:e}))}export{o as t};

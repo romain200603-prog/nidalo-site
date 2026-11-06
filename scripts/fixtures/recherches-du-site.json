@@ -1,0 +1,310 @@
+[
+  {
+    "label": "Résidentiel, Lyon et alentours, critères des filtres",
+    "mode": "buy",
+    "name": "Résidentiel · Lyon et alentours · Appartement, Maison · Jusqu'à 300 000 €",
+    "query": {
+      "transaction": "sale",
+      "propertyTypes": [
+        "apartment",
+        "house"
+      ],
+      "location": {
+        "around": {
+          "center": {
+            "latitude": 45.764,
+            "longitude": 4.8357
+          },
+          "radiusMeters": 10000
+        }
+      },
+      "price": {
+        "max": 300000
+      },
+      "livingArea": {
+        "min": 50
+      },
+      "rooms": {
+        "min": 3
+      },
+      "bedrooms": {
+        "min": 2
+      },
+      "floor": {
+        "min": 1
+      },
+      "requiresElevator": true,
+      "requiresOutdoorSpace": false,
+      "outdoorSpaces": [
+        "balcony",
+        "terrace"
+      ],
+      "requiresParking": true,
+      "yearBuilt": {
+        "min": 1950
+      },
+      "worstEnergyClass": "D",
+      "isNewBuild": false,
+      "excludesLeased": true
+    }
+  },
+  {
+    "label": "Résidentiel, terrain autour d’une commune choisie",
+    "mode": "buy",
+    "name": "Résidentiel · Péron et alentours · Terrain · Jusqu'à 180 000 €",
+    "query": {
+      "transaction": "sale",
+      "propertyTypes": [
+        "land"
+      ],
+      "location": {
+        "around": {
+          "center": {
+            "latitude": 46.19,
+            "longitude": 5.93
+          },
+          "radiusMeters": 10000
+        }
+      },
+      "price": {
+        "max": 180000
+      },
+      "livingArea": {},
+      "rooms": {},
+      "bedrooms": {},
+      "floor": {},
+      "requiresElevator": false,
+      "requiresOutdoorSpace": false,
+      "outdoorSpaces": [],
+      "requiresParking": false,
+      "locationLabel": "Péron",
+      "excludesLeased": true,
+      "requiresDocumentedBuildability": true,
+      "requiresServiced": true,
+      "zoning": "UB"
+    }
+  },
+  {
+    "label": "Résidentiel, un arrondissement (par son code postal)",
+    "mode": "buy",
+    "name": "Résidentiel · Lyon 3e (69003) · Appartement, Maison, Terrain · 150 000 € – 400 0",
+    "query": {
+      "transaction": "sale",
+      "propertyTypes": [
+        "apartment",
+        "house",
+        "land"
+      ],
+      "location": {
+        "city": {
+          "name": "Lyon 3e",
+          "postalCode": "69003",
+          "inseeCode": "69383"
+        }
+      },
+      "price": {
+        "min": 150000,
+        "max": 400000
+      },
+      "livingArea": {
+        "max": 90
+      },
+      "rooms": {},
+      "bedrooms": {},
+      "floor": {
+        "min": 1,
+        "max": 5
+      },
+      "requiresElevator": false,
+      "requiresOutdoorSpace": false,
+      "outdoorSpaces": [],
+      "requiresParking": false,
+      "yearBuilt": {
+        "max": 2000
+      },
+      "excludesLeased": true
+    }
+  },
+  {
+    "label": "Location meublée à Paris",
+    "mode": "rent",
+    "name": "Location · Paris et alentours · Appartement, Bureaux, Local commercial, Maison, ",
+    "query": {
+      "transaction": "rent",
+      "propertyTypes": [
+        "apartment",
+        "house",
+        "parking",
+        "land",
+        "commercial",
+        "office"
+      ],
+      "location": {
+        "around": {
+          "center": {
+            "latitude": 48.8566,
+            "longitude": 2.3522
+          },
+          "radiusMeters": 5000
+        }
+      },
+      "price": {
+        "max": 1200
+      },
+      "livingArea": {},
+      "rooms": {},
+      "bedrooms": {},
+      "floor": {},
+      "requiresElevator": false,
+      "requiresOutdoorSpace": false,
+      "outdoorSpaces": [],
+      "requiresParking": false,
+      "furnished": true,
+      "maxMonthlyCharges": 150,
+      "availableBy": "2027-01-01T00:00:00Z"
+    }
+  },
+  {
+    "label": "Investir, appartement loué",
+    "mode": "invest",
+    "name": "Investir · Appartement · Jusqu'à 250 000 €",
+    "query": {
+      "transaction": "sale",
+      "propertyTypes": [
+        "apartment"
+      ],
+      "location": {
+        "anywhere": {}
+      },
+      "price": {
+        "max": 250000
+      },
+      "livingArea": {},
+      "rooms": {},
+      "bedrooms": {},
+      "floor": {},
+      "requiresElevator": false,
+      "requiresOutdoorSpace": false,
+      "outdoorSpaces": [],
+      "requiresParking": false,
+      "investment": {
+        "minGrossYield": 0.07,
+        "minNetYield": 0.05,
+        "minMonthlyCashFlow": 100,
+        "downPayment": 50000,
+        "maxWorksAmount": 15000,
+        "maxAnnualPropertyTax": 1500,
+        "requiresDeclaredRent": true,
+        "leasedOnly": true,
+        "minCurrentMonthlyRent": 600
+      }
+    }
+  },
+  {
+    "label": "Investir, immeuble mixte",
+    "mode": "invest",
+    "name": "Investir · Immeuble",
+    "query": {
+      "transaction": "sale",
+      "propertyTypes": [
+        "building"
+      ],
+      "location": {
+        "anywhere": {}
+      },
+      "price": {},
+      "livingArea": {},
+      "rooms": {},
+      "bedrooms": {},
+      "floor": {},
+      "requiresElevator": false,
+      "requiresOutdoorSpace": false,
+      "outdoorSpaces": [],
+      "requiresParking": false,
+      "investment": {
+        "requiresDeclaredRent": false,
+        "leasedOnly": false,
+        "maxAnnualCharges": 5000
+      },
+      "building": {
+        "minUnits": 4,
+        "maxVacantUnits": 1
+      }
+    }
+  },
+  {
+    "label": "Hôtels, murs et fonds",
+    "mode": "hotel",
+    "name": "Hôtels · 450 m² et + · 1 300 000 € – 9 900 000 €",
+    "query": {
+      "transaction": "sale",
+      "propertyTypes": [
+        "hotel"
+      ],
+      "location": {
+        "anywhere": {}
+      },
+      "price": {
+        "min": 1300000,
+        "max": 9900000
+      },
+      "livingArea": {
+        "min": 450
+      },
+      "rooms": {},
+      "bedrooms": {},
+      "floor": {},
+      "requiresElevator": false,
+      "requiresOutdoorSpace": false,
+      "outdoorSpaces": [],
+      "requiresParking": false,
+      "hotel": {
+        "minStars": 3,
+        "minAnnualRevenue": 1000000,
+        "minEBITDA": 200000,
+        "minOperatingIncome": 100000,
+        "minOccupancyRate": 0.6,
+        "scope": "wallsAndBusiness"
+      }
+    }
+  },
+  {
+    "label": "Zone de la carte",
+    "mode": "buy",
+    "name": "Résidentiel · Zone de la carte · Appartement, Maison, Terrain · Jusqu'à 400 000 ",
+    "query": {
+      "transaction": "sale",
+      "propertyTypes": [
+        "apartment",
+        "house",
+        "land"
+      ],
+      "location": {
+        "area": {
+          "_0": {
+            "southWest": {
+              "latitude": 45.73,
+              "longitude": 4.8
+            },
+            "northEast": {
+              "latitude": 45.79,
+              "longitude": 4.9
+            }
+          }
+        }
+      },
+      "price": {
+        "max": 400000
+      },
+      "livingArea": {},
+      "rooms": {},
+      "bedrooms": {},
+      "floor": {},
+      "requiresElevator": false,
+      "requiresOutdoorSpace": false,
+      "outdoorSpaces": [],
+      "requiresParking": false,
+      "excludesLeased": true
+    }
+  }
+]

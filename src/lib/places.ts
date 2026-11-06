@@ -264,6 +264,15 @@ export async function placeSuggestions(raw: string, limit = 6, signal?: AbortSig
   return refined(found, limit);
 }
 
+/** Rues et adresses (« Mes informations »), limitées au code postal quand il a 5 chiffres (FrenchPlaceProvider). */
+export async function streetSuggestions(raw: string, limit = 6, signal?: AbortSignal, postalCode = ''): Promise<PlaceSuggestion[]> {
+  const text = collapsed(raw);
+  if ([...text].length < 3) return [];
+  const params: Record<string, string> = { q: text, autocomplete: '1', limit: String(limit + 2), index: 'address' };
+  if (/^\d{5}$/.test(postalCode.trim())) params.postcode = postalCode.trim();
+  return refined(parseGeoplateforme(await get(GEOCODING, params, signal)), limit, ['street', 'address']);
+}
+
 // MARK: - Surlignage
 
 /** Morceaux du texte correspondant à la saisie, mot par mot, sans tenir compte des accents ni de la casse. */

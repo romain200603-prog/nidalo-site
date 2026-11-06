@@ -40,16 +40,122 @@ const communes = [
   { nom: 'Lyons-la-Forêt', code: '27377', codesPostaux: ['27480'], population: 750, centre: { type: 'Point', coordinates: [1.47, 49.4] }, departement: { nom: 'Eure' } },
 ];
 
-async function mock(context) {
+// MARK: - Compte de test (étape 2) : données inventées, numéro dans la plage réservée à la fiction (06 39 98).
+
+const USER_ID = 'a0000000-0000-4000-8000-0000000000c1';
+const USER_EMAIL = 'claire.martin@exemple.fr';
+const GONE_ID = '6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1aff';
+const ACCOUNT = {
+  profiles: [{
+    id: USER_ID, display_name: 'Claire Martin', avatar_path: null, account_type: 'individual', professional_profile_id: null,
+    created_at: '2026-10-01T08:00:00Z', shows_full_name: false, findable_by_phone: false,
+  }],
+  profile_details: [{
+    user_id: USER_ID, first_name: 'Claire', last_name: 'Martin', birth_date: null, phone: '0639981234', street: null,
+    postal_code: '69003', city: 'Lyon', insee_code: '69383', country_code: 'FR', professional_situation: 'employee',
+  }],
+  favorites: [
+    { listing_id: '6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1a02', created_at: '2026-11-02T09:00:00Z' },
+    { listing_id: '6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1a01', created_at: '2026-11-04T09:00:00Z' },
+    // Annonce retirée depuis : le site doit afficher « Annonce plus disponible ».
+    { listing_id: GONE_ID, created_at: '2026-11-05T09:00:00Z' },
+  ],
+  saved_searches: [
+    {
+      id: 'b0000000-0000-4000-8000-000000000051', user_id: USER_ID, name: 'Lyon · Appartement · Jusqu\'à 300 000 €',
+      query: { floor: {}, price: { max: 300000 }, rooms: {}, bedrooms: {}, location: { around: { center: { latitude: 45.764, longitude: 4.8357 }, radiusMeters: 10000 } }, livingArea: {}, transaction: 'sale', outdoorSpaces: [], propertyTypes: ['apartment'], requiresParking: false, requiresElevator: false, requiresOutdoorSpace: false },
+      alerts_enabled: true, created_at: '2026-11-03T18:00:00Z', last_notified_at: null, last_viewed_at: '2026-11-03T18:00:00Z',
+    },
+    {
+      id: 'b0000000-0000-4000-8000-000000000052', user_id: USER_ID, name: 'Investir · Appartement · Jusqu\'à 250 000 €',
+      query: { floor: {}, price: { max: 250000 }, rooms: {}, bedrooms: {}, location: { anywhere: {} }, investment: { leasedOnly: false, downPayment: 50000, minGrossYield: 0.05, requiresDeclaredRent: false }, livingArea: {}, transaction: 'sale', outdoorSpaces: [], propertyTypes: ['apartment'], requiresParking: false, requiresElevator: false, requiresOutdoorSpace: false },
+      alerts_enabled: false, created_at: '2026-11-02T18:00:00Z', last_notified_at: null, last_viewed_at: null,
+    },
+  ],
+  real_estate_projects: [{ id: 'c0000000-0000-4000-8000-000000000001', user_id: USER_ID, kind: 'buy', city: 'Lyon', purpose: 'Résidence principale', completed_steps: ['search', 'visits'] }],
+  professional_profiles: [],
+  professional_profile_details: [],
+};
+
+/** Jeton de session factice (le serveur est simulé : la signature n'est jamais vérifiée). */
+function fakeSession() {
+  const b64 = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const now = Math.floor(Date.now() / 1000);
+  const user = {
+    id: USER_ID, aud: 'authenticated', role: 'authenticated', email: USER_EMAIL, email_confirmed_at: '2026-10-01T08:00:00Z',
+    app_metadata: { provider: 'email', providers: ['email'] }, user_metadata: {}, created_at: '2026-10-01T08:00:00Z',
+  };
+  const access = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: USER_ID, email: USER_EMAIL, role: 'authenticated', aud: 'authenticated', exp: now + 7200, iat: now })}.c2lnbmF0dXJl`;
+  return { access_token: access, token_type: 'bearer', expires_in: 7200, expires_at: now + 7200, refresh_token: 'jeton-de-test', user };
+}
+
+/** Filtres PostgREST utiles ici : `col=eq.x` et `col=in.(a,b)` ; les autres (lte, or…) sont ignorés. */
+function filtered(rows, params) {
+  let result = rows;
+  for (const [column, value] of params) {
+    if (['select', 'order', 'limit', 'offset', 'on_conflict', 'columns'].includes(column)) continue;
+    if (value.startsWith('eq.')) result = result.filter((row) => String(row[column]) === value.slice(3));
+    else if (value.startsWith('in.(') && value.endsWith(')')) {
+      const allowed = value.slice(4, -1).split(',').map((v) => v.replace(/^"|"$/g, ''));
+      result = result.filter((row) => allowed.includes(String(row[column])));
+    }
+  }
+  return result;
+}
+
+/** Demandes envoyées au serveur simulé par le compte de test (enregistrements). */
+const writes = [];
+
+async function mock(context, { signedIn = false } = {}) {
+  const json = (route, status, body) =>
+    route.fulfill({ status, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: body === undefined ? '' : JSON.stringify(body) });
   await context.route('https://izzsoitqtzzswkpvdozd.supabase.co/rest/v1/**', (route) => {
-    const url = new URL(route.request().url());
+    const request = route.request();
+    const url = new URL(request.url());
+    const table = url.pathname.replace('/rest/v1/', '');
+    const single = (request.headers().accept ?? '').includes('vnd.pgrst.object');
+    if (signedIn && table in ACCOUNT) {
+      if (request.method() !== 'GET' && request.method() !== 'HEAD') {
+        let body = null;
+        try { body = request.postDataJSON(); } catch { body = request.postData(); }
+        writes.push({ method: request.method(), table, search: url.search, body });
+        // Une recherche enregistrée revient telle qu'envoyée ; les autres écritures ne renvoient rien.
+        if (table === 'saved_searches' && request.method() === 'POST') {
+          return json(route, 201, { user_id: USER_ID, created_at: new Date().toISOString(), last_notified_at: null, last_viewed_at: null, alerts_enabled: true, ...body });
+        }
+        if (table === 'saved_searches' && request.method() === 'PATCH' && (request.headers().prefer ?? '').includes('return=representation')) return json(route, 200, []);
+        return json(route, request.method() === 'POST' ? 201 : 204);
+      }
+      const rows = filtered(ACCOUNT[table], url.searchParams);
+      if (single) return rows.length === 1 ? json(route, 200, rows[0]) : json(route, 406, { code: 'PGRST116', message: 'no rows' });
+      return json(route, 200, rows);
+    }
     let rows = listings;
+    if (signedIn && table === 'listings' && url.searchParams.get('owner_id') === `eq.${USER_ID}`) {
+      // « Mes annonces » : une annonce en ligne et un brouillon.
+      rows = [{ ...listings[2], owner_id: USER_ID }, { ...listings[0], id: '6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1a0d', owner_id: USER_ID, status: 'draft', published_at: null }];
+      return json(route, 200, rows);
+    }
     const transaction = url.searchParams.get('transaction');
     if (transaction?.startsWith('eq.')) rows = rows.filter((r) => r.transaction === transaction.slice(3));
     const id = url.searchParams.get('id');
     if (id?.startsWith('eq.')) rows = rows.filter((r) => r.id === id.slice(3));
-    route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(rows) });
+    if (id?.startsWith('in.(')) rows = filtered(rows, [['id', id]]);
+    json(route, 200, rows);
   });
+  await context.route('https://izzsoitqtzzswkpvdozd.supabase.co/auth/v1/**', (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (!signedIn) return json(route, 401, { code: 'no_authorization', message: 'Pas de session' });
+    if (path.endsWith('/logout')) return json(route, 204);
+    if (path.endsWith('/user')) return json(route, 200, fakeSession().user);
+    return json(route, 200, fakeSession());
+  });
+  if (signedIn) {
+    const session = JSON.stringify(fakeSession());
+    await context.addInitScript((value) => {
+      try { localStorage.setItem('sb-izzsoitqtzzswkpvdozd-auth-token', value); } catch { /* stockage indisponible */ }
+    }, session);
+  }
   await context.route('https://izzsoitqtzzswkpvdozd.supabase.co/storage/**', (route) => {
     const name = route.request().url().split('/').pop();
     route.fulfill({ status: 200, contentType: 'image/jpeg', headers: { 'access-control-allow-origin': '*' }, body: photos[name] ?? photos['photo0.jpg'] });
@@ -181,7 +287,111 @@ try {
     await p.screenshot({ path: join(out, `${name}-ordinateur.png`) });
     await p.close();
   }
+
+  // Étape 2, sans compte : carte de connexion, fenêtre ouverte par un cœur, conditions d'utilisation.
+  page = await open(desktop, '/compte/', 'compte-connexion');
+  await page.waitForSelector('.signin-card');
+  await page.screenshot({ path: join(out, 'compte-connexion-ordinateur.png') });
+  await page.close();
+  page = await open(desktop, '/recherche/?mode=buy', 'coeur-sans-compte');
+  await page.waitForSelector('.listing-card .heart-button');
+  await page.click('.listing-card .heart-button >> nth=0');
+  await page.waitForSelector('dialog.signin-sheet[open]');
+  if (page.url().includes('/annonce/')) problems.push('cœur sans compte : le clic a ouvert l\'annonce');
+  await page.screenshot({ path: join(out, 'connexion-fenetre-ordinateur.png') });
+  await page.close();
+  page = await open(desktop, '/conditions/', 'conditions');
+  await page.waitForSelector('main h1');
+  if ((await page.content()).includes('{{EDITEUR}}')) problems.push('conditions : {{EDITEUR}} non remplacé');
+  await page.screenshot({ path: join(out, 'conditions-ordinateur.png') });
+  await page.close();
   await desktop.close();
+
+  // Étape 2, avec le compte de test (serveur simulé).
+  const signed = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, locale: 'fr-FR' });
+  await mock(signed, { signedIn: true });
+  page = await open(signed, '/', 'accueil-connecte');
+  await page.waitForFunction(() => document.querySelector('h1')?.textContent?.includes('Bonjour Claire'), null, { timeout: 8000 })
+    .catch(async () => problems.push(`accueil connecté : titre « ${await page.textContent('h1')} »`));
+  await page.close();
+  page = await open(signed, '/compte/', 'compte-espace');
+  await page.waitForSelector('.space-profile');
+  await page.waitForSelector('.project-card');
+  await page.waitForFunction(() => /1 en ligne · 1 brouillon/.test(document.querySelector('.activity-tiles')?.textContent ?? ''), null, { timeout: 8000 }).catch(() => undefined);
+  const space = (await page.textContent('.space'))?.replace(/\s+/g, ' ') ?? '';
+  for (const expected of ['Claire Martin', USER_EMAIL, 'Particulier', 'Votre projet immobilier', '2 recherches actives', '1 en ligne · 1 brouillon']) {
+    if (!space.includes(expected)) problems.push(`Mon compte : « ${expected} » absent`);
+  }
+  await page.screenshot({ path: join(out, 'compte-espace-ordinateur.png'), fullPage: true });
+  await page.close();
+  page = await open(signed, '/compte/?vue=informations', 'mes-informations');
+  await page.waitForSelector('input[autocomplete="tel"]');
+  const phoneValue = await page.inputValue('input[autocomplete="tel"]');
+  if (phoneValue !== '06 39 98 12 34') problems.push(`Mes informations : téléphone « ${phoneValue} »`);
+  await page.screenshot({ path: join(out, 'mes-informations-ordinateur.png'), fullPage: true });
+  await page.close();
+  page = await open(signed, '/compte/?vue=recherches', 'mes-recherches');
+  await page.waitForSelector('.saved-search');
+  const searches = await page.locator('.saved-search').count();
+  if (searches !== 2) problems.push(`Mes recherches : ${searches} cartes au lieu de 2`);
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: join(out, 'mes-recherches-ordinateur.png'), fullPage: true });
+  await page.close();
+  page = await open(signed, '/compte/?vue=annonces', 'mes-annonces');
+  await page.waitForSelector('.my-listing');
+  await page.screenshot({ path: join(out, 'mes-annonces-ordinateur.png'), fullPage: true });
+  await page.close();
+
+  // Favoris : deux annonces chargées, une retirée, la recherche dans les favoris, l'onglet Recherches.
+  page = await open(signed, '/favoris/', 'favoris-connecte');
+  await page.waitForSelector('.favorite-card');
+  await page.waitForSelector('.missing-card');
+  const favoriteCount = await page.locator('.favorite-card').count();
+  if (favoriteCount !== 2) problems.push(`Favoris : ${favoriteCount} cartes au lieu de 2`);
+  const total = (await page.textContent('.favorites-total'))?.trim();
+  if (total !== '2 biens sauvegardés') problems.push(`Favoris : compteur « ${total} »`);
+  await page.screenshot({ path: join(out, 'favoris-connecte-ordinateur.png'), fullPage: true });
+  await page.fill('.favorites-search input', 'villeur');
+  await page.waitForFunction(() => document.querySelector('.favorites-total')?.textContent?.trim() === '1 sur 2 biens', null, { timeout: 4000 })
+    .catch(async () => problems.push(`Favoris : recherche « villeur », compteur « ${await page.textContent('.favorites-total')} »`));
+  await page.screenshot({ path: join(out, 'favoris-recherche-ordinateur.png') });
+  await page.click('.favorites-tabs button >> nth=1');
+  await page.waitForSelector('.favorites-searches .saved-search');
+  if (!page.url().includes('onglet=recherches')) problems.push(`Favoris : l'onglet Recherches n'est pas dans l'adresse (${page.url()})`);
+  await page.screenshot({ path: join(out, 'favoris-recherches-ordinateur.png'), fullPage: true });
+  await page.close();
+
+  // Recherche : cœur déjà rempli pour un favori ; « Enregistrer cette recherche » écrit le format de l'app.
+  page = await open(signed, '/recherche/?mode=buy&lieu=Lyon', 'recherche-connecte');
+  await page.waitForSelector('.listing-card');
+  // Les deux annonces à vendre sont en favoris : chaque carte affichée a son cœur rempli.
+  await page.waitForFunction(() => {
+    const hearts = [...document.querySelectorAll('.listing-card .heart-button')];
+    return hearts.length > 0 && hearts.every((heart) => heart.getAttribute('aria-pressed') === 'true');
+  }, null, { timeout: 8000 })
+    .catch(async () => problems.push(`recherche connectée : ${await page.locator('.listing-card .heart-button[aria-pressed="true"]').count()} cœurs remplis sur ${await page.locator('.listing-card').count()} cartes`));
+  await page.click('.save-search-button');
+  await page.waitForSelector('dialog[open] .alert-body .text-input');
+  const proposed = await page.inputValue('dialog[open] .alert-body .text-input');
+  await page.screenshot({ path: join(out, 'enregistrer-recherche-ordinateur.png') });
+  await page.click('dialog[open] .alert-actions .btn-primary');
+  await page.waitForSelector('.save-search-button.is-saved');
+  const saved = writes.find((w) => w.table === 'saved_searches' && w.method === 'POST');
+  if (!saved) problems.push('enregistrer : aucune recherche envoyée au serveur');
+  else {
+    const query = saved.body?.query ?? {};
+    if (saved.body?.name !== proposed) problems.push(`enregistrer : nom « ${saved.body?.name} » au lieu de « ${proposed} »`);
+    if (query.transaction !== 'sale' || !query.location?.around || query.location.around.radiusMeters !== 10000) {
+      problems.push(`enregistrer : requête ${JSON.stringify(query)}`);
+    }
+    if (JSON.stringify(query).includes('null')) problems.push('enregistrer : valeur null dans la requête (l\'iPhone ne la lirait pas)');
+  }
+  await page.close();
+  page = await open(signed, `/annonce/?id=${listings[0].id}`, 'annonce-connecte');
+  await page.waitForSelector('.gallery-action[aria-pressed]');
+  if ((await page.getAttribute('.gallery-action[aria-pressed]', 'aria-pressed')) !== 'true') problems.push('annonce : le cœur d\'un favori n\'est pas rempli');
+  await page.close();
+  await signed.close();
 
   // Téléphone
   const phone = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
@@ -238,7 +448,28 @@ try {
   await page.screenshot({ path: join(out, 'filtres-location-telephone.png') });
   const rentChips = await page.locator('dialog[open] .active-chip').allTextContents();
   if (!rentChips.some((c) => /^Dispo\. avant le /.test(c))) problems.push(`location : pastilles « ${rentChips.join(' | ')} »`);
+  page = await open(phone, '/compte/', 'compte-connexion-telephone');
+  await page.waitForSelector('.signin-card');
+  await page.screenshot({ path: join(out, 'compte-connexion-telephone.png') });
   await phone.close();
+
+  // Téléphone, avec le compte de test.
+  const signedPhone = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
+  await mock(signedPhone, { signedIn: true });
+  page = await open(signedPhone, '/compte/', 'compte-espace-telephone');
+  await page.waitForSelector('.project-card');
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: join(out, 'compte-espace-telephone.png') });
+  await page.screenshot({ path: join(out, 'compte-espace-telephone-long.png'), fullPage: true });
+  page = await open(signedPhone, '/favoris/', 'favoris-telephone');
+  await page.waitForSelector('.favorite-card');
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: join(out, 'favoris-telephone.png') });
+  await page.screenshot({ path: join(out, 'favoris-telephone-long.png'), fullPage: true });
+  page = await open(signedPhone, '/compte/?vue=informations', 'mes-informations-telephone');
+  await page.waitForSelector('input[autocomplete="tel"]');
+  await page.screenshot({ path: join(out, 'mes-informations-telephone-long.png'), fullPage: true });
+  await signedPhone.close();
 } finally {
   await browser.close();
   server.close();

@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { Icon } from '../../components/Icon';
 import { ListingPhoto } from '../../components/PhotoPager';
+import { HeartButton } from '../../components/account/HeartButton';
 import type { PhotoRow } from '../../lib/listings';
 import { Modal } from './Dialogs';
 import { ExtraIcon } from './icons';
@@ -85,10 +86,11 @@ function PhotoViewer({ photos, start, onClose }: { photos: PhotoRow[]; start: nu
   );
 }
 
-export function Gallery({ photos, onShare, onFavorite, back }: {
+export function Gallery({ photos, onShare, listingId, back }: {
   photos: PhotoRow[];
   onShare: () => void;
-  onFavorite: () => void;
+  /** Annonce du cœur (ajouter demande un compte). */
+  listingId: string;
   /** Retour à la recherche, posé sur la photo (téléphone). */
   back: { href: string; label: string; onClick?: (event: MouseEvent<HTMLAnchorElement>) => void };
 }) {
@@ -143,9 +145,7 @@ export function Gallery({ photos, onShare, onFavorite, back }: {
         <button type="button" className="gallery-action" onClick={onShare} aria-label="Partager l'annonce" title="Partager l'annonce">
           <ExtraIcon name="shareUp" />
         </button>
-        <button type="button" className="gallery-action" onClick={onFavorite} aria-label="Ajouter aux favoris" title="Ajouter aux favoris">
-          <Icon name="heart" />
-        </button>
+        <HeartButton listingId={listingId} className="gallery-action" />
       </div>
       <PhotoViewer
         photos={photos}
