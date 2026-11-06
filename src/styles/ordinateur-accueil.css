@@ -83,6 +83,9 @@
   .dhome-see-all:focus-visible { border-radius: 6px; outline: 2px solid var(--d-blue); outline-offset: 3px; }
   .dhome-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
   .dhome-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+  /* Une seule ligne par section, comme la maquette : 4 grandes cartes (3 sous 1280 px) ou 3 petites. Les lectures
+     restent celles de l'app (8 ou 10 biens) ; « Voir tout » ouvre la liste complète. */
+  .dhome .dhome-grid > :nth-child(n+5), .dhome .dhome-list > :nth-child(n+4) { display: none; }
 
   /* Sans photo : le fond teinté et l'icône photo de l'app (ListingPhoto.swift). */
   .dhome-no-photo { display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; color: rgba(36, 45, 56, 0.35); }
@@ -149,6 +152,7 @@
 /* Entre 1024 et 1279 px : marges de 32 px (ordinateur.css), 3 cartes par ligne, et Investir sur deux lignes. */
 @media (min-width: 1024px) and (max-width: 1279px) {
   .dhome-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dhome .dhome-grid > :nth-child(n+4) { display: none; }
   .dhome .dhome-fields .criterion-tile, .dhome .dhome-fields.dhome-fields-6 .criterion-tile { padding: 0 12px 0 16px; }
   .dhome .dhome-fields.dhome-fields-6 .criterion-label { font-size: 13px; }
   .dhome .dhome-fields.dhome-fields-6 .criterion-value { font-size: 16px; }

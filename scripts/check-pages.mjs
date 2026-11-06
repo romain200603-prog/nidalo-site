@@ -65,6 +65,10 @@ const HOME_LISTINGS = [
     living_area: 68, rooms: 3, price: 255000, previous_price: 265000, published_at: '2026-11-04T09:00:00Z', listing_photos: homePhoto(6, 'photo2.jpg') }),
   homeRow(7, { title: 'Appartement 2 pièces', city: 'Lyon 6e', postal_code: '69006', insee_code: '69386', public_latitude: 45.7700, public_longitude: 4.8520,
     living_area: 45, rooms: 2, bedrooms: 1, price: 265000, published_at: '2026-11-03T09:00:00Z', listing_photos: homePhoto(7, 'photo0.jpg') }),
+  // Une de plus que la ligne affichée dans Opportunités, Biens similaires et Baisses de prix.
+  homeRow(8, { title: 'Appartement 2 pièces avec balcon', city: 'Villeurbanne', postal_code: '69100', insee_code: '69266', public_latitude: 45.7720, public_longitude: 4.8903,
+    living_area: 41, rooms: 2, bedrooms: 1, price: 172000, previous_price: 179000, rental_info: { isLeased: false, potentialMonthlyRent: 920 },
+    publish_category: 'investment', published_at: '2026-11-02T09:00:00Z', listing_photos: homePhoto(8, 'photo1.jpg') }),
 ];
 const communes = [
   { nom: 'Lyon', code: '69123', codesPostaux: ['69001', '69002', '69003'], population: 520000, centre: { type: 'Point', coordinates: [4.835, 45.758] }, departement: { nom: 'Rhône' } },
@@ -825,19 +829,30 @@ try {
   }
 
   // Accueil sur ordinateur (maquette 1), à 1440 × 900 et 1024 × 768, avec les annonces inventées : bonjour, ordre
-  // des sections de l'app (vide = absente), 4 cartes par ligne (3 sous 1280 px), projet du compte, fiche ouverte
-  // dans l'onglet puis « Consultés récemment », « Plus de critères ». Captures pour Romain : 1-accueil-*.png.
+  // des sections de l'app (vide = absente), une seule ligne par section (4 grandes cartes, 3 sous 1280 px ; 3 petites)
+  // alors que les annonces lues en remplissent davantage, projet du compte, fiche ouverte dans l'onglet puis
+  // « Consultés récemment », « Plus de critères ». Captures pour Romain : 1-accueil-*.png.
   const HOME_PROJECT = {
     real_estate_projects: [{ ...ACCOUNT.real_estate_projects[0], criteria: { residential: { maxBudget: 300000, propertyTypes: ['apartment'], location: { place: 'Lyon' } } } }],
   };
   const homeSections = (p) => p.locator('.dhome-section h2').allTextContents();
   const sectionCards = (p, id) => p.locator(`section:has(> .dhome-inner #${id}) h3`).allTextContents();
-  const firstRowCount = (p, id) => p.evaluate((sectionId) => {
+  // Cartes d'une section : lues (dans la page), affichées, et nombre de lignes qu'elles occupent.
+  const sectionRow = (p, id) => p.evaluate((sectionId) => {
     const section = document.getElementById(sectionId)?.closest('section');
-    const tops = [...(section?.querySelectorAll('article') ?? [])].map((card) => Math.round(card.getBoundingClientRect().top));
-    return tops.filter((top) => top === tops[0]).length;
+    const cards = [...(section?.querySelectorAll('article') ?? [])];
+    const shown = cards.filter((card) => card.getClientRects().length > 0);
+    return { total: cards.length, shown: shown.length, rows: new Set(shown.map((card) => Math.round(card.getBoundingClientRect().top))).size };
   }, id);
-  const wantedPerRow = (width) => (width >= 1280 ? 4 : 3);
+  const checkOneRow = async (p, width, label, ids) => {
+    for (const id of ids) {
+      const { total, shown, rows } = await sectionRow(p, id);
+      const wanted = ['opportunites', 'similaires'].includes(id) ? (width >= 1280 ? 4 : 3) : 3;
+      if (rows !== 1 || shown !== wanted || total <= shown) {
+        problems.push(`accueil ${width} ${label} : ${id} affiche ${shown} carte(s) sur ${rows} ligne(s), ${total} dans la page, au lieu d'une ligne de ${wanted} (et des biens en plus non affichés)`);
+      }
+    }
+  };
   for (const [width, height] of [[1440, 900], [1024, 768]]) {
     const guest = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR' });
     await mock(guest, { listingRows: HOME_LISTINGS });
@@ -849,10 +864,7 @@ try {
     const guestSections = await homeSections(page);
     const guestWanted = ['Opportunités du moment', 'Biens similaires à vos recherches', 'Nouveautés', 'Baisses de prix'];
     if (JSON.stringify(guestSections) !== JSON.stringify(guestWanted)) problems.push(`accueil ${width} sans compte : sections ${JSON.stringify(guestSections)} au lieu de ${JSON.stringify(guestWanted)}`);
-    for (const id of ['opportunites', 'similaires']) {
-      const count = await firstRowCount(page, id);
-      if (count !== wantedPerRow(width)) problems.push(`accueil ${width} : ${count} cartes par ligne dans ${id} au lieu de ${wantedPerRow(width)}`);
-    }
+    await checkOneRow(page, width, 'sans compte', ['opportunites', 'similaires', 'nouveautes', 'baisses']);
     const noPhoto = await page.locator('section:has(#opportunites) .dhome-no-photo').count();
     if (noPhoto < 1 || await page.getByText('Photos à venir').count()) problems.push(`accueil ${width} : annonce sans photo mal affichée`);
     await page.mouse.move(0, 0);
@@ -890,7 +902,7 @@ try {
     const budget = (await page.textContent('.criterion-tile >> nth=0 >> .criterion-value'))?.replace(/\s/g, ' ');
     if (budget !== '300 000 €') problems.push(`accueil ${width} : budget du projet « ${budget} » au lieu de « 300 000 € »`);
     const similar = await sectionCards(page, 'similaires');
-    const similarWanted = [HOME_LISTINGS[0], HOME_LISTINGS[3], HOME_LISTINGS[5], HOME_LISTINGS[6]].map((row) => row.title);
+    const similarWanted = [HOME_LISTINGS[0], HOME_LISTINGS[3], HOME_LISTINGS[5], HOME_LISTINGS[6], HOME_LISTINGS[7]].map((row) => row.title);
     if (JSON.stringify(similar) !== JSON.stringify(similarWanted)) problems.push(`accueil ${width} : biens similaires ${JSON.stringify(similar)} au lieu de ${JSON.stringify(similarWanted)}`);
     if (await page.locator('#consultes').count()) problems.push(`accueil ${width} : « Consultés récemment » affiché sans fiche ouverte`);
     // Fiche ouverte dans le même onglet, puis retour : elle passe en tête de « Consultés récemment ».
@@ -900,8 +912,8 @@ try {
     await page.waitForSelector('#consultes', { timeout: 8000 }).catch(() => undefined);
     const viewedFirst = await sectionCards(page, 'consultes');
     if (viewedFirst[0] !== HOME_LISTINGS[0].title) problems.push(`accueil ${width} : consultés ${JSON.stringify(viewedFirst)} après la fiche « ${HOME_LISTINGS[0].title} »`);
-    // Deux autres fiches, puis l'accueil complet pour la capture.
-    for (const row of [HOME_LISTINGS[6], HOME_LISTINGS[5]]) {
+    // Trois autres fiches (une de plus que la ligne affichée), puis l'accueil complet pour la capture.
+    for (const row of [HOME_LISTINGS[6], HOME_LISTINGS[5], HOME_LISTINGS[2]]) {
       await page.goto(`${base}/annonce/?id=${row.id}`, { waitUntil: 'networkidle' });
     }
     await page.goto(`${base}/`, { waitUntil: 'networkidle' });
@@ -914,9 +926,9 @@ try {
       problems.push(`accueil ${width} connecté : sections ${JSON.stringify(memberSections)}`);
     }
     const viewed = await sectionCards(page, 'consultes');
-    const viewedWanted = [HOME_LISTINGS[5], HOME_LISTINGS[6], HOME_LISTINGS[0]].map((row) => row.title);
+    const viewedWanted = [HOME_LISTINGS[2], HOME_LISTINGS[5], HOME_LISTINGS[6], HOME_LISTINGS[0]].map((row) => row.title);
     if (JSON.stringify(viewed) !== JSON.stringify(viewedWanted)) problems.push(`accueil ${width} : consultés ${JSON.stringify(viewed)} au lieu de ${JSON.stringify(viewedWanted)}`);
-    if (await firstRowCount(page, 'similaires') !== wantedPerRow(width)) problems.push(`accueil ${width} connecté : biens similaires pas à ${wantedPerRow(width)} par ligne`);
+    await checkOneRow(page, width, 'connecté', ['opportunites', 'consultes', 'similaires', 'nouveautes', 'baisses']);
     await checkChrome(page, `accueil maquette ${width} connecté`, { signedIn: true, margin: width >= 1280 ? 48 : 32 });
     await page.mouse.move(0, 0);
     await page.waitForTimeout(300);
