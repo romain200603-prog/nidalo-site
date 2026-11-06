@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react';
+// Styles communs d'abord : les styles des écrans (compte, favoris, annonce) viennent après et les précisent.
+import '../styles/app.css';
 import { Icon } from './Icon';
 import type { IconName } from './iconPaths';
+import { SignInSheet } from './account/SignInSheet';
 import { CONTACT_EMAIL } from '../lib/config';
 import { PATHS } from '../lib/paths';
 
@@ -85,6 +88,7 @@ export function Footer() {
           <a href={PATHS.help}>Aide</a>
           <a href={PATHS.privacy}>Confidentialité</a>
           <a href={PATHS.legal}>Mentions légales</a>
+          <a href={PATHS.terms}>Conditions</a>
           <a href={`mailto:${CONTACT_EMAIL}`}>Contact</a>
         </nav>
         <p>© 2026 Nidalo</p>
@@ -129,6 +133,7 @@ export function Page({ section, children, wide = false }: { section: Section; ch
       </main>
       <Footer />
       <TabBar section={section} />
+      <SignInSheet />
     </div>
   );
 }

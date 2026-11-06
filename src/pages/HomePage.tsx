@@ -5,7 +5,10 @@ import { ModeTabs } from '../components/ModeTabs';
 import { PlaceField } from '../components/PlaceField';
 import { ListingPhoto } from '../components/PhotoPager';
 import { SelectionDialog } from '../components/SelectionDialog';
+import { HeartButton } from '../components/account/HeartButton';
 import { FiltersDialog } from './FiltersDialog';
+import { accountStore, greetingName, loadAccount } from '../lib/account/profile';
+import { useSession, useStore } from '../lib/account/session';
 import { GOOD_YIELD, grossYieldText } from '../lib/cardContent';
 import { formatArea, formatFraction, formatPrice } from '../lib/format';
 import { highlightsFor } from '../lib/highlights';
@@ -114,6 +117,7 @@ function OpportunityCard({ row, highlights }: { row: ListingRow; highlights: Hig
             {grossYieldText(highlights)}
           </span>
         )}
+        <HeartButton listingId={row.id} />
       </div>
       <div className="opportunity-body">
         <Tag text={homeTag(row, highlights !== null)} />
@@ -138,6 +142,7 @@ function CompactCard({ row, accessory }: { row: ListingRow; accessory: 'new' | '
   const drop = accessory === 'priceDrop' ? priceDrop(row) : null;
   return (
     <article className="home-card compact-card">
+      {accessory === 'new' && <HeartButton listingId={row.id} className="heart-button heart-plain" />}
       <div className="compact-photo">
         <ListingPhoto photo={sortedPhotos(row)[0]} />
         {accessory === 'new' && <span className="compact-new"><Tag text="Nouveau" tone="solid" /></span>}
@@ -165,6 +170,12 @@ export function HomePage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [feed, setFeed] = useState<HomeFeed | null>(null);
   const draft = drafts[mode];
+  const session = useSession();
+  const account = useStore(accountStore);
+
+  useEffect(() => {
+    if (session.status === 'signedIn') void loadAccount();
+  }, [session.status, session.status === 'signedIn' ? session.userId : null]);
 
   useEffect(() => {
     let cancelled = false;
@@ -197,12 +208,15 @@ export function HomePage() {
 
   const tiles = homeTiles(draft);
   const sectionHref = searchHref(draft);
+  const name = account.status === 'ready' ? greetingName(account.account) : null;
+  // « Bonjour Romain », « Bonjour » sans prénom connu, « Bienvenue sur Nidalo » sans compte (HomeBanner).
+  const greeting = session.status === 'signedIn' ? (name ? `Bonjour ${name}` : 'Bonjour') : 'Bienvenue sur Nidalo';
 
   return (
     <Page section="home">
       <section className="home-band" aria-labelledby="accueil-titre">
         <div className="wrap home-band-inner">
-          <h1 id="accueil-titre">Bienvenue sur Nidalo</h1>
+          <h1 id="accueil-titre">{greeting}</h1>
           <p>Que recherchez-vous aujourd’hui ?</p>
         </div>
       </section>

@@ -15,6 +15,7 @@ const pages = [
   'aide/index',
   'confidentialite/index',
   'mentions-legales/index',
+  'conditions/index',
   '404',
 ];
 

@@ -31,6 +31,10 @@ type Props = {
   onApply: (draft: SearchDraft, drafts: DraftsByMode) => void;
   /** « Voir sur la carte » : applique les filtres et ouvre la carte. */
   onShowMap?: (draft: SearchDraft, drafts: DraftsByMode) => void;
+  /** Recherche enregistrée : sa catégorie est fixe (pas d'onglets de catégorie). */
+  fixedMode?: boolean;
+  /** Favoris : le bouton compte les favoris retenus (« Afficher 3 biens »), sans interroger le serveur. */
+  countAmong?: (draft: SearchDraft) => number;
 };
 
 /** Bornes et pas des fourchettes de prix (budgetBounds, budgetStep). */
@@ -60,13 +64,14 @@ const percentIssue = (value: number | null) => (value !== null && (value < 0 || 
 const rangeIssue = (min: number | null, max: number | null) => (min !== null && max !== null && min > max ? RANGE_ISSUE : null);
 const whole = (value: number | null) => (value === null ? null : Math.trunc(value));
 
-function applyTitle(count: number | null): string {
-  if (count === null) return 'Afficher les annonces';
-  if (count === 0) return 'Aucune annonce';
-  return count === 1 ? 'Afficher 1 annonce' : `Afficher ${new Intl.NumberFormat('fr-FR').format(count)} annonces`;
+function applyTitle(count: number | null, favorites = false): string {
+  const [one, many, none] = favorites ? ['bien', 'biens', 'Aucun bien'] : ['annonce', 'annonces', 'Aucune annonce'];
+  if (count === null) return `Afficher les ${many}`;
+  if (count === 0) return none;
+  return count === 1 ? `Afficher 1 ${one}` : `Afficher ${new Intl.NumberFormat('fr-FR').format(count)} ${many}`;
 }
 
-export function FiltersDialog({ open, draft, remembered, onClose, onApply, onShowMap }: Props) {
+export function FiltersDialog({ open, draft, remembered, onClose, onApply, onShowMap, fixedMode = false, countAmong }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [mode, setMode] = useState<SearchMode>(draft.mode);
   const [drafts, setDrafts] = useState<DraftsByMode>({ [draft.mode]: draft });
@@ -96,6 +101,10 @@ export function FiltersDialog({ open, draft, remembered, onClose, onApply, onSho
     let cancelled = false;
     setCount(null);
     const timer = window.setTimeout(() => {
+      if (countAmong) {
+        setCount(countAmong(working));
+        return;
+      }
       search(working, (row) => highlightsFor(row, working.mode === 'invest' ? working.downPayment : null))
         .then((results) => { if (!cancelled) setCount(results.length); })
         .catch(() => { if (!cancelled) setCount(null); });
@@ -186,7 +195,7 @@ export function FiltersDialog({ open, draft, remembered, onClose, onApply, onSho
             {searchCenter(working) && <RadiusChoices value={working.radiusKm} onChange={(radiusKm) => update({ radiusKm })} />}
           </FilterCard>
 
-          <ModeTabs mode={mode} onChange={changeMode} className="mode-tabs-search filters-modes" />
+          {!fixedMode && <ModeTabs mode={mode} onChange={changeMode} className="mode-tabs-search filters-modes" />}
 
           {chips.length > 0 && (
             <div className="filters-active" role="group" aria-label="Critères appliqués">
@@ -394,7 +403,7 @@ export function FiltersDialog({ open, draft, remembered, onClose, onApply, onSho
         <div className="filters-apply">
           <button type="submit" className="btn btn-primary">
             <Icon name="search" />
-            <span aria-live="polite">{applyTitle(count)}</span>
+            <span aria-live="polite">{applyTitle(count, countAmong !== undefined)}</span>
           </button>
         </div>
       </form>

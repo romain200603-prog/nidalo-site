@@ -155,7 +155,7 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
         </a>
       </div>
       <div className="listing-gallery-wrap">
-        <Gallery photos={photos} onShare={share} onFavorite={() => setAccount('favorite')} back={{ href: back.href, label: back.label, onClick: onBack }} />
+        <Gallery photos={photos} onShare={share} listingId={row.id} back={{ href: back.href, label: back.label, onClick: onBack }} />
       </div>
       <div className="wrap listing-body">
         <div className="listing-aside">

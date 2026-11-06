@@ -78,14 +78,13 @@ export function AlertDialog({ open, onClose, title, message, actions, children }
   );
 }
 
-/** Ce qui demande un compte (écrire, visiter, offre, favori). */
-export type AccountAction = 'message' | 'visit' | 'offer' | 'favorite';
+/** Ce qui demande un compte et n'est pas encore sur le site (écrire, visiter, offre). */
+export type AccountAction = 'message' | 'visit' | 'offer';
 
 const ACCOUNT_TITLES: Record<AccountAction, string> = {
   message: 'Écrire au vendeur',
   visit: 'Demander une visite',
   offer: 'Faire une offre',
-  favorite: 'Ajouter aux favoris',
 };
 
 /**

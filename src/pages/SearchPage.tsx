@@ -5,6 +5,8 @@ import { cardTag, ListingCard } from '../components/ListingCard';
 import { ModeTabs } from '../components/ModeTabs';
 import { PlaceField } from '../components/PlaceField';
 import { ListingPhoto } from '../components/PhotoPager';
+import { HeartButton } from '../components/account/HeartButton';
+import { SaveSearchButton } from '../components/account/SaveSearchButton';
 import type { MapFrame } from '../components/ResultsMap';
 
 // Le moteur de carte est lourd : chargé à part, la liste s'affiche sans l'attendre.
@@ -73,6 +75,7 @@ function MapPreview({ result, mode, onClose }: { result: Result; mode: SearchMod
           <span className="map-preview-price">{price.amount}{price.suffix && <small>{price.suffix}</small>}</span>
         </span>
       </a>
+      <HeartButton listingId={row.id} className="heart-inline" />
       <button type="button" className="map-preview-close" aria-label="Fermer l’aperçu" onClick={onClose}>
         <Icon name="x" />
       </button>
@@ -232,6 +235,7 @@ export function SearchPage() {
               </label>
             </div>
           </div>
+          <SaveSearchButton draft={draft} />
 
           {status.kind === 'loading' && (
             <div className="results-list" aria-hidden="true">
