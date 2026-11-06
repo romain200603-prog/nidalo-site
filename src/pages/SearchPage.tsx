@@ -181,7 +181,7 @@ export function SearchPage() {
   }
 
   return (
-    <Page section="search" wide>
+    <Page section="search" wide mode={draft.mode}>
       <div className="search-layout">
         <div className="search-column">
           <div className="search-head">

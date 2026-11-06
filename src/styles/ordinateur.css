@@ -1,0 +1,148 @@
+/* Nidalo sur ordinateur, à partir de 1024 px : police, couleurs et mesures des maquettes de Romain (spec §4).
+   Tout est dans @media (min-width: 1024px) : en dessous, le site reste exactement comme sur téléphone.
+   Chaque page redessinée ajoute ensuite sa propre section ou son propre fichier dans styles/. */
+
+/* Police Inter (SIL Open Font License 1.1, public/fonts/LICENSE-Inter.txt), déclarée sous un nom à part : la liste de
+   polices du téléphone cite « Inter » (police installée sur l'appareil), elle ne doit jamais recevoir celle-ci. */
+@font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 400; src: url('/fonts/inter-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 400; src: url('/fonts/inter-latin-400-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 500; src: url('/fonts/inter-latin-ext-500-normal.woff2') format('woff2'); unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 500; src: url('/fonts/inter-latin-500-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 600; src: url('/fonts/inter-latin-ext-600-normal.woff2') format('woff2'); unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 600; src: url('/fonts/inter-latin-600-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 700; src: url('/fonts/inter-latin-ext-700-normal.woff2') format('woff2'); unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 700; src: url('/fonts/inter-latin-700-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 800; src: url('/fonts/inter-latin-ext-800-normal.woff2') format('woff2'); unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 800; src: url('/fonts/inter-latin-800-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
+@media (min-width: 1024px) {
+  /* ——— Valeurs communes de la maquette ——— */
+  :root {
+    --d-font: 'Nidalo Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --d-bg: #FAF9F6;
+    --d-text: #242D38;
+    --d-grey: #75808B;
+    --d-help: #9AA2AA;
+    --d-icon: #5B6571;
+    --d-chevron: #A7AEB5;
+    --d-card-border: #ECEAE6;
+    --d-separator: #F2F0EC;
+    --d-field-border: #E3E0DA;
+    --d-blue: #3C5CB0;
+    --d-blue-hover: #2F4A92;
+    --d-blue-light: #EEF2FA;
+    --d-blue-line: #C9D3EE;
+    --d-green: #577965;
+    --d-green-pill: #E9F0E8;
+    --d-green-text: #3F6650;
+    --d-red: #C0392B;
+    --d-badge: #E5383B;
+    --d-night: #22366B;
+    --d-night-text: #C3CDE4;
+    --d-night-line: #41527F;
+    --d-hover: #F4F2EE;
+    --d-content: 1200px;
+    --d-margin: 48px;
+    --d-card-radius: 18px;
+    --d-card-hover-shadow: 0 10px 28px rgba(36, 45, 56, 0.08);
+    --d-button-height: 44px;
+    --d-button-radius: 12px;
+    /* Fond et texte de toutes les pages sur ordinateur ; la barre du haut mesure 72 px. */
+    --page: var(--d-bg);
+    --text: var(--d-text);
+    --ink: var(--d-text);
+    --topbar-height: 72px;
+  }
+  body { background: var(--d-bg); color: var(--d-text); font-family: var(--d-font); }
+  .dtop a:focus-visible, .dfoot a:focus-visible, .notification-row:focus-visible, .notifications-read-all:focus-visible { outline: 3px solid var(--d-blue); outline-offset: 2px; }
+
+  /* ——— Barre du haut : 72 px, blanche, filet en bas ——— */
+  .dtop { position: relative; z-index: 20; height: var(--topbar-height); background: #FFFFFF; border-bottom: 1px solid var(--d-card-border); }
+  .page-wide .dtop { position: sticky; top: 0; }
+  .dtop-bar { display: flex; align-items: center; height: 100%; padding: 0 var(--d-margin); }
+  .dtop-brand { flex: none; display: inline-flex; align-items: center; gap: 13px; border-radius: 10px; text-decoration: none; }
+  .dtop-tile { width: 36px; height: 36px; border-radius: 10px; box-shadow: 0 0 0 1px #E0E5F3, 0 1px 3px rgba(36, 45, 56, 0.06); }
+  .dtop-word { width: auto; height: 12.5px; }
+  .dtop-modes { display: flex; align-items: center; gap: 4px; margin-left: 34px; }
+  .dtop-mode { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border-radius: 10px; color: var(--d-icon); font-size: 15px; font-weight: 500; text-decoration: none; white-space: nowrap; }
+  .dtop-mode .icon { width: 18px; height: 18px; }
+  .dtop-mode:hover { background: var(--d-hover); }
+  .dtop-mode[aria-current="page"] { background: var(--d-blue-light); color: var(--d-blue); font-weight: 600; }
+  .dtop-actions { flex: none; display: flex; align-items: center; gap: 10px; margin-left: auto; padding-left: 24px; }
+  .dtop-publish { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 18px; border-radius: var(--d-button-radius); background: var(--d-blue); color: #FFFFFF; font-size: 15px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+  .dtop-publish:hover { background: var(--d-blue-hover); }
+  .dtop-publish .icon { width: 18px; height: 18px; }
+  .dtop-round { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; border: 1px solid var(--d-card-border); border-radius: 50%; background: #FFFFFF; color: var(--d-text); }
+  .dtop-round:hover { background: var(--d-hover); }
+  .dtop-round .icon { width: 20px; height: 20px; }
+  .dtop-badge { position: absolute; top: -3px; right: -3px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; background: var(--d-badge); box-shadow: 0 0 0 2px #FFFFFF; color: #FFFFFF; font-size: 11px; font-weight: 700; line-height: 17px; text-align: center; font-variant-numeric: tabular-nums; }
+  .dtop-space { display: inline-flex; align-items: center; gap: 10px; height: 42px; padding: 0 14px 0 4px; border: 1px solid var(--d-card-border); border-radius: 999px; background: #FFFFFF; color: var(--d-text); font-size: 15px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+  .dtop-space:hover { background: var(--d-hover); }
+  .dtop-space[aria-current="page"] { border-color: var(--d-blue-line); background: var(--d-blue-light); color: var(--d-blue); }
+  .dtop-avatar { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; overflow: hidden; border-radius: 50%; background: var(--d-blue-light); color: var(--d-blue); font-size: 15px; font-weight: 600; }
+  .dtop-space[aria-current="page"] .dtop-avatar { background: #FFFFFF; }
+  .dtop-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .dtop-avatar .icon { width: 18px; height: 18px; }
+
+  /* ——— Pied de page bleu nuit ——— */
+  .dfoot { margin-top: 48px; background: var(--d-night); color: var(--d-night-text); font-size: 15px; }
+  .page-wide .dfoot { margin-top: 0; }
+  .dfoot-inner { width: 100%; max-width: calc(var(--d-content) + 2 * var(--d-margin)); margin: 0 auto; padding: 48px var(--d-margin) 0; }
+  .dfoot-grid { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 32px; }
+  .dfoot-logo { display: inline-flex; align-items: center; gap: 13px; border-radius: 10px; }
+  .dfoot-tile { width: 36px; height: 36px; border-radius: 10px; }
+  .dfoot-word { width: auto; height: 12.5px; }
+  .dfoot-brand p { margin: 14px 0 0; line-height: 21px; }
+  .dfoot-column h2 { margin: 0 0 7px; color: #FFFFFF; font-size: 15px; font-weight: 600; line-height: 18px; }
+  .dfoot-column ul { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+  .dfoot a { color: var(--d-night-text); text-decoration: none; line-height: 21px; }
+  .dfoot a:hover { color: #FFFFFF; text-decoration: underline; }
+  .dfoot-bottom { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 38px; padding: 18px 0 26px; border-top: 1px solid var(--d-night-line); font-size: 14px; line-height: 20px; }
+  .dfoot-bottom p { margin: 0; }
+  .dfoot-bottom a { line-height: 20px; }
+
+  /* ——— Colonne de 640 px : écrans absents des maquettes (connexion, Mes informations, aide, 404…) ———
+     L'espace « Mon espace » (titre .space-title) garde sa mise en page actuelle jusqu'à son propre commit. */
+  .wrap-narrow { max-width: 672px; }
+  .page .account-wrap:not(:has(> .space > .space-title)) { max-width: 672px; }
+
+  /* ——— Notifications (NotificationsView de l'app) ——— */
+  .notification-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .notification-row { display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 14px 16px 14px 12px; border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; color: var(--d-text); font: inherit; text-align: left; text-decoration: none; cursor: pointer; transition: box-shadow 0.15s ease, transform 0.15s ease; }
+  .notification-row:hover { box-shadow: var(--d-card-hover-shadow); transform: translateY(-2px); }
+  .notification-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; color: var(--d-icon); }
+  .notification-icon .icon { width: 20px; height: 20px; }
+  .notification-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding-top: 1px; }
+  .notification-head { display: flex; align-items: baseline; gap: 6px; }
+  .notification-title { flex: 1; min-width: 0; overflow: hidden; font-size: 15px; font-weight: 700; line-height: 21px; text-overflow: ellipsis; white-space: nowrap; }
+  .notification-date { flex: none; color: var(--d-grey); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .notification-body { color: rgba(36, 45, 56, 0.8); font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
+  .notification-dot { flex: none; width: 8px; height: 8px; margin-top: 7px; border-radius: 50%; background: var(--d-blue); }
+  .notifications-read-all { height: var(--d-button-height); padding: 0 16px; border: 0; border-radius: var(--d-button-radius); background: var(--d-blue-light); color: var(--d-blue); font-size: 15px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .notifications-read-all:hover { background: #E2E8F6; }
+  .notifications-screen .account-empty > .icon { color: var(--d-blue); }
+  .notifications-screen .account-empty p { color: var(--d-grey); }
+}
+
+@media (min-width: 1024px) and (prefers-reduced-motion: reduce) {
+  .notification-row { transition: none; }
+  .notification-row:hover { transform: none; }
+}
+
+/* La barre du haut garde tout sur une ligne en se resserrant par étapes ; les liens gardent leur nom complet.
+   - Jusqu'à 1365 px : « Publier » seul (la barre complète ne tient qu'à partir d'environ 1300 px avec les marges de 48 px).
+   - Entre 1024 et 1279 px : marges de 32 px.
+   - Jusqu'à 1179 px : l'avatar seul pour « Mon espace », catégories plus serrées. */
+@media (min-width: 1024px) and (max-width: 1365px) {
+  .dtop-publish-end { display: none; }
+}
+@media (min-width: 1024px) and (max-width: 1279px) {
+  :root { --d-margin: 32px; }
+}
+@media (min-width: 1024px) and (max-width: 1179px) {
+  .dtop-modes { margin-left: 24px; }
+  .dtop-mode { padding: 0 10px; }
+  .dtop-actions { padding-left: 16px; }
+  .dtop-space-label { display: none; }
+  .dtop-space { gap: 0; padding: 0 3px; }
+}

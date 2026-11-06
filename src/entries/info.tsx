@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Footer, Header, TabBar } from '../components/Layout';
+import { SiteFooter, SiteHeader, TabBar } from '../components/Layout';
 import '../styles/app.css';
 
 // Pages d'information : le texte est déjà dans la page HTML, on ajoute seulement l'en-tête et le bas de page.
@@ -10,14 +10,14 @@ if (header) {
   createRoot(header).render(
     <StrictMode>
       <a className="skip-link" href="#contenu">Aller au contenu</a>
-      <Header section="other" />
+      <SiteHeader section="other" />
     </StrictMode>,
   );
 }
 if (footer) {
   createRoot(footer).render(
     <StrictMode>
-      <Footer />
+      <SiteFooter />
       <TabBar section="other" />
     </StrictMode>,
   );

@@ -4,9 +4,11 @@ import { SignInCard } from '../components/account/SignInCard';
 import { authMessage, isNewAccount, linkErrorMessage, openLink } from '../lib/account/auth';
 import { accountStore, loadAccount } from '../lib/account/profile';
 import { recoveryStore, useSession, useStore } from '../lib/account/session';
+import { useDesktop } from '../lib/desktop';
 import { Hub } from './account/Hub';
 import { MyInfo } from './account/MyInfo';
 import { MyListings } from './account/MyListings';
+import { NotificationsScreen } from './account/Notifications';
 import { ProfileChoice } from './account/ProfileChoice';
 import { SavedSearchesList } from './account/SavedSearchesList';
 import { ScreenHeader, Spinner } from './account/parts';
@@ -53,6 +55,7 @@ function AccountContent() {
   const recovery = useStore(recoveryStore);
   const account = useStore(accountStore);
   const link = useEmailLink();
+  const desktop = useDesktop();
   const [, refresh] = useState(0);
   const params = new URLSearchParams(window.location.search);
   const view = params.get('vue');
@@ -63,6 +66,8 @@ function AccountContent() {
 
   // Rien tant que la session n'est pas connue : la carte ne clignote pas.
   if (session.status === 'loading' || !link.checked) return <Spinner />;
+  // Ordinateur : comme la cloche de l'app, l'écran Notifications s'ouvre aussi sans compte, avec son message.
+  if (desktop && view === 'notifications' && session.status === 'signedOut' && !link.error) return <NotificationsScreen signedIn={false} />;
   if (session.status === 'signedOut') return <SignInCard linkError={link.error} />;
   if (recovery) return <SignInCard recovery onPasswordSaved={() => refresh((n) => n + 1)} />;
   if (account.status === 'error') {
@@ -85,6 +90,9 @@ function AccountContent() {
     case 'legal': return <LegalScreen />;
     case 'securite': return <SecurityScreen />;
     case 'supprimer': return <DeleteAccountScreen />;
+    // Notifications : l'écran de l'app sur ordinateur ; sur téléphone, « bientôt » comme avant.
+    case 'notifications': return desktop ? <NotificationsScreen signedIn /> : <SoonScreen screen="notifications" />;
+    case 'demande-visite': return <SoonScreen screen="demande-visite" />;
     case 'bientot': return <SoonScreen screen={params.get('ecran')} />;
     default: return <Hub account={current} />;
   }

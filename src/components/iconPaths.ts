@@ -97,6 +97,12 @@ export const ICON_PATHS = {
   // Filtres : « Réinitialiser » (arrow.counterclockwise dans l'app) et « Ascenseur ».
   rotateCcw: "<path d=\"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8\"/> <path d=\"M3 3v5h5\"/>",
   arrowUp: "<path d=\"m5 12 7-7 7 7\"/> <path d=\"M12 19V5\"/>",
+  // Ordinateur : bouton Messages de la barre du haut (AppIcon.messageBubble) et icônes des notifications
+  // (NotificationRow dans HomeView.swift), copiés des fichiers Icons/ de l'app.
+  messageSquareText: "<path d=\"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z\"/> <path d=\"M7 11h10\"/> <path d=\"M7 15h6\"/> <path d=\"M7 7h8\"/>",
+  calendarPlus: "<path d=\"M16 18h6\"/> <path d=\"M16 2v3\"/> <path d=\"M19 15v6\"/> <path d=\"M21 11.5V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h8.3\"/> <path d=\"M3 9h18\"/> <path d=\"M8 2v3\"/>",
+  calendarCheck: "<path d=\"M8 2v3\"/> <path d=\"M16 2v3\"/> <rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"/> <path d=\"M3 9h18\"/> <path d=\"m9 15 2 2 4-4\"/>",
+  calendarBlank: "<path d=\"M8 2v3\"/> <path d=\"M16 2v3\"/> <rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"/> <path d=\"M3 9h18\"/>",
 } as const;
 
 export type IconName = keyof typeof ICON_PATHS;

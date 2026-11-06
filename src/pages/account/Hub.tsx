@@ -97,11 +97,11 @@ export function Hub({ account }: { account: Account }) {
       </SpaceSection>
       <SpaceSection icon="gear" title="Paramètres et assistance">
         <RowGroup rows={isPro ? [
-          { icon: 'bell', title: 'Notifications', subtitle: 'Nouveaux contacts, visites et messages', href: soonPath('notifications') },
+          { icon: 'bell', title: 'Notifications', subtitle: 'Nouveaux contacts, visites et messages', href: accountPath('notifications') },
           { icon: 'circleHelp', title: 'Aide et support Pro', subtitle: 'Conseiller dédié, centre d\'aide', href: PATHS.help },
           legalRow,
         ] : [
-          { icon: 'bell', title: 'Notifications', subtitle: 'Alertes, visites et messages', href: soonPath('notifications') },
+          { icon: 'bell', title: 'Notifications', subtitle: 'Alertes, visites et messages', href: accountPath('notifications') },
           { icon: 'circleHelp', title: 'Aide et assistance', subtitle: 'Questions fréquentes, nous contacter', href: PATHS.help },
           { icon: 'star', title: 'Donner mon avis', subtitle: 'Notez l\'application', onClick: () => setDialog('review') },
           legalRow,

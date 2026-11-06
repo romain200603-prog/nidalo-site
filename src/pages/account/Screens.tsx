@@ -18,6 +18,7 @@ const SOON_TITLES: Record<string, string> = {
   offres: 'Offres et compromis',
   signature: 'Documents à signer',
   notifications: 'Notifications',
+  'demande-visite': 'Demande de visite',
   projet: 'Mon projet immobilier',
   agence: 'Compte professionnel',
   mandats: 'Mes mandats',

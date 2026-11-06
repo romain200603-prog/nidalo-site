@@ -1,10 +1,16 @@
 import type { ReactNode } from 'react';
 // Styles communs d'abord : les styles des écrans (compte, favoris, annonce) viennent après et les précisent.
 import '../styles/app.css';
+// Ordinateur (≥ 1024 px seulement) : police Inter, couleurs, barre du haut, pied de page, colonne de 640 px.
+import '../styles/ordinateur.css';
+import { DesktopFooter } from './DesktopFooter';
+import { DesktopHeader } from './DesktopHeader';
 import { Icon } from './Icon';
 import type { IconName } from './iconPaths';
 import { SignInSheet } from './account/SignInSheet';
 import { CONTACT_EMAIL } from '../lib/config';
+import { useDesktop } from '../lib/desktop';
+import type { SearchMode } from '../lib/labels';
 import { PATHS } from '../lib/paths';
 
 export type Section = 'home' | 'search' | 'favorites' | 'publish' | 'messages' | 'account' | 'other';
@@ -120,18 +126,34 @@ export function Framed() {
   );
 }
 
-export function Page({ section, children, wide = false }: { section: Section; children: ReactNode; wide?: boolean }) {
+/** En-tête : la barre du haut sur ordinateur (≥ 1024 px), l'en-tête actuel en dessous. */
+export function SiteHeader({ section, mode = null }: { section: Section; mode?: SearchMode | null }) {
+  return useDesktop() ? <DesktopHeader section={section} mode={mode} /> : <Header section={section} />;
+}
+
+/** Pied de page : le pied bleu nuit sur ordinateur (≥ 1024 px), le pied actuel en dessous. */
+export function SiteFooter() {
+  return useDesktop() ? <DesktopFooter /> : <Footer />;
+}
+
+/** `mode` : la catégorie de la recherche affichée, mise en avant dans la barre du haut sur ordinateur. */
+export function Page({ section, children, wide = false, mode = null }: {
+  section: Section;
+  children: ReactNode;
+  wide?: boolean;
+  mode?: SearchMode | null;
+}) {
   if (isFramed()) return <Framed />;
   return (
     <div className={wide ? 'page page-wide' : 'page'}>
       <a className="skip-link" href="#contenu">
         Aller au contenu
       </a>
-      <Header section={section} />
+      <SiteHeader section={section} mode={mode} />
       <main id="contenu" tabIndex={-1}>
         {children}
       </main>
-      <Footer />
+      <SiteFooter />
       <TabBar section={section} />
       <SignInSheet />
     </div>
