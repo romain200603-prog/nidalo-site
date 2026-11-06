@@ -36,6 +36,36 @@ const listings = JSON.parse(await readFile(join(root, 'scripts/fixtures/listings
 const photos = {};
 for (const name of ['photo0.jpg', 'photo1.jpg', 'photo2.jpg']) photos[name] = await readFile(join(root, 'scripts/fixtures', name));
 const tile = await readFile(join(root, 'scripts/fixtures/tile.png'));
+
+// Accueil sur ordinateur : annonces inventées qui remplissent chaque section (Opportunités : loyer déclaré ou
+// potentiel ; Biens similaires : appartements de Lyon jusqu'à 300 000 € ; Nouveautés ; Baisses de prix).
+const homeId = (n) => `6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1b0${n}`;
+const homePhoto = (n, file) => [{ id: `pb${n}`, storage_path: `test/${file}`, position: 0, width: 1400, height: 800 }];
+const homeRow = (n, fields) => ({
+  ...listings[0], id: homeId(n), owner_id: '00000000-0000-4000-8000-0000000000b0', publish_category: 'residential', previous_price: null,
+  rental_info: null, location_precision: 'approximate', public_street: null, listing_photos: [], ...fields,
+});
+const HOME_LISTINGS = [
+  homeRow(1, { title: 'Appartement 3 pièces', city: 'Lyon 2e', postal_code: '69002', insee_code: '69382', public_latitude: 45.7486, public_longitude: 4.8275,
+    living_area: 62, rooms: 3, price: 238000, rental_info: { isLeased: false, potentialMonthlyRent: 1550 }, publish_category: 'investment',
+    published_at: '2026-11-06T09:00:00Z', listing_photos: homePhoto(1, 'photo0.jpg') }),
+  homeRow(2, { title: 'Appartement 2 pièces vue dégagée', city: 'Lyon 7e', postal_code: '69007', insee_code: '69387', public_latitude: 45.7451, public_longitude: 4.8423,
+    living_area: 48, rooms: 2, bedrooms: 1, price: 349000, rental_info: { isLeased: true, currentMonthlyRent: 1149 }, publish_category: 'investment',
+    published_at: '2026-11-06T08:00:00Z' }),
+  homeRow(3, { property_type: 'house', title: 'Maison 4 pièces avec jardin', city: 'Caluire-et-Cuire', postal_code: '69300', insee_code: '69034',
+    public_latitude: 45.7953, public_longitude: 4.8466, living_area: 95, rooms: 4, bedrooms: 3, floor: null, price: 420000, previous_price: 435000,
+    rental_info: { isLeased: false, potentialMonthlyRent: 1900 }, publish_category: 'investment', published_at: '2026-11-05T18:00:00Z', listing_photos: homePhoto(3, 'photo1.jpg') }),
+  homeRow(4, { title: 'Studio rénové', city: 'Lyon 8e', postal_code: '69008', insee_code: '69388', public_latitude: 45.7352, public_longitude: 4.8691,
+    living_area: 22, rooms: 1, bedrooms: 0, price: 98000, previous_price: 105000, rental_info: { isLeased: false, potentialMonthlyRent: 690 },
+    publish_category: 'investment', published_at: '2026-11-05T12:00:00Z', listing_photos: homePhoto(4, 'photo2.jpg') }),
+  homeRow(5, { property_type: 'house', title: 'Maison familiale 5 pièces', city: 'Écully', postal_code: '69130', insee_code: '69081',
+    public_latitude: 45.7746, public_longitude: 4.7771, living_area: 128, rooms: 5, bedrooms: 4, floor: null, price: 545000,
+    published_at: '2026-11-06T10:00:00Z', listing_photos: homePhoto(5, 'photo1.jpg') }),
+  homeRow(6, { title: 'Appartement 3 pièces lumineux', city: 'Lyon 3e', postal_code: '69003', insee_code: '69383', public_latitude: 45.7597, public_longitude: 4.8492,
+    living_area: 68, rooms: 3, price: 255000, previous_price: 265000, published_at: '2026-11-04T09:00:00Z', listing_photos: homePhoto(6, 'photo2.jpg') }),
+  homeRow(7, { title: 'Appartement 2 pièces', city: 'Lyon 6e', postal_code: '69006', insee_code: '69386', public_latitude: 45.7700, public_longitude: 4.8520,
+    living_area: 45, rooms: 2, bedrooms: 1, price: 265000, published_at: '2026-11-03T09:00:00Z', listing_photos: homePhoto(7, 'photo0.jpg') }),
+];
 const communes = [
   { nom: 'Lyon', code: '69123', codesPostaux: ['69001', '69002', '69003'], population: 520000, centre: { type: 'Point', coordinates: [4.835, 45.758] }, departement: { nom: 'Rhône' } },
   { nom: 'Lyons-la-Forêt', code: '27377', codesPostaux: ['27480'], population: 750, centre: { type: 'Point', coordinates: [1.47, 49.4] }, departement: { nom: 'Eure' } },
@@ -184,7 +214,18 @@ function pageWidth(request) {
   }
 }
 
-async function mock(context, { signedIn = false } = {}) {
+/** Page qui a envoyé une demande au serveur simulé (chemin de son adresse), ou null. */
+function pagePath(request) {
+  try { return new URL(request.frame().url()).pathname; } catch { return null; }
+}
+
+/**
+ * `listingRows` : annonces renvoyées par la table listings (par défaut les trois de fixtures/listings.json) ;
+ * `account` : tables du compte de test à remplacer (projet avec critères, autre nom affiché…).
+ */
+async function mock(context, { signedIn = false, listingRows = listings, account = {} } = {}) {
+  const tables = { ...ACCOUNT, ...account };
+  const requests = [];
   const json = (route, status, body) =>
     route.fulfill({ status, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: body === undefined ? '' : JSON.stringify(body) });
   const state = messagingState();
@@ -193,6 +234,7 @@ async function mock(context, { signedIn = false } = {}) {
     const url = new URL(request.url());
     const table = url.pathname.replace('/rest/v1/', '');
     const single = (request.headers().accept ?? '').includes('vnd.pgrst.object');
+    requests.push({ table, method: request.method(), search: decodeURIComponent(url.search), width: pageWidth(request), path: pagePath(request) });
     if (['rpc/my_conversations', 'rpc/mark_notifications_read', 'notifications'].includes(table)) {
       let body = null;
       try { body = request.postDataJSON(); } catch { body = request.postData(); }
@@ -216,7 +258,7 @@ async function mock(context, { signedIn = false } = {}) {
       }
       return json(route, 204);
     }
-    if (signedIn && table in ACCOUNT) {
+    if (signedIn && table in tables) {
       if (request.method() !== 'GET' && request.method() !== 'HEAD') {
         let body = null;
         try { body = request.postDataJSON(); } catch { body = request.postData(); }
@@ -228,11 +270,11 @@ async function mock(context, { signedIn = false } = {}) {
         if (table === 'saved_searches' && request.method() === 'PATCH' && (request.headers().prefer ?? '').includes('return=representation')) return json(route, 200, []);
         return json(route, request.method() === 'POST' ? 201 : 204);
       }
-      const rows = filtered(ACCOUNT[table], url.searchParams);
+      const rows = filtered(tables[table], url.searchParams);
       if (single) return rows.length === 1 ? json(route, 200, rows[0]) : json(route, 406, { code: 'PGRST116', message: 'no rows' });
       return json(route, 200, rows);
     }
-    let rows = listings;
+    let rows = listingRows;
     if (signedIn && table === 'listings' && url.searchParams.get('owner_id') === `eq.${USER_ID}`) {
       // « Mes annonces » : une annonce en ligne et un brouillon.
       rows = [{ ...listings[2], owner_id: USER_ID }, { ...listings[0], id: '6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1a0d', owner_id: USER_ID, status: 'draft', published_at: null }];
@@ -308,7 +350,7 @@ async function mock(context, { signedIn = false } = {}) {
       }
     }
   };
-  return { state, followed, pushChange };
+  return { state, followed, pushChange, requests };
 }
 
 const problems = [];
@@ -780,6 +822,158 @@ try {
     if ((await contentWidth(page, '.account-wrap')) !== 608) problems.push(`Mon espace ${width} : largeur ${await contentWidth(page, '.account-wrap')} px au lieu de 608 (inchangée)`);
     await page.close();
     await member.close();
+  }
+
+  // Accueil sur ordinateur (maquette 1), à 1440 × 900 et 1024 × 768, avec les annonces inventées : bonjour, ordre
+  // des sections de l'app (vide = absente), 4 cartes par ligne (3 sous 1280 px), projet du compte, fiche ouverte
+  // dans l'onglet puis « Consultés récemment », « Plus de critères ». Captures pour Romain : 1-accueil-*.png.
+  const HOME_PROJECT = {
+    real_estate_projects: [{ ...ACCOUNT.real_estate_projects[0], criteria: { residential: { maxBudget: 300000, propertyTypes: ['apartment'], location: { place: 'Lyon' } } } }],
+  };
+  const homeSections = (p) => p.locator('.dhome-section h2').allTextContents();
+  const sectionCards = (p, id) => p.locator(`section:has(> .dhome-inner #${id}) h3`).allTextContents();
+  const firstRowCount = (p, id) => p.evaluate((sectionId) => {
+    const section = document.getElementById(sectionId)?.closest('section');
+    const tops = [...(section?.querySelectorAll('article') ?? [])].map((card) => Math.round(card.getBoundingClientRect().top));
+    return tops.filter((top) => top === tops[0]).length;
+  }, id);
+  const wantedPerRow = (width) => (width >= 1280 ? 4 : 3);
+  for (const [width, height] of [[1440, 900], [1024, 768]]) {
+    const guest = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR' });
+    await mock(guest, { listingRows: HOME_LISTINGS });
+    page = await open(guest, '/', `accueil-${width}-maquette-sans-compte`);
+    await page.waitForSelector('.dhome .opportunity-card');
+    await page.waitForSelector('#similaires');
+    const welcome = await page.textContent('h1');
+    if (welcome !== 'Bienvenue sur Nidalo') problems.push(`accueil ${width} sans compte : « ${welcome} » au lieu de « Bienvenue sur Nidalo »`);
+    const guestSections = await homeSections(page);
+    const guestWanted = ['Opportunités du moment', 'Biens similaires à vos recherches', 'Nouveautés', 'Baisses de prix'];
+    if (JSON.stringify(guestSections) !== JSON.stringify(guestWanted)) problems.push(`accueil ${width} sans compte : sections ${JSON.stringify(guestSections)} au lieu de ${JSON.stringify(guestWanted)}`);
+    for (const id of ['opportunites', 'similaires']) {
+      const count = await firstRowCount(page, id);
+      if (count !== wantedPerRow(width)) problems.push(`accueil ${width} : ${count} cartes par ligne dans ${id} au lieu de ${wantedPerRow(width)}`);
+    }
+    const noPhoto = await page.locator('section:has(#opportunites) .dhome-no-photo').count();
+    if (noPhoto < 1 || await page.getByText('Photos à venir').count()) problems.push(`accueil ${width} : annonce sans photo mal affichée`);
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(300);
+    if (width === 1440) await page.screenshot({ path: join(out, '1-accueil-1440-sans-compte.png'), fullPage: true });
+    await page.screenshot({ path: join(out, `accueil-maquette-${width}-sans-compte.png`), fullPage: true });
+    // « Plus de critères » ouvre les filtres du site, sur la catégorie choisie.
+    await page.click('.dhome-more');
+    await page.waitForSelector('dialog.filters-dialog[open]');
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('dialog.filters-dialog[open]', { state: 'detached' }).catch(() => undefined);
+    // Investir : le lieu et 6 critères, sur une ligne à partir de 1280 px, sur deux lignes en dessous.
+    await page.click('.mode-tab >> nth=2');
+    const investRows = await page.evaluate(() => new Set([...document.querySelectorAll('.dhome-fields > *')].filter((el) => el.offsetParent).map((el) => Math.round(el.getBoundingClientRect().top))).size);
+    if (investRows !== (width >= 1280 ? 1 : 2)) problems.push(`accueil ${width} : critères Investir sur ${investRows} ligne(s)`);
+    await page.locator('.dhome-search').screenshot({ path: join(out, `accueil-maquette-${width}-investir.png`) });
+    const clipped = await page.evaluate(() => [...document.querySelectorAll('.dhome-fields .criterion-label, .dhome-fields .criterion-value')].filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.textContent));
+    if (clipped.length) console.log(`accueil ${width} Investir, textes coupés : ${clipped.join(' | ')}`);
+    await page.click('.mode-tab >> nth=3');
+    const hotelButton = (await page.textContent('.home-search-button'))?.trim();
+    if (hotelButton !== 'Rechercher des hôtels') problems.push(`accueil ${width} : bouton « ${hotelButton} » en Hôtels`);
+    await page.close();
+    await guest.close();
+
+    // Avec le compte de test : prénom, projet (Lyon, appartement, 300 000 €), puis une fiche ouverte dans l'onglet.
+    const member = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR' });
+    const homeServer = await mock(member, { signedIn: true, listingRows: HOME_LISTINGS, account: HOME_PROJECT });
+    page = await open(member, '/', `accueil-${width}-maquette-connecte`);
+    await page.waitForFunction(() => document.querySelector('h1')?.textContent === 'Bonjour Claire', null, { timeout: 8000 }).catch(() => undefined);
+    const hello = await page.textContent('h1');
+    if (hello !== 'Bonjour Claire') problems.push(`accueil ${width} connecté : « ${hello} » au lieu de « Bonjour Claire »`);
+    await page.waitForSelector('#similaires');
+    const projectRead = homeServer.requests.find((request) => request.table === 'real_estate_projects' && request.search.includes('criteria'));
+    if (!projectRead || !projectRead.search.includes(`user_id=eq.${USER_ID}`) || !projectRead.search.includes('limit=1')) problems.push(`accueil ${width} : projet lu ${projectRead?.search}`);
+    const budget = (await page.textContent('.criterion-tile >> nth=0 >> .criterion-value'))?.replace(/\s/g, ' ');
+    if (budget !== '300 000 €') problems.push(`accueil ${width} : budget du projet « ${budget} » au lieu de « 300 000 € »`);
+    const similar = await sectionCards(page, 'similaires');
+    const similarWanted = [HOME_LISTINGS[0], HOME_LISTINGS[3], HOME_LISTINGS[5], HOME_LISTINGS[6]].map((row) => row.title);
+    if (JSON.stringify(similar) !== JSON.stringify(similarWanted)) problems.push(`accueil ${width} : biens similaires ${JSON.stringify(similar)} au lieu de ${JSON.stringify(similarWanted)}`);
+    if (await page.locator('#consultes').count()) problems.push(`accueil ${width} : « Consultés récemment » affiché sans fiche ouverte`);
+    // Fiche ouverte dans le même onglet, puis retour : elle passe en tête de « Consultés récemment ».
+    await Promise.all([page.waitForURL(/\/annonce\/\?id=/), page.click('.opportunity-card h3 a >> nth=0')]);
+    await page.waitForLoadState('networkidle');
+    await page.goBack({ waitUntil: 'networkidle' });
+    await page.waitForSelector('#consultes', { timeout: 8000 }).catch(() => undefined);
+    const viewedFirst = await sectionCards(page, 'consultes');
+    if (viewedFirst[0] !== HOME_LISTINGS[0].title) problems.push(`accueil ${width} : consultés ${JSON.stringify(viewedFirst)} après la fiche « ${HOME_LISTINGS[0].title} »`);
+    // Deux autres fiches, puis l'accueil complet pour la capture.
+    for (const row of [HOME_LISTINGS[6], HOME_LISTINGS[5]]) {
+      await page.goto(`${base}/annonce/?id=${row.id}`, { waitUntil: 'networkidle' });
+    }
+    await page.goto(`${base}/`, { waitUntil: 'networkidle' });
+    await page.waitForSelector('#consultes');
+    await page.waitForSelector('#similaires');
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(300);
+    const memberSections = await homeSections(page);
+    if (JSON.stringify(memberSections) !== JSON.stringify(['Opportunités du moment', 'Consultés récemment', 'Biens similaires à vos recherches', 'Nouveautés', 'Baisses de prix'])) {
+      problems.push(`accueil ${width} connecté : sections ${JSON.stringify(memberSections)}`);
+    }
+    const viewed = await sectionCards(page, 'consultes');
+    const viewedWanted = [HOME_LISTINGS[5], HOME_LISTINGS[6], HOME_LISTINGS[0]].map((row) => row.title);
+    if (JSON.stringify(viewed) !== JSON.stringify(viewedWanted)) problems.push(`accueil ${width} : consultés ${JSON.stringify(viewed)} au lieu de ${JSON.stringify(viewedWanted)}`);
+    if (await firstRowCount(page, 'similaires') !== wantedPerRow(width)) problems.push(`accueil ${width} connecté : biens similaires pas à ${wantedPerRow(width)} par ligne`);
+    await checkChrome(page, `accueil maquette ${width} connecté`, { signedIn: true, margin: width >= 1280 ? 48 : 32 });
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(out, `1-accueil-${width}.png`), fullPage: true });
+    await page.close();
+    await member.close();
+  }
+
+  // Nom du compte tiré de l'adresse e-mail : « Bonjour », sans prénom (greetingName, HomeView.swift:328).
+  const mailName = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'fr-FR' });
+  await mock(mailName, { signedIn: true, account: { profiles: [{ ...ACCOUNT.profiles[0], display_name: 'claire.martin' }] } });
+  page = await open(mailName, '/', 'accueil-nom-e-mail');
+  await page.waitForSelector('.dhome .home-section');
+  await page.waitForTimeout(400);
+  const plain = await page.textContent('h1');
+  if (plain !== 'Bonjour') problems.push(`accueil, nom tiré de l'e-mail : « ${plain} » au lieu de « Bonjour »`);
+  await mailName.close();
+
+  // « Rechercher des biens » ouvre la même adresse /recherche/ que l'accueil du téléphone, pour les mêmes choix.
+  const searchUrl = async (context, name) => {
+    const p = await open(context, '/', name);
+    await p.waitForSelector('.home-search-card');
+    await p.click('.mode-tab >> nth=2');
+    for (const [tileIndex, row] of [[0, 4], [1, 3]]) {
+      await p.click(`.criterion-tile >> nth=${tileIndex}`);
+      await p.waitForSelector('dialog.selection-dialog[open]');
+      await p.click(`dialog[open] .selection-row >> nth=${row}`);
+      await p.click('dialog[open] .selection-foot .btn');
+    }
+    await Promise.all([p.waitForURL(/\/recherche\/\?/), p.click('.home-search-button')]);
+    const url = new URL(p.url());
+    await p.close();
+    return url.pathname + url.search;
+  };
+  const sameDesktop = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'fr-FR' });
+  await mock(sameDesktop);
+  const desktopSearch = await searchUrl(sameDesktop, 'accueil-recherche-ordinateur');
+  await sameDesktop.close();
+  const samePhone = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
+  await mock(samePhone);
+  const phoneSearch = await searchUrl(samePhone, 'accueil-recherche-telephone');
+  await samePhone.close();
+  if (desktopSearch !== phoneSearch || !desktopSearch.includes('mode=invest')) problems.push(`accueil : recherche ${desktopSearch} sur ordinateur, ${phoneSearch} sur téléphone`);
+
+  // Téléphone : l'accueil ne fait aucune des lectures de l'ordinateur (projet, fiches consultées, biens similaires).
+  for (const signedIn of [false, true]) {
+    const phoneHome = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
+    const phoneServer = await mock(phoneHome, { signedIn, listingRows: HOME_LISTINGS, account: HOME_PROJECT });
+    await phoneHome.addInitScript((id) => { try { sessionStorage.setItem('nidalo.consultes', JSON.stringify([id])); } catch { /* indisponible */ } }, homeId(7));
+    page = await open(phoneHome, '/', `accueil-telephone-lectures-${signedIn ? 'connecte' : 'sans-compte'}`);
+    await page.waitForSelector('.home-section');
+    if (signedIn) await page.waitForFunction(() => document.querySelector('h1')?.textContent === 'Bonjour Claire', null, { timeout: 8000 }).catch(() => undefined);
+    await page.waitForTimeout(400);
+    const extra = phoneServer.requests.filter((request) => request.path === '/' && (request.table === 'real_estate_projects' || (request.table === 'listings' && !request.search.includes('limit=200'))));
+    if (extra.length) problems.push(`téléphone : l'accueil lit ${extra.map((request) => `${request.table}${request.search}`).join(' ; ')}`);
+    if (await page.locator('.dhome, #consultes, #similaires').count()) problems.push('téléphone : sections de l\'ordinateur affichées');
+    await phoneHome.close();
   }
 
   // Largeurs limites : la barre du haut tient toujours sur une ligne (catégorie active en gras), avec des marges de

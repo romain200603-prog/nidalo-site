@@ -1,0 +1,165 @@
+/* Accueil sur ordinateur (maquette 1 de Romain), à partir de 1024 px. Tout est dans @media (min-width: 1024px) et
+   sous .dhome : en dessous de 1024 px, l'accueil du téléphone ne change pas. Mesures de la maquette à 1440 px. */
+
+@media (min-width: 1024px) {
+  .dhome-inner { width: min(var(--d-content), 100% - 2 * var(--d-margin)); margin: 0 auto; }
+
+  /* ——— Bandeau bleu nuit ——— */
+  .dhome-band { padding: 59px 0 141px; background: var(--d-night); }
+  .dhome-band h1 { margin: 0; color: #FFFFFF; font-size: 52px; font-weight: 700; line-height: 60px; }
+  .dhome-band p { margin: 8px 0 0; color: var(--d-night-text); font-size: 20px; line-height: 28px; }
+
+  /* ——— Carte de recherche, qui chevauche le bas du bandeau ——— */
+  .dhome-card-wrap { position: relative; z-index: 5; margin-top: -96px; }
+  .dhome .dhome-search { display: block; padding: 20px 24px; border-radius: 20px; background: #FFFFFF; box-shadow: 0 18px 44px rgba(20, 32, 70, 0.14); }
+
+  .dhome .dhome-search .mode-tabs { display: inline-flex; height: 50px; padding: 4px; border-radius: 12px; background: var(--d-separator); }
+  .dhome .dhome-search .mode-tab { flex-direction: row; gap: 8px; height: 42px; margin: 0; padding: 0 20px; border-radius: 9px; color: var(--d-icon); font-size: 15px; font-weight: 500; }
+  .dhome .dhome-search .mode-tab .icon { width: 18px; height: 18px; }
+  .dhome .dhome-search .mode-tab:hover { color: var(--d-text); }
+  .dhome .dhome-search .mode-tab[aria-checked="true"] { background: #FFFFFF; color: var(--d-blue); font-weight: 600; box-shadow: 0 1px 3px rgba(36, 45, 56, 0.12); }
+  .dhome .dhome-search .mode-tab:focus-visible { outline: 2px solid var(--d-blue); outline-offset: 2px; }
+
+  /* Le lieu puis les critères du mode, sur une ligne, séparés par un filet. */
+  .dhome-fields { display: grid; grid-template-columns: minmax(0, 1.45fr) repeat(4, minmax(0, 1fr)); margin-top: 16px; border: 1px solid var(--d-field-border); border-radius: 14px; background: var(--d-bg); }
+  /* Investir : le lieu et 6 critères sur la même ligne, en plus serré (sur deux lignes sous 1280 px, plus bas). */
+  .dhome-fields-6 { grid-template-columns: minmax(0, 1.1fr) repeat(6, minmax(0, 1fr)); }
+  .dhome .dhome-fields.dhome-fields-6 .criterion-tile { padding: 0 10px 0 14px; }
+  .dhome .dhome-fields.dhome-fields-6 .criterion-label { font-size: 12px; }
+  .dhome .dhome-fields.dhome-fields-6 .criterion-value { font-size: 15px; }
+  .dhome .dhome-fields.dhome-fields-6 .criterion-chevron { display: none; }
+  .dhome .dhome-fields-6 .dhome-place input { padding-left: 44px; padding-right: 34px; }
+  .dhome .dhome-fields-6 .dhome-place .place-field-caption { left: 44px; }
+  .dhome .dhome-fields-6 .dhome-place .place-field-icon { left: 15px; }
+  .dhome .dhome-fields > .criterion-tile { border-left: 1px solid var(--d-field-border); }
+
+  .dhome .dhome-place { margin: 0; }
+  .dhome .dhome-place input { height: 66px; padding: 32px 40px 14px 51px; border: 0; border-radius: 13px 0 0 13px; background: transparent; color: var(--d-text); font-size: 16px; font-weight: 600; line-height: 20px; }
+  .dhome .dhome-place input::placeholder { color: var(--d-help); font-weight: 400; }
+  .dhome .dhome-place input:hover { background: var(--d-hover); }
+  .dhome .dhome-place input:focus { border: 0; box-shadow: inset 0 0 0 2px var(--d-blue); }
+  .dhome .dhome-place .place-field-caption { left: 51px; top: 14px; color: var(--d-grey); font-size: 13px; font-weight: 500; line-height: 16px; }
+  .dhome .dhome-place .place-field-icon { left: 20px; top: 23px; width: 20px; height: 20px; color: var(--d-blue); }
+  .dhome .dhome-place .place-field-chevron { display: none; }
+  .dhome .dhome-place .place-field-clear { top: 14px; right: 6px; color: var(--d-icon); }
+  .dhome .dhome-place .place-list { top: 72px; }
+
+  .dhome .dhome-fields .criterion-tile { width: 100%; height: 66px; padding: 0 16px 0 20px; border-top: 0; border-right: 0; border-bottom: 0; border-radius: 0; background: transparent; color: var(--d-text); }
+  .dhome .dhome-fields > .criterion-tile:last-of-type { border-radius: 0 13px 13px 0; }
+  .dhome .dhome-fields .criterion-tile:hover { border-color: var(--d-field-border); background: var(--d-hover); }
+  .dhome .dhome-fields .criterion-tile:focus-visible { outline: 2px solid var(--d-blue); outline-offset: -2px; }
+  .dhome .dhome-fields .criterion-icon { display: none; }
+  .dhome .dhome-fields .criterion-text { gap: 4px; margin-left: 0; }
+  .dhome .dhome-fields .criterion-label { color: var(--d-grey); font-size: 13px; font-weight: 500; line-height: 16px; }
+  .dhome .dhome-fields .criterion-value { color: var(--d-text); font-size: 16px; font-weight: 600; line-height: 20px; }
+  .dhome .dhome-fields .criterion-chevron { flex: none; width: 16px; height: 16px; margin-left: 8px; color: var(--d-chevron); }
+
+  /* « Plus de critères » (filtres du site) et « Rechercher des biens ». */
+  .dhome-actions { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 14px; }
+  .dhome-more { display: inline-flex; align-items: center; min-width: 0; height: 52px; padding: 0; border: 0; background: transparent; color: var(--d-blue); font: inherit; text-align: left; cursor: pointer; }
+  .dhome-more .icon { flex: none; width: 18px; height: 18px; }
+  .dhome-more .icon:last-child { width: 16px; height: 16px; margin-left: 8px; }
+  .dhome-more-title { flex: none; margin-left: 9px; font-size: 15px; font-weight: 600; }
+  .dhome-more-hint { min-width: 0; margin-left: 11px; color: var(--d-grey); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dhome-more:hover { color: var(--d-blue-hover); }
+  .dhome-more:hover .dhome-more-title { text-decoration: underline; }
+  .dhome-more:focus-visible { border-radius: 8px; outline: 2px solid var(--d-blue); outline-offset: 4px; }
+  .dhome .dhome-submit { flex: none; gap: 10px; min-width: 247px; height: 52px; padding: 0 28px; border-radius: var(--d-button-radius); background: var(--d-blue); font-size: 16px; font-weight: 600; }
+  .dhome .dhome-submit:hover { background: var(--d-blue-hover); }
+  .dhome .dhome-submit .icon { position: static; width: 18px; height: 18px; }
+  .dhome .dhome-submit:focus-visible { outline: 2px solid var(--d-blue); outline-offset: 3px; }
+
+  /* ——— Sections ——— */
+  .dhome-sections { padding-bottom: 16px; }
+  .dhome .dhome-section { display: block; padding-top: 56px; }
+  .dhome .dhome-opportunities { margin-top: 56px; padding: 48px 0 52px; background: #E9EEF8; }
+  .dhome-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+  .dhome-head-text { min-width: 0; }
+  .dhome-head h2 { margin: 0; color: var(--d-text); font-size: 24px; font-weight: 700; line-height: 30px; }
+  .dhome-head p { margin: 4px 0 0; color: var(--d-grey); font-size: 15px; line-height: 20px; }
+  .dhome-see-all { flex: none; display: inline-flex; align-items: center; gap: 4px; color: var(--d-blue); font-size: 15px; font-weight: 600; line-height: 20px; text-decoration: none; }
+  .dhome-see-all .icon { width: 16px; height: 16px; }
+  .dhome-see-all:hover { color: var(--d-blue-hover); text-decoration: underline; }
+  .dhome-see-all:focus-visible { border-radius: 6px; outline: 2px solid var(--d-blue); outline-offset: 3px; }
+  .dhome-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
+  .dhome-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+
+  /* Sans photo : le fond teinté et l'icône photo de l'app (ListingPhoto.swift). */
+  .dhome-no-photo { display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; color: rgba(36, 45, 56, 0.35); }
+  .dhome-no-photo .icon { width: 30px; height: 30px; }
+  .dhome-no-photo.tint-apartment { background: #DDE6F0; }
+  .dhome-no-photo.tint-house { background: #DDEADF; }
+  .dhome-no-photo.tint-business { background: #EFE6DA; }
+  .dhome-no-photo.tint-other { background: #EADFE8; }
+
+  .dhome .stretched:focus-visible { outline: none; }
+  .dcard, .dsmall { position: relative; min-width: 0; border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; transition: box-shadow 0.15s ease, transform 0.15s ease; }
+  .dcard:hover, .dsmall:hover { box-shadow: var(--d-card-hover-shadow); transform: translateY(-2px); }
+  .dcard:has(.stretched:focus-visible), .dsmall:has(.stretched:focus-visible) { outline: 2px solid var(--d-blue); outline-offset: 2px; }
+
+  /* Carte d'annonce : photo de 196 px, pastille de rentabilité, cœur rond de 38 px. */
+  .dhome .dcard { display: flex; flex-direction: column; width: auto; overflow: hidden; }
+  .dhome-opportunities .dcard { border-color: #DCE3F1; }
+  .dcard-photo { position: relative; flex: none; height: 196px; background: var(--d-separator); }
+  .dhome .dcard-yield { position: absolute; left: 12px; top: 12px; z-index: 2; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px 0 10px; border-radius: 999px; background: #FFFFFF; color: var(--d-text); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .dhome .dcard-yield .home-yield { position: static; height: auto; padding: 0; border-radius: 0; background: none; color: inherit; font: inherit; }
+  .dcard-yield .icon { flex: none; width: 16px; height: 16px; }
+  .dcard-yield.is-good .icon { color: var(--d-green); }
+  .dcard-yield.is-low .icon { color: #E59A0B; }
+  .dhome .dcard-heart { right: 10px; top: 10px; width: 38px; height: 38px; border-radius: 50%; background: #FFFFFF; color: var(--d-text); box-shadow: 0 1px 3px rgba(36, 45, 56, 0.12); }
+  .dcard-heart .icon { width: 20px; height: 20px; margin-top: 1px; }
+  .dhome .dcard-heart:hover, .dhome .dcard-heart.is-active { color: var(--d-blue); }
+  .dhome .heart-button:focus-visible { outline: 2px solid var(--d-blue); outline-offset: 2px; }
+  .dcard-body { display: flex; flex-direction: column; flex: 1; padding: 16px 20px 18px; }
+  .dcard-tags { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 24px; }
+  .dcard-category { min-width: 0; color: var(--d-grey); font-size: 11.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dcard-highlight { flex: none; display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 999px; background: var(--d-green-pill); color: var(--d-green-text); font-size: 12px; font-weight: 600; }
+  .dcard h3 { margin: 6px 0 0; font-size: 17px; font-weight: 700; line-height: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dcard h3 a, .dsmall h3 a { color: var(--d-text); text-decoration: none; }
+  .dcard-place { display: flex; align-items: center; gap: 6px; margin: 5px 0 0; color: var(--d-grey); font-size: 15px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dcard-place .icon { flex: none; width: 18px; height: 18px; }
+  .dcard-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; min-height: 46px; margin-top: auto; padding-top: 10px; }
+  .dhome-price { color: var(--d-text); font-size: 20px; font-weight: 700; line-height: 24px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .dhome-price small { margin-left: 2px; color: var(--d-grey); font-size: 14px; font-weight: 600; }
+  .dcard-rent { display: flex; flex-direction: column; align-items: flex-end; min-width: 0; text-align: right; }
+  .dcard-rent-label { color: var(--d-grey); font-size: 13px; line-height: 16px; white-space: nowrap; }
+  .dcard-rent-value { color: var(--d-text); font-size: 15px; font-weight: 700; line-height: 20px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* Petite carte horizontale : photo de 96 × 84 px à gauche. */
+  .dsmall { display: flex; align-items: center; gap: 14px; padding: 10px; }
+  .dsmall-photo { position: relative; flex: none; width: 96px; height: 84px; overflow: hidden; border-radius: 10px; background: var(--d-separator); }
+  .dsmall-photo .dhome-no-photo .icon { width: 24px; height: 24px; }
+  .dsmall-body { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+  .dsmall:has(.dsmall-heart) .dsmall-body { padding-right: 36px; }
+  .dsmall h3 { margin: 0; font-size: 17px; font-weight: 700; line-height: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dsmall-place { margin: 2px 0 0; color: var(--d-grey); font-size: 15px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dsmall-prices { display: flex; align-items: baseline; gap: 8px; min-width: 0; margin: 4px 0 0; white-space: nowrap; }
+  .dsmall-prices s { color: var(--d-grey); font-size: 14px; font-variant-numeric: tabular-nums; }
+  .dsmall-new { position: absolute; left: 6px; bottom: 6px; display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 6px; background: var(--d-blue); color: #FFFFFF; font-size: 11.5px; font-weight: 600; }
+  .dsmall-drop { position: absolute; left: 6px; top: 6px; display: inline-flex; align-items: center; height: 22px; padding: 0 7px; border-radius: 7px; background: var(--d-badge); color: #FFFFFF; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .dhome .dsmall-heart { right: 10px; top: 10px; width: 32px; height: 32px; border-radius: 10px; background: transparent; color: var(--d-blue); }
+  .dsmall-heart .icon { width: 20px; height: 20px; }
+}
+
+@media (min-width: 1024px) and (prefers-reduced-motion: reduce) {
+  .dcard, .dsmall { transition: none; }
+  .dcard:hover, .dsmall:hover { transform: none; }
+}
+
+/* Entre 1024 et 1279 px : marges de 32 px (ordinateur.css), 3 cartes par ligne, et Investir sur deux lignes. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .dhome-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dhome .dhome-fields .criterion-tile, .dhome .dhome-fields.dhome-fields-6 .criterion-tile { padding: 0 12px 0 16px; }
+  .dhome .dhome-fields.dhome-fields-6 .criterion-label { font-size: 13px; }
+  .dhome .dhome-fields.dhome-fields-6 .criterion-value { font-size: 16px; }
+  .dhome .dhome-fields.dhome-fields-6 .criterion-chevron { display: block; }
+  .dhome-fields-6 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .dhome .dhome-fields-6 .dhome-place { grid-column: span 2; }
+  .dhome .dhome-fields-6 .dhome-place input { padding-left: 51px; padding-right: 40px; border-radius: 13px 0 0 0; }
+  .dhome .dhome-fields-6 .dhome-place .place-field-caption { left: 51px; }
+  .dhome .dhome-fields-6 .dhome-place .place-field-icon { left: 20px; }
+  .dhome .dhome-fields-6 > .criterion-tile:nth-of-type(2) { border-radius: 0 13px 0 0; }
+  .dhome .dhome-fields-6 > .criterion-tile:nth-of-type(n+3) { border-top: 1px solid var(--d-field-border); }
+  .dhome .dhome-fields-6 > .criterion-tile:nth-of-type(3) { border-left: 0; border-radius: 0 0 0 13px; }
+  .dhome .dhome-fields-6 > .criterion-tile:last-of-type { border-radius: 0 0 13px 0; }
+}
