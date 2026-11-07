@@ -17,21 +17,21 @@
   .dsp-profile { display: flex; align-items: center; gap: 14px; min-width: 0; border-radius: 12px; color: var(--d-text); text-decoration: none; }
   .dsp-profile .avatar { background: var(--d-blue-light); color: var(--d-blue); }
   .dsp-profile-text { display: flex; flex-direction: column; min-width: 0; }
-  .dsp-profile-name { overflow: hidden; font-size: 18px; font-weight: 700; line-height: 22px; text-overflow: ellipsis; white-space: nowrap; }
-  .dsp-profile-email { overflow: hidden; color: var(--d-grey); font-size: 14px; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+  .dsp-profile-name { overflow: hidden; font-size: 17px; font-weight: 700; line-height: 22px; text-overflow: ellipsis; white-space: nowrap; }
+  .dsp-profile-email { overflow: hidden; color: var(--d-grey); font-size: 13px; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
   .dsp-profile:hover .dsp-profile-name { color: var(--d-blue); }
   .dsp-badge { align-self: flex-start; display: inline-flex; align-items: center; height: 26px; margin-top: 12px; padding: 0 10px; border-radius: 999px; background: var(--d-blue-light); color: var(--d-blue); font-size: 13px; font-weight: 600; }
   .dsp-nav { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--d-separator); }
   .dsp-nav ul { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
-  .dsp-nav a { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px; border-radius: 10px; color: #4D5763; font-size: 16px; font-weight: 500; text-decoration: none; white-space: nowrap; }
-  .dsp-nav a .icon { width: 20px; height: 20px; }
+  .dsp-nav a { display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 10px; color: #4D5763; font-size: 15px; font-weight: 500; text-decoration: none; white-space: nowrap; }
+  .dsp-nav a .icon { width: 18px; height: 18px; }
   .dsp-nav a:hover { background: var(--d-hover); }
   .dsp-nav a.is-current { background: var(--d-blue-light); color: var(--d-blue); font-weight: 600; }
   .dsp-aside-end { margin-top: 14px; padding-top: 15px; border-top: 1px solid var(--d-separator); }
-  .dsp-logout { display: flex; align-items: center; gap: 10px; width: 100%; height: 44px; padding: 0 12px; border: 0; border-radius: 10px; background: none; color: var(--d-red); font-size: 16px; font-weight: 600; text-align: left; cursor: pointer; }
-  .dsp-logout .icon { width: 20px; height: 20px; }
+  .dsp-logout { display: flex; align-items: center; gap: 12px; width: 100%; height: 44px; padding: 0 12px; border: 0; border-radius: 10px; background: none; color: var(--d-red); font-size: 15px; font-weight: 600; text-align: left; cursor: pointer; }
+  .dsp-logout .icon { width: 18px; height: 18px; }
   .dsp-logout:hover { background: #FBEDEB; }
-  .dsp-delete { display: block; margin-top: 3px; padding: 6px 12px 8px; border-radius: 10px; color: var(--d-grey); font-size: 14px; line-height: 20px; text-decoration: none; }
+  .dsp-delete { display: block; margin-top: 3px; padding: 6px 12px 8px; border-radius: 10px; color: var(--d-grey); font-size: 13.5px; line-height: 20px; text-decoration: none; }
   .dsp-delete:hover { color: var(--d-text); text-decoration: underline; }
 
   /* ——— Partie droite ——— */
@@ -41,7 +41,7 @@
   .dsp-card { border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; }
   .dsp-card-title { color: var(--d-text); font-size: 20px; font-weight: 700; line-height: 24px; }
   .dsp-section { margin-top: 35px; }
-  .dsp-section-title { margin-bottom: 15px; color: var(--d-text); font-size: 24px; font-weight: 700; line-height: 32px; }
+  .dsp-section-title { margin-bottom: 15px; color: var(--d-text); font-size: 24px; font-weight: 700; letter-spacing: -0.01em; line-height: 32px; }
   .dsp-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: var(--d-button-height); padding: 0 20px; border: 0; border-radius: var(--d-button-radius); font-size: 15px; font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer; }
   .dsp-button .icon { width: 18px; height: 18px; }
   .dsp-button-primary { background: var(--d-blue); color: #FFFFFF; }
@@ -54,7 +54,7 @@
   .dsp-project { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; padding: 25px 24px 24px; }
   .dsp-project-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; width: 100%; }
   .dsp-project-titles { min-width: 0; }
-  .dsp-project-subtitle { margin-top: 4px; color: var(--d-grey); font-size: 16px; line-height: 22px; }
+  .dsp-project-subtitle { margin-top: 4px; color: var(--d-grey); font-size: 15px; line-height: 22px; }
   .dsp-ring { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; margin-top: 1px; }
   .dsp-ring svg { position: absolute; inset: 0; }
   .dsp-ring-track { stroke: #EEEBE6; }
@@ -78,7 +78,7 @@
   .dsp-agenda-summary { display: flex; align-items: center; gap: 12px; min-height: 68px; margin-top: 19px; }
   .dsp-agenda-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; color: var(--d-icon); }
   .dsp-agenda-icon .icon { width: 22px; height: 22px; }
-  .dsp-agenda-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; color: var(--d-grey); font-size: 15px; line-height: 18px; }
+  .dsp-agenda-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; color: var(--d-grey); font-size: 14.5px; line-height: 18px; }
   .dsp-agenda-title { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; color: var(--d-text); font-size: 17px; font-weight: 700; line-height: 22px; }
   .dsp-agenda-listing { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dsp-pill { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; background: var(--d-blue-light); color: var(--d-blue); font-size: 12px; font-weight: 600; white-space: nowrap; }
@@ -89,9 +89,9 @@
   .dsp-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
   .dsp-tile { display: flex; flex-direction: column; min-height: 128px; padding: 20px 20px 17px; color: var(--d-text); text-decoration: none; transition: box-shadow 0.15s ease, transform 0.15s ease; }
   .dsp-tile:hover { box-shadow: var(--d-card-hover-shadow); transform: translateY(-2px); }
-  .dsp-tile-title { color: var(--d-grey); font-size: 15px; font-weight: 600; line-height: 18px; }
-  .dsp-tile-number { margin-top: 7px; color: var(--d-text); font-size: 35px; font-weight: 700; line-height: 40px; font-variant-numeric: tabular-nums; }
-  .dsp-tile-rest { margin-top: 4px; color: var(--d-grey); font-size: 15px; line-height: 20px; }
+  .dsp-tile-title { color: var(--d-grey); font-size: 14.5px; font-weight: 600; line-height: 18px; }
+  .dsp-tile-number { margin-top: 8px; color: var(--d-text); font-size: 34px; font-weight: 700; line-height: 40px; font-variant-numeric: tabular-nums; }
+  .dsp-tile-rest { margin-top: 2px; color: var(--d-grey); font-size: 14px; line-height: 20px; }
   .dsp-tile-title + .dsp-tile-rest { margin-top: 8px; }
 
   /* Contrats et location : carte du dossier et cinq lignes */
@@ -114,8 +114,8 @@
   .dsp-row-icon { flex: none; display: inline-flex; color: var(--d-icon); }
   .dsp-row-icon .icon { width: 22px; height: 22px; }
   .dsp-row-text { display: flex; flex: 1; min-width: 0; flex-direction: column; }
-  .dsp-row-title { font-size: 16px; font-weight: 600; line-height: 21px; }
-  .dsp-row-subtitle { overflow: hidden; color: var(--d-grey); font-size: 14px; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+  .dsp-row-title { font-size: 15.5px; font-weight: 600; line-height: 21px; }
+  .dsp-row-subtitle { overflow: hidden; color: var(--d-grey); font-size: 13.5px; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
   .dsp-row-chevron { flex: none; width: 18px; height: 18px; color: var(--d-chevron); }
   .dsp-section > .field-error { margin-top: 8px; }
 

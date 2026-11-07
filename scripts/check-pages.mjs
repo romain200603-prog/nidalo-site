@@ -2937,7 +2937,8 @@ try {
       expectSame(E, 'mise en page', spaceLayout, width === 1440
         ? { content: 1200, aside: 280, gap: 32, sticky: 'sticky', project: 544, agenda: 320, tiles: [280, 280, 280], dossier: 384, overflowX: 0, footer: true, current: 'page' }
         : { content: 960, aside: 280, gap: 32, sticky: 'sticky', project: 648, agenda: 648, tiles: [200, 200, 200], dossier: 648, overflowX: 0, footer: true, current: 'page' });
-      // Tailles de la maquette (titre 36/700, sections 24/700, cartes 20/700, menu 16) et police Inter partout, boutons compris.
+      // Tailles mesurées sur la maquette (titre 36/700, sections 24/700, cartes 20/700, nom 17/700, menu 15, lignes 15,5/600)
+      // et police Inter partout, boutons compris.
       const spaceFonts = await page.evaluate(() => {
         const font = (selector) => {
           const element = document.querySelector(selector);
@@ -2952,8 +2953,8 @@ try {
         };
       });
       expectSame(E, 'polices', spaceFonts, {
-        titre: '36px 700', nom: '18px 700', section: '24px 700', carte: '20px 700', menu: '16px 500', 'menu actif': '16px 600', bouton: '15px 600',
-        'Se déconnecter': '16px 600', nombre: '35px 700', ligne: '16px 600',
+        titre: '36px 700', nom: '17px 700', section: '24px 700', carte: '20px 700', menu: '15px 500', 'menu actif': '15px 600', bouton: '15px 600',
+        'Se déconnecter': '15px 600', nombre: '34px 700', ligne: '15.5px 600',
       });
       await favShot(page, `5-mon-espace-${width}.png`);
       await page.close();
