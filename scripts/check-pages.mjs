@@ -1863,14 +1863,26 @@ try {
     await page.waitForSelector('dialog.filters-dialog[open]');
     await page.keyboard.press('Escape');
     await page.waitForSelector('dialog.filters-dialog[open]', { state: 'detached' }).catch(() => undefined);
-    // Investir : le lieu et 6 critères, sur une ligne à partir de 1280 px, sur deux lignes en dessous.
-    await page.click('.mode-tab >> nth=2');
-    const investRows = await page.evaluate(() => new Set([...document.querySelectorAll('.dhome-fields > *')].filter((el) => el.offsetParent).map((el) => Math.round(el.getBoundingClientRect().top))).size);
-    if (investRows !== (width >= 1280 ? 1 : 2)) problems.push(`accueil ${width} : critères Investir sur ${investRows} ligne(s)`);
-    await page.locator('.dhome-search').screenshot({ path: join(out, `accueil-maquette-${width}-investir.png`) });
-    const clipped = await page.evaluate(() => [...document.querySelectorAll('.dhome-fields .criterion-label, .dhome-fields .criterion-value')].filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.textContent));
-    if (clipped.length) console.log(`accueil ${width} Investir, textes coupés : ${clipped.join(' | ')}`);
-    await page.click('.mode-tab >> nth=3');
+    // Les 4 catégories (demande de Romain du 7 novembre) : le lieu seul sur sa ligne, de toute la largeur, puis les
+    // critères en blocs en dessous, deux par ligne comme dans l'app, sans texte coupé.
+    for (const [index, name] of [[0, 'Résidentiel'], [1, 'Location'], [2, 'Investir'], [3, 'Hôtels']]) {
+      await page.click(`.dhome-search .mode-tab >> nth=${index}`);
+      const layout = await page.evaluate(() => {
+        const place = document.querySelector('.dhome-place').getBoundingClientRect();
+        const grid = document.querySelector('.dhome-tiles').getBoundingClientRect();
+        const tiles = [...document.querySelectorAll('.dhome-tiles > .criterion-tile')].map((el) => el.getBoundingClientRect());
+        return {
+          placeAbove: tiles.every((tile) => tile.top >= place.bottom),
+          placeFullWidth: Math.round(place.width) === Math.round(grid.width),
+          enoughTiles: tiles.length >= 4,
+          rowsOfTwo: new Set(tiles.map((tile) => Math.round(tile.top))).size === Math.ceil(tiles.length / 2),
+          columns: new Set(tiles.map((tile) => Math.round(tile.left))).size,
+          clipped: [...document.querySelectorAll('.dhome-tiles .criterion-label, .dhome-tiles .criterion-value')].filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.textContent),
+        };
+      });
+      expectSame(`accueil ${width} ${name}`, 'lieu puis critères en blocs', layout, { placeAbove: true, placeFullWidth: true, enoughTiles: true, rowsOfTwo: true, columns: 2, clipped: [] });
+      if (name === 'Investir') await page.locator('.dhome-search').screenshot({ path: join(out, `accueil-maquette-${width}-investir.png`) });
+    }
     const hotelButton = (await page.textContent('.home-search-button'))?.trim();
     if (hotelButton !== 'Rechercher des hôtels') problems.push(`accueil ${width} : bouton « ${hotelButton} » en Hôtels`);
     await page.close();

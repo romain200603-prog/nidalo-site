@@ -20,39 +20,28 @@
   .dhome .dhome-search .mode-tab[aria-checked="true"] { background: #FFFFFF; color: var(--d-blue); font-weight: 600; box-shadow: 0 1px 3px rgba(36, 45, 56, 0.12); }
   .dhome .dhome-search .mode-tab:focus-visible { outline: 2px solid var(--d-blue); outline-offset: 2px; }
 
-  /* Le lieu puis les critères du mode, sur une ligne, séparés par un filet. */
-  .dhome-fields { display: grid; grid-template-columns: minmax(0, 1.45fr) repeat(4, minmax(0, 1fr)); margin-top: 16px; border: 1px solid var(--d-field-border); border-radius: 14px; background: var(--d-bg); }
-  /* Investir : le lieu et 6 critères sur la même ligne, en plus serré (sur deux lignes sous 1280 px, plus bas). */
-  .dhome-fields-6 { grid-template-columns: minmax(0, 1.1fr) repeat(6, minmax(0, 1fr)); }
-  .dhome .dhome-fields.dhome-fields-6 .criterion-tile { padding: 0 10px 0 14px; }
-  .dhome .dhome-fields.dhome-fields-6 .criterion-label { font-size: 12px; }
-  .dhome .dhome-fields.dhome-fields-6 .criterion-value { font-size: 15px; }
-  .dhome .dhome-fields.dhome-fields-6 .criterion-chevron { display: none; }
-  .dhome .dhome-fields-6 .dhome-place input { padding-left: 44px; padding-right: 34px; }
-  .dhome .dhome-fields-6 .dhome-place .place-field-caption { left: 44px; }
-  .dhome .dhome-fields-6 .dhome-place .place-field-icon { left: 15px; }
-  .dhome .dhome-fields > .criterion-tile { border-left: 1px solid var(--d-field-border); }
-
-  .dhome .dhome-place { margin: 0; }
-  .dhome .dhome-place input { height: 66px; padding: 32px 40px 14px 51px; border: 0; border-radius: 13px 0 0 13px; background: transparent; color: var(--d-text); font-size: 16px; font-weight: 600; line-height: 20px; }
+  /* Le lieu sur toute la largeur, puis les critères du mode en blocs en dessous, deux par ligne comme dans l'app
+     (demande de Romain du 7 novembre, à la place de la ligne unique de la maquette), pour les 4 catégories. */
+  .dhome .dhome-place { margin: 16px 0 0; }
+  .dhome .dhome-place input { height: 66px; padding: 32px 48px 14px 51px; border: 1px solid var(--d-field-border); border-radius: 14px; background: #FFFFFF; color: var(--d-text); font-size: 16px; font-weight: 600; line-height: 20px; }
   .dhome .dhome-place input::placeholder { color: var(--d-help); font-weight: 400; }
-  .dhome .dhome-place input:hover { background: var(--d-hover); }
-  .dhome .dhome-place input:focus { border: 0; box-shadow: inset 0 0 0 2px var(--d-blue); }
+  .dhome .dhome-place input:hover { border-color: var(--d-blue-line); }
+  .dhome .dhome-place input:focus { border-color: var(--d-blue); box-shadow: 0 0 0 3px rgba(60, 92, 176, 0.16); }
   .dhome .dhome-place .place-field-caption { left: 51px; top: 14px; color: var(--d-grey); font-size: 13px; font-weight: 500; line-height: 16px; }
   .dhome .dhome-place .place-field-icon { left: 20px; top: 23px; width: 20px; height: 20px; color: var(--d-blue); }
-  .dhome .dhome-place .place-field-chevron { display: none; }
-  .dhome .dhome-place .place-field-clear { top: 14px; right: 6px; color: var(--d-icon); }
+  .dhome .dhome-place .place-field-chevron { right: 18px; top: 24px; width: 18px; height: 18px; color: var(--d-chevron); }
+  .dhome .dhome-place .place-field-clear { top: 14px; right: 10px; color: var(--d-icon); }
   .dhome .dhome-place .place-list { top: 72px; }
 
-  .dhome .dhome-fields .criterion-tile { width: 100%; height: 66px; padding: 0 16px 0 20px; border-top: 0; border-right: 0; border-bottom: 0; border-radius: 0; background: transparent; color: var(--d-text); }
-  .dhome .dhome-fields > .criterion-tile:last-of-type { border-radius: 0 13px 13px 0; }
-  .dhome .dhome-fields .criterion-tile:hover { border-color: var(--d-field-border); background: var(--d-hover); }
-  .dhome .dhome-fields .criterion-tile:focus-visible { outline: 2px solid var(--d-blue); outline-offset: -2px; }
-  .dhome .dhome-fields .criterion-icon { display: none; }
-  .dhome .dhome-fields .criterion-text { gap: 4px; margin-left: 0; }
-  .dhome .dhome-fields .criterion-label { color: var(--d-grey); font-size: 13px; font-weight: 500; line-height: 16px; }
-  .dhome .dhome-fields .criterion-value { color: var(--d-text); font-size: 16px; font-weight: 600; line-height: 20px; }
-  .dhome .dhome-fields .criterion-chevron { flex: none; width: 16px; height: 16px; margin-left: 8px; color: var(--d-chevron); }
+  .dhome-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+  .dhome .dhome-tiles .criterion-tile { width: 100%; height: 66px; padding: 0 16px 0 20px; border: 1px solid var(--d-field-border); border-radius: 14px; background: #FFFFFF; color: var(--d-text); }
+  .dhome .dhome-tiles .criterion-tile:hover { border-color: var(--d-blue-line); }
+  .dhome .dhome-tiles .criterion-tile:focus-visible { outline: 2px solid var(--d-blue); outline-offset: 2px; }
+  .dhome .dhome-tiles .criterion-icon { flex: none; width: 20px; height: 20px; color: var(--d-icon); }
+  .dhome .dhome-tiles .criterion-text { gap: 4px; margin-left: 14px; }
+  .dhome .dhome-tiles .criterion-label { color: var(--d-grey); font-size: 13px; font-weight: 500; line-height: 16px; }
+  .dhome .dhome-tiles .criterion-value { color: var(--d-text); font-size: 16px; font-weight: 600; line-height: 20px; }
+  .dhome .dhome-tiles .criterion-chevron { flex: none; width: 16px; height: 16px; margin-left: 8px; color: var(--d-chevron); }
 
   /* « Plus de critères » (filtres du site) et « Rechercher des biens ». */
   .dhome-actions { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 14px; }
@@ -149,21 +138,8 @@
   .dcard:hover, .dsmall:hover { transform: none; }
 }
 
-/* Entre 1024 et 1279 px : marges de 32 px (ordinateur.css), 3 cartes par ligne, et Investir sur deux lignes. */
+/* Entre 1024 et 1279 px : marges de 32 px (ordinateur.css) et 3 cartes par ligne. */
 @media (min-width: 1024px) and (max-width: 1279px) {
   .dhome-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .dhome .dhome-grid > :nth-child(n+4) { display: none; }
-  .dhome .dhome-fields .criterion-tile, .dhome .dhome-fields.dhome-fields-6 .criterion-tile { padding: 0 12px 0 16px; }
-  .dhome .dhome-fields.dhome-fields-6 .criterion-label { font-size: 13px; }
-  .dhome .dhome-fields.dhome-fields-6 .criterion-value { font-size: 16px; }
-  .dhome .dhome-fields.dhome-fields-6 .criterion-chevron { display: block; }
-  .dhome-fields-6 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .dhome .dhome-fields-6 .dhome-place { grid-column: span 2; }
-  .dhome .dhome-fields-6 .dhome-place input { padding-left: 51px; padding-right: 40px; border-radius: 13px 0 0 0; }
-  .dhome .dhome-fields-6 .dhome-place .place-field-caption { left: 51px; }
-  .dhome .dhome-fields-6 .dhome-place .place-field-icon { left: 20px; }
-  .dhome .dhome-fields-6 > .criterion-tile:nth-of-type(2) { border-radius: 0 13px 0 0; }
-  .dhome .dhome-fields-6 > .criterion-tile:nth-of-type(n+3) { border-top: 1px solid var(--d-field-border); }
-  .dhome .dhome-fields-6 > .criterion-tile:nth-of-type(3) { border-left: 0; border-radius: 0 0 0 13px; }
-  .dhome .dhome-fields-6 > .criterion-tile:last-of-type { border-radius: 0 0 13px 0; }
 }

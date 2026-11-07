@@ -363,17 +363,19 @@ function DesktopHome({ greeting, mode, draft, drafts, tiles, feed, update, chang
       <div className="dhome-inner dhome-card-wrap">
         <form className="home-search-card dhome-search" role="search" aria-label="Rechercher un bien" onSubmit={startSearch}>
           <ModeTabs mode={mode} onChange={changeMode} />
-          <div className={`dhome-fields dhome-fields-${tiles.length}`}>
-            <PlaceField
-              variant="home"
-              className="home-place-field dhome-place"
-              label="Où cherchez-vous ?"
-              placeholder="Ville, quartier, code postal..."
-              value={draft.place}
-              onChange={(text) => update((d) => ({ ...d, place: text }))}
-              onChoose={choosePlace}
-              onSubmit={() => startSearch()}
-            />
+          {/* Le lieu sur toute la largeur, puis les critères en blocs en dessous, deux par ligne comme dans l'app
+              (demande de Romain du 7 novembre : plus tous les critères côte à côte). */}
+          <PlaceField
+            variant="home"
+            className="home-place-field dhome-place"
+            label="Où cherchez-vous ?"
+            placeholder="Ville, quartier, code postal..."
+            value={draft.place}
+            onChange={(text) => update((d) => ({ ...d, place: text }))}
+            onChoose={choosePlace}
+            onSubmit={() => startSearch()}
+          />
+          <div className="dhome-tiles">
             {tiles.map((tile) => (
               <CriterionTile key={`${mode}-${tile.id}`} tile={tile} onApply={update} />
             ))}
