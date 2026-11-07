@@ -35,7 +35,8 @@
   .dfav-search { position: relative; flex: none; width: 420px; }
   .dfav-field { display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 8px 0 16px; border: 1px solid var(--d-field-border); border-radius: 12px; background: #FFFFFF; }
   .dfav-field:focus-within { border-color: var(--d-blue); box-shadow: 0 0 0 3px rgba(60, 92, 176, 0.16); }
-  .dfav-field > .icon { width: 20px; height: 20px; color: var(--d-icon); }
+  /* Loupe du gris clair du texte d'aide, comme la maquette (#9AA2AA). */
+  .dfav-field > .icon { width: 20px; height: 20px; color: var(--d-help); }
   .dfav-field input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; color: var(--d-text); font: inherit; font-size: 15px; }
   .dfav-field input::placeholder { color: var(--d-help); opacity: 1; }
   .dfav-field input:focus { outline: none; }
