@@ -3,8 +3,8 @@ import { PROPERTY_TYPE_LABELS, type PropertyType, type SearchMode } from '../lab
 import type { HotelScope } from '../listingJson';
 import type { Coordinate } from '../places';
 import {
-  chosenPlace, DEFAULT_RADIUS_METERS, defaultDraft, floorRange, knownCityCenter, MODE_PROPERTY_TYPES, searchCenter,
-  type EnergyClass, type OutdoorSpace, type SearchDraft,
+  BEDROOM_NOUNS, chosenPlace, countRangeLabel, DEFAULT_RADIUS_METERS, defaultDraft, floorRange, knownCityCenter, MODE_PROPERTY_TYPES,
+  ROOM_NOUNS, searchCenter, type EnergyClass, type OutdoorSpace, type SearchDraft,
 } from '../search';
 import { supabase } from '../supabase';
 import { databaseMessage } from './errors';
@@ -177,8 +177,9 @@ export function queryFromDraft(draft: SearchDraft): SearchQueryJson {
   query.propertyTypes = chosenTypes.length ? [...new Set(chosenTypes)] : [...allowed];
   query.price = range(draft.priceMin, draft.priceMax);
   query.livingArea = range(draft.livingAreaMin, draft.livingAreaMax);
-  query.rooms = valueRange(draft.roomsMin, null);
-  query.bedrooms = valueRange(draft.bedroomsMin, null);
+  // Pièces et chambres : minimum et maximum (un hôtel n'a qu'un minimum de chambres).
+  query.rooms = range(draft.roomsMin, mode === 'hotel' ? null : draft.roomsMax);
+  query.bedrooms = range(draft.bedroomsMin, draft.bedroomsMax);
   const [floorMin, floorMax] = floorRange(draft);
   query.floor = valueRange(floorMin, floorMax);
   if (draft.yearBuiltMin !== null || draft.yearBuiltMax !== null) query.yearBuilt = range(draft.yearBuiltMin, draft.yearBuiltMax);
@@ -308,7 +309,9 @@ export function draftFromQuery(query: SearchQueryJson): SearchDraft {
   draft.livingAreaMin = query.livingArea.min ?? null;
   draft.livingAreaMax = query.livingArea.max ?? null;
   draft.roomsMin = query.rooms.min ?? null;
+  draft.roomsMax = mode === 'hotel' ? null : query.rooms.max ?? null;
   draft.bedroomsMin = query.bedrooms.min ?? null;
+  draft.bedroomsMax = query.bedrooms.max ?? null;
   draft.worstEnergyClass = query.worstEnergyClass ?? null;
   const lowest = query.floor.min ?? 0;
   draft.excludesGroundFloor = lowest >= 1;
@@ -369,11 +372,13 @@ export function budgetLabelOf(query: SearchQueryJson): string | null {
 export function criteriaLabelsOf(query: SearchQueryJson): string[] {
   const labels: string[] = [];
   const types = [...new Set(query.propertyTypes)];
-  if (types.length && !(types.length === 1 && types[0] === 'hotel')) {
+  const onlyHotel = types.length === 1 && types[0] === 'hotel';
+  if (types.length && !onlyHotel) {
     labels.push(types.map((type) => PROPERTY_TYPE_LABELS[type] ?? type).sort().join(', '));
   }
   if (query.livingArea.min !== undefined) labels.push(`${formatArea(query.livingArea.min)} et +`);
-  if (query.rooms.min !== undefined) labels.push(query.rooms.min > 1 ? `${query.rooms.min} pièces et +` : '1 pièce et +');
+  const rooms = countRangeLabel(query.rooms.min, query.rooms.max, onlyHotel ? BEDROOM_NOUNS : ROOM_NOUNS);
+  if (rooms) labels.push(rooms);
   if (query.investment?.minGrossYield !== undefined) labels.push(`Rentabilité ≥ ${formatFraction(query.investment.minGrossYield, 0)}`);
   return labels;
 }

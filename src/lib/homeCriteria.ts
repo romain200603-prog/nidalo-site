@@ -4,7 +4,8 @@ import { scopeLabel, type HotelScope } from './listingJson';
 import { formatArea, formatPrice } from './format';
 import { PROPERTY_TYPE_LABELS, type PropertyType, type SearchMode } from './labels';
 import {
-  investmentKind, LIGHT_WORKS_LIMIT, MODE_PROPERTY_TYPES, withInvestmentKind, type InvestmentKind, type SearchDraft,
+  countRangeLabel, investmentKind, LIGHT_WORKS_LIMIT, MODE_PROPERTY_TYPES, ROOM_NOUNS, withInvestmentKind, type InvestmentKind,
+  type SearchDraft,
 } from './search';
 
 // Tuiles de critères de l'accueil, comme l'app : HomeView.swift (HomeSearchCard.tiles) et
@@ -34,12 +35,14 @@ export function priceLabel(value: number | null, perMonth: boolean): string {
 
 export const areaLabel = (value: number | null): string => (value === null ? 'Indifférent' : formatArea(value));
 
+/** « 1 pièce », « 3 pièces » : le nombre minimal choisi, sans « et + » (demande du 7 novembre 2026). */
 export function roomsLabel(value: number | null): string {
   if (value === null) return 'Indifférent';
-  return value > 1 ? `${value} pièces et +` : '1 pièce et +';
+  return value > 1 ? `${value} pièces` : '1 pièce';
 }
 
-export const bedroomsLabel = (value: number | null): string => (value === null ? 'Indifférent' : `${value} chambres et +`);
+/** Hôtels : « 10 chambres ». */
+export const bedroomsLabel = (value: number | null): string => (value === null ? 'Indifférent' : `${value} chambre${value > 1 ? 's' : ''}`);
 
 export function furnishedLabel(value: boolean | null): string {
   return value === null ? 'Indifférent' : value ? 'Meublée' : 'Non meublée';
@@ -205,8 +208,12 @@ export function homeTiles(draft: SearchDraft): CriterionTileSpec[] {
         areaTile(draft, SALE_AREAS, 'Surface habitable minimale du logement.', true),
         single<number | null>({
           id: 'rooms', icon: 'layers', label: 'Nombre de pièces', subtitle: 'Nombre minimal de pièces principales.',
-          value: draft.roomsMin, format: roomsLabel, options: options(ROOMS, 'Toutes les tailles', roomsLabel),
-          apply: (d, value) => ({ ...d, roomsMin: value }),
+          value: draft.roomsMin, options: options(ROOMS, 'Toutes les tailles', roomsLabel),
+          // Avec un maximum choisi dans les filtres, la tuile montre la fourchette (« 2 à 4 pièces »).
+          format: (value) => (draft.roomsMax === null ? roomsLabel(value) : countRangeLabel(value, draft.roomsMax, ROOM_NOUNS) ?? roomsLabel(value)),
+          // « Toutes les tailles » retire aussi le maximum ; un minimum au-dessus du maximum le retire (sinon rien ne
+          // serait appliqué).
+          apply: (d, value) => ({ ...d, roomsMin: value, roomsMax: value === null || (d.roomsMax !== null && d.roomsMax < value) ? null : d.roomsMax }),
         }),
       ];
     case 'rent':

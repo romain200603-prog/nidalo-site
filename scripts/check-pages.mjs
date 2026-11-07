@@ -1463,6 +1463,16 @@ try {
   await page.click('dialog[open] .selection-foot .btn');
   const budget = (await page.textContent('.criterion-tile >> nth=0 >> .criterion-value'))?.replace(/\s/g, ' ');
   if (budget !== '300 000 €') problems.push(`accueil : budget affiché « ${budget} » au lieu de « 300 000 € »`);
+  // « Nombre de pièces » : « 1 pièce », « 2 pièces »… sans « et + » (demande du 7 novembre 2026).
+  await page.click('.criterion-tile >> nth=3');
+  await page.waitForSelector('dialog.selection-dialog[open]');
+  const roomTitles = await page.locator('dialog[open] .selection-title').allTextContents();
+  if (roomTitles.join(' | ') !== 'Indifférent | 1 pièce | 2 pièces | 3 pièces | 4 pièces | 5 pièces') problems.push(`accueil : pièces « ${roomTitles.join(' | ')} »`);
+  await page.screenshot({ path: join(out, 'accueil-pieces-ordinateur.png') });
+  await page.click('dialog[open] .selection-row >> nth=2');
+  await page.click('dialog[open] .selection-foot .btn');
+  const roomsValue = await page.textContent('.criterion-tile >> nth=3 >> .criterion-value');
+  if (roomsValue !== '2 pièces') problems.push(`accueil : pièces affichées « ${roomsValue} » au lieu de « 2 pièces »`);
   await page.click('.mode-tab >> nth=1');
   const rent = await page.textContent('.criterion-tile >> nth=0 >> .criterion-value');
   if (rent !== 'Indifférent') problems.push(`accueil : le loyer de Location reprend « ${rent} »`);
@@ -1497,12 +1507,29 @@ try {
   await checkApplyButton(page, 'filtres ordinateur');
   // Un critère choisi apparaît en pastille retirable ; le DPE affiche sa fourchette.
   await page.getByRole('group', { name: 'Pièces minimum' }).getByRole('button', { name: '3', exact: true }).click();
+  // Minimum et maximum : 3 puis 4 → « 3 à 4 pièces » ; chambres 1 à 2. Le dernier maximum s'appelle « 5 » (pas « 5+ »).
+  await page.getByRole('group', { name: 'Pièces maximum' }).getByRole('button', { name: '4', exact: true }).click();
+  await page.getByRole('group', { name: 'Chambres minimum' }).getByRole('button', { name: '1', exact: true }).click();
+  await page.getByRole('group', { name: 'Chambres maximum' }).getByRole('button', { name: '2', exact: true }).click();
+  const lastMax = await page.getByRole('group', { name: 'Pièces maximum' }).getByRole('button').last().textContent();
+  if (lastMax !== '5') problems.push(`filtres : dernier choix de « Pièces maximum » « ${lastMax} » au lieu de « 5 »`);
   await page.getByRole('button', { name: 'DPE C', exact: true }).click();
   const dpe = await page.getByRole('group', { name: 'DPE maximum accepté' }).locator('.field-value').textContent();
   if (dpe !== 'DPE A à C') problems.push(`filtres : DPE affiché « ${dpe} » au lieu de « DPE A à C »`);
   const chips = await page.locator('dialog[open] .active-chip').allTextContents();
-  if (!chips.some((c) => /pièce/.test(c)) || !chips.some((c) => /DPE/.test(c))) problems.push(`filtres : pastilles « ${chips.join(' | ')} »`);
+  if (!chips.some((c) => c.includes('3 à 4 pièces')) || !chips.some((c) => c.includes('1 à 2 chambres')) || !chips.some((c) => /DPE/.test(c))) {
+    problems.push(`filtres : pastilles « ${chips.join(' | ')} »`);
+  }
+  await page.getByRole('heading', { name: 'Surface et pièces' }).scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
   await page.screenshot({ path: join(out, 'filtres-ordinateur.png') });
+  // Un minimum au-dessus du maximum : le message, et le critère n'est pas appliqué (pas de pastille).
+  await page.getByRole('group', { name: 'Pièces minimum' }).getByRole('button', { name: '5+', exact: true }).click();
+  const issue = await page.locator('dialog[open] .field-error').first().textContent().catch(() => null);
+  if (!issue?.startsWith('Le minimum dépasse le maximum')) problems.push(`filtres : pièces 5+ à 4, message « ${issue} »`);
+  const incoherent = await page.locator('dialog[open] .active-chip').allTextContents();
+  if (incoherent.some((c) => /pièce/.test(c))) problems.push(`filtres : pièces 5+ à 4, pastilles « ${incoherent.join(' | ')} »`);
+  await page.getByRole('group', { name: 'Pièces minimum' }).getByRole('button', { name: '5+', exact: true }).click();
   // Investir : rentabilité, situation locative ; puis Hôtels.
   await page.click('dialog[open] .filters-modes .mode-tab >> nth=2');
   await page.getByRole('heading', { name: 'Rentabilité' }).scrollIntoViewIfNeeded();
