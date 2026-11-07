@@ -5,7 +5,9 @@ import { NumberField } from './NumberField';
 import { formatPrice } from '../lib/format';
 import { DPE_COLORS } from '../lib/labels';
 import { scopeLabel, type HotelScope } from '../lib/listingJson';
-import { ENERGY_CLASSES, energyRangeLabel, type EnergyClass } from '../lib/search';
+import {
+  COUNT_TOP, countRangeIncludes, countRangeText, ENERGY_CLASSES, energyRangeLabel, tapCountRange, type EnergyClass,
+} from '../lib/search';
 
 // Contrôles des filtres, comme DesignSystem/Components/FormControls.swift dans l'app : cartes titrées, pastilles
 // de choix, champs de montant, fourchette à deux poignées, interrupteurs, échelle du DPE.
@@ -92,30 +94,41 @@ export function OptionalBoolPicker({ title, value, onChange, trueLabel, falseLab
   );
 }
 
-/**
- * « Pièces minimum » (Studio, 2, 3, 4, 5+) ou « Chambres minimum » (1 à 5+) ; avec `bound="max"`, « Pièces maximum »
- * (Studio, 2, 3, 4, 5) ou « Chambres maximum » (1 à 5). Retoucher le choix l'enlève.
- */
-export function RoomsPicker({ title, value, onChange, startsAtOne = false, bound = 'min', issue = null }: {
-  title: string;
-  value: number | null;
-  onChange: (value: number | null) => void;
-  startsAtOne?: boolean;
-  bound?: 'min' | 'max';
-  /** Fourchette incohérente (minimum au-dessus du maximum). */
-  issue?: string | null;
-}) {
-  const isMax = bound === 'max';
+/** « Pièces minimum » (Studio, 2, 3, 4, 5+) ou « Chambres minimum » (1 à 5+) ; retoucher le choix l'enlève (Mon projet). */
+export function RoomsPicker({ title, value, onChange, startsAtOne = false }: { title: string; value: number | null; onChange: (value: number | null) => void; startsAtOne?: boolean }) {
   return (
-    <>
-      <ChoiceGroup label={`${title} ${isMax ? 'maximum' : 'minimum'}`}>
-        {[1, 2, 3, 4, 5].map((count) => (
-          <ChoiceChip key={count} title={count === 5 ? (isMax ? '5' : '5+') : count === 1 && !startsAtOne ? 'Studio' : String(count)}
-            selected={value === count} onClick={() => onChange(value === count ? null : count)} expands />
-        ))}
-      </ChoiceGroup>
-      {issue && <p className="field-error">{issue}</p>}
-    </>
+    <ChoiceGroup label={`${title} minimum`}>
+      {[1, 2, 3, 4, 5].map((count) => (
+        <ChoiceChip key={count} title={count === 5 ? '5+' : count === 1 && !startsAtOne ? 'Studio' : String(count)}
+          selected={value === count} onClick={() => onChange(value === count ? null : count)} expands />
+      ))}
+    </ChoiceGroup>
+  );
+}
+
+/**
+ * « Pièces minimum et maximum » (Studio, 2, 3, 4, 5+) ou « Chambres minimum et maximum » (1 à 5+) sur une seule ligne,
+ * comme l'app : 2 puis 4 allument 2, 3 et 4 (« De 2 à 4 ») ; un seul appui, ce nombre exactement ; « 5+ », sans maximum
+ * (tapCountRange).
+ */
+export function RoomsRangePicker({ title, min, max, onChange, startsAtOne = false }: {
+  title: string;
+  min: number | null;
+  max: number | null;
+  onChange: (min: number | null, max: number | null) => void;
+  startsAtOne?: boolean;
+}) {
+  return (
+    <ChoiceGroup label={`${title} minimum et maximum`} aside={<span className="field-value">{countRangeText(min, max)}</span>}>
+      {[1, 2, 3, 4, COUNT_TOP].map((count) => (
+        <ChoiceChip key={count} title={count === COUNT_TOP ? `${COUNT_TOP}+` : count === 1 && !startsAtOne ? 'Studio' : String(count)}
+          selected={countRangeIncludes(min, max, count)} expands
+          onClick={() => {
+            const next = tapCountRange(min, max, count);
+            onChange(next.min, next.max);
+          }} />
+      ))}
+    </ChoiceGroup>
   );
 }
 

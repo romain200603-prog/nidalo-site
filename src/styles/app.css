@@ -356,7 +356,8 @@ main:focus { outline: none; }
 .filters-dialog::backdrop { background: rgba(10, 26, 68, 0.45); }
 .filters-form { display: flex; flex-direction: column; height: 100%; }
 .filters-scroll { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: 12px 16px 24px; overflow-y: auto; overscroll-behavior: contain; }
-.filters-scroll > * { flex: none; }
+/* Les cartes ne rétrécissent jamais, y compris dans les regroupements de l'ordinateur (.filters-page, .filters-cards). */
+.filters-scroll > *, .filters-page > *, .filters-cards > * { flex: none; }
 .filters-header { display: flex; align-items: flex-start; gap: 12px; }
 .filters-back { flex: none; width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--chip); color: var(--ink); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .filters-back .icon { width: 18px; height: 18px; }
@@ -375,6 +376,27 @@ main:focus { outline: none; }
 .filters-apply .btn .icon { width: 18px; height: 18px; }
 @media (max-width: 760px) {
   .filters-dialog { width: 100vw; height: 100dvh; margin: 0; border-radius: 0; box-shadow: none; }
+}
+/* Regroupements utiles sur ordinateur seulement : ailleurs, les cartes restent l'une sous l'autre. */
+.filters-page, .filters-cards { display: contents; }
+@media (min-width: 1024px) {
+  /* Sur ordinateur, les critères sont une page complète (demande de Romain du 7 novembre) : tout l'écran, une barre de
+     titre en haut, la localisation puis les cartes sur deux colonnes au centre, « Afficher N annonces » en bas. */
+  .filters-dialog { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; border-radius: 0; background: var(--d-bg); box-shadow: none; }
+  .filters-dialog::backdrop { background: var(--d-bg); }
+  .filters-scroll { gap: 0; padding: 0 0 40px; }
+  .filters-header { position: sticky; top: 0; z-index: 3; align-items: center; gap: 16px; min-height: var(--topbar-height); padding: 12px max(var(--d-margin), calc((100% - 1040px) / 2)); border-bottom: 1px solid var(--d-card-border); background: #FFFFFF; }
+  .filters-back { width: 40px; height: 40px; background: var(--d-separator); }
+  .filters-back:hover { background: var(--d-hover); }
+  .filters-titles h2 { font-size: 24px; font-weight: 700; line-height: 30px; }
+  .filters-titles p { color: var(--d-grey); font-size: 14px; }
+  .filters-reset:hover { background: var(--d-blue-light); }
+  .filters-page { display: flex; flex-direction: column; gap: 16px; width: min(1040px, calc(100% - 2 * var(--d-margin))); margin: 24px auto 0; }
+  .filters-active { flex-wrap: wrap; margin: 0; padding: 0; overflow: visible; }
+  .filters-cards { display: block; columns: 2; column-gap: 20px; }
+  .filters-cards > .filter-card { margin-bottom: 20px; break-inside: avoid; }
+  .filters-apply { display: flex; justify-content: center; padding: 14px var(--d-margin); border-top: 1px solid var(--d-card-border); box-shadow: none; }
+  .filters-apply .btn { width: min(480px, 100%); }
 }
 
 /* Cartes titrées (SectionCard) */

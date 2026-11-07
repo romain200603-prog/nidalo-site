@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { criteriaLabelsOf, draftFromQuery, queryFromDraft, type SearchQueryJson } from './account/savedSearches';
 import { bedroomsLabel, homeTiles, roomsLabel } from './homeCriteria';
 import {
-  BEDROOM_NOUNS, countRangeLabel, defaultDraft, draftFromParams, filterChips, matches, paramsFromDraft, ROOM_NOUNS, type SearchDraft,
+  BEDROOM_NOUNS, countRangeIncludes, countRangeLabel, countRangeText, defaultDraft, draftFromParams, filterChips, matches, paramsFromDraft,
+  ROOM_NOUNS, tapCountRange, type SearchDraft,
 } from './search';
 import { testRow } from './testRows';
 
@@ -106,5 +107,62 @@ describe('accueil : nombre de pièces sans « et + »', () => {
     expect([tile.apply(draft, 4).roomsMin, tile.apply(draft, 4).roomsMax]).toEqual([4, null]);
     expect([tile.apply(draft, 1).roomsMin, tile.apply(draft, 1).roomsMax]).toEqual([1, 3]);
     expect([tile.apply(draft, null).roomsMin, tile.apply(draft, null).roomsMax]).toEqual([null, null]);
+  });
+});
+
+describe('une seule ligne : 2 puis 4 (comme l’app)', () => {
+  /** Appuis successifs depuis une ligne vide ; renvoie [minimum, maximum]. */
+  const taps = (...values: number[]) => {
+    let range = { min: null as number | null, max: null as number | null };
+    for (const value of values) range = tapCountRange(range.min, range.max, value);
+    return [range.min, range.max];
+  };
+  const lit = (min: number | null, max: number | null) => [1, 2, 3, 4, 5].filter((value) => countRangeIncludes(min, max, value));
+
+  it('un appui : ce nombre exactement ; un second : la fourchette, dans un sens ou dans l’autre', () => {
+    expect(taps(3)).toEqual([3, 3]);
+    expect(taps(2, 4)).toEqual([2, 4]);
+    expect(taps(4, 2)).toEqual([2, 4]);
+    expect(lit(2, 4)).toEqual([2, 3, 4]);
+    expect(lit(3, 3)).toEqual([3]);
+  });
+
+  it('« 5+ » : sans maximum, seul ou en fin de fourchette', () => {
+    expect(taps(5)).toEqual([5, null]);
+    expect(taps(2, 5)).toEqual([2, null]);
+    expect(taps(5, 2)).toEqual([2, null]);
+    expect(lit(2, null)).toEqual([2, 3, 4, 5]);
+    expect(lit(5, null)).toEqual([5]);
+  });
+
+  it('retoucher le seul nombre choisi l’efface ; un troisième appui recommence', () => {
+    expect(taps(3, 3)).toEqual([null, null]);
+    expect(taps(5, 5)).toEqual([null, null]);
+    expect(taps(2, 4, 3)).toEqual([3, 3]);
+    expect(taps(2, 4, 3, 1)).toEqual([1, 3]);
+    expect(lit(null, null)).toEqual([]);
+  });
+
+  it('critères venus d’ailleurs : minimum seul (accueil), maximum seul, fourchette incohérente', () => {
+    // « 2 pièces » choisi sur l'accueil (minimum) : 2 à 5+ allumés ; un appui recommence la ligne.
+    expect(lit(2, null)).toEqual([2, 3, 4, 5]);
+    expect(tapCountRange(2, null, 4)).toEqual({ min: 4, max: 4 });
+    expect(lit(null, 3)).toEqual([1, 2, 3]);
+    expect(lit(4, 2)).toEqual([]);
+    expect(tapCountRange(4, 2, 1)).toEqual({ min: 1, max: 1 });
+  });
+
+  it('texte à droite de la ligne', () => {
+    expect([countRangeText(2, 4), countRangeText(3, 3), countRangeText(5, null), countRangeText(null, 3), countRangeText(null, null), countRangeText(4, 2)])
+      .toEqual(['De 2 à 4', 'Exactement 3', '5 ou plus', 'Jusqu\'à 3', 'Indifférent', 'Indifférent']);
+  });
+
+  it('la recherche suit la ligne : 2 puis 4 garde 2, 3 et 4 pièces ; la pastille dit « 2 à 4 pièces »', () => {
+    const [roomsMin, roomsMax] = taps(2, 4);
+    const draft = { ...buy, roomsMin, roomsMax };
+    expect([1, 2, 3, 4, 5].map((rooms) => matches(testRow({ rooms }), draft, null))).toEqual([false, true, true, true, false]);
+    expect(labels(draft)).toEqual(['2 à 4 pièces']);
+    const [bedroomsMin, bedroomsMax] = taps(3);
+    expect(labels({ ...buy, bedroomsMin, bedroomsMax })).toEqual(['3 chambres']);
   });
 });

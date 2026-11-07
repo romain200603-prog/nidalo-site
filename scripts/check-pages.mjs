@@ -1502,17 +1502,29 @@ try {
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => location.search.includes('lieu=Lyon'));
+  const beforeFilters = page.url();
   await page.click('.filters-button');
   await page.waitForSelector('dialog.filters-dialog[open]');
   await checkApplyButton(page, 'filtres ordinateur');
-  // Un critère choisi apparaît en pastille retirable ; le DPE affiche sa fourchette.
-  await page.getByRole('group', { name: 'Pièces minimum' }).getByRole('button', { name: '3', exact: true }).click();
-  // Minimum et maximum : 3 puis 4 → « 3 à 4 pièces » ; chambres 1 à 2. Le dernier maximum s'appelle « 5 » (pas « 5+ »).
-  await page.getByRole('group', { name: 'Pièces maximum' }).getByRole('button', { name: '4', exact: true }).click();
-  await page.getByRole('group', { name: 'Chambres minimum' }).getByRole('button', { name: '1', exact: true }).click();
-  await page.getByRole('group', { name: 'Chambres maximum' }).getByRole('button', { name: '2', exact: true }).click();
-  const lastMax = await page.getByRole('group', { name: 'Pièces maximum' }).getByRole('button').last().textContent();
-  if (lastMax !== '5') problems.push(`filtres : dernier choix de « Pièces maximum » « ${lastMax} » au lieu de « 5 »`);
+  // Une page complète sur ordinateur (demande de Romain du 7 novembre), plus une fenêtre au milieu de l'écran.
+  expectSame('filtres ordinateur', 'page complète (x, y, largeur, hauteur)', await page.$eval('dialog.filters-dialog', (dialog) => {
+    const box = dialog.getBoundingClientRect();
+    return [box.x, box.y, box.width, box.height];
+  }), [0, 0, 1440, 900]);
+  // Pièces et chambres sur une seule ligne chacune, comme l'app : 3 puis 4 allument 3 et 4 (« De 3 à 4 ») ; chambres 1
+  // puis 2. Un critère choisi apparaît en pastille retirable ; le DPE affiche sa fourchette.
+  const roomsRow = (name) => page.getByRole('group', { name: `${name} minimum et maximum` });
+  const rowState = (name) => roomsRow(name).evaluate((group) => [group.querySelector('.field-value')?.textContent,
+    [...group.querySelectorAll('.choice-chip')].map((chip) => `${chip.textContent}${chip.getAttribute('aria-pressed') === 'true' ? ' allumé' : ''}`)]);
+  expectSame('filtres', 'lignes Pièces et Chambres', [await rowState('Pièces'), await rowState('Chambres'), await page.locator('dialog[open] [role="group"][aria-labelledby]', { hasText: /maximum$/ }).count()],
+    [['Indifférent', ['Studio', '2', '3', '4', '5+']], ['Indifférent', ['1', '2', '3', '4', '5+']], 0]);
+  await roomsRow('Pièces').getByRole('button', { name: '3', exact: true }).click();
+  expectSame('filtres', 'pièces : un seul appui', await rowState('Pièces'), ['Exactement 3', ['Studio', '2', '3 allumé', '4', '5+']]);
+  await roomsRow('Pièces').getByRole('button', { name: '4', exact: true }).click();
+  await roomsRow('Chambres').getByRole('button', { name: '1', exact: true }).click();
+  await roomsRow('Chambres').getByRole('button', { name: '2', exact: true }).click();
+  expectSame('filtres', 'pièces 3 puis 4, chambres 1 puis 2', [await rowState('Pièces'), await rowState('Chambres')],
+    [['De 3 à 4', ['Studio', '2', '3 allumé', '4 allumé', '5+']], ['De 1 à 2', ['1 allumé', '2 allumé', '3', '4', '5+']]]);
   await page.getByRole('button', { name: 'DPE C', exact: true }).click();
   const dpe = await page.getByRole('group', { name: 'DPE maximum accepté' }).locator('.field-value').textContent();
   if (dpe !== 'DPE A à C') problems.push(`filtres : DPE affiché « ${dpe} » au lieu de « DPE A à C »`);
@@ -1523,13 +1535,17 @@ try {
   await page.getByRole('heading', { name: 'Surface et pièces' }).scrollIntoViewIfNeeded();
   await page.waitForTimeout(300);
   await page.screenshot({ path: join(out, 'filtres-ordinateur.png') });
-  // Un minimum au-dessus du maximum : le message, et le critère n'est pas appliqué (pas de pastille).
-  await page.getByRole('group', { name: 'Pièces minimum' }).getByRole('button', { name: '5+', exact: true }).click();
-  const issue = await page.locator('dialog[open] .field-error').first().textContent().catch(() => null);
-  if (!issue?.startsWith('Le minimum dépasse le maximum')) problems.push(`filtres : pièces 5+ à 4, message « ${issue} »`);
-  const incoherent = await page.locator('dialog[open] .active-chip').allTextContents();
-  if (incoherent.some((c) => /pièce/.test(c))) problems.push(`filtres : pièces 5+ à 4, pastilles « ${incoherent.join(' | ')} »`);
-  await page.getByRole('group', { name: 'Pièces minimum' }).getByRole('button', { name: '5+', exact: true }).click();
+  // Un troisième appui recommence la ligne ; « 5+ » ferme la fourchette sans maximum ; retoucher le seul choix l'efface.
+  await roomsRow('Pièces').getByRole('button', { name: '2', exact: true }).click();
+  await roomsRow('Pièces').getByRole('button', { name: '5+', exact: true }).click();
+  expectSame('filtres', 'pièces 2 puis 5+', [await rowState('Pièces'), (await page.locator('dialog[open] .active-chip').allTextContents()).filter((c) => /pièce/.test(c))],
+    [['2 ou plus', ['Studio', '2 allumé', '3 allumé', '4 allumé', '5+ allumé']], ['2 pièces min ']]);
+  await roomsRow('Pièces').getByRole('button', { name: '4', exact: true }).click();
+  await roomsRow('Pièces').getByRole('button', { name: '4', exact: true }).click();
+  expectSame('filtres', 'pièces effacées', [await rowState('Pièces'), (await page.locator('dialog[open] .active-chip').allTextContents()).filter((c) => /pièce/.test(c))],
+    [['Indifférent', ['Studio', '2', '3', '4', '5+']], []]);
+  await roomsRow('Pièces').getByRole('button', { name: '3', exact: true }).click();
+  await roomsRow('Pièces').getByRole('button', { name: '4', exact: true }).click();
   // Investir : rentabilité, situation locative ; puis Hôtels.
   await page.click('dialog[open] .filters-modes .mode-tab >> nth=2');
   await page.getByRole('heading', { name: 'Rentabilité' }).scrollIntoViewIfNeeded();
@@ -1545,6 +1561,11 @@ try {
   await page.click('dialog[open] .filters-apply .btn');
   await page.waitForFunction(() => location.search.includes('mode=invest') && location.search.includes('brutMin=5'));
   if (await page.locator('dialog.filters-dialog[open]').count()) problems.push('filtres : la fenêtre reste ouverte après « Afficher »');
+  // Retour (navigateur) après « Afficher » : la recherche d'avant, sans repasser par la page des critères.
+  await page.goBack();
+  await page.waitForFunction((url) => location.href === url, beforeFilters, { timeout: 4000 })
+    .catch(() => problems.push(`filtres : Retour après « Afficher » mène à ${page.url()} au lieu de ${beforeFilters}`));
+  if (await page.locator('dialog.filters-dialog[open]').count()) problems.push('filtres : Retour après « Afficher » rouvre la page des critères');
   await page.close();
 
   // Investir : chiffres du moteur de l'app sur la fiche du bien loué (850 €/mois pour 185 000 €).
@@ -1886,11 +1907,21 @@ try {
     await page.waitForTimeout(300);
     if (width === 1440) await page.screenshot({ path: join(out, '1-accueil-1440-sans-compte.png'), fullPage: true });
     await page.screenshot({ path: join(out, `accueil-maquette-${width}-sans-compte.png`), fullPage: true });
-    // « Plus de critères » ouvre les filtres du site, sur la catégorie choisie.
-    await page.click('.dhome-more');
-    await page.waitForSelector('dialog.filters-dialog[open]');
-    await page.keyboard.press('Escape');
-    await page.waitForSelector('dialog.filters-dialog[open]', { state: 'detached' }).catch(() => undefined);
+    // « Plus de critères » ouvre les filtres du site, sur la catégorie choisie, en page complète (demande de Romain du
+    // 7 novembre) ; Retour (navigateur) ou Échap la referment sans quitter l'accueil.
+    for (const how of ['Retour', 'Échap']) {
+      await page.click('.dhome-more');
+      await page.waitForSelector('dialog.filters-dialog[open]');
+      expectSame(`accueil ${width}`, `« Plus de critères » en page complète (${how})`, await page.$eval('dialog.filters-dialog', (dialog) => {
+        const box = dialog.getBoundingClientRect();
+        return [box.x, box.y, box.width, box.height, box.width === innerWidth && box.height === innerHeight];
+      }), [0, 0, width, height, true]);
+      if (how === 'Retour') await page.goBack();
+      else await page.keyboard.press('Escape');
+      await page.waitForSelector('dialog.filters-dialog[open]', { state: 'detached', timeout: 4000 })
+        .catch(() => problems.push(`accueil ${width} : ${how} ne referme pas « Plus de critères »`));
+      expectSame(`accueil ${width}`, `après ${how}`, [new URL(page.url()).pathname, await page.evaluate(() => Boolean(window.history.state?.nidaloCriteres))], ['/', false]);
+    }
     // Les 4 catégories (demande de Romain du 7 novembre) : le lieu seul sur sa ligne, de toute la largeur, puis les
     // critères en blocs en dessous, deux par ligne comme dans l'app, sans texte coupé.
     for (const [index, name] of [[0, 'Résidentiel'], [1, 'Location'], [2, 'Investir'], [3, 'Hôtels']]) {
@@ -2771,7 +2802,7 @@ try {
       await page.click('.dfav-filters');
       await page.waitForSelector('dialog.filters-dialog[open]');
       expectSame(B, 'filtres : catégorie', await textOf(page, 'dialog[open] .mode-tab[aria-checked="true"]'), 'Résidentiel');
-      await page.locator('dialog[open]').getByRole('group', { name: 'Pièces minimum' }).getByRole('button', { name: '3', exact: true }).click();
+      await page.locator('dialog[open]').getByRole('group', { name: 'Pièces minimum et maximum' }).getByRole('button', { name: '3', exact: true }).click();
       await page.waitForFunction(() => document.querySelector('dialog[open] .filters-apply .btn')?.textContent?.trim() === 'Afficher 1 bien', null, { timeout: 8000 })
         .catch(async () => problems.push(`${B} : filtres, bouton « ${await textOf(page, 'dialog[open] .filters-apply .btn')} » au lieu de « Afficher 1 bien »`));
       await page.click('dialog[open] .filters-apply .btn');
@@ -2886,10 +2917,11 @@ try {
       await choose(0, 'Modifier les critères');
       await page.waitForSelector('dialog.filters-dialog[open]');
       if (await page.locator('dialog[open] .mode-tab').count()) problems.push(`${B} : modifier les critères propose de changer de catégorie`);
-      await page.locator('dialog[open]').getByRole('group', { name: 'Pièces minimum' }).getByRole('button', { name: '3', exact: true }).click();
+      // Un seul appui sur la ligne des pièces : 3 pièces exactement (comme l'app), donc minimum et maximum à 3.
+      await page.locator('dialog[open]').getByRole('group', { name: 'Pièces minimum et maximum' }).getByRole('button', { name: '3', exact: true }).click();
       await checkApplyButton(page, `${B} : modifier les critères`);
       await page.click('dialog[open] .filters-apply .btn');
-      await expectWrites(mark, saved({ name: 'Lyon centre', query: { ...lyon.query, rooms: { min: 3 }, excludesLeased: true }, alerts_enabled: true }), `${B} : modifier les critères`);
+      await expectWrites(mark, saved({ name: 'Lyon centre', query: { ...lyon.query, rooms: { min: 3, max: 3 }, excludesLeased: true }, alerts_enabled: true }), `${B} : modifier les critères`);
       // Supprimer, après confirmation : DELETE saved_searches?id=eq.<id>.
       expectSame(B, 'menu de la deuxième recherche', await openMenu(1), ['Modifier les critères', 'Renommer', 'Activer les alertes', 'Supprimer']);
       mark = writes.length;

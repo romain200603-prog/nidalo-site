@@ -902,6 +902,45 @@ export function countRangeLabel(min: number | null | undefined, max: number | nu
   return null;
 }
 
+// Pièces et chambres sur une seule ligne (1 à « 5+ »), comme l'app (demande de Romain du 7 novembre : « je clique sur 2
+// et, sur la même ligne, je reclique sur 4 ») : un premier appui choisit ce nombre exactement, un second fait la
+// fourchette, un troisième recommence ; retoucher le seul nombre choisi l'efface. « 5+ » : sans maximum.
+
+/** Dernier choix de la ligne : « 5+ ». */
+export const COUNT_TOP = 5;
+
+export type CountRange = { min: number | null; max: number | null };
+
+/** Nouvelle fourchette après un appui sur `value` (1 à 5, 5 pour « 5+ »). */
+export function tapCountRange(min: number | null, max: number | null, value: number): CountRange {
+  const upTo = (count: number) => (count >= COUNT_TOP ? null : count);
+  if (min === null && max === null) return { min: value, max: upTo(value) };
+  const single = min !== null && (max === min || (min >= COUNT_TOP && max === null));
+  if (!single) return { min: value, max: upTo(value) };
+  if (value === min) return { min: null, max: null };
+  return value > min ? { min, max: upTo(value) } : { min: value, max: upTo(min) === null ? null : max };
+}
+
+/** Le choix `value` est allumé : il est dans la fourchette (« 5+ » quand elle va jusqu'à 5 ou au-delà). */
+export function countRangeIncludes(min: number | null, max: number | null, value: number): boolean {
+  if (min === null && max === null) return false;
+  const low = min ?? 1;
+  const high = max ?? Number.POSITIVE_INFINITY;
+  if (low > high) return false;
+  return value >= COUNT_TOP ? high >= COUNT_TOP : value >= low && value <= high;
+}
+
+/** Texte à droite du titre de la ligne : « De 2 à 4 », « Exactement 3 », « 5 ou plus », « Jusqu'à 4 », « Indifférent ». */
+export function countRangeText(min: number | null, max: number | null): string {
+  if (min !== null && max !== null) {
+    if (min > max) return 'Indifférent';
+    return min === max ? `Exactement ${min}` : `De ${min} à ${max}`;
+  }
+  if (min !== null) return `${min} ou plus`;
+  if (max !== null) return `Jusqu'à ${max}`;
+  return 'Indifférent';
+}
+
 /** « 150 k€ – 250 k€ », « min 40 m² », « 250 k€ » ; `null` si vide ou incohérent. */
 export function rangeLabel(min: number | null, max: number | null, format: (n: number) => string): string | null {
   if (min !== null && max !== null) return min <= max ? `${format(min)} – ${format(max)}` : null;
