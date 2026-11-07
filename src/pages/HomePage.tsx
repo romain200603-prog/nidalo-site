@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { Icon } from '../components/Icon';
+import type { IconName } from '../components/iconPaths';
 import { Page } from '../components/Layout';
 import { ModeTabs } from '../components/ModeTabs';
 import { PlaceField } from '../components/PlaceField';
@@ -82,11 +83,55 @@ function CriterionTile({ tile, onApply }: { tile: CriterionTileSpec; onApply: (a
   );
 }
 
-function SectionHeader({ id, title, subtitle, href }: { id: string; title: string; subtitle?: string; href?: string }) {
+/**
+ * Titre trop long pour sa ligne (petit téléphone, pictogramme) : il se resserre jusqu'à 80 % de sa taille au lieu
+ * d'être coupé par « … », comme les titres de l'accueil de l'app (minimumScaleFactor 0,8).
+ */
+function useShrinkToFit() {
+  const ref = useRef<HTMLHeadingElement>(null);
+  useLayoutEffect(() => {
+    const title = ref.current;
+    if (!title) return;
+    // Largeur exacte du texte entier, mesurée sur un double invisible du titre : scrollWidth est arrondi au pixel, et un
+    // titre qui dépasse d'une fraction de pixel serait coupé sans que cela se voie à la mesure.
+    const textWidth = () => {
+      const probe = document.createElement('span');
+      probe.textContent = title.textContent;
+      probe.style.cssText = 'position:absolute;left:-10000px;top:0;visibility:hidden;white-space:nowrap';
+      title.append(probe);
+      const width = probe.getBoundingClientRect().width;
+      probe.remove();
+      return width;
+    };
+    const fit = () => {
+      title.style.fontSize = '';
+      const room = title.getBoundingClientRect().width;
+      const full = parseFloat(getComputedStyle(title).fontSize);
+      let size = full;
+      let width = textWidth();
+      while (width > room - 0.5 && size > full * 0.8) {
+        size = Math.max(full * 0.8, Math.min(size - 0.25, (size * (room - 1)) / width));
+        title.style.fontSize = `${size}px`;
+        width = textWidth();
+      }
+    };
+    fit();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(fit);
+    observer.observe(title.parentElement ?? title);
+    return () => observer.disconnect();
+  }, []);
+  return ref;
+}
+
+/** Titre de section ; `picto` : pictogramme fin à gauche du titre (maquette de Romain du 07/11/2026). */
+function SectionHeader({ id, title, subtitle, href, picto }: { id: string; title: string; subtitle?: string; href?: string; picto?: IconName }) {
+  const titleRef = useShrinkToFit();
   return (
     <div className="home-section-head">
       <div className="home-section-title">
-        <h2 id={id}>{title}</h2>
+        {picto && <Icon name={picto} className="icon home-picto" />}
+        <h2 id={id} ref={titleRef}>{title}</h2>
         {href && <a href={href} className="home-section-more">Voir tout<Icon name="chevronRight" /></a>}
       </div>
       {subtitle && <p>{subtitle}</p>}
@@ -200,11 +245,16 @@ function DesktopPrice({ row }: { row: ListingRow }) {
   );
 }
 
-function DesktopSectionHead({ id, title, subtitle, href }: { id: string; title: string; subtitle?: string; href: string }) {
+function DesktopSectionHead({ id, title, subtitle, href, picto }: { id: string; title: string; subtitle?: string; href: string; picto?: IconName }) {
   return (
     <div className="dhome-head">
       <div className="dhome-head-text">
-        <h2 id={id}>{title}</h2>
+        {picto ? (
+          <div className="dhome-title">
+            <Icon name={picto} className="icon dhome-picto" />
+            <h2 id={id}>{title}</h2>
+          </div>
+        ) : <h2 id={id}>{title}</h2>}
         {subtitle && <p>{subtitle}</p>}
       </div>
       <a href={href} className="dhome-see-all">Voir tout<Icon name="chevronRight" /></a>
@@ -400,7 +450,7 @@ function DesktopHome({ greeting, mode, draft, drafts, tiles, feed, update, chang
           <section className="home-section dhome-section dhome-opportunities" aria-labelledby="opportunites">
             <div className="dhome-inner">
               <DesktopSectionHead id="opportunites" title="Opportunités du moment" subtitle="Des biens sélectionnés selon vos critères et le marché actuel."
-                href={searchHref(switchMode(draft, 'invest', drafts.invest))} />
+                href={searchHref(switchMode(draft, 'invest', drafts.invest))} picto="pictoOpportunites" />
               <div className="dhome-grid">
                 {feed.opportunities.map(({ row, highlights }) => (
                   <DesktopListingCard key={row.id} row={row} highlights={highlights} href={listingPath(row.id, 'invest')} className="opportunity-card" showsHighlight />
@@ -412,7 +462,7 @@ function DesktopHome({ greeting, mode, draft, drafts, tiles, feed, update, chang
         {viewed.length > 0 && (
           <section className="home-section dhome-section" aria-labelledby="consultes">
             <div className="dhome-inner">
-              <DesktopSectionHead id="consultes" title="Consultés récemment" href={sectionHref} />
+              <DesktopSectionHead id="consultes" title="Consultés récemment" href={sectionHref} picto="pictoConsultes" />
               <div className="dhome-list">
                 {viewed.map((row) => <DesktopSmallCard key={row.id} row={row} />)}
               </div>
@@ -422,7 +472,7 @@ function DesktopHome({ greeting, mode, draft, drafts, tiles, feed, update, chang
         {similar.length > 0 && (
           <section className="home-section dhome-section" aria-labelledby="similaires">
             <div className="dhome-inner">
-              <DesktopSectionHead id="similaires" title="Biens similaires à vos recherches" href={sectionHref} />
+              <DesktopSectionHead id="similaires" title="Biens similaires à vos recherches" href={sectionHref} picto="pictoSimilaires" />
               <div className="dhome-grid">
                 {similar.map(({ row, highlights }) => <DesktopListingCard key={row.id} row={row} highlights={highlights} href={listingPath(row.id)} />)}
               </div>
@@ -432,7 +482,7 @@ function DesktopHome({ greeting, mode, draft, drafts, tiles, feed, update, chang
         {feed && feed.newest.length > 0 && (
           <section className="home-section dhome-section" aria-labelledby="nouveautes">
             <div className="dhome-inner">
-              <DesktopSectionHead id="nouveautes" title="Nouveautés" subtitle="Les dernières annonces publiées sur Nidalo." href={sectionHref} />
+              <DesktopSectionHead id="nouveautes" title="Nouveautés" subtitle="Les dernières annonces publiées sur Nidalo." href={sectionHref} picto="pictoNouveautes" />
               <div className="dhome-list">
                 {feed.newest.map((row) => <DesktopSmallCard key={row.id} row={row} accessory="new" />)}
               </div>
@@ -442,7 +492,7 @@ function DesktopHome({ greeting, mode, draft, drafts, tiles, feed, update, chang
         {feed && feed.priceDrops.length > 0 && (
           <section className="home-section dhome-section" aria-labelledby="baisses">
             <div className="dhome-inner">
-              <DesktopSectionHead id="baisses" title="Baisses de prix" subtitle="Des biens qui ont récemment baissé leur prix." href={sectionHref} />
+              <DesktopSectionHead id="baisses" title="Baisses de prix" subtitle="Des biens qui ont récemment baissé leur prix." href={sectionHref} picto="pictoBaisses" />
               <div className="dhome-list">
                 {feed.priceDrops.map((row) => <DesktopSmallCard key={row.id} row={row} accessory="priceDrop" />)}
               </div>
@@ -578,7 +628,7 @@ export function HomePage() {
         {feed && feed.opportunities.length > 0 && (
           <section className="home-section" aria-labelledby="opportunites">
             <SectionHeader id="opportunites" title="Opportunités du moment" subtitle="Des biens sélectionnés selon vos critères et le marché actuel."
-              href={searchHref(switchMode(draft, 'invest', drafts.invest))} />
+              href={searchHref(switchMode(draft, 'invest', drafts.invest))} picto="pictoOpportunites" />
             <div className="home-carousel">
               {feed.opportunities.map(({ row, highlights }) => <OpportunityCard key={row.id} row={row} highlights={highlights} />)}
             </div>
@@ -586,7 +636,7 @@ export function HomePage() {
         )}
         {feed && feed.newest.length > 0 && (
           <section className="home-section" aria-labelledby="nouveautes">
-            <SectionHeader id="nouveautes" title="Nouveautés" subtitle="Les dernières annonces publiées sur Nidalo." href={sectionHref} />
+            <SectionHeader id="nouveautes" title="Nouveautés" subtitle="Les dernières annonces publiées sur Nidalo." href={sectionHref} picto="pictoNouveautes" />
             <div className="home-carousel">
               {feed.newest.map((row) => <CompactCard key={row.id} row={row} accessory="new" />)}
             </div>
@@ -594,7 +644,7 @@ export function HomePage() {
         )}
         {feed && feed.priceDrops.length > 0 && (
           <section className="home-section" aria-labelledby="baisses">
-            <SectionHeader id="baisses" title="Baisses de prix" subtitle="Des biens qui ont récemment baissé leur prix." href={sectionHref} />
+            <SectionHeader id="baisses" title="Baisses de prix" subtitle="Des biens qui ont récemment baissé leur prix." href={sectionHref} picto="pictoBaisses" />
             <div className="home-carousel">
               {feed.priceDrops.map((row) => <CompactCard key={row.id} row={row} accessory="priceDrop" />)}
             </div>
