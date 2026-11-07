@@ -312,6 +312,8 @@ main:focus { outline: none; }
 .map-preview-close .icon { width: 18px; height: 18px; }
 .map-open { position: fixed; z-index: 28; left: 50%; transform: translateX(-50%); bottom: 24px; box-shadow: 0 8px 18px rgba(10, 26, 68, 0.24); border-radius: 999px; padding: 0 22px; }
 .map-close { display: none; }
+/* Bascule « liste / carte » : sur ordinateur seulement (le téléphone garde le bouton « Carte »). */
+.view-toggle { display: none; }
 
 /* Téléphone : la carte s'ouvre en plein écran, comme dans l'app */
 @media (max-width: 1023px) {
@@ -326,18 +328,27 @@ main:focus { outline: none; }
   .map-open { bottom: calc(var(--tabbar-height) + 18px + env(safe-area-inset-bottom)); }
 }
 
-/* Ordinateur : liste à gauche, carte à droite, toujours visible */
+/* Ordinateur (demande de Romain du 7 novembre) : la liste sur toute la largeur, la carte fermée au départ. La bascule
+   « liste / carte » de l'app ouvre la carte en plein écran sous la barre du haut ; « Liste » ou Échap la referment. */
 @media (min-width: 1024px) {
-  .search-layout { grid-template-columns: minmax(420px, 560px) minmax(0, 1fr); align-items: start; }
-  .search-column { padding: 28px 24px 40px; }
   .page-wide .topbar { position: sticky; top: 0; }
-  .map-column { display: block; position: sticky; top: var(--topbar-height); height: calc(100vh - var(--topbar-height)); }
-  .map-open { display: none; }
   .page-wide .footer .wrap { max-width: none; }
-}
-@media (min-width: 1360px) {
-  .search-layout { grid-template-columns: 640px minmax(0, 1fr); }
-  .search-column .results-list { grid-template-columns: 1fr 1fr; }
+  .search-column { width: 100%; max-width: calc(var(--d-content) + 2 * var(--d-margin)); margin: 0 auto; padding: 28px var(--d-margin) 48px; }
+  .search-head, .search-column > .save-search-button, .search-column > .state { max-width: 600px; }
+  .results-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .view-toggle { flex: none; display: inline-flex; gap: 2px; padding: 3px; border-radius: 13px; background: var(--chip); }
+  .view-toggle-item { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 38px; padding: 0; border: 0; border-radius: 10px; background: none; color: rgba(36, 45, 56, 0.7); }
+  .view-toggle-item .icon { width: 19px; height: 19px; }
+  .view-toggle-item.is-current { background: #FFFFFF; color: var(--blue); }
+  button.view-toggle-item { cursor: pointer; }
+  button.view-toggle-item:hover { background: rgba(255, 255, 255, 0.6); color: var(--d-text); }
+  button.view-toggle-item:focus-visible { outline: 3px solid var(--d-blue); outline-offset: 2px; }
+  .search-column .results-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+  .map-open { display: none; }
+  .map-column.is-open { display: block; position: fixed; top: var(--topbar-height); right: 0; bottom: 0; left: 0; z-index: 30; background: var(--page); }
+  .map-column.is-open .results-map { position: absolute; inset: 0; }
+  .map-column.is-open .map-close { display: inline-flex; position: absolute; z-index: 5; top: 16px; left: 50%; transform: translateX(-50%); padding: 0 22px; border-radius: 999px; box-shadow: 0 8px 18px rgba(10, 26, 68, 0.24); }
+  body.map-is-open { overflow: hidden; }
 }
 
 /* ——— Filtres (SearchFiltersSheet de l'app) : plein écran sur téléphone, fenêtre centrée sur ordinateur ——— */

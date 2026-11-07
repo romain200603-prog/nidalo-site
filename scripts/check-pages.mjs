@@ -441,8 +441,9 @@ function contentWidth(page, selector) {
   });
 }
 
-/** Barre du haut et pied de page de l'ordinateur : mesures, liens, catégorie active, police. */
-async function checkChrome(page, name, { signedIn, active = null, margin }) {
+/** Barre du haut et pied de page de l'ordinateur : mesures, liens, pas de catégories (demande de Romain du 7 novembre),
+ *  libellés en entier, police. */
+async function checkChrome(page, name, { signedIn, margin }) {
   await page.evaluate(() => document.fonts.ready);
   const info = await page.evaluate(() => {
     const bar = document.querySelector('.dtop-bar');
@@ -454,13 +455,13 @@ async function checkChrome(page, name, { signedIn, active = null, margin }) {
       outside: items.filter((item) => item.top < 0 || item.bottom > 72 || item.right > window.innerWidth).length,
       left: box(document.querySelector('.dtop-brand'))?.left,
       right: window.innerWidth - (box(document.querySelector('.dtop-space'))?.right ?? 0),
-      modes: [...document.querySelectorAll('.dtop-mode')].map((link) => [link.textContent.trim(), link.getAttribute('href')]),
-      active: [...document.querySelectorAll('.dtop-mode[aria-current="page"]')].map((link) => link.textContent.trim()),
+      modes: [...document.querySelectorAll('.dtop a[href^="/recherche/"]')].map((link) => link.textContent.trim()),
+      labels: [document.querySelector('.dtop-publish')?.textContent.trim(), getComputedStyle(document.querySelector('.dtop-space-label') ?? document.body).display !== 'none'],
       badges: document.querySelectorAll('.dtop-badge').length,
       avatar: document.querySelector('.dtop-avatar')?.textContent.trim() ?? null,
       avatarIcon: Boolean(document.querySelector('.dtop-avatar svg')),
-      font: getComputedStyle(document.querySelector('.dtop-mode') ?? document.body).fontFamily,
-      interLoaded: document.fonts.check('500 15px "Nidalo Inter"') && [...document.fonts].some((face) => face.family.includes('Nidalo Inter') && face.status === 'loaded'),
+      font: getComputedStyle(document.querySelector('.dtop-publish') ?? document.body).fontFamily,
+      interLoaded: document.fonts.check('600 15px "Nidalo Inter"') && [...document.fonts].some((face) => face.family.includes('Nidalo Inter') && face.status === 'loaded'),
       oldHeader: Boolean(document.querySelector('.topbar, footer.footer')),
       footerColumns: [...document.querySelectorAll('.dfoot-column h2')].map((title) => title.textContent.trim()),
       footerLinks: [...document.querySelectorAll('.dfoot a')].map((link) => link.getAttribute('href')),
@@ -471,11 +472,8 @@ async function checkChrome(page, name, { signedIn, active = null, margin }) {
   if (info.height !== 72) problems.push(`${name} : barre du haut de ${info.height} px au lieu de 72`);
   if (info.overflow || info.outside) problems.push(`${name} : la barre du haut déborde (${info.outside} élément(s) hors de la barre)`);
   if (Math.round(info.left) !== margin || Math.round(info.right) !== margin) problems.push(`${name} : marges ${info.left} / ${info.right} au lieu de ${margin}`);
-  const modes = JSON.stringify(info.modes);
-  if (modes !== JSON.stringify([['Résidentiel', '/recherche/?mode=buy'], ['Location', '/recherche/?mode=rent'], ['Investir', '/recherche/?mode=invest'], ['Hôtels', '/recherche/?mode=hotel']])) {
-    problems.push(`${name} : catégories ${modes}`);
-  }
-  if (JSON.stringify(info.active) !== JSON.stringify(active ? [active] : [])) problems.push(`${name} : catégorie active ${JSON.stringify(info.active)} au lieu de ${active}`);
+  if (info.modes.length) problems.push(`${name} : catégories encore dans la barre du haut ${JSON.stringify(info.modes)}`);
+  if (JSON.stringify(info.labels) !== JSON.stringify(['Publier une annonce', true])) problems.push(`${name} : libellés de la barre ${JSON.stringify(info.labels)}`);
   if (!signedIn && (info.badges || !info.avatarIcon)) problems.push(`${name} : sans compte, ${info.badges} pastille(s), icône du compte ${info.avatarIcon}`);
   if (signedIn && info.avatar !== 'CM') problems.push(`${name} : initiales « ${info.avatar} » au lieu de « CM »`);
   if (!info.font.startsWith('"Nidalo Inter"') || !info.interLoaded) problems.push(`${name} : police ${info.font} (Inter chargée : ${info.interLoaded})`);
@@ -1478,12 +1476,16 @@ try {
 
   page = await open(desktop, '/recherche/?mode=buy', 'recherche-ordinateur');
   await page.waitForSelector('.listing-card');
+  await page.screenshot({ path: join(out, 'recherche-ordinateur-liste.png') });
+  await page.click('.view-toggle button[aria-label="Afficher sur la carte"]');
   await page.waitForSelector('.map-marker', { timeout: 15000 });
   await page.waitForTimeout(400);
   await page.screenshot({ path: join(out, 'recherche-ordinateur.png') });
   await page.click('.map-marker');
   await page.waitForSelector('.map-preview');
   await page.screenshot({ path: join(out, 'recherche-ordinateur-apercu.png') });
+  await page.click('.map-close');
+  await page.waitForSelector('.map-column:not(.is-open)', { state: 'attached' });
   await page.fill('.place-field input', 'lyo');
   await page.waitForSelector('.place-list li');
   await page.screenshot({ path: join(out, 'recherche-suggestions.png'), clip: { x: 0, y: 0, width: 720, height: 520 } });
@@ -1654,24 +1656,46 @@ try {
     await page.locator('.dfoot').screenshot({ path: join(out, `pied-de-page-${width}.png`) });
     await page.screenshot({ path: join(out, `accueil-${width}-sans-compte.png`), fullPage: true });
     await page.close();
-    // Recherche : la catégorie ouverte est mise en avant ; la barre reste en haut, la carte dessous.
+    // Recherche (demande de Romain du 7 novembre) : les catégories du milieu changent la recherche ; la liste sur toute
+    // la largeur en 3 colonnes, la carte fermée au départ ; la bascule « liste / carte » de l'app ouvre la carte sous la
+    // barre de 72 px, « Liste » ou Échap la referment ; la barre reste en haut quand la page défile.
     page = await open(guest, '/recherche/?mode=invest', `recherche-${width}`);
     await page.waitForSelector('.listing-card');
-    await checkChrome(page, `recherche ${width}`, { signedIn: false, active: 'Investir', margin });
-    await page.click('.dtop-mode >> nth=1');
+    await checkChrome(page, `recherche ${width}`, { signedIn: false, margin });
+    await page.click('.mode-tabs-search .mode-tab >> nth=1');
     await page.waitForURL(/\/recherche\/\?mode=rent$/);
     await page.waitForSelector('.listing-card');
-    const rentActive = (await page.locator('.dtop-mode[aria-current="page"]').allTextContents()).map((text) => text.trim());
-    if (JSON.stringify(rentActive) !== '["Location"]') problems.push(`recherche ${width} : après « Location », catégorie active ${JSON.stringify(rentActive)}`);
-    // La carte occupe toute la hauteur sous la barre de 72 px ; la barre reste en haut quand la page défile.
-    const map = await page.evaluate(() => { const box = document.querySelector('.map-column').getBoundingClientRect(); return [box.top, box.bottom]; });
-    if (map[0] !== 72 || map[1] !== height) problems.push(`recherche ${width} : carte de ${map[0]} à ${map[1]} px au lieu de 72 à ${height}`);
+    const start = await page.evaluate(() => ({
+      map: getComputedStyle(document.querySelector('.map-column')).display,
+      pill: getComputedStyle(document.querySelector('.map-open')).display,
+      toggle: getComputedStyle(document.querySelector('.view-toggle')).display,
+      columns: getComputedStyle(document.querySelector('.results-list')).gridTemplateColumns.split(' ').length,
+      column: Math.round(document.querySelector('.search-column').getBoundingClientRect().width),
+    }));
+    expectSame(`recherche ${width}`, 'au départ', start, { map: 'none', pill: 'none', toggle: 'flex', columns: 3, column: Math.min(width, 1200 + 2 * margin) });
     await page.mouse.wheel(0, 600);
     await page.waitForTimeout(300);
     const scrolled = await page.evaluate(() => [window.scrollY, document.querySelector('.dtop').getBoundingClientRect().top]);
     if (scrolled[0] <= 0 || scrolled[1] !== 0) problems.push(`recherche ${width} : après défilement de ${scrolled[0]} px, barre à ${scrolled[1]} px`);
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: join(out, `recherche-${width}.png`) });
+    await page.click('.view-toggle button[aria-label="Afficher sur la carte"]');
+    await page.waitForSelector('.map-column.is-open .map-marker', { timeout: 15000 });
+    await page.waitForTimeout(400);
+    const opened = await page.evaluate(() => {
+      const box = document.querySelector('.map-column').getBoundingClientRect();
+      return [box.top, box.bottom, box.left, box.right === document.documentElement.clientWidth, document.querySelector('.dtop').getBoundingClientRect().top, location.search.includes('vue=carte')];
+    });
+    expectSame(`recherche ${width}`, 'carte ouverte [haut, bas, gauche, largeur, barre, adresse]', opened, [72, height, 0, true, 0, true]);
+    await page.screenshot({ path: join(out, `recherche-carte-${width}.png`) });
+    await page.click('.map-close');
+    await page.waitForFunction(() => !document.querySelector('.map-column.is-open') && !location.search.includes('vue=carte'), null, { timeout: 4000 })
+      .catch(() => problems.push(`recherche ${width} : « Liste » ne referme pas la carte`));
+    await page.click('.view-toggle button[aria-label="Afficher sur la carte"]');
+    await page.waitForSelector('.map-column.is-open');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('.map-column.is-open'), null, { timeout: 4000 })
+      .catch(() => problems.push(`recherche ${width} : Échap ne referme pas la carte`));
     await page.close();
     // Écrans absents des maquettes : leur version actuelle, dans une colonne de 640 px.
     for (const [path, name, selector] of [['/aide/', 'aide', 'article.doc'], ['/mentions-legales/', 'mentions-legales', 'article.doc'], ['/page-inexistante/', '404', 'main .wrap-narrow'],
@@ -1951,21 +1975,16 @@ try {
     await phoneHome.close();
   }
 
-  // Largeurs limites : la barre du haut tient toujours sur une ligne (catégorie active en gras), avec des marges de
-  // 32 px jusqu'à 1279 px puis de 48 px ; « Mon espace » s'écrit à partir de 1180 px, « une annonce » à partir de 1366 px.
-  for (const width of [1179, 1180, 1279, 1280, 1365, 1366]) {
+  // Largeurs limites : sans les catégories, la barre du haut tient sur une ligne avec « Publier une annonce » et
+  // « Mon espace » en entier dès 1024 px, avec des marges de 32 px jusqu'à 1279 px puis de 48 px.
+  for (const width of [1024, 1179, 1180, 1279, 1280, 1365, 1366]) {
     const edge = await browser.newContext({ viewport: { width, height: 800 }, locale: 'fr-FR' });
     await mock(edge);
     const p = await open(edge, '/recherche/?mode=buy', `recherche-${width}`);
     await p.waitForSelector('.listing-card');
-    await checkChrome(p, `recherche ${width}`, { signedIn: false, active: 'Résidentiel', margin: width >= 1280 ? 48 : 32 });
-    const shown = await p.evaluate(() => [
-      getComputedStyle(document.querySelector('.dtop-publish-end')).display !== 'none', getComputedStyle(document.querySelector('.dtop-space-label')).display !== 'none',
-      document.querySelector('.dtop-publish').getAttribute('aria-label'), document.querySelector('.dtop-space').getAttribute('aria-label'),
-    ]);
-    // [« une annonce » affiché, « Mon espace » affiché, noms des deux liens]
-    const wanted = [width >= 1366, width >= 1180, 'Publier une annonce', 'Mon espace'];
-    if (JSON.stringify(shown) !== JSON.stringify(wanted)) problems.push(`barre ${width} : ${JSON.stringify(shown)} au lieu de ${JSON.stringify(wanted)}`);
+    await checkChrome(p, `recherche ${width}`, { signedIn: false, margin: width >= 1280 ? 48 : 32 });
+    const names = await p.evaluate(() => [document.querySelector('.dtop-publish').getAttribute('aria-label'), document.querySelector('.dtop-space').getAttribute('aria-label')]);
+    if (JSON.stringify(names) !== JSON.stringify(['Publier une annonce', 'Mon espace'])) problems.push(`barre ${width} : noms des liens ${JSON.stringify(names)}`);
     await p.close();
     await edge.close();
   }

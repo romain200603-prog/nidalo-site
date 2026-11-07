@@ -4,10 +4,10 @@
 @media (min-width: 1024px) {
   .dhome-inner { width: min(var(--d-content), 100% - 2 * var(--d-margin)); margin: 0 auto; }
 
-  /* ——— Bandeau bleu nuit ——— */
-  .dhome-band { padding: 59px 0 141px; background: var(--d-night); }
+  /* ——— Bandeau bleu, le bleu du bandeau de l'app ——— */
+  .dhome-band { padding: 59px 0 141px; background: var(--d-band); }
   .dhome-band h1 { margin: 0; color: #FFFFFF; font-size: 52px; font-weight: 700; line-height: 60px; }
-  .dhome-band p { margin: 8px 0 0; color: var(--d-night-text); font-size: 20px; line-height: 28px; }
+  .dhome-band p { margin: 8px 0 0; color: var(--d-band-text); font-size: 20px; line-height: 28px; }
 
   /* ——— Carte de recherche, qui chevauche le bas du bandeau ——— */
   .dhome-card-wrap { position: relative; z-index: 5; margin-top: -96px; }

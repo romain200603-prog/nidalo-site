@@ -38,8 +38,11 @@
     --d-red: #C0392B;
     --d-badge: #E5383B;
     --d-night: #22366B;
-    --d-night-text: #C3CDE4;
-    --d-night-line: #41527F;
+    /* Bandeau de l'accueil et pied de page : le bleu du bandeau de l'app (Color.homeBanner), texte blanc à 88 %
+       comme le sous-titre du bandeau de l'app (demande de Romain du 7 novembre, à la place du bleu nuit). */
+    --d-band: #1F5BC6;
+    --d-band-text: rgba(255, 255, 255, 0.88);
+    --d-band-line: rgba(255, 255, 255, 0.24);
     --d-hover: #F4F2EE;
     --d-content: 1200px;
     --d-margin: 48px;
@@ -55,6 +58,7 @@
   }
   body { background: var(--d-bg); color: var(--d-text); font-family: var(--d-font); }
   .dtop a:focus-visible, .dfoot a:focus-visible, .notification-row:focus-visible, .notifications-read-all:focus-visible { outline: 3px solid var(--d-blue); outline-offset: 2px; }
+  .dfoot a:focus-visible { outline-color: #FFFFFF; }
 
   /* ——— Barre du haut : 72 px, blanche, filet en bas ——— */
   .dtop { position: relative; z-index: 20; height: var(--topbar-height); background: #FFFFFF; border-bottom: 1px solid var(--d-card-border); }
@@ -63,11 +67,6 @@
   .dtop-brand { flex: none; display: inline-flex; align-items: center; gap: 13px; border-radius: 10px; text-decoration: none; }
   .dtop-tile { width: 36px; height: 36px; border-radius: 10px; box-shadow: 0 0 0 1px #E0E5F3, 0 1px 3px rgba(36, 45, 56, 0.06); }
   .dtop-word { width: auto; height: 12.5px; }
-  .dtop-modes { display: flex; align-items: center; gap: 4px; margin-left: 34px; }
-  .dtop-mode { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border-radius: 10px; color: var(--d-icon); font-size: 15px; font-weight: 500; text-decoration: none; white-space: nowrap; }
-  .dtop-mode .icon { width: 18px; height: 18px; }
-  .dtop-mode:hover { background: var(--d-hover); }
-  .dtop-mode[aria-current="page"] { background: var(--d-blue-light); color: var(--d-blue); font-weight: 600; }
   .dtop-actions { flex: none; display: flex; align-items: center; gap: 10px; margin-left: auto; padding-left: 24px; }
   .dtop-publish { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 18px; border-radius: var(--d-button-radius); background: var(--d-blue); color: #FFFFFF; font-size: 15px; font-weight: 600; text-decoration: none; white-space: nowrap; }
   .dtop-publish:hover { background: var(--d-blue-hover); }
@@ -84,8 +83,8 @@
   .dtop-avatar img { width: 100%; height: 100%; object-fit: cover; }
   .dtop-avatar .icon { width: 18px; height: 18px; }
 
-  /* ——— Pied de page bleu nuit ——— */
-  .dfoot { margin-top: 48px; background: var(--d-night); color: var(--d-night-text); font-size: 15px; }
+  /* ——— Pied de page bleu (le bleu du bandeau de l'accueil) ——— */
+  .dfoot { margin-top: 48px; background: var(--d-band); color: var(--d-band-text); font-size: 15px; }
   .page-wide .dfoot { margin-top: 0; }
   .dfoot-inner { width: 100%; max-width: calc(var(--d-content) + 2 * var(--d-margin)); margin: 0 auto; padding: 48px var(--d-margin) 0; }
   .dfoot-grid { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 32px; }
@@ -95,9 +94,9 @@
   .dfoot-brand p { margin: 14px 0 0; line-height: 21px; }
   .dfoot-column h2 { margin: 0 0 7px; color: #FFFFFF; font-size: 15px; font-weight: 600; line-height: 18px; }
   .dfoot-column ul { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
-  .dfoot a { color: var(--d-night-text); text-decoration: none; line-height: 21px; }
+  .dfoot a { color: var(--d-band-text); text-decoration: none; line-height: 21px; }
   .dfoot a:hover { color: #FFFFFF; text-decoration: underline; }
-  .dfoot-bottom { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 38px; padding: 18px 0 26px; border-top: 1px solid var(--d-night-line); font-size: 14px; line-height: 20px; }
+  .dfoot-bottom { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 38px; padding: 18px 0 26px; border-top: 1px solid var(--d-band-line); font-size: 14px; line-height: 20px; }
   .dfoot-bottom p { margin: 0; }
   .dfoot-bottom a { line-height: 20px; }
 
@@ -129,20 +128,8 @@
   .notification-row:hover { transform: none; }
 }
 
-/* La barre du haut garde tout sur une ligne en se resserrant par étapes ; les liens gardent leur nom complet.
-   - Jusqu'à 1365 px : « Publier » seul (la barre complète ne tient qu'à partir d'environ 1300 px avec les marges de 48 px).
-   - Entre 1024 et 1279 px : marges de 32 px.
-   - Jusqu'à 1179 px : l'avatar seul pour « Mon espace », catégories plus serrées. */
-@media (min-width: 1024px) and (max-width: 1365px) {
-  .dtop-publish-end { display: none; }
-}
+/* Entre 1024 et 1279 px : marges de 32 px. Sans les catégories, la barre du haut tient en entier dès 1024 px
+   (« Publier une annonce » et « Mon espace » toujours écrits en entier). */
 @media (min-width: 1024px) and (max-width: 1279px) {
   :root { --d-margin: 32px; }
-}
-@media (min-width: 1024px) and (max-width: 1179px) {
-  .dtop-modes { margin-left: 24px; }
-  .dtop-mode { padding: 0 10px; }
-  .dtop-actions { padding-left: 16px; }
-  .dtop-space-label { display: none; }
-  .dtop-space { gap: 0; padding: 0 3px; }
 }

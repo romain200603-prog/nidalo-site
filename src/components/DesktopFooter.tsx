@@ -2,7 +2,7 @@ import { CONTACT_EMAIL } from '../lib/config';
 import { SEARCH_MODES } from '../lib/labels';
 import { PATHS, searchModePath } from '../lib/paths';
 
-// Pied de page sur ordinateur (≥ 1024 px) : bleu nuit, quatre colonnes, puis « © 2026 Nidalo » et les liens légaux.
+// Pied de page sur ordinateur (≥ 1024 px) : bleu (celui du bandeau de l'app), quatre colonnes, puis « © 2026 Nidalo » et les liens légaux.
 // Seulement des liens vers des pages qui existent déjà sur le site. Libellés de la maquette, qui sont ceux de l'app
 // (« Vos favoris », « Aide et assistance », « CGU ») ; « Donner mon avis » et « Informations légales » ne sont pas des pages.
 

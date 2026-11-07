@@ -32,7 +32,7 @@ function readDraft(): SearchDraft {
   return draftFromParams(new URLSearchParams(window.location.search));
 }
 
-/** « vue=carte » : la carte plein écran du téléphone est ouverte (gardée au retour d'une annonce). */
+/** « vue=carte » : la carte plein écran est ouverte (gardée au retour d'une annonce), sur téléphone comme sur ordinateur. */
 function readMapOpen(): boolean {
   return new URLSearchParams(window.location.search).get('vue') === 'carte';
 }
@@ -142,7 +142,7 @@ export function SearchPage() {
     document.title = `${draft.place ? `${placeLabel(draft)} · ` : ''}Rechercher un bien · Nidalo`;
   }, [draft]);
 
-  // L'adresse suit la carte du téléphone (sans nouvelle entrée d'historique), pour la retrouver au retour d'une annonce.
+  // L'adresse suit la carte ouverte (sans nouvelle entrée d'historique), pour la retrouver au retour d'une annonce.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if ((params.get('vue') === 'carte') === mapOpen) return;
@@ -152,7 +152,7 @@ export function SearchPage() {
     window.history.replaceState(null, '', query ? `?${query}` : window.location.pathname);
   }, [mapOpen]);
 
-  // La carte en plein écran (téléphone) se ferme avec Échap.
+  // La carte en plein écran se ferme avec Échap.
   useEffect(() => {
     if (!mapOpen) return;
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setMapOpen(false); };
@@ -181,7 +181,7 @@ export function SearchPage() {
   }
 
   return (
-    <Page section="search" wide mode={draft.mode}>
+    <Page section="search" wide>
       <div className="search-layout">
         <div className="search-column">
           <div className="search-head">
@@ -233,6 +233,16 @@ export function SearchPage() {
                 </select>
                 <Icon name="chevronDown" />
               </label>
+            </div>
+            {/* Ordinateur : la bascule « liste / carte » de l'app (ViewModeToggle de SearchView) ; la carte s'ouvre en
+                plein écran, comme le bouton « Carte » du téléphone (masquée sur téléphone). */}
+            <div className="view-toggle" role="group" aria-label="Affichage des résultats">
+              <span className="view-toggle-item is-current">
+                <Icon name="layoutGrid" title="Liste, sélectionnée" />
+              </span>
+              <button type="button" className="view-toggle-item" onClick={() => setMapOpen(true)} aria-label="Afficher sur la carte" title="Afficher sur la carte">
+                <Icon name="map" />
+              </button>
             </div>
           </div>
           <SaveSearchButton draft={draft} />

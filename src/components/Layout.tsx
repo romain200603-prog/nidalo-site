@@ -10,7 +10,6 @@ import type { IconName } from './iconPaths';
 import { SignInSheet } from './account/SignInSheet';
 import { CONTACT_EMAIL } from '../lib/config';
 import { useDesktop } from '../lib/desktop';
-import type { SearchMode } from '../lib/labels';
 import { PATHS } from '../lib/paths';
 
 export type Section = 'home' | 'search' | 'favorites' | 'publish' | 'messages' | 'account' | 'other';
@@ -127,24 +126,20 @@ export function Framed() {
 }
 
 /** En-tête : la barre du haut sur ordinateur (≥ 1024 px), l'en-tête actuel en dessous. */
-export function SiteHeader({ section, mode = null }: { section: Section; mode?: SearchMode | null }) {
-  return useDesktop() ? <DesktopHeader section={section} mode={mode} /> : <Header section={section} />;
+export function SiteHeader({ section }: { section: Section }) {
+  return useDesktop() ? <DesktopHeader section={section} /> : <Header section={section} />;
 }
 
-/** Pied de page : le pied bleu nuit sur ordinateur (≥ 1024 px), le pied actuel en dessous. */
+/** Pied de page : le pied bleu (le bleu du bandeau de l'app) sur ordinateur (≥ 1024 px), le pied actuel en dessous. */
 export function SiteFooter() {
   return useDesktop() ? <DesktopFooter /> : <Footer />;
 }
 
-/**
- * `mode` : la catégorie de la recherche affichée, mise en avant dans la barre du haut sur ordinateur.
- * `fill` : la page occupe l'écran sous la barre du haut, sans pied de page (Messages sur ordinateur).
- */
-export function Page({ section, children, wide = false, mode = null, fill = false }: {
+/** `fill` : la page occupe l'écran sous la barre du haut, sans pied de page (Messages sur ordinateur). */
+export function Page({ section, children, wide = false, fill = false }: {
   section: Section;
   children: ReactNode;
   wide?: boolean;
-  mode?: SearchMode | null;
   fill?: boolean;
 }) {
   if (isFramed()) return <Framed />;
@@ -153,7 +148,7 @@ export function Page({ section, children, wide = false, mode = null, fill = fals
       <a className="skip-link" href="#contenu">
         Aller au contenu
       </a>
-      <SiteHeader section={section} mode={mode} />
+      <SiteHeader section={section} />
       <main id="contenu" tabIndex={-1}>
         {children}
       </main>

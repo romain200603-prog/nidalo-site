@@ -258,7 +258,7 @@ export function ComparePage() {
   const desktop = useDesktop();
   const mode = useMemo(() => listingModeFromParams(new URLSearchParams(window.location.search)), []);
   return (
-    <Page section="search" mode={mode}>
+    <Page section="search">
       {desktop ? <DesktopCompare mode={mode} /> : <SoonCard icon="columns" title="Comparer" text={SOON_TEXT} />}
     </Page>
   );

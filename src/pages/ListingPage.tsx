@@ -249,14 +249,14 @@ export function ListingPage() {
   if (phoneScreen) {
     const soon = PHONE_SCREENS[phoneScreen];
     return (
-      <Page section="search" mode={mode}>
+      <Page section="search">
         <SoonCard icon={soon.icon} title={soon.title} text={ACCOUNT_SOON_MESSAGE} />
       </Page>
     );
   }
 
   return (
-    <Page section="search" mode={mode}>
+    <Page section="search">
       {state.status === 'ready' && (desktop ? <DesktopListing row={state.row} mode={mode} /> : <ListingView row={state.row} mode={mode} />)}
       {state.status === 'loading' && <Loading />}
       {state.status === 'notFound' && (
