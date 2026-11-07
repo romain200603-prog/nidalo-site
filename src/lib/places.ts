@@ -285,6 +285,34 @@ export async function streetSuggestions(raw: string, limit = 6, signal?: AbortSi
   return refined(parseGeoplateforme(await get(GEOCODING, params, signal)), limit, ['street', 'address']);
 }
 
+/**
+ * Position d'une adresse saisie sans choisir de suggestion (Publier, PublishFlowView.coordinate(for:)) : la rue dans
+ * la commune si elle est donnée, sinon la commune, d'après la Base Adresse Nationale (Géoplateforme) ; à défaut, le
+ * centre de la commune de geo.api.gouv.fr. `null` si rien n'est trouvé.
+ */
+export async function locateAddress(address: { street: string | null; postalCode: string; city: string }, signal?: AbortSignal): Promise<Coordinate | null> {
+  const street = collapsed(address.street ?? '');
+  const postalCode = address.postalCode.trim();
+  const city = collapsed(address.city);
+  const params: Record<string, string> = { limit: '1' };
+  if (/^\d{5}$/.test(postalCode)) params.postcode = postalCode;
+  if (street) {
+    params.q = `${street} ${city}`.trim();
+  } else {
+    params.q = city || postalCode;
+    params.type = 'municipality';
+  }
+  if (params.q) {
+    const found = parseGeoplateforme(await get(GEOCODING, params, signal))[0]?.coordinate;
+    if (found) return found;
+  }
+  if (!/^\d{5}$/.test(postalCode)) return null;
+  const communes = parseCommunes(await get(`${COMMUNES_API}/communes`, { codePostal: postalCode, fields: COMMUNE_FIELDS }, signal));
+  const wanted = normalized(city);
+  const commune = communes.find((place) => normalized(place.name) === wanted) ?? (communes.length === 1 ? communes[0] : undefined);
+  return commune?.coordinate ?? null;
+}
+
 // MARK: - Surlignage
 
 /** Morceaux du texte correspondant à la saisie, mot par mot, sans tenir compte des accents ni de la casse. */
