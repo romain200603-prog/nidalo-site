@@ -134,6 +134,14 @@ export const ICON_PATHS = {
   arrowLeftRight: "<path d=\"M8 3 4 7l4 4\"/> <path d=\"M4 7h16\"/> <path d=\"m16 21 4-4-4-4\"/> <path d=\"M20 17H4\"/>",
   target: "<circle cx=\"12\" cy=\"12\" r=\"10\"/> <circle cx=\"12\" cy=\"12\" r=\"6\"/> <circle cx=\"12\" cy=\"12\" r=\"2\"/>",
   chevronUp: "<path d=\"m18 15-6-6-6 6\"/>",
+  // Pictogrammes de l'accueil (maquette de Romain du 07/11/2026), trait de 1,25 : mêmes dessins que l'app
+  // (Assets.xcassets/Icons/icon-accueil-*). Cloche et étiquette adaptées de Lucide (ISC).
+  pictoConsultes: "<path d=\"M4.96 16.5A9 9 0 1 0 3.76 12.47\"/><path d=\"M1.91 10.62 3.76 12.47 5.61 10.62\"/><path d=\"M12.75 7.25V12l3.6 2.55\"/>",
+  pictoSimilaires: "<path d=\"M2.25 11.5 12 3.5l9.75 8\"/><path d=\"M16.4 7.1V4.3h2.8v5.1\"/><path d=\"M4.75 11.6v8.3h7.4\"/><circle cx=\"14.75\" cy=\"14.5\" r=\"3.7\"/><path d=\"m17.4 17.15 3.45 3.45\"/>",
+  pictoNouveautes: "<path d=\"M13.56 13.66C13.56 16.63 14.49 17.59 15.37 18.5A0.66 0.66 0 0 1 14.88 19.6H4.32A0.66 0.66 0 0 1 3.83 18.5C4.71 17.59 5.64 16.63 5.64 13.66A3.96 3.96 0 0 1 13.56 13.66Z\"/><circle cx=\"9.6\" cy=\"8.85\" r=\"0.85\"/><path d=\"M8.15 19.6a1.45 1.45 0 0 0 2.9 0\"/><path d=\"M1.9 11.4l1.95.25M2.75 7.6l1.6 1.3M5.75 5.1l.5 1.95\"/><rect x=\"11.6\" y=\"2.6\" width=\"11.4\" height=\"6.9\" rx=\"3.45\"/><path stroke-width=\"1\" d=\"M 13.503 5.378A 0.982 0.878 0 0 1 15.466 5.378c 0 0.62-0.465 1.033-0.93 1.395L 13.503 7.6h 2.015M 17.894 7.6V 4.5L 16.138 6.722h 2.325M 19.134 4.5v 3.1M 19.134 6.36a 0.982 0.982 0 0 1 1.963 0V 7.6\"/>",
+  pictoBaisses: "<path d=\"M11.414 2.586A2 2 0 0 1 12.828 2H20a2 2 0 0 1 2 2v7.172a2 2 0 0 1-.586 1.414l-8.704 8.704a2.426 2.426 0 0 1-3.42 0l-6.58-6.58a2.426 2.426 0 0 1 0-3.42z\"/><circle cx=\"17\" cy=\"7\" r=\"1.2\"/><path d=\"M11.6 8.7v7.4m-2.6-2.6 2.6 2.6 2.6-2.6\"/>",
+  // Mégaphone d'« Opportunités du moment » : agrandi de 15 % autour du centre, trait ramené à 1,25 (même fichier que l'app).
+  pictoOpportunites: "<g transform=\"translate(12 12) scale(1.15) translate(-12 -12) translate(-0.7 1.2)\" stroke-width=\"1.087\"><rect x=\"14.3\" y=\"4.6\" width=\"1.6\" height=\"9.6\" rx=\"0.8\" transform=\"rotate(-12 15.1 9.4)\"/><path d=\"M6.2 8.6c3-.5 5.6-1.6 8.2-3.4\"/><path d=\"M6.9 13.4c2.9-.3 5.6.1 8.4 1.2\"/><path d=\"M6.2 8.6 4.9 8.85a2.43 2.43 0 0 0 .75 4.75l1.25-.2\"/><path d=\"m6.2 8.6.7 4.8\"/><path d=\"m5.65 13.6 1.05 4.6a1 1 0 0 0 1.95-.45l-.95-4.45\"/><path d=\"m17.6 4.9 1.8-2\"/><path d=\"m17.9 8.9 2.6-.4\"/><path d=\"m17.8 11.9 2.3 1.3\"/></g>",
 } as const;
 
 export type IconName = keyof typeof ICON_PATHS;

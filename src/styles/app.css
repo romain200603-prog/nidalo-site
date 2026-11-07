@@ -538,6 +538,9 @@ main:focus { outline: none; }
 .home-section-head { width: 100%; max-width: 1180px; margin: 0 auto; padding: 0 16px; }
 .home-section-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .home-section-title h2 { font-size: 20px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Pictogramme fin à gauche du titre (maquette de Romain du 07/11/2026), de la couleur du titre. */
+.home-picto { flex: none; width: 24px; height: 24px; stroke-width: 1.25; }
+.home-picto + h2 { flex: 1; min-width: 0; }
 .home-section-head p { margin: 3px 0 0; color: var(--text-secondary); font-size: 13px; }
 .home-section-more { flex: none; display: inline-flex; align-items: center; gap: 3px; color: var(--blue); font-size: 13px; font-weight: 600; text-decoration: none; }
 .home-section-more .icon { width: 14px; height: 14px; }

@@ -65,6 +65,9 @@
   .dhome-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
   .dhome-head-text { min-width: 0; }
   .dhome-head h2 { margin: 0; color: var(--d-text); font-size: 24px; font-weight: 700; line-height: 30px; }
+  /* Pictogramme fin à gauche du titre (maquette de Romain du 07/11/2026), de la couleur du titre */
+  .dhome-title { display: flex; align-items: center; gap: 10px; }
+  .dhome-picto { flex: none; width: 30px; height: 30px; color: var(--d-text); stroke-width: 1.25; }
   .dhome-head p { margin: 4px 0 0; color: var(--d-grey); font-size: 15px; line-height: 20px; }
   .dhome-see-all { flex: none; display: inline-flex; align-items: center; gap: 4px; color: var(--d-blue); font-size: 15px; font-weight: 600; line-height: 20px; text-decoration: none; }
   .dhome-see-all .icon { width: 16px; height: 16px; }
