@@ -8,6 +8,7 @@ import { saveAccountType, type Account } from '../../lib/account/profile';
 import { loadProject, PROJECT_KIND_LABELS, PROJECT_STEPS, projectStore, STEP_LABELS } from '../../lib/account/project';
 import { loadSavedSearches, savedSearchesStore } from '../../lib/account/savedSearches';
 import { useStore } from '../../lib/account/session';
+import { useDesktop } from '../../lib/desktop';
 import { accountPath, PATHS } from '../../lib/paths';
 import { ActivityTile, RowGroup, SpaceProfileCard, SpaceSection, type RowItem } from './parts';
 import { soonPath } from './Screens';
@@ -195,6 +196,8 @@ function ProjectCard() {
 /** Haut de l'espace professionnel : la fiche agence et les chiffres. */
 function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
   const pro = useStore(professionalStore);
+  // Ordinateur : l'agenda des visites est sur le site (Mon agenda) ; sur téléphone, « bientôt » comme avant.
+  const desktop = useDesktop();
   const agency = pro.status === 'ready' ? pro.agency : null;
   const name = agency?.agency_name?.trim() || 'Votre agence';
   const line = agency?.email?.trim() || agency?.city?.trim() || 'Fiche agence à compléter';
@@ -212,7 +215,7 @@ function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
           { icon: 'fileText', title: 'Mes mandats', subtitle: '0 mandat actif, vente et location', href: soonPath('mandats') },
           { icon: 'handshake', title: 'Mes ventes', subtitle: '0 en cours · 0 compromis signé', href: soonPath('ventes') },
           { icon: 'users', title: 'Mes contacts', subtitle: '0 contact · 0 nouveau', href: soonPath('contacts') },
-          { icon: 'calendarDays', title: 'Agenda des visites', subtitle: 'Visites et rendez-vous', href: soonPath('agenda') },
+          { icon: 'calendarDays', title: 'Agenda des visites', subtitle: 'Visites et rendez-vous', href: desktop ? accountPath('agenda') : soonPath('agenda') },
           { icon: 'sparkles', title: 'Mes opportunités', subtitle: '0 opportunité active', href: soonPath('opportunites') },
         ]} />
       </SpaceSection>

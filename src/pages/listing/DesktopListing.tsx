@@ -552,7 +552,7 @@ function SellerRow({ publisher }: { publisher: Publisher }) {
 function VisitPill({ upcoming, now }: { upcoming: AgendaVisit; now: Date }) {
   const status = visitDisplayStatus(upcoming, now);
   return (
-    <a className={`dl-pill-wide${status === 'confirmed' ? ' is-confirmed' : ''}`} href={accountPath('bientot', { ecran: 'agenda' })}>
+    <a className={`dl-pill-wide${status === 'confirmed' ? ' is-confirmed' : ''}`} href={accountPath('agenda')}>
       <Icon name="calendarCheck" />
       <span>{VISIT_STATUS_LABELS[status]} · {visitDateInline(upcoming.start)}</span>
     </a>
@@ -561,7 +561,7 @@ function VisitPill({ upcoming, now }: { upcoming: AgendaVisit; now: Date }) {
 
 /**
  * Carte « Visite » de l'app (agendaCard) : le prochain rendez-vous du bien, sinon la demande en cours, sinon « Aucune
- * visite prévue ». L'agenda et le détail d'une demande ne sont pas encore sur le site (écran « bientôt »).
+ * visite prévue ». « Agenda » ouvre Mon agenda ; le détail d'une demande n'est pas encore sur le site (écran « bientôt »).
  */
 function VisitCard({ upcoming, request, now }: { upcoming: AgendaVisit | null; request: VisitRequestRow | null; now: Date }) {
   const icon = <span className="dl-visit-icon" aria-hidden="true"><ExtraIcon name="calendar" /></span>;
@@ -573,7 +573,7 @@ function VisitCard({ upcoming, request, now }: { upcoming: AgendaVisit | null; r
           <span className="dl-visit-title">{visitDateLong(upcoming.start)}</span>
           <span className="dl-visit-subtitle">Visite prévue · {VISIT_STATUS_LABELS[visitDisplayStatus(upcoming, now)]}</span>
         </span>
-        <a className="dl-visit-agenda" href={accountPath('bientot', { ecran: 'agenda' })} aria-label="Ouvrir l'agenda des visites">Agenda</a>
+        <a className="dl-visit-agenda" href={accountPath('agenda')} aria-label="Ouvrir l'agenda des visites">Agenda</a>
       </section>
     );
   }

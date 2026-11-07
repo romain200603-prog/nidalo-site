@@ -112,7 +112,7 @@ export function Inbox({ inbox, visits, me, selectedId, onCompose }: {
             <section className="dm-next" aria-labelledby="dm-next-title">
               <div className="dm-section-head">
                 <h2 id="dm-next-title">Prochaine visite</h2>
-                <a href={accountPath('bientot', { ecran: 'agenda' })}>Voir l’agenda</a>
+                <a href={accountPath('agenda')}>Voir l’agenda</a>
               </div>
               <NextVisitCard visit={nextVisit} conversation={nextConversation} />
             </section>

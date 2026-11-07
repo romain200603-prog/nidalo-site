@@ -1,3 +1,4 @@
+import { appDate } from '../appDates';
 import { supabase } from '../supabase';
 import { isoSeconds } from './offers';
 
@@ -110,9 +111,10 @@ const VISIT_STATUSES: readonly VisitStatus[] = ['confirmed', 'awaitingOther', 't
 /** Visite d'une ligne de l'agenda ; `null` si la ligne est illisible (l'app l'écarterait). */
 export function agendaVisit(row: AgendaRow): AgendaVisit | null {
   const visit = row.visit ?? {};
-  const start = new Date(visit.start ?? row.start_at);
+  // La date de la visite est écrite par l'app en UTC sans fuseau (appDate).
+  const start = appDate(visit.start) ?? appDate(row.start_at);
   const status = (visit.status ?? row.status) as VisitStatus;
-  if (Number.isNaN(start.getTime()) || !VISIT_STATUSES.includes(status)) return null;
+  if (!start || !VISIT_STATUSES.includes(status)) return null;
   const duration = typeof visit.durationMinutes === 'number' ? visit.durationMinutes : null;
   return { id: row.id, listingId: visit.listing?.listingId ?? row.listing_id ?? null, start, durationMinutes: duration, status };
 }

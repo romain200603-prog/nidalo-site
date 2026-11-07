@@ -160,7 +160,7 @@ export function DetailsView({ conversation, messages, visits, blocked, me }: Det
           )}
 
           {nextVisit && (
-            <DetailsSection title="Prochaine visite" link={{ title: 'Voir l\'agenda', href: accountPath('bientot', { ecran: 'agenda' }) }}>
+            <DetailsSection title="Prochaine visite" link={{ title: 'Voir l\'agenda', href: accountPath('agenda') }}>
               <VisitCard start={nextVisit.start} address={nextVisit.address ?? nextVisit.listing?.city ?? listing?.city ?? ''} />
             </DetailsSection>
           )}

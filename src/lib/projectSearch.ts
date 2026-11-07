@@ -1,3 +1,4 @@
+import { appDate } from './appDates';
 import type { PropertyType, SearchMode } from './labels';
 import type { HotelScope } from './listingJson';
 import type { Coordinate } from './places';
@@ -57,9 +58,9 @@ function percent(value: unknown): number | null {
 
 /** Date ISO 8601 en jour AAAA-MM-JJ du navigateur (champ « Disponible au plus tard le » de la recherche). */
 function localDay(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
+  // L'app écrit la date en UTC sans fuseau (appDate).
+  const date = appDate(value);
+  if (!date) return null;
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }

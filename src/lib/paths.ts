@@ -17,7 +17,7 @@ export const PATHS = {
 /** Écrans de Mon compte : `/compte/?vue=informations`. */
 export type AccountView =
   | 'informations' | 'annonces' | 'recherches' | 'confidentialite' | 'legal' | 'securite' | 'supprimer' | 'bientot'
-  | 'notifications' | 'demande-visite';
+  | 'notifications' | 'demande-visite' | 'agenda' | 'ajouter-visite' | 'projet' | 'consultes';
 
 export function accountPath(view: AccountView | null = null, extra: Record<string, string> = {}): string {
   const params = new URLSearchParams(view ? { vue: view, ...extra } : extra);

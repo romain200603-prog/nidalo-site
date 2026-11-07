@@ -102,9 +102,9 @@
   .dfoot-bottom a { line-height: 20px; }
 
   /* ——— Colonne de 640 px : écrans absents des maquettes (connexion, Mes informations, aide, 404…) ———
-     L'espace « Mon espace » (titre .space-title) garde sa mise en page actuelle jusqu'à son propre commit. */
+     « Mon espace » d'un particulier (.dsp, ordinateur-mon-espace.css) a sa propre mise en page sur 1200 px. */
   .wrap-narrow { max-width: 672px; }
-  .page .account-wrap:not(:has(> .space > .space-title)) { max-width: 672px; }
+  .page .account-wrap:not(:has(> .dsp)) { max-width: 672px; }
 
   /* ——— Notifications (NotificationsView de l'app) ——— */
   .notification-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }

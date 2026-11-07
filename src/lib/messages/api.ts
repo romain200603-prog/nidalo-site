@@ -1,3 +1,4 @@
+import { appDate } from '../appDates';
 import { supabase } from '../supabase';
 import { decodeContent, type MessageContent } from './content';
 import type { CommunityRow, Counterpart, ParticipantRow, ProfessionalContactRow, ProfileRow, ServerInboxRow } from './inbox';
@@ -355,9 +356,10 @@ const VISIT_STATUSES = ['confirmed', 'awaitingOther', 'toConfirm', 'cancelled'] 
 
 export function conversationVisit(row: { id: string; start_at: string; status: string; listing_id: string | null; visit: AgendaJson | null }): ConversationVisit | null {
   const visit = row.visit ?? {};
-  const start = new Date(visit.start ?? row.start_at);
+  // La date de la visite est écrite par l'app en UTC sans fuseau (appDate).
+  const start = appDate(visit.start) ?? appDate(row.start_at);
   const status = (visit.status ?? row.status) as ConversationVisit['status'];
-  if (Number.isNaN(start.getTime()) || !VISIT_STATUSES.includes(status)) return null;
+  if (!start || !VISIT_STATUSES.includes(status)) return null;
   const listing = visit.listing ? {
     listingId: visit.listing.listingId ?? row.listing_id ?? null,
     title: visit.listing.title ?? 'Annonce',

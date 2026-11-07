@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  departmentCodes, highlightRanges, nameStartsWith, normalized, parseCommunes, parseGeoplateforme, placeQuery, placeShortName,
+  addressSuggestions, departmentCodes, highlightRanges, nameStartsWith, normalized, parseCommunes, parseGeoplateforme, placeQuery, placeShortName,
   placeSubtitle, refined, type PlaceSuggestion,
 } from './places';
 import * as fixtures from './placeFixtures.test-data';
@@ -87,5 +87,29 @@ describe('surlignage', () => {
     expect(parts('Péron', 'pe')).toEqual(['Pé']);
     expect(parts(text, 'mes')).toEqual(['Més']);
     expect(parts('Saint-Genis-Pouilly', 'genis')).toEqual(['Genis']);
+  });
+});
+
+describe('adresse du rendez-vous (scope .fullAddress)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('texte : la Géoplateforme sans type, rues et adresses gardées, 5 au plus', async () => {
+    const urls: string[] = [];
+    const feature = (type: string, name: string, n: number) => ({
+      geometry: { coordinates: [4.83, 45.76] },
+      properties: { id: `${type}-${n}`, label: `${name} 69002 Lyon`, name, type, postcode: '69002', citycode: '69382', city: 'Lyon', context: '69, Rhône' },
+    });
+    vi.stubGlobal('fetch', async (url: string) => {
+      urls.push(url);
+      const features = [feature('housenumber', '12 Rue de la République', 1), feature('street', 'Rue de la République', 2),
+        ...Array.from({ length: 6 }, (_, i) => feature('housenumber', `${i + 20} Rue de la République`, i + 3))];
+      return new Response(JSON.stringify({ type: 'FeatureCollection', features }), { status: 200 });
+    });
+    const found = await addressSuggestions('12 rue de la republique');
+    expect(urls).toHaveLength(1);
+    const url = new URL(urls[0]);
+    expect(url.origin + url.pathname).toBe('https://data.geopf.fr/geocodage/search');
+    expect(Object.fromEntries(url.searchParams)).toEqual({ autocomplete: '1', limit: '9', q: '12 rue de la republique' });
+    expect(found.map((place) => place.kind)).toEqual(['address', 'street', 'address', 'address', 'address']);
   });
 });

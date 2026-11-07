@@ -1225,6 +1225,227 @@ async function favShot(page, file) {
   await page.screenshot({ path: join(out, file), fullPage: true });
 }
 
+// MARK: - Mon espace sur ordinateur (maquette 5) : projet, agenda, visites et biens consultés, avec des données inventées.
+
+const SPACE_STORAGE = 'https://izzsoitqtzzswkpvdozd.supabase.co/storage/v1/object/public/listing-photos/';
+/** Vendeur de l'appartement de Lyon 3e : une agence, avec son numéro publié (plage de la fiction). */
+const SPACE_OWNER_ID = listings[0].owner_id;
+const SPACE_PROFILES = [{
+  user_id: SPACE_OWNER_ID, public_name: 'Agence du Parc', avatar_path: null, account_type: 'professional', member_since: '2025-03-01T00:00:00Z',
+  agency_id: 'b1000000-0000-4000-8000-000000000001', agency_name: 'Agence du Parc', agency_logo_path: null, agency_postal_code: '69003',
+  agency_city: 'Lyon', agency_phone: '06 39 98 00 11',
+}];
+const SPACE_CONVERSATION_ID = 'c2000000-0000-4000-8000-000000000001';
+/** Conversation à deux avec l'agence, à propos de l'appartement de Lyon 3e (my_conversations). */
+const SPACE_CONVERSATIONS = [{
+  conversation_id: SPACE_CONVERSATION_ID, kind: 'listing', listing_id: listings[0].id,
+  listing_snapshot: { listingId: listings[0].id.toUpperCase(), title: listings[0].title, price: listings[0].price, transaction: 'sale', city: listings[0].city, coverPath: 'test/photo0.jpg' },
+  buyer_id: USER_ID, seller_id: SPACE_OWNER_ID, group_name: null, group_details: null, group_image_path: null, group_purpose: null, ephemeral_seconds: null,
+  created_by: USER_ID, created_at: '2026-11-01T09:00:00Z', my_role: 'member', joined_at: '2026-11-01T09:00:00Z', left_at: null, last_read_at: null,
+  is_archived: false, is_favorite: false, muted_until: null, saves_photos: false, cleared_at: null, other_user_id: SPACE_OWNER_ID, other_last_read_at: null,
+  member_count: 2, unread_count: 0, last_message_id: null, last_message_sender_id: SPACE_OWNER_ID, last_message_kind: 'text', last_message_content: null,
+  last_message_preview: 'Bonjour, la visite est confirmée.', last_message_at: '2026-11-05T17:00:00Z',
+}];
+/** Bien d'une visite tel que l'app l'écrit (ListingSnapshot : identifiant en majuscules, photo en adresse publique). */
+const spaceSnapshot = (row, cover) => ({
+  listingId: row.id.toUpperCase(), title: row.title, price: row.price, transaction: row.transaction, city: row.city, ...(cover ? { coverImageURL: `${SPACE_STORAGE}${cover}` } : {}),
+});
+const SPACE_L1 = spaceSnapshot(listings[0], 'test/photo0.jpg');
+const SPACE_L2 = spaceSnapshot(listings[1], 'test/photo2.jpg');
+const SPACE_L3 = spaceSnapshot(listings[2], null);
+const spaceVisitId = (n) => `D0000000-0000-4000-8000-00000000000${n}`;
+/** Ligne de agenda_visits écrite par l'app : la visite entière en JSON, dates en UTC sans fuseau. */
+function spaceVisit(n, start, status, visit) {
+  return { id: spaceVisitId(n), start_at: start, status, request_id: null, listing_id: visit.listing?.listingId ?? null,
+    visit: { id: spaceVisitId(n), start, status, createdAt: '2026-11-01T09:00:00.000', ...visit } };
+}
+/** Agenda au vendredi 6 novembre 2026, 10 h 50 à Paris : aujourd'hui, lundi, une visite passée avec compte rendu, une annulée. */
+const SPACE_VISITS = [
+  spaceVisit(1, '2026-11-06T13:30:00.000', 'confirmed', { listing: SPACE_L1, durationMinutes: 45, contactName: 'Agence du Parc', address: 'Lyon 3e (69003)',
+    linkedConversationId: 'E0000000-0000-4000-8000-000000000001' }),
+  spaceVisit(2, '2026-11-09T08:00:00.000', 'awaitingOther', { listing: SPACE_L3, durationMinutes: 30, contactName: 'Julien Moreau', address: '12 Rue de test, 69007 Lyon 7e' }),
+  spaceVisit(3, '2026-11-02T14:00:00.000', 'confirmed', { listing: SPACE_L2, durationMinutes: 60, contactName: 'Camille Roux', address: 'Villeurbanne (69100)',
+    report: { opinion: 'interesting', decision: 'reviewAgain' } }),
+  spaceVisit(4, '2026-11-04T16:00:00.000', 'cancelled', { listing: SPACE_L2, durationMinutes: 45, contactName: 'Camille Roux' }),
+];
+const SPACE_REQUEST_ID = 'F0000000-0000-4000-8000-000000000001';
+/** Demande de visite envoyée, trois créneaux proposés, pas encore acceptée (my_visit_requests). */
+const SPACE_REQUESTS = [{
+  id: SPACE_REQUEST_ID, listing_id: SPACE_L2.listingId,
+  listing_snapshot: { listingId: SPACE_L2.listingId, title: SPACE_L2.title, price: SPACE_L2.price, transaction: 'sale', city: SPACE_L2.city, coverPath: 'test/photo2.jpg' },
+  requester: { userId: USER_ID, name: 'Claire M.', kind: 'individual' },
+  recipient: { userId: listings[1].owner_id, name: 'Marc Petit', kind: 'individual' },
+  slots: [
+    { id: 'S1', start: '2026-11-10T09:00:00.000', durationMinutes: 45 },
+    { id: 'S2', start: '2026-11-10T16:00:00.000', durationMinutes: 45 },
+    { id: 'S3', start: '2026-11-11T09:30:00.000', durationMinutes: 45 },
+  ],
+  mode: 'onSite', message: null, status: 'pending', accepted_slot: null, proposed_slots: null, created_at: '2026-11-05T18:00:00',
+}];
+const SPACE_PROJECT_ID = 'C0000000-0000-4000-8000-000000000001';
+/** Projet du compte de chaque sorte (ProjectServerRow), critères tels que l'app les écrit. */
+const spaceProject = (fields) => ({ user_id: USER_ID, id: SPACE_PROJECT_ID, city: '', purpose: null, completed_steps: [], shared_with_contacts: false, ...fields });
+const SPACE_PROJECTS = {
+  buy: spaceProject({ kind: 'buy', city: 'Lyon', purpose: 'Résidence principale', completed_steps: ['search', 'visits'],
+    criteria: { residential: { maxBudget: 300000, propertyTypes: ['apartment'], location: { place: 'Lyon' } } } }),
+  // Celui de la maquette : Investissement, 4 critères sur 7 (57 %), trois étapes franchies.
+  invest: spaceProject({ kind: 'invest', completed_steps: ['analysis', 'search', 'visits'],
+    criteria: { investment: { maxPrice: 250000, downPayment: 50000, assetTypes: ['apartment'], minGrossYield: 0.05, location: { place: '' } } } }),
+  rent: spaceProject({ kind: 'rent', city: 'Villeurbanne', completed_steps: ['application', 'search', 'visits'], shared_with_contacts: true,
+    criteria: { rental: { maxRent: 900, propertyTypes: ['apartment'], minArea: 40, minRooms: 2, furnished: true, moveInBy: '2026-12-01T00:00:00.000',
+      location: { place: 'Villeurbanne' } } } }),
+  hotel: spaceProject({ kind: 'hotel', city: 'Annecy', criteria: { hotel: { maxBudget: 1500000, location: { place: 'Annecy' } } } }),
+};
+/** Carte du projet attendue (ProjectCard de l'app) : sous-titre, anneau des critères, étapes [libellé, franchie]. */
+const SPACE_PROJECT_CARDS = {
+  buy: ['Résidence principale · Lyon', '43 %', [['Recherche', true], ['Visites', true], ['Sélection', false], ['Offre', false], ['Signature', false]]],
+  invest: ['Investissement', '57 %', [['Recherche', true], ['Analyse', true], ['Visites', true], ['Offre', false], ['Financement', false], ['Signature', false]]],
+  rent: ['Location · Villeurbanne', '100 %', [['Recherche', true], ['Visites', true], ['Dossier', true], ['Bail', false], ['Emménagement', false]]],
+  hotel: ['Hôtel · Annecy', '33 %', [['Recherche', false], ['Analyse', false], ['Visites', false], ['Audit', false], ['Offre', false], ['Signature', false]]],
+  // Sans projet enregistré : le projet par défaut de l'app (Résidentiel, sans ville).
+  none: ['Résidentiel', '0 %', [['Recherche', false], ['Visites', false], ['Sélection', false], ['Offre', false], ['Signature', false]]],
+};
+/** Biens consultés (sessionStorage), du plus récent au plus ancien : une maison vendue depuis, puis trois annonces. */
+const SPACE_SOLD = { ...HOME_LISTINGS[2], status: 'sold' };
+const SPACE_VIEWED = [SPACE_SOLD.id, listings[0].id, listings[2].id, listings[1].id];
+const SPACE_LISTING_ROWS = [...listings, SPACE_SOLD];
+/** Demandes servies par mockSpace ; les autres vont au serveur simulé général. */
+const SPACE_TABLES = ['real_estate_projects', 'agenda_visits', 'rpc/my_visit_requests', 'rpc/public_profiles', 'rpc/my_conversations', 'listing_locations'];
+
+function spaceState(fields = {}) {
+  return {
+    project: structuredClone(SPACE_PROJECTS.buy), visits: structuredClone(SPACE_VISITS), requests: structuredClone(SPACE_REQUESTS),
+    conversations: null, myListings: null, calls: [], logouts: [], ...fields,
+  };
+}
+
+/**
+ * Serveur de Mon espace, par-dessus mock() : projet (lecture, upsert), agenda (lecture, ajout), demandes de visite,
+ * profils publics, conversations et « Mes annonces » quand l'état les fournit ; déconnexions notées. Sous 1024 px,
+ * rien n'est servi ici : mock() signale la demande (rien ne doit changer sur téléphone).
+ */
+async function mockSpace(context, space) {
+  const cors = { 'access-control-allow-origin': '*' };
+  const reply = (route, status, value) => route.fulfill({ status, contentType: 'application/json', headers: cors, body: value === undefined ? '' : JSON.stringify(value) });
+  await context.route('https://izzsoitqtzzswkpvdozd.supabase.co/rest/v1/**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const table = url.pathname.replace('/rest/v1/', '');
+    const width = pageWidth(request);
+    const myListings = table === 'listings' && url.searchParams.get('owner_id') === `eq.${USER_ID}` && space.myListings !== null;
+    // Fiche lue par son identifiant : comme Postgres, majuscules ou minuscules (l'app écrit les identifiants en majuscules).
+    const detail = table === 'listings' && url.searchParams.get('id')?.startsWith('eq.') ? url.searchParams.get('id').slice(3).toLowerCase() : null;
+    const served = SPACE_TABLES.includes(table) && (table !== 'rpc/my_conversations' || space.conversations !== null);
+    if ((!served && !myListings && !detail) || (width !== null && width < 1024)) return route.fallback();
+    let body = null;
+    try { body = request.postDataJSON(); } catch { body = request.postData(); }
+    const headers = await request.allHeaders();
+    space.calls.push({ table, method: request.method(), search: decodeURIComponent(url.search), body, prefer: headers.prefer ?? '', path: pagePath(request) });
+    if (myListings) return reply(route, 200, space.myListings);
+    if (detail) return reply(route, 200, SPACE_LISTING_ROWS.filter((row) => row.id.toLowerCase() === detail));
+    switch (table) {
+      case 'real_estate_projects':
+        if (request.method() === 'GET') return reply(route, 200, space.project ? [space.project] : []);
+        // Upsert sur user_id : la ligne envoyée devient le projet du compte.
+        space.project = body;
+        return reply(route, 201);
+      case 'agenda_visits':
+        if (request.method() === 'GET') return reply(route, 200, space.visits);
+        space.visits.push(body);
+        return reply(route, 201);
+      case 'rpc/my_visit_requests':
+        return reply(route, 200, space.requests);
+      case 'rpc/public_profiles': {
+        const wanted = (body?.user_ids ?? []).map((id) => String(id).toLowerCase());
+        return reply(route, 200, SPACE_PROFILES.filter((profile) => wanted.includes(profile.user_id.toLowerCase())));
+      }
+      case 'rpc/my_conversations':
+        return reply(route, 200, space.conversations);
+      default:
+        return reply(route, 200, []);
+    }
+  });
+  await context.route(/^https:\/\/izzsoitqtzzswkpvdozd\.supabase\.co\/auth\/v1\/logout/, (route) => {
+    space.logouts.push({ method: route.request().method(), search: new URL(route.request().url()).search });
+    return route.fallback();
+  });
+}
+
+/** Demandes `table` (et `method`) reçues par mockSpace depuis `mark`. */
+const spaceCalls = (space, table, method, mark = 0) => space.calls.slice(mark).filter((call) => call.table === table && call.method === method);
+
+/** La seule demande `table`/`method` arrivée depuis `mark` (attendue, puis comptée après un court délai). */
+async function oneSpaceCall(space, table, method, mark, what) {
+  await waitFor(() => spaceCalls(space, table, method, mark).length > 0, `${what} : ${method} ${table}`);
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  const calls = spaceCalls(space, table, method, mark);
+  if (calls.length !== 1) problems.push(`${what} : ${calls.length} appel(s) ${method} ${table} au lieu d'un (${JSON.stringify(calls.map((call) => call.body))})`);
+  return calls[0] ?? null;
+}
+
+/** Carte du projet de Mon espace, telle qu'affichée : sous-titre, anneau, étapes [libellé, franchie]. */
+async function spaceProjectCard(page) {
+  return [await textOf(page, '.dsp-project-subtitle'), await textOf(page, '.dsp-project .dsp-ring-label'),
+    await page.$$eval('.dsp-steps li', (items) => items.map((item) => [item.querySelector('.dsp-step-label')?.textContent.trim() ?? null, item.classList.contains('is-done')]))];
+}
+
+/** Textes de `selector` (les espaces des icônes retirés), ou de `inner` dans chacun. */
+function textsOf(page, selector, inner = null) {
+  return page.$$eval(selector, (elements, sub) => elements.map((element) => {
+    const target = sub ? element.querySelector(sub) : element;
+    return target ? target.textContent.replace(/\s+/g, ' ').trim() : null;
+  }), inner);
+}
+
+/** Lignes d'une carte de lignes (Compte et sécurité, Paramètres…) : titre, sous-titre, lien. */
+function spaceRows(page, selector) {
+  return page.$$eval(`${selector} .dsp-row`, (rows) => rows.map((row) => [row.querySelector('.dsp-row-title')?.textContent.trim() ?? null,
+    row.querySelector('.dsp-row-subtitle')?.textContent.trim() ?? null, row.getAttribute('href')]));
+}
+
+/** Cartes de visite de l'onglet affiché, par groupe de dates (VisitsAgendaView). */
+function agendaCards(page) {
+  return page.$$eval('.dsc-visit-group', (groups) => groups.map((group) => {
+    const text = (element) => (element ? element.textContent.replace(/\s+/g, ' ').trim() : null);
+    return [text(group.querySelector('.dsc-group-title')), [...group.querySelectorAll('.dsc-visit')].map((card) => ({
+      date: text(card.querySelector('.dsc-visit-date > span[aria-hidden="true"]')),
+      status: text(card.querySelector('.dsc-status')),
+      title: text(card.querySelector('.dsc-visit-title')),
+      lines: [...card.querySelectorAll('.dsc-visit-lines > span')].map(text),
+      route: card.querySelector('a.dsc-visit-action')?.getAttribute('href') ?? null,
+      request: card.querySelector('a.dsc-visit-open')?.getAttribute('href') ?? null,
+      contact: [...card.querySelectorAll('.dsc-visit-action')].find((action) => text(action) === 'Contacter')?.disabled === false,
+      menu: Boolean(card.querySelector('.dsc-menu-button')),
+    }))];
+  }));
+}
+
+/** Biens consultés affichés : titre, ville et surface, prix, statut. */
+function viewedRows(page) {
+  return page.$$eval('.dsc-viewed', (rows) => rows.map((row) => [row.querySelector('.dsc-viewed-title')?.textContent ?? null,
+    row.querySelector('.dsc-viewed-line')?.textContent.replace(/\s+/g, ' ') ?? null, row.querySelector('.dsc-viewed-price')?.textContent.replace(/\s+/g, ' ') ?? null,
+    row.querySelector('.dsc-viewed-link')?.getAttribute('href') ?? null]));
+}
+
+/** Liste des biens consultés gardée dans l'onglet (sessionStorage). */
+const viewedStorage = (page) => page.evaluate(() => sessionStorage.getItem('nidalo.consultes'));
+
+/**
+ * Capture d'un écran à barre d'actions collante (Mon projet) : la fenêtre prend la hauteur de la page, sinon la
+ * capture de toute la page dessine la barre au milieu.
+ */
+async function tallShot(page, file) {
+  const viewport = page.viewportSize();
+  await page.mouse.move(2, 2);
+  await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
+  await page.evaluate(() => document.fonts.ready);
+  const height = await page.evaluate(() => document.documentElement.scrollHeight);
+  await page.setViewportSize({ width: viewport.width, height });
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: join(out, file) });
+  await page.setViewportSize(viewport);
+}
+
 const browser = await chromium.launch();
 try {
   // Ordinateur
@@ -1337,11 +1558,12 @@ try {
   await page.waitForFunction(() => document.querySelector('h1')?.textContent?.includes('Bonjour Claire'), null, { timeout: 8000 })
     .catch(async () => problems.push(`accueil connecté : titre « ${await page.textContent('h1')} »`));
   await page.close();
+  // Sur ordinateur, « Mon espace » de la maquette 5 (.dsp, voir « Mon espace sur ordinateur » plus bas).
   page = await open(signed, '/compte/', 'compte-espace');
-  await page.waitForSelector('.space-profile');
-  await page.waitForSelector('.project-card');
-  await page.waitForFunction(() => /1 en ligne · 1 brouillon/.test(document.querySelector('.activity-tiles')?.textContent ?? ''), null, { timeout: 8000 }).catch(() => undefined);
-  const space = (await page.textContent('.space'))?.replace(/\s+/g, ' ') ?? '';
+  await page.waitForSelector('.dsp-profile');
+  await page.waitForSelector('.dsp-project');
+  await page.waitForFunction(() => /1\s+en ligne · 1 brouillon/.test(document.querySelector('.dsp-tiles')?.innerText ?? ''), null, { timeout: 8000 }).catch(() => undefined);
+  const space = (await textOf(page, '.dsp')) ?? '';
   for (const expected of ['Claire Martin', USER_EMAIL, 'Particulier', 'Votre projet immobilier', '2 recherches actives', '1 en ligne · 1 brouillon']) {
     if (!space.includes(expected)) problems.push(`Mon compte : « ${expected} » absent`);
   }
@@ -1558,9 +1780,13 @@ try {
     if ((await page.getAttribute('.dtop-space', 'aria-current')) !== 'page') problems.push(`Mes informations ${width} : « Mon espace » n'est pas mis en avant`);
     await page.screenshot({ path: join(out, `mes-informations-${width}.png`), fullPage: true });
     await page.close();
+    // Mon espace (maquette 5) : contenu de 1200 px (960 à 1024 px), colonne de gauche de 280 px ; « Mon espace » mis en avant.
     page = await open(member, '/compte/', `compte-espace-${width}`);
-    await page.waitForSelector('.project-card');
-    if ((await contentWidth(page, '.account-wrap')) !== 608) problems.push(`Mon espace ${width} : largeur ${await contentWidth(page, '.account-wrap')} px au lieu de 608 (inchangée)`);
+    await page.waitForSelector('.dsp-project');
+    expectSame(`Mon espace ${width}`, 'largeurs et bouton actif', await page.evaluate(() => [Math.round(document.querySelector('.dsp').getBoundingClientRect().width),
+      Math.round(document.querySelector('.dsp-aside').getBoundingClientRect().width), document.querySelector('.dtop-space')?.getAttribute('aria-current') ?? null]),
+    [width === 1440 ? 1200 : 960, 280, 'page']);
+    await checkChrome(page, `Mon espace ${width}`, { signedIn: true, margin });
     await page.close();
     await member.close();
   }
@@ -1794,7 +2020,8 @@ try {
     expectSame(M, 'filtres', await page.$$eval('.dm-chip', (els) => els.map((el) => [el.getAttribute('aria-label'), el.getAttribute('aria-pressed')])),
       [['Tous', 'true'], ['Non lus, 3', 'false'], ['Favoris', 'false'], ['Visites', 'false'], ['Archivés', 'false']]);
     expectSame(M, 'prochaine visite', [await textOf(page, '.dm-next .dm-section-head'), await page.getAttribute('.dm-next .dm-section-head a', 'href'), await textOf(page, '.dm-next-card')],
-      ['Prochaine visite Voir l’agenda', '/compte/?vue=bientot&ecran=agenda', 'VISITE CONFIRMÉE Jeu. 12 nov. · 18h00 Appartement 3 pièces · Lyon 2e 238 000 € AD Avec Agence Démo Lyon']);
+      // « Voir l'agenda » ouvre Mon agenda (Mon espace sur ordinateur).
+      ['Prochaine visite Voir l’agenda', '/compte/?vue=agenda', 'VISITE CONFIRMÉE Jeu. 12 nov. · 18h00 Appartement 3 pièces · Lyon 2e 238 000 € AD Avec Agence Démo Lyon']);
     // Aucune conversation n'est ouverte d'elle-même : aucune ligne n'est sélectionnée.
     if (await page.locator('.dm-row[aria-current="true"]').count()) problems.push(`${M} : une conversation est sélectionnée sans ?c=`);
     await chatShot(page, `3-messages-vide-${width}.png`);
@@ -2193,6 +2420,11 @@ try {
     await page.waitForSelector('section.dm-details');
     expectSame(M, 'détails', [await textOf(page, '.dm-details-bar h2'), await textOf(page, '.dm-details-who h3'), await textOf(page, '.dm-details-badges')],
       ['Détails', 'Agence Démo Lyon', 'PRO Sur Nidalo depuis mars 2025']);
+    // « Voir l'agenda » de la prochaine visite ouvre Mon agenda (Mon espace sur ordinateur).
+    expectSame(M, 'lien de l’agenda des détails', await page.$$eval('.dm-details-section', (els) => els
+      .filter((el) => el.querySelector('.dm-section-head h3')?.textContent === 'Prochaine visite')
+      .map((el) => [el.querySelector('.dm-section-head a')?.textContent ?? null, el.querySelector('.dm-section-head a')?.getAttribute('href') ?? null])),
+    [['Voir l\'agenda', '/compte/?vue=agenda']]);
     await page.waitForTimeout(300);
     await chatShot(page, `3-messages-details-${width}.png`);
     await page.click('.dm-details-bar button[aria-label="Retour"]');
@@ -2652,6 +2884,502 @@ try {
     expectSame('favoris 1023', 'page du téléphone', [await page.locator('.favorite-card').count(), await page.locator('.dfav, .dtop, .dfoot').count()], [4, 0]);
     await page.close();
     await context.close();
+  }
+
+  // Mon espace sur ordinateur (maquette 5), à 1440 × 900 et 1024 × 768, avec le compte de test : la page au plus près
+  // de la maquette, puis le contenu et les actions de l'app (ProfileView.swift, MySpaceComponents.swift) ; Mon agenda,
+  // Ajouter une visite, Mon projet et Biens consultés dans la colonne de 640 px, avec ce qu'ils envoient au serveur
+  // simulé, comparé à ce que l'app envoie. Horloge figée au vendredi 6 novembre 2026, 10 h 50 à Paris ; champs de date
+  // et d'heure en français. Captures pour Romain : 5-mon-espace-*.png.
+  const spaceBrowser = await chromium.launch({ env: { ...process.env, LANG: 'fr_FR.UTF-8', LANGUAGE: 'fr_FR:fr', LC_ALL: 'fr_FR.UTF-8' } });
+  try {
+    const spaceContext = async (width, height, space, viewed = SPACE_VIEWED) => {
+      const context = await spaceBrowser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR', timezoneId: 'Europe/Paris' });
+      await context.clock.setFixedTime(CHAT_NOW);
+      const server = await mock(context, { signedIn: true, listingRows: SPACE_LISTING_ROWS });
+      await mockSpace(context, space);
+      // Biens consultés de l'onglet, posés une seule fois : « Retirer » et « Vider » tiennent après un rechargement.
+      await context.addInitScript((ids) => {
+        try {
+          if (sessionStorage.getItem('nidalo.consultes') === null) sessionStorage.setItem('nidalo.consultes', JSON.stringify(ids));
+        } catch { /* stockage indisponible */ }
+      }, viewed);
+      return { context, server };
+    };
+
+    // La page au plus près de la maquette : projet Investissement à 57 %, agenda libre, 2 recherches, 4 biens consultés,
+    // aucune annonce. Mesures de la maquette à 1440 px (contenu de 1200, colonne de 280, projet 544, agenda 320).
+    for (const [width, height] of [[1440, 900], [1024, 768]]) {
+      const E = `Mon espace ${width}`;
+      const space = spaceState({ project: structuredClone(SPACE_PROJECTS.invest), visits: [], requests: [], myListings: [] });
+      const { context } = await spaceContext(width, height, space);
+      page = await open(context, '/compte/', E);
+      await page.waitForFunction(() => document.querySelector('.dsp-project-subtitle')?.textContent === 'Investissement'
+        && /2\s+recherches actives/.test(document.querySelector('.dsp-tiles')?.innerText ?? '') && /0\s+en ligne/.test(document.querySelector('.dsp-tiles')?.innerText ?? '')
+        && document.querySelector('.dsp-agenda-title')?.textContent === 'Votre agenda est libre', null, { timeout: 8000 })
+        .catch(() => problems.push(`${E} : page incomplète`));
+      expectSame(E, 'projet', await spaceProjectCard(page), SPACE_PROJECT_CARDS.invest);
+      expectSame(E, 'agenda libre', [await textOf(page, '.dsp-agenda-title'), await textOf(page, '.dsp-agenda-text > p:last-child')],
+        ['Votre agenda est libre', 'Aucune visite prévue pour l\'instant.']);
+      expectSame(E, 'activités', await page.$$eval('.dsp-tile', (tiles) => tiles.map((tile) => [tile.querySelector('.dsp-tile-title')?.textContent ?? null,
+        tile.querySelector('.dsp-tile-number')?.textContent ?? null, tile.querySelector('.dsp-tile-rest')?.textContent ?? null])),
+      [['Mes recherches', '2', 'recherches actives'], ['Biens consultés', '4', 'annonces'], ['Mes annonces', '0', 'en ligne']]);
+      const spaceLayout = await page.evaluate(() => {
+        const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+        return {
+          content: Math.round(box('.dsp').width), aside: Math.round(box('.dsp-aside').width), gap: Math.round(box('.dsp-main').left - box('.dsp-aside').right),
+          sticky: getComputedStyle(document.querySelector('.dsp-aside')).position, project: Math.round(box('.dsp-project').width), agenda: Math.round(box('.dsp-agenda').width),
+          tiles: [...document.querySelectorAll('.dsp-tile')].map((tile) => Math.round(tile.getBoundingClientRect().width)), dossier: Math.round(box('.dsp-dossier').width),
+          overflowX: document.documentElement.scrollWidth - innerWidth, footer: Boolean(document.querySelector('.dfoot')),
+          current: document.querySelector('.dtop-space')?.getAttribute('aria-current') ?? null,
+        };
+      });
+      expectSame(E, 'mise en page', spaceLayout, width === 1440
+        ? { content: 1200, aside: 280, gap: 32, sticky: 'sticky', project: 544, agenda: 320, tiles: [280, 280, 280], dossier: 384, overflowX: 0, footer: true, current: 'page' }
+        : { content: 960, aside: 280, gap: 32, sticky: 'sticky', project: 648, agenda: 648, tiles: [200, 200, 200], dossier: 648, overflowX: 0, footer: true, current: 'page' });
+      // Tailles de la maquette (titre 36/700, sections 24/700, cartes 20/700, menu 16) et police Inter partout, boutons compris.
+      const spaceFonts = await page.evaluate(() => {
+        const font = (selector) => {
+          const element = document.querySelector(selector);
+          if (!element) return null;
+          const style = getComputedStyle(element);
+          return `${style.fontSize} ${style.fontWeight}${style.fontFamily.startsWith('"Nidalo Inter"') ? '' : ` ${style.fontFamily}`}`;
+        };
+        return {
+          titre: font('.dsp-title'), nom: font('.dsp-profile-name'), section: font('.dsp-section-title'), carte: font('.dsp-card-title'), menu: font('.dsp-nav a:not(.is-current)'),
+          'menu actif': font('.dsp-nav a.is-current'), bouton: font('.dsp-project-button'), 'Se déconnecter': font('.dsp-logout'), nombre: font('.dsp-tile-number'),
+          ligne: font('.dsp-row-title'),
+        };
+      });
+      expectSame(E, 'polices', spaceFonts, {
+        titre: '36px 700', nom: '18px 700', section: '24px 700', carte: '20px 700', menu: '16px 500', 'menu actif': '16px 600', bouton: '15px 600',
+        'Se déconnecter': '16px 600', nombre: '35px 700', ligne: '16px 600',
+      });
+      await favShot(page, `5-mon-espace-${width}.png`);
+      await page.close();
+      await context.close();
+    }
+
+    // Contenu et actions de l'app, à 1440 px : projet Résidentiel, agenda de quatre visites et d'une demande, conversation
+    // avec l'agence, une annonce en ligne et un brouillon.
+    {
+      const E = 'Mon espace';
+      const space = spaceState({ conversations: SPACE_CONVERSATIONS });
+      const { context } = await spaceContext(1440, 900, space);
+      page = await open(context, '/compte/', E);
+      await page.waitForFunction(() => document.querySelector('.dsp-agenda-title')?.textContent?.startsWith('3 visites')
+        && /1\s+en ligne · 1 brouillon/.test(document.querySelector('.dsp-tiles')?.innerText ?? '')
+        && document.querySelector('.dsp-project-subtitle')?.textContent === 'Résidence principale · Lyon', null, { timeout: 8000 })
+        .catch(() => problems.push(`${E} : page incomplète`));
+      expectSame(E, 'profil', [await textOf(page, '.dsp-profile-name'), await textOf(page, '.dsp-profile-email'), await page.getAttribute('.dsp-profile', 'href'),
+        await textOf(page, '.dsp-badge'), await textOf(page, '.dsp-profile .avatar')], ['Claire Martin', USER_EMAIL, '/compte/?vue=informations', 'Particulier', 'CM']);
+      // Sections dans l'ordre de l'app, la première mise en avant.
+      expectSame(E, 'menu des sections', await page.$$eval('.dsp-nav a', (links) => links.map((link) => [link.textContent.trim(), link.getAttribute('href'), link.getAttribute('aria-current')])),
+        [['Mon espace', '#mon-espace', 'location'], ['Mon agenda', '#mon-agenda', null], ['Mes activités', '#mes-activites', null],
+          ['Contrats et location', '#contrats-et-location', null], ['Compte et sécurité', '#compte-et-securite', null], ['Paramètres et assistance', '#parametres-et-assistance', null]]);
+      expectSame(E, 'titres', [await textOf(page, '.dsp-title'), await page.$$eval('.dsp-section-title', (titles) => titles.map((title) => title.textContent))],
+        ['Mon espace', ['Mes activités', 'Contrats et location', 'Compte et sécurité', 'Paramètres et assistance']]);
+      expectSame(E, 'projet', await spaceProjectCard(page), SPACE_PROJECT_CARDS.buy);
+      expectSame(E, 'bouton du projet', [await textOf(page, '.dsp-project-button'), await page.getAttribute('.dsp-project-button', 'href')], ['Voir mon avancement', '/compte/?vue=projet']);
+      // Mon agenda : trois visites à venir (la demande comprise), la prochaine aujourd'hui à 14h30 ; ses deux boutons.
+      expectSame(E, 'agenda', [await textOf(page, '.dsp-agenda-title'), await page.$$eval('.dsp-agenda-text > p:not(.dsp-agenda-title)', (lines) => lines.map((line) => line.textContent)),
+        await page.$$eval('.dsp-agenda-actions a', (links) => links.map((link) => [link.textContent.trim(), link.getAttribute('href')]))],
+      ['3 visites à venir', ['Prochaine : Ven. 6 nov. · 14h30', 'Appartement lumineux avec balcon · Lyon 3e'],
+        [['Voir mon agenda', '/compte/?vue=agenda'], ['Ajouter une visite', '/compte/?vue=ajouter-visite']]]);
+      expectSame(E, 'activités', await page.$$eval('.dsp-tile', (tiles) => tiles.map((tile) => [tile.querySelector('.dsp-tile-title')?.textContent ?? null,
+        tile.querySelector('.dsp-tile-number')?.textContent ?? null, tile.querySelector('.dsp-tile-rest')?.textContent ?? null, tile.getAttribute('href')])),
+      [['Mes recherches', '2', 'recherches actives', '/compte/?vue=recherches'], ['Biens consultés', '4', 'annonces', '/compte/?vue=consultes'],
+        ['Mes annonces', '1', 'en ligne · 1 brouillon', '/compte/?vue=annonces']]);
+      // Contrats et location : les documents restent dans l'app iPhone.
+      expectSame(E, 'dossier', [await textOf(page, '.dsp-dossier h3'), await textOf(page, '.dsp-dossier p'), await textOf(page, '.dsp-dossier-button')],
+        ['Mon dossier immobilier', 'Dans l’app iPhone pour l’instant', 'Compléter mon dossier']);
+      const IPHONE = 'Dans l’app iPhone pour l’instant';
+      expectSame(E, 'contrats et location', await spaceRows(page, '#contrats-et-location'),
+        [['Mon bail de location', IPHONE, null], ['Quittances de loyer', IPHONE, null], ['États des lieux', IPHONE, null], ['Offres et compromis', IPHONE, null],
+          ['Documents à signer', IPHONE, null]]);
+      expectSame(E, 'compte et sécurité', await spaceRows(page, '#compte-et-securite'),
+        [['Connexion et sécurité', 'Mot de passe, Face ID, appareils', '/compte/?vue=securite'], ['Confidentialité et données', 'Consentements, export de mes données', '/compte/?vue=confidentialite'],
+          ['Type de compte', 'Particulier · passer en professionnel', null]]);
+      expectSame(E, 'paramètres et assistance', await spaceRows(page, '#parametres-et-assistance'),
+        [['Notifications', 'Alertes, visites et messages', '/compte/?vue=notifications'], ['Alertes sur cet iPhone', IPHONE, null], ['Préférences', IPHONE, null],
+          ['Aide et assistance', 'Questions fréquentes, nous contacter', '/aide/'], ['Donner mon avis', 'Notez l\'application', null],
+          ['Informations légales', 'CGU, confidentialité, mentions légales', '/compte/?vue=legal']]);
+      expectSame(E, 'bas de la colonne', [await textOf(page, '.dsp-logout'), await textOf(page, '.dsp-delete'), await page.getAttribute('.dsp-delete', 'href')],
+        ['Se déconnecter', 'Supprimer mon compte', '/compte/?vue=supprimer']);
+      // Ce que l'app garde sur l'iPhone : « Dans l'app iPhone pour l'instant », sans rien envoyer.
+      let mark = writes.length;
+      const spaceMark = space.calls.length;
+      await page.click('.dsp-dossier-button');
+      await iphoneOnly(page, E, 'Mon dossier immobilier');
+      for (const title of ['Mon bail de location', 'Quittances de loyer', 'États des lieux', 'Offres et compromis', 'Documents à signer', 'Alertes sur cet iPhone', 'Préférences']) {
+        await page.locator('.dsp-row', { hasText: title }).click();
+        await iphoneOnly(page, E, title);
+      }
+      // Type de compte : la confirmation de l'app ; « Annuler » ne change rien.
+      await page.locator('.dsp-row', { hasText: 'Type de compte' }).click();
+      expectSame(E, 'type de compte', [await dialogTitle(page), await textOf(page, 'dialog.alert-dialog[open] .alert-body p'),
+        await page.$$eval('dialog.alert-dialog[open] .alert-actions button', (buttons) => buttons.map((button) => button.textContent))],
+      ['Passer en professionnel ?', 'Vous pourrez revenir en arrière à tout moment depuis Type de compte.', ['Passer en professionnel', 'Annuler']]);
+      await alertButton(page, 'Annuler');
+      await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${E} : la fenêtre du type de compte reste ouverte`));
+      if (writes.length !== mark || space.calls.slice(spaceMark).some((call) => call.method !== 'GET' && !call.table.startsWith('rpc/'))) {
+        problems.push(`${E} : écriture envoyée par une action de l'app iPhone (${JSON.stringify(writes.slice(mark))})`);
+      }
+      // Menu des sections : la section choisie est mise en avant.
+      await page.click('.dsp-nav a[href="#compte-et-securite"]');
+      await page.waitForFunction(() => document.querySelector('.dsp-nav a[aria-current="location"]')?.textContent.trim() === 'Compte et sécurité', null, { timeout: 8000 })
+        .catch(async () => problems.push(`${E} : après « Compte et sécurité », section mise en avant « ${await textOf(page, '.dsp-nav a[aria-current="location"]')} »`));
+      await page.evaluate(() => window.scrollTo(0, 0));
+
+      // Projet de chaque sorte : sous-titre, anneau (part des critères renseignés) et étapes de l'app ; sans projet, celui par défaut.
+      for (const kind of ['invest', 'rent', 'hotel', 'none', 'buy']) {
+        space.project = kind === 'none' ? null : structuredClone(SPACE_PROJECTS[kind]);
+        await page.reload({ waitUntil: 'networkidle' });
+        const [subtitle] = SPACE_PROJECT_CARDS[kind];
+        await page.waitForFunction((wanted) => document.querySelector('.dsp-project-subtitle')?.textContent === wanted, subtitle, { timeout: 8000 }).catch(() => undefined);
+        await page.waitForTimeout(200);
+        expectSame(E, `projet ${kind}`, await spaceProjectCard(page), SPACE_PROJECT_CARDS[kind]);
+      }
+
+      // « Voir mon agenda » ouvre Mon agenda.
+      await page.click('.dsp-agenda-actions a[href="/compte/?vue=agenda"]');
+      await page.waitForURL(`${base}/compte/?vue=agenda`, { timeout: 8000 }).catch(() => problems.push(`${E} : « Voir mon agenda » ouvre ${page.url()}`));
+      await page.waitForSelector('.dsc-agenda-screen .dsc-visit', { timeout: 8000 }).catch(() => problems.push(`${E} : Mon agenda ne s'affiche pas`));
+
+      // Mon agenda : onglets dans l'ordre de l'app avec leur nombre, cartes groupées par date, Itinéraire vers Plans.
+      const A = 'Mon agenda';
+      expectSame(A, 'en-tête', [await textOf(page, '.dsc-head h1'), await textOf(page, '.dsc-head p'), await page.getAttribute('.dsc-back', 'href'),
+        await page.getAttribute('.dsc-square', 'href'), await page.getAttribute('.dsc-square', 'aria-label'), await textOf(page, '.dsc-add-visit'),
+        await page.getAttribute('.dsc-add-visit', 'href')],
+      ['Agenda des visites', 'Toutes vos visites à venir et passées.', '/compte/', '/compte/?vue=ajouter-visite&depuis=agenda', 'Programmer une visite',
+        'Ajouter une visite manuellement', '/compte/?vue=ajouter-visite&depuis=agenda']);
+      const agendaTabs = () => page.$$eval('.dsc-tab', (tabs) => tabs.map((tab) => [tab.childNodes[0]?.textContent ?? null, tab.querySelector('.dsc-tab-count')?.textContent ?? null,
+        tab.getAttribute('aria-selected')]));
+      expectSame(A, 'onglets', await agendaTabs(), [['À venir', '3', 'true'], ['Passées', '1', 'false'], ['Annulées', '1', 'false']]);
+      const plans = (address) => `https://maps.apple.com/?daddr=${encodeURIComponent(address)}`;
+      const card = (fields) => ({ route: null, request: null, contact: true, menu: true, ...fields });
+      expectSame(A, 'À venir', await agendaCards(page), [
+        ['Aujourd\'hui', [card({ date: 'Ven. 6 nov. · 14h30', status: 'Confirmée', title: 'Appartement lumineux avec balcon', lines: ['Lyon 3e (69003)', 'Avec Agence du Parc'],
+          route: plans('Lyon 3e (69003)') })]],
+        ['Cette semaine', [
+          card({ date: 'Lun. 9 nov. · 9h00', status: 'En attente', title: 'Studio meublé', lines: ['12 Rue de test, 69007 Lyon 7e', 'Avec Julien Moreau'],
+            route: plans('12 Rue de test, 69007 Lyon 7e') }),
+          // Demande envoyée, pas encore acceptée : son écran « Demande de visite » réunit ses actions (pas de menu « … »).
+          card({ date: 'Mar. 10 nov. · 10h00', status: 'En attente', title: 'T2 vendu loué près du métro', lines: ['Villeurbanne', 'Avec Marc Petit', '3 créneaux proposés'],
+            route: plans('Villeurbanne'), request: `/compte/?vue=demande-visite&id=${SPACE_REQUEST_ID}`, menu: false }),
+        ]],
+      ]);
+      expectSame(A, 'lien Itinéraire', await page.$eval('.dsc-visit a.dsc-visit-action', (link) => [link.textContent, link.getAttribute('target'), link.getAttribute('rel')]),
+        ['Itinéraire', '_blank', 'noopener noreferrer']);
+      // Menu « … » d'une visite à venir : les actions de l'app, toutes dans l'app iPhone.
+      const visitMenu = async (index) => {
+        await page.locator('.dsc-visit').nth(index).locator('.dsc-menu-button').click();
+        await page.waitForSelector('.dsc-menu-list');
+        return textsOf(page, '.dsc-menu-list [role="menuitem"]');
+      };
+      expectSame(A, 'menu d\'une visite à venir', await visitMenu(0),
+        ['Modifier la visite', 'Reprogrammer', 'Ajouter une note', 'Ajouter à mon calendrier', 'Annuler la visite', 'Supprimer']);
+      await page.locator('.dsc-menu-list').getByRole('menuitem', { name: 'Ajouter à mon calendrier', exact: true }).click();
+      await iphoneOnly(page, A, 'Ajouter à mon calendrier');
+      // Contacter : la conversation liée à la visite.
+      await page.route(new RegExp(`^${base}/messages/`), (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Messages</title>' }));
+      await page.locator('.dsc-visit').nth(0).getByRole('button', { name: 'Contacter' }).click();
+      await page.waitForURL(`${base}/messages/?c=E0000000-0000-4000-8000-000000000001`, { timeout: 8000 })
+        .catch(() => problems.push(`${A} : « Contacter » ouvre ${page.url()} au lieu de la conversation liée`));
+      await page.goBack({ waitUntil: 'networkidle' });
+      await page.waitForSelector('.dsc-visit');
+      await favShot(page, '5-mon-espace-agenda-1440.png');
+      await page.click('.dsc-tab >> nth=1');
+      expectSame(A, 'Passées', await agendaCards(page), [
+        ['Ces 7 derniers jours', [card({ date: 'Lun. 2 nov. · 15h00', status: 'Terminée', title: 'T2 vendu loué près du métro',
+          lines: ['Villeurbanne (69100)', 'Avec Camille Roux', 'Intéressant · À revoir'], route: plans('Villeurbanne (69100)') })]],
+      ]);
+      expectSame(A, 'menu d\'une visite terminée', await visitMenu(0), ['Ajouter une note', 'Ajouter à mon calendrier', 'Supprimer']);
+      await page.keyboard.press('Escape');
+      await page.click('.dsc-tab >> nth=2');
+      expectSame(A, 'Annulées', await agendaCards(page), [
+        ['Ces 7 derniers jours', [card({ date: 'Mer. 4 nov. · 17h00', status: 'Annulée', title: 'T2 vendu loué près du métro', lines: ['Adresse non renseignée', 'Avec Camille Roux'] })]],
+      ]);
+      expectSame(A, 'onglet choisi', await agendaTabs(), [['À venir', '3', 'false'], ['Passées', '1', 'false'], ['Annulées', '1', 'true']]);
+      expectSame(A, 'menu d\'une visite annulée', await visitMenu(0), ['Reprogrammer', 'Ajouter une note', 'Ajouter à mon calendrier', 'Supprimer']);
+      await page.keyboard.press('Escape');
+      // Sans adresse : l'avis de l'app au lieu de l'itinéraire.
+      await page.locator('.dsc-visit').nth(0).getByRole('button', { name: 'Itinéraire' }).click();
+      expectSame(A, 'itinéraire sans adresse', await noticeText(page, A), 'Adresse non renseignée : l\'itinéraire sera disponible quand le vendeur l\'aura communiquée.');
+      const agendaReads = space.calls.filter((call) => call.path === '/compte/' && ['agenda_visits', 'rpc/my_visit_requests'].includes(call.table));
+      expectSame(A, 'lectures de l\'agenda', [...new Set(agendaReads.map((call) => `${call.method} ${call.table} ${call.search}`))].sort(),
+        ['GET agenda_visits ?select=id,start_at,status,request_id,listing_id,visit', 'POST rpc/my_visit_requests ']);
+
+      // Ajouter une visite (depuis l'agenda) : le bien d'une conversation, la date, la durée, le contact, deux participants,
+      // les rappels et « Confirmée » ; « Enregistrer » insère dans agenda_visits la ligne que l'app insère.
+      const V = 'Ajouter une visite';
+      await page.click('.dsc-tab >> nth=0');
+      await page.click('.dsc-add-visit');
+      await page.waitForURL(`${base}/compte/?vue=ajouter-visite&depuis=agenda`, { timeout: 8000 }).catch(() => problems.push(`${V} : ouvert à ${page.url()}`));
+      await page.waitForSelector('.dsc-form-screen .dsc-choose');
+      const dateField = page.getByLabel('Date', { exact: true });
+      const timeField = page.getByLabel('Heure de début', { exact: true });
+      expectSame(V, 'formulaire vide', [await textOf(page, '.dsc-head h1'), await page.isDisabled('.dsc-head-action .dsc-button-primary'), await dateField.inputValue(),
+        await timeField.inputValue(), await page.$$eval('.dsc-grid-3 .choice-chip', (chips) => chips.map((chip) => [chip.textContent, chip.getAttribute('aria-pressed')])),
+        await textOf(page, '.dsc-end'), await page.$$eval('.dsc-form-screen .dsc-card-title', (titles) => titles.map((title) => title.textContent))],
+      ['Nouvelle visite', true, '2026-11-07', '10:00', [['15 min', 'false'], ['30 min', 'false'], ['45 min', 'true'], ['1 h', 'false'], ['90 min', 'false'], ['2 h', 'false']],
+        'Fin : 10:45', ['Bien concerné', 'Date et heure', 'Rendez-vous', 'Rappels et suivi']]);
+      expectSame(V, 'rappels par défaut', await page.$$eval('.dsc-toggle', (toggles) => toggles.map((toggle) => [toggle.querySelector('.dsc-toggle-title')?.textContent ?? null,
+        toggle.querySelector('input')?.checked ?? null, toggle.querySelector('.dsc-toggle-note')?.textContent ?? null])),
+      [['La veille, à 18 h', true, null], ['2 heures avant', true, null], ['Rappel personnalisé', false, null], ['Confirmée par le contact', false, null],
+        ['Ajouter à mon calendrier', null, IPHONE]]);
+      await page.click('.dsc-prepare');
+      await iphoneOnly(page, V, 'Préparer ma visite');
+      // Bien concerné : Mes annonces, Mes favoris, Biens de mes conversations ; le bien de la conversation avec l'agence.
+      await page.click('.dsc-choose');
+      await page.waitForSelector('dialog.dsc-picker[open] .dsc-picker-section', { timeout: 8000 });
+      expectSame(V, 'feuille Bien concerné', [await textOf(page, 'dialog.dsc-picker[open] h2'), await page.getAttribute('dialog.dsc-picker[open] input[type="search"]', 'placeholder'),
+        await textOf(page, 'dialog.dsc-picker[open] .dsc-picker-manual'), await page.$$eval('dialog.dsc-picker[open] .dsc-picker-section h3', (titles) => titles.map((title) => title.textContent)),
+        await textsOf(page, 'dialog.dsc-picker[open] .dsc-picker-section[aria-label="Biens de mes conversations"] .dsc-picker-row')],
+      ['Bien concerné', 'Rechercher un bien, une ville…', 'Ajouter une adresse manuellement Pour un bien qui n\'est pas dans NIDALO', ['Mes annonces', 'Mes favoris', 'Biens de mes conversations'],
+        ['Appartement lumineux avec balconLyon 3e · avec Agence du Parc']]);
+      await page.click('dialog.dsc-picker[open] .dsc-picker-section[aria-label="Biens de mes conversations"] .dsc-picker-row');
+      await page.waitForFunction(() => document.querySelector('.dsc-place input')?.value === 'Lyon 3e (69003)', null, { timeout: 8000 })
+        .catch(async () => problems.push(`${V} : adresse proposée « ${await page.inputValue('.dsc-place input')} »`));
+      // Adresse cachée par le vendeur : la commune seulement ; contact et numéro publiés de l'agence ; visite déjà prévue.
+      expectSame(V, 'bien choisi', [await textOf(page, '.dsc-chosen-title'), await textOf(page, '.dsc-chosen-city'), await page.getByLabel('Contact ou agence').inputValue(),
+        await page.getByLabel('Téléphone du contact (facultatif)').inputValue(), await page.inputValue('.dsc-place input'),
+        (await textOf(page, '.dsc-form-screen'))?.includes('Adresse exacte à demander au vendeur : l\'annonce n\'indique que la commune.') ?? false,
+        await textOf(page, '.dsc-duplicate p'), await page.$$eval('.dsc-duplicate .dsc-small', (actions) => actions.map((action) => [action.textContent.trim(), action.getAttribute('href')]))],
+      ['Appartement lumineux avec balcon', 'Lyon 3e', 'Agence du Parc', '06 39 98 00 11', 'Lyon 3e (69003)', true,
+        'Vous avez déjà une visite pour ce bien le vendredi 6 novembre · 14h30.', [['Voir la visite', '/compte/?vue=agenda'], ['Programmer quand même', null]]]);
+      await page.getByRole('button', { name: 'Programmer quand même' }).click();
+      await page.waitForSelector('.dsc-duplicate', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${V} : l'avertissement de doublon reste affiché`));
+      await dateField.fill('2026-11-10');
+      await timeField.fill('14:30');
+      await page.getByRole('button', { name: '1 h', exact: true }).click();
+      expectSame(V, 'fin de la visite', await textOf(page, '.dsc-end'), 'Fin : 15:30');
+      await page.getByRole('button', { name: 'Ajouter un participant' }).click();
+      await page.getByLabel('Nom', { exact: true }).fill('Camille Roux');
+      await page.getByLabel('Téléphone (facultatif)', { exact: true }).fill('0639981122');
+      await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
+      await page.getByRole('button', { name: 'Contact NIDALO' }).click();
+      expectSame(V, 'contacts NIDALO', await textsOf(page, '.dsc-menu-list [role="menuitem"]'), ['Agence du Parc']);
+      await page.locator('.dsc-menu-list').getByRole('menuitem', { name: 'Agence du Parc' }).click();
+      expectSame(V, 'participants', await page.$$eval('.dsc-participant', (rows) => rows.map((row) => row.querySelector('.dsc-participant-text')?.textContent ?? null)),
+        ['Camille Roux06 39 98 11 22', 'Agence du Parc']);
+      await page.getByRole('switch', { name: '2 heures avant' }).uncheck();
+      await page.getByRole('switch', { name: 'Rappel personnalisé' }).check();
+      await page.selectOption('.dsc-select select', '60');
+      await page.getByRole('switch', { name: 'Confirmée par le contact' }).check();
+      await page.waitForTimeout(200);
+      await favShot(page, '5-mon-espace-ajouter-visite-1440.png');
+      mark = space.calls.length;
+      await page.click('.dsc-head-action .dsc-button-primary');
+      const inserted = await oneSpaceCall(space, 'agenda_visits', 'POST', mark, V);
+      if (inserted) {
+        const row = inserted.body ?? {};
+        const visitId = row.id;
+        const participants = row.visit?.participants ?? [];
+        if (!UPPER_UUID.test(visitId ?? '') || !participants.every((participant) => UPPER_UUID.test(participant.id ?? ''))) {
+          problems.push(`${V} : identifiants ${JSON.stringify([visitId, participants.map((participant) => participant.id)])} au lieu d'UUID en majuscules`);
+        }
+        expectSame(V, 'ligne insérée dans agenda_visits', row, {
+          id: visitId, start_at: '2026-11-10T13:30:00.000', status: 'confirmed', listing_id: listings[0].id.toUpperCase(),
+          visit: {
+            id: visitId, listing: SPACE_L1, start: '2026-11-10T13:30:00.000', durationMinutes: 60, contactName: 'Agence du Parc', address: 'Lyon 3e (69003)',
+            status: 'confirmed', createdAt: '2026-11-06T09:50:00.000', contactPhone: '0639980011',
+            participants: [{ id: participants[0]?.id, name: 'Camille Roux', phone: '0639981122' }, { id: participants[1]?.id, name: 'Agence du Parc' }],
+            reminders: { eveningBefore: true, twoHoursBefore: false, customMinutesBefore: 60 }, linkedConversationId: SPACE_CONVERSATION_ID.toUpperCase(),
+          },
+        });
+        // Une insertion simple (pas d'upsert), comme table.insert(Row(visit)) dans l'app.
+        expectSame(V, 'insertion', [inserted.search, inserted.prefer.includes('resolution=')], ['', false]);
+      }
+      await page.waitForSelector('.dsc-saved', { timeout: 8000 }).catch(() => undefined);
+      expectSame(V, 'message', await textOf(page, '.dsc-saved'), 'Visite enregistrée · rappels la veille et 1 h avant');
+      // Retour à l'agenda, où la visite s'ajoute à « Cette semaine ».
+      await page.waitForURL(`${base}/compte/?vue=agenda`, { timeout: 8000 }).catch(() => problems.push(`${V} : après l'enregistrement, ${page.url()} au lieu de Mon agenda`));
+      await page.waitForFunction(() => document.querySelector('.dsc-tab .dsc-tab-count')?.textContent === '4', null, { timeout: 8000 })
+        .catch(() => problems.push(`${V} : la visite enregistrée n'apparaît pas dans Mon agenda`));
+      const added = (await agendaCards(page)).flatMap(([, cards]) => cards).find((item) => item.date === 'Mar. 10 nov. · 14h30');
+      expectSame(V, 'visite dans l\'agenda', added, card({ date: 'Mar. 10 nov. · 14h30', status: 'Confirmée', title: 'Appartement lumineux avec balcon',
+        lines: ['Lyon 3e (69003)', 'Avec Agence du Parc'], route: plans('Lyon 3e (69003)') }));
+
+      // Mon projet : la sorte, le résumé et l'anneau ; une étape cochée et le partage, puis « Enregistrer mon projet »
+      // envoie l'upsert de l'app (ProjectServerRow, sur user_id).
+      const P = 'Mon projet';
+      space.project = structuredClone(SPACE_PROJECTS.buy);
+      await page.goto(`${base}/compte/`, { waitUntil: 'networkidle' });
+      await page.click('.dsp-project-button');
+      await page.waitForURL(`${base}/compte/?vue=projet`, { timeout: 8000 }).catch(() => problems.push(`${P} : « Voir mon avancement » ouvre ${page.url()}`));
+      await page.waitForSelector('.dsc-project-screen .dsc-kinds', { timeout: 8000 });
+      expectSame(P, 'en-tête et sortes', [await textOf(page, '.dsc-head h1'), await textOf(page, '.dsc-head p'), await textOf(page, '.dsc-active'),
+        await page.$$eval('.dsc-kind', (kinds) => kinds.map((kind) => [kind.querySelector('.dsc-kind-title')?.textContent ?? null, kind.querySelector('.dsc-kind-subtitle')?.textContent ?? null,
+          kind.getAttribute('aria-pressed')]))],
+      ['Mon projet immobilier', 'Définissez vos critères pour trouver les biens qui vous correspondent', 'Projet actif',
+        [['Résidentiel', 'Acheter pour habiter', 'true'], ['Investissement', 'Générer des revenus immobiliers', 'false'], ['Location', 'Trouver mon futur logement', 'false'],
+          ['Hôtel', 'Acquérir ou reprendre un hôtel', 'false']]]);
+      expectSame(P, 'résumé', [await page.$$eval('.dsc-summary-row', (rows) => rows.map((row) => [row.querySelector('dt')?.textContent ?? null,
+        row.querySelector('dd')?.textContent.replace(/\s+/g, ' ') ?? null])), await textOf(page, '.dsc-summary-ring .dsp-ring-label'), await textOf(page, '.dsc-steps-count')],
+      [[['Type de bien', 'Appartement'], ['Budget maximum', '300 000 €'], ['Surface et pièces', 'Non renseigné'], ['Localisation', 'Lyon']], '43 %', '2 étapes sur 5']);
+      await page.locator('.dsc-card-toggle', { hasText: 'Avancement du projet' }).click();
+      await page.waitForSelector('.dsc-steps');
+      expectSame(P, 'étapes', await page.$$eval('.dsc-step', (steps) => steps.map((step) => [step.querySelector('.dsc-step-title')?.textContent ?? null, step.getAttribute('aria-pressed')])),
+        [['Recherche', 'true'], ['Visites', 'true'], ['Sélection', 'false'], ['Offre', 'false'], ['Signature', 'false']]);
+      await page.locator('.dsc-step', { hasText: 'Sélection' }).click();
+      expectSame(P, 'étape cochée', [await page.getAttribute('.dsc-step >> nth=2', 'aria-pressed'), await textOf(page, '.dsc-steps-count')], ['true', '3 étapes sur 5']);
+      await page.getByRole('switch', { name: 'Montrer mon projet à mes contacts' }).check();
+      mark = space.calls.length;
+      const before = writes.length;
+      await page.getByRole('button', { name: 'Enregistrer mon projet' }).click();
+      const upsert = await oneSpaceCall(space, 'real_estate_projects', 'POST', mark, P);
+      if (upsert) {
+        expectSame(P, 'upsert', [upsert.search, upsert.prefer.split(',').includes('resolution=merge-duplicates')], ['?on_conflict=user_id', true]);
+        expectSame(P, 'ligne envoyée à real_estate_projects', upsert.body, {
+          user_id: USER_ID.toUpperCase(), id: SPACE_PROJECT_ID, kind: 'buy', city: 'Lyon', purpose: 'Résidence principale', completed_steps: ['search', 'selection', 'visits'],
+          criteria: {
+            residential: { maxBudget: 300000, propertyTypes: ['apartment'], excludesGroundFloor: false, requiresElevator: false, outdoorSpaces: [], requiresParking: false,
+              requiresDocumentedBuildability: false, requiresServiced: false, location: { place: 'Lyon' } },
+            investment: { assetTypes: [], leasedOnly: false, includesMixedBuildings: false, location: { place: '' } },
+            rental: { propertyTypes: [], requiresElevator: false, requiresParking: false, outdoorSpaces: [], location: { place: '' } },
+            hotel: { location: { place: '' } },
+          },
+          shared_with_contacts: true,
+        });
+      }
+      if (writes.length !== before) problems.push(`${P} : écritures en plus de l'upsert (${JSON.stringify(writes.slice(before))})`);
+      await page.waitForURL(`${base}/compte/`, { timeout: 8000 }).catch(() => problems.push(`${P} : après l'enregistrement, ${page.url()} au lieu de Mon espace`));
+      await page.waitForFunction(() => document.querySelectorAll('.dsp-steps li.is-done').length === 3, null, { timeout: 8000 })
+        .catch(() => problems.push(`${P} : l'étape cochée n'apparaît pas sur Mon espace`));
+      expectSame(P, 'carte après l\'enregistrement', await spaceProjectCard(page),
+        ['Résidence principale · Lyon', '43 %', [['Recherche', true], ['Visites', true], ['Sélection', true], ['Offre', false], ['Signature', false]]]);
+
+      // Biens consultés : du plus récent au plus ancien, « Retirer » puis « Vider l'historique » (rien n'est envoyé au serveur).
+      const C = 'Biens consultés';
+      await page.click('.dsp-tile[href="/compte/?vue=consultes"]');
+      await page.waitForSelector('.dsc-viewed', { timeout: 8000 });
+      expectSame(C, 'liste', [await textOf(page, '.dsc-head h1'), await textOf(page, '.dsc-head-action button'), await viewedRows(page),
+        await page.$$eval('.dsc-viewed-remove', (buttons) => buttons.map((button) => [button.textContent.trim(), button.getAttribute('aria-label')]))],
+      ['Biens consultés', 'Vider', [
+        ['Maison 4 pièces avec jardin', 'Caluire-et-Cuire · 95 m²', '420 000 €Vendu', `/annonce/?id=${SPACE_SOLD.id}`],
+        ['Appartement lumineux avec balcon', 'Lyon 3e · 62 m²', '238 000 €', `/annonce/?id=${listings[0].id}`],
+        ['Studio meublé', 'Lyon 7e · 24 m²', '640 €/mois', `/annonce/?id=${listings[2].id}`],
+        ['T2 vendu loué près du métro', 'Villeurbanne · 45 m²', '185 000 €', `/annonce/?id=${listings[1].id}`],
+      ], Array(4).fill(['Retirer', 'Retirer de l\'historique'])]);
+      await imagesLoaded(page, '.dsc-viewed img', 3, C);
+      await favShot(page, '5-mon-espace-consultes-1440.png');
+      mark = writes.length;
+      const viewedMark = space.calls.length;
+      await page.locator('.dsc-viewed', { hasText: 'Studio meublé' }).getByRole('button', { name: 'Retirer de l\'historique' }).click();
+      await page.waitForFunction(() => document.querySelectorAll('.dsc-viewed').length === 3, null, { timeout: 8000 }).catch(() => problems.push(`${C} : « Retirer » n'a rien retiré`));
+      expectSame(C, 'après « Retirer »', [(await viewedRows(page)).map((row) => row[0]), JSON.parse(await viewedStorage(page) ?? 'null')],
+        [['Maison 4 pièces avec jardin', 'Appartement lumineux avec balcon', 'T2 vendu loué près du métro'], [SPACE_SOLD.id, listings[0].id, listings[1].id]]);
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.waitForSelector('.dsc-viewed');
+      expectSame(C, 'après un rechargement', (await viewedRows(page)).map((row) => row[0]), ['Maison 4 pièces avec jardin', 'Appartement lumineux avec balcon', 'T2 vendu loué près du métro']);
+      await page.click('.dsc-head-action button');
+      expectSame(C, 'confirmation', [await dialogTitle(page), await textOf(page, 'dialog.alert-dialog[open] .alert-body p'),
+        await page.$$eval('dialog.alert-dialog[open] .alert-actions button', (buttons) => buttons.map((button) => button.textContent))],
+      ['Vider l\'historique ?', 'Les 3 biens consultés seront retirés de cette liste.', ['Vider l\'historique', 'Annuler']]);
+      await alertButton(page, 'Vider l\'historique');
+      await page.waitForSelector('.dsc-viewed-screen .dsc-empty', { timeout: 8000 }).catch(() => problems.push(`${C} : la liste n'est pas vidée`));
+      expectSame(C, 'historique vidé', [await textOf(page, '.dsc-empty h2'), await textOf(page, '.dsc-empty p'), await page.locator('.dsc-head-action button').count(), await viewedStorage(page)],
+        ['Aucun bien consulté', 'Les annonces que vous ouvrez apparaîtront ici.', 0, '[]']);
+      if (writes.length !== mark || space.calls.slice(viewedMark).some((call) => call.method !== 'GET' && !call.table.startsWith('rpc/'))) {
+        problems.push(`${C} : écriture envoyée au serveur (${JSON.stringify(space.calls.slice(viewedMark).filter((call) => call.method !== 'GET'))})`);
+      }
+      await page.goto(`${base}/compte/`, { waitUntil: 'networkidle' });
+      await page.waitForSelector('.dsp-tile');
+      expectSame(C, 'tuile de Mon espace', await textOf(page, '.dsp-tile[href="/compte/?vue=consultes"]'), 'Biens consultés Aucun historique');
+
+      // Supprimer mon compte : l'écran existant (rien n'est supprimé sans « Supprimer définitivement »).
+      await page.click('.dsp-delete');
+      await page.waitForURL(`${base}/compte/?vue=supprimer`, { timeout: 8000 }).catch(() => problems.push(`Supprimer mon compte : ouvre ${page.url()}`));
+      await page.waitForSelector('.delete-card');
+      expectSame('Supprimer mon compte', 'écran', [await textOf(page, '.delete-card h2'), await textOf(page, '.delete-card .danger-button')],
+        ['Supprimer mon compte ?', 'Supprimer définitivement']);
+
+      // Se déconnecter : la confirmation de l'app ; « Annuler » ne fait rien, « Se déconnecter » ferme la session.
+      const D = 'Se déconnecter';
+      await page.goto(`${base}/compte/`, { waitUntil: 'networkidle' });
+      await page.waitForSelector('.dsp-logout');
+      await page.click('.dsp-logout');
+      expectSame(D, 'confirmation', [await dialogTitle(page), await textOf(page, 'dialog.alert-dialog[open] .alert-body p'),
+        await page.$$eval('dialog.alert-dialog[open] .alert-actions button', (buttons) => buttons.map((button) => [button.textContent, button.className]))],
+      ['Se déconnecter ?', 'Vous pourrez vous reconnecter avec votre adresse e-mail et votre mot de passe.', [['Se déconnecter', 'btn dsc-btn-danger'], ['Annuler', 'btn dsc-btn-quiet']]]);
+      await alertButton(page, 'Annuler');
+      await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${D} : la confirmation reste ouverte`));
+      await page.waitForTimeout(300);
+      if (space.logouts.length) problems.push(`${D} : session fermée après « Annuler »`);
+      await page.click('.dsp-logout');
+      await dialogTitle(page);
+      await alertButton(page, 'Se déconnecter');
+      await waitFor(() => space.logouts.length > 0, `${D} : appel au serveur`);
+      expectSame(D, 'appel', space.logouts, [{ method: 'POST', search: '?scope=global' }]);
+      await page.waitForSelector('.signin-card', { timeout: 8000 }).catch(() => problems.push(`${D} : la carte de connexion ne s'affiche pas`));
+      expectSame(D, 'page après la déconnexion', [await page.locator('.dsp').count(), await page.evaluate(() => {
+        try { return Object.keys(localStorage).filter((key) => key.startsWith('sb-')).length; } catch { return null; }
+      })], [0, 0]);
+      await page.close();
+      await context.close();
+    }
+
+    // Mon projet de la maquette (Investissement, 57 %) : capture de l'écran entier.
+    {
+      const space = spaceState({ project: structuredClone(SPACE_PROJECTS.invest) });
+      const { context } = await spaceContext(1440, 900, space);
+      page = await open(context, '/compte/?vue=projet', 'Mon projet 1440');
+      await page.waitForSelector('.dsc-project-screen .dsc-kinds');
+      expectSame('Mon projet 1440', 'résumé', [await textOf(page, '.dsc-summary-ring .dsp-ring-label'), await textOf(page, '.dsc-steps-count'),
+        await page.getAttribute('.dsc-kind[aria-pressed="true"]', 'aria-label'), (await contentWidth(page, '.account-wrap'))], ['57 %', '3 étapes sur 6',
+        'Investissement, Générer des revenus immobiliers', 640]);
+      await tallShot(page, '5-mon-espace-projet-1440.png');
+      await page.close();
+      await context.close();
+    }
+
+    // Compte professionnel : son espace garde son écran ; sur ordinateur, « Agenda des visites » ouvre Mon agenda.
+    for (const [width, href] of [[1440, '/compte/?vue=agenda'], [1023, '/compte/?vue=bientot&ecran=agenda']]) {
+      const context = await browser.newContext({ viewport: { width, height: 900 }, locale: 'fr-FR' });
+      await mock(context, { signedIn: true, account: { profiles: [{ ...ACCOUNT.profiles[0], account_type: 'professional', professional_profile_id: 'b2000000-0000-4000-8000-000000000001' }] } });
+      page = await open(context, '/compte/', `espace pro ${width}`);
+      await page.waitForSelector('.row-title');
+      expectSame(`espace pro ${width}`, 'Agenda des visites', [await page.locator('.dsp').count(),
+        await page.$$eval('a.row', (rows) => rows.filter((row) => row.querySelector('.row-title')?.textContent === 'Agenda des visites').map((row) => row.getAttribute('href')))], [0, [href]]);
+      await page.close();
+      await context.close();
+    }
+
+    // À 1023 px : la page du téléphone ; les écrans de l'ordinateur y sont « bientôt » et rien de l'agenda n'est demandé.
+    {
+      const context = await browser.newContext({ viewport: { width: 1023, height: 768 }, locale: 'fr-FR' });
+      await mock(context, { signedIn: true });
+      page = await open(context, '/compte/', 'Mon espace 1023');
+      await page.waitForSelector('.project-card');
+      expectSame('Mon espace 1023', 'page du téléphone', [await page.locator('.dsp, .dsc, .dtop, .dfoot').count(), await page.locator('.space-profile').count()], [0, 1]);
+      await page.close();
+      for (const [view, title] of [['agenda', 'Mon agenda'], ['ajouter-visite', 'Mon agenda'], ['projet', 'Mon projet immobilier'], ['consultes', 'Biens consultés']]) {
+        page = await open(context, `/compte/?vue=${view}`, `${view} 1023`);
+        await page.waitForSelector('.soon-card');
+        expectSame(`${view} 1023`, 'écran « bientôt »', [await textOf(page, '.soon-card h2'), await page.locator('.dsc').count()], [title, 0]);
+        await page.close();
+      }
+      await context.close();
+    }
+
+    // Sans compte, sur ordinateur : l'invitation à se connecter sur Mon espace et ses écrans ; rien n'est demandé.
+    {
+      const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'fr-FR' });
+      const guestServer = await mock(context);
+      for (const view of [null, 'agenda', 'ajouter-visite', 'projet', 'consultes']) {
+        const path = view ? `/compte/?vue=${view}` : '/compte/';
+        page = await open(context, path, `${path} sans compte`);
+        await page.waitForSelector('.signin-card');
+        expectSame(`${path} sans compte`, 'page', [await page.locator('.dsp, .dsc').count(), await textOf(page, '.signin-card h1')], [0, 'Bienvenue sur NIDALO']);
+        await page.close();
+      }
+      const asked = guestServer.requests.filter((request) => ['real_estate_projects', 'agenda_visits', 'rpc/my_visit_requests', 'profiles'].includes(request.table));
+      if (asked.length) problems.push(`Mon espace sans compte : ${asked.map((request) => request.table).join(', ')} demandé`);
+      await context.close();
+    }
+  } finally {
+    await spaceBrowser.close();
   }
 
   // Téléphone

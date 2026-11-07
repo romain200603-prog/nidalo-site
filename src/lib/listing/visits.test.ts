@@ -57,6 +57,14 @@ describe('Agenda (VisitAgenda.nextVisit)', () => {
     expect(nextVisit(visits, 'l3', now)).toBeNull();
   });
 
+  it('date de la visite écrite par l’app : UTC sans fuseau', () => {
+    const visit = agendaVisit({
+      id: 'v1', start_at: '2026-11-08T09:00:00+00:00', status: 'confirmed', request_id: null, listing_id: null,
+      visit: { start: '2026-11-08T09:00:00.000', status: 'confirmed' },
+    });
+    expect(visit?.start.toISOString()).toBe('2026-11-08T09:00:00.000Z');
+  });
+
   it('ligne illisible écartée', () => {
     expect(agendaVisit({ id: 'x', start_at: 'pas une date', status: 'confirmed', request_id: null, listing_id: null, visit: null })).toBeNull();
     expect(agendaVisit({ id: 'x', start_at: '2026-11-08T09:00:00Z', status: 'bizarre', request_id: null, listing_id: null, visit: null })).toBeNull();

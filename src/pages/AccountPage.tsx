@@ -5,14 +5,19 @@ import { authMessage, isNewAccount, linkErrorMessage, openLink } from '../lib/ac
 import { accountStore, loadAccount } from '../lib/account/profile';
 import { recoveryStore, useSession, useStore } from '../lib/account/session';
 import { useDesktop } from '../lib/desktop';
+import { AddVisit } from './account/AddVisit';
+import { AgendaScreen } from './account/Agenda';
+import { DesktopSpace } from './account/DesktopSpace';
 import { Hub } from './account/Hub';
 import { MyInfo } from './account/MyInfo';
 import { MyListings } from './account/MyListings';
 import { NotificationsScreen } from './account/Notifications';
 import { ProfileChoice } from './account/ProfileChoice';
+import { ProjectEditor } from './account/ProjectEditor';
 import { SavedSearchesList } from './account/SavedSearchesList';
 import { ScreenHeader, Spinner } from './account/parts';
 import { DeleteAccountScreen, LegalScreen, PrivacyScreen, SecurityScreen, SoonScreen } from './account/Screens';
+import { ViewedListings } from './account/ViewedListings';
 import '../styles/account.css';
 
 // Mon compte (Features/Profile/ProfileView.swift) : la carte de connexion, le choix du profil d'un compte neuf,
@@ -92,9 +97,15 @@ function AccountContent() {
     case 'supprimer': return <DeleteAccountScreen />;
     // Notifications : l'écran de l'app sur ordinateur ; sur téléphone, « bientôt » comme avant.
     case 'notifications': return desktop ? <NotificationsScreen signedIn /> : <SoonScreen screen="notifications" />;
+    // Ordinateur : Mon agenda, Ajouter une visite, Mon projet et Biens consultés ; sur téléphone, « bientôt ».
+    case 'agenda': return desktop ? <AgendaScreen /> : <SoonScreen screen="agenda" />;
+    case 'ajouter-visite': return desktop ? <AddVisit fromAgenda={params.get('depuis') === 'agenda'} /> : <SoonScreen screen="agenda" />;
+    case 'projet': return desktop ? <ProjectEditor /> : <SoonScreen screen="projet" />;
+    case 'consultes': return desktop ? <ViewedListings /> : <SoonScreen screen="consultes" />;
     case 'demande-visite': return <SoonScreen screen="demande-visite" />;
     case 'bientot': return <SoonScreen screen={params.get('ecran')} />;
-    default: return <Hub account={current} />;
+    // Ordinateur : Mon espace de la maquette 5 pour un compte particulier ; l'espace professionnel garde son écran.
+    default: return desktop && current.profile.account_type !== 'professional' ? <DesktopSpace account={current} /> : <Hub account={current} />;
   }
 }
 

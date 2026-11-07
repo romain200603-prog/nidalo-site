@@ -264,6 +264,18 @@ export async function placeSuggestions(raw: string, limit = 6, signal?: AbortSig
   return refined(found, limit);
 }
 
+/**
+ * Adresse complète (« Adresse du rendez-vous » d'une visite, FrenchPlaceProvider scope .fullAddress) : les communes
+ * pour un code postal ou une initiale, comme le champ de recherche ; sinon la Géoplateforme sans type de résultat
+ * (adresses, rues, lieux-dits, communes), tous gardés. L'app en propose 5.
+ */
+export async function addressSuggestions(raw: string, limit = 5, signal?: AbortSignal): Promise<PlaceSuggestion[]> {
+  const query = placeQuery(raw);
+  if (query.kind !== 'text') return placeSuggestions(raw, limit, signal);
+  const found = parseGeoplateforme(await get(GEOCODING, { q: query.value, autocomplete: '1', limit: String(limit + 4) }, signal));
+  return refined(found, limit, ['municipality', 'district', 'locality', 'street', 'address']);
+}
+
 /** Rues et adresses (« Mes informations »), limitées au code postal quand il a 5 chiffres (FrenchPlaceProvider). */
 export async function streetSuggestions(raw: string, limit = 6, signal?: AbortSignal, postalCode = ''): Promise<PlaceSuggestion[]> {
   const text = collapsed(raw);

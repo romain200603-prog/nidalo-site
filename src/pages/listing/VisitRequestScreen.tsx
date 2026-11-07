@@ -166,7 +166,7 @@ export function VisitRequestScreen({ row, photo, recipientName, initialMode = 'o
             </ul>
           </div>
           <div className="dl-screen-actions">
-            <a className="dl-submit" href={accountPath('bientot', { ecran: 'agenda' })}>Voir mon agenda</a>
+            <a className="dl-submit" href={accountPath('agenda')}>Voir mon agenda</a>
             <button type="button" className="dl-secondary" onClick={onClose}>Fermer</button>
           </div>
         </>

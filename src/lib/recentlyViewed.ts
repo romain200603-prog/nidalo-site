@@ -20,7 +20,20 @@ export function recentlyViewedIds(): string[] {
 
 /** Note l'ouverture d'une fiche (recordView(of:)). */
 export function recordView(id: string): void {
-  const ids = [id, ...recentlyViewedIds().filter((other) => other !== id)].slice(0, LIMIT);
+  store([id, ...recentlyViewedIds().filter((other) => other !== id)].slice(0, LIMIT));
+}
+
+/** « Retirer de l'historique » (removeFromHistory). */
+export function removeFromHistory(id: string): void {
+  store(recentlyViewedIds().filter((other) => other !== id));
+}
+
+/** « Vider l'historique » (clearHistory). */
+export function clearHistory(): void {
+  store([]);
+}
+
+function store(ids: string[]): void {
   try {
     sessionStorage.setItem(KEY, JSON.stringify(ids));
   } catch {

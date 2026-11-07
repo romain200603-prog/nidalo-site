@@ -262,6 +262,9 @@ describe('Lignes du serveur (SupabaseMessagingRepository)', () => {
     expect(visit).toMatchObject({ conversationId: 'c1', status: 'confirmed', address: '12 rue de l\'Exemple', durationMinutes: null });
     expect(visit?.listing).toEqual({ listingId: 'l1', title: 'Appartement 3 pièces', price: 238000, transaction: 'sale', city: 'Lyon 2e', coverUrl: null });
     expect(conversationVisit({ id: 'v2', start_at: '2026-11-12T17:00:00Z', status: 'autre', listing_id: null, visit: null })).toBeNull();
+    // Date écrite par l'app (supabase-swift) : UTC sans fuseau.
+    expect(conversationVisit({ id: 'v3', start_at: '2026-11-12T17:00:00+00:00', status: 'confirmed', listing_id: null, visit: { start: '2026-11-12T17:00:00.000' } })
+      ?.start.toISOString()).toBe('2026-11-12T17:00:00.000Z');
     const at = (iso: string, status: 'confirmed' | 'cancelled' = 'confirmed') => conversationVisit({ id: iso, start_at: iso, status, listing_id: null, visit: null })!;
     const now = new Date('2026-11-06T12:00:00Z');
     expect(upcomingVisits([at('2026-11-09T10:00:00Z'), at('2026-11-06T11:30:00Z'), at('2026-11-06T10:00:00Z'), at('2026-11-07T10:00:00Z', 'cancelled')], now)

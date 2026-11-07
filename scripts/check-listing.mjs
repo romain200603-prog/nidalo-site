@@ -1208,7 +1208,8 @@ try {
   expect('visite', 'statut', await page.textContent('.dl-sent .dl-status-badge'), 'En attente');
   expect('visite', 'texte de la confirmation', await page.textContent('.dl-sent-text'), 'Ce n\'est pas encore une visite confirmée : Agence Démo Centre doit choisir un créneau, ou en proposer un autre. Vous la retrouvez dans Mon compte › Mon agenda.');
   expect('visite', 'créneaux envoyés', await page.$$eval('.dl-sent-slots li', (els) => els.map((el) => /\d+h\d\d/.exec(el.textContent)?.[0]).join(' | ')), '18h00 | 10h00');
-  expect('visite', 'lien de l’agenda', await page.getAttribute('.dl-screen-actions a.dl-submit', 'href'), '/compte/?vue=bientot&ecran=agenda');
+  // « Voir mon agenda » ouvre Mon agenda (Mon espace sur ordinateur).
+  expect('visite', 'lien de l’agenda', await page.getAttribute('.dl-screen-actions a.dl-submit', 'href'), '/compte/?vue=agenda');
   await fullShot(page, 'visite-envoyee-1440.png');
   await page.click('.dl-screen-actions .dl-secondary');
   await waitForAddress(page, `${base}/annonce/?id=${FICHE}`);
@@ -1372,7 +1373,9 @@ try {
     expect(name, 'état de l’offre', await page.textContent('.dl-aside a.dl-offer'), 'Offre en attente');
     expect(name, 'visite confirmée', await page.textContent('.dl-aside .dl-pill-wide'), /^Visite confirmée · \S+ \d{1,2} \S+, 18h00$/);
     expect(name, 'carte des visites', await page.textContent('.dl-main .dl-visit-card .dl-visit-subtitle'), 'Visite prévue · Visite confirmée');
-    expect(name, 'lien de l’agenda', await page.getAttribute('.dl-main .dl-visit-agenda', 'href'), '/compte/?vue=bientot&ecran=agenda');
+    // « Agenda » et la pastille de la visite ouvrent Mon agenda (Mon espace sur ordinateur).
+    expect(name, 'lien de l’agenda', await page.getAttribute('.dl-main .dl-visit-agenda', 'href'), '/compte/?vue=agenda');
+    expect(name, 'lien de la visite confirmée', await page.getAttribute('.dl-aside .dl-pill-wide.is-confirmed', 'href'), '/compte/?vue=agenda');
     // La mini carte est dessinée avant la capture de toute la page.
     await page.locator('section[aria-labelledby="localisation"]').scrollIntoViewIfNeeded();
     await page.waitForSelector('.mini-map .location-map-canvas[data-ready="oui"]', { timeout: 20000 });

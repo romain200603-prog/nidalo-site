@@ -129,6 +129,11 @@ export const ICON_PATHS = {
   play: "<polygon points=\"6 3 20 12 6 21 6 3\"/>",
   navigation: "<polygon points=\"3 11 22 2 13 21 11 13 3 11\"/>",
   circleCheck: "<circle cx=\"12\" cy=\"12\" r=\"10\"/> <path d=\"m9 12 2 2 4-4\"/>",
+  // Mon espace (ProfileView.swift, ProjectEditorView.swift) : mêmes dessins que Assets.xcassets/Icons.
+  shield: "<path d=\"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z\"/>",
+  arrowLeftRight: "<path d=\"M8 3 4 7l4 4\"/> <path d=\"M4 7h16\"/> <path d=\"m16 21 4-4-4-4\"/> <path d=\"M20 17H4\"/>",
+  target: "<circle cx=\"12\" cy=\"12\" r=\"10\"/> <circle cx=\"12\" cy=\"12\" r=\"6\"/> <circle cx=\"12\" cy=\"12\" r=\"2\"/>",
+  chevronUp: "<path d=\"m18 15-6-6-6 6\"/>",
 } as const;
 
 export type IconName = keyof typeof ICON_PATHS;
