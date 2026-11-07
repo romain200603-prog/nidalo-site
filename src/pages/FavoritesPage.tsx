@@ -1,103 +1,35 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Icon } from '../components/Icon';
 import { Page } from '../components/Layout';
 import { PhotoPager } from '../components/PhotoPager';
 import { SignInCard } from '../components/account/SignInCard';
 import { isNewAccount } from '../lib/account/auth';
-import { databaseMessage } from '../lib/account/errors';
 import {
-  categoryIncludes, categoryOfMode, FAVORITE_CATEGORIES, FAVORITE_SORTS, favoriteCard, favoriteDetails, favoriteSuggestions,
-  matchesText, modeOfCategory, relevanceOrder, savedCountText, sortFavorites, type FavoriteCard, type FavoriteCategory, type FavoriteSort,
+  categoryIncludes, categoryOfMode, FAVORITE_CATEGORIES, FAVORITE_SORTS, favoriteDetails, favoriteSuggestions,
+  matchesText, modeOfCategory, savedCountText, sortFavorites, type FavoriteCard, type FavoriteCategory, type FavoriteSort,
 } from '../lib/account/favoriteCards';
 import { loadFavorites, removeFavorite, useFavorites, type Favorite } from '../lib/account/favorites';
 import { loadSavedSearches, savedSearchesStore } from '../lib/account/savedSearches';
 import { useSession, useStore } from '../lib/account/session';
 import { formatCardPrice, yieldTone } from '../lib/cardContent';
 import { formatFraction, formatPrice } from '../lib/format';
-import { highlightsFor } from '../lib/highlights';
 import { DPE_COLORS } from '../lib/labels';
-import { LISTING_COLUMNS, sortedPhotos, type ListingRow } from '../lib/listings';
+import { useDesktop } from '../lib/desktop';
+import { sortedPhotos } from '../lib/listings';
 import { listingPath, PATHS } from '../lib/paths';
-import { activeFilterCount, defaultDraft, matches, pricePerSquareMeter, type SearchDraft } from '../lib/search';
-import { supabase } from '../lib/supabase';
+import { defaultDraft, pricePerSquareMeter, type SearchDraft } from '../lib/search';
 import { FiltersDialog, type DraftsByMode } from './FiltersDialog';
 import { soonPath } from './account/Screens';
 import { SavedSearchesList, useSearchCounts } from './account/SavedSearchesList';
 import { EmptyState, Spinner } from './account/parts';
+import { DesktopFavoritesPage } from './favorites/DesktopFavorites';
+import { filterCount, matchingIds, useFavoriteCards } from './favorites/data';
 import '../styles/account.css';
 
 // « Vos favoris » (Features/Favorites/FavoritesView.swift) : onglets Favoris et Recherches ; recherche, catégories,
 // filtres et tri sur les biens mis en cœur. Les filtres s'appliquent directement aux favoris chargés (même moteur
-// que la recherche), sans relancer une recherche complète.
-
-type Loaded =
-  | { status: 'loading' }
-  | { status: 'error'; message: string }
-  | { status: 'ready'; cards: FavoriteCard[]; missing: string[] };
-
-/** Fiches des favoris, par paquets ; une annonce que le serveur ne renvoie pas (retirée, vendue) est « plus disponible ». */
-async function loadCards(items: Favorite[]): Promise<{ cards: FavoriteCard[]; missing: string[] }> {
-  const ids = items.map((item) => item.listing_id);
-  const rows: ListingRow[] = [];
-  for (let start = 0; start < ids.length; start += 100) {
-    const { data, error } = await supabase.from('listings').select(LISTING_COLUMNS).in('id', ids.slice(start, start + 100));
-    if (error) throw error;
-    rows.push(...((data ?? []) as unknown as ListingRow[]));
-  }
-  const found = new Set(rows.map((row) => row.id));
-  return { cards: relevanceOrder(rows.map(favoriteCard)), missing: ids.filter((id) => !found.has(id)) };
-}
-
-function useFavoriteCards(items: Favorite[]): [Loaded, () => void] {
-  const [state, setState] = useState<Loaded>({ status: 'loading' });
-  const [attempt, setAttempt] = useState(0);
-  const loadedIds = useRef<Set<string>>(new Set());
-  const ids = items.map((item) => item.listing_id);
-  const key = [...ids].sort().join(',');
-  useEffect(() => {
-    // Un favori retiré disparaît sans recharger ; un favori ajouté ailleurs (autre onglet) recharge les fiches.
-    if (state.status === 'ready' && ids.every((id) => loadedIds.current.has(id))) return;
-    let cancelled = false;
-    loadCards(items)
-      .then((result) => {
-        if (cancelled) return;
-        loadedIds.current = new Set(ids);
-        setState({ status: 'ready', ...result });
-      })
-      .catch((error: unknown) => { if (!cancelled) setState({ status: 'error', message: databaseMessage(error) }); });
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, attempt]);
-  const shown = useMemo<Loaded>(() => {
-    if (state.status !== 'ready') return state;
-    const current = new Set(ids);
-    return { status: 'ready', cards: state.cards.filter((card) => current.has(card.row.id)), missing: state.missing.filter((id) => current.has(id)) };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, key]);
-  return [shown, () => {
-    setState({ status: 'loading' });
-    setAttempt((n) => n + 1);
-  }];
-}
-
-function highlightsForDraft(draft: SearchDraft) {
-  return (row: ListingRow) => highlightsFor(row, draft.mode === 'invest' ? draft.downPayment : null);
-}
-
-/** Favoris de la catégorie de ces filtres qui y correspondent (FavoriteFilterMatcher, appliqué aux favoris). */
-function matchingIds(cards: FavoriteCard[], draft: SearchDraft): Set<string> {
-  const highlights = highlightsForDraft(draft);
-  const category = categoryOfMode(draft.mode);
-  return new Set(cards
-    .filter((card) => categoryIncludes(category, card.content.kind) && matches(card.row, draft, highlights(card.row)))
-    .map((card) => card.row.id));
-}
-
-/** Filtres posés sur une catégorie, lieu compris (pastille du bouton). */
-function filterCount(draft: SearchDraft | undefined): number {
-  if (!draft) return 0;
-  return activeFilterCount(draft) + (draft.place.trim() ? 1 : 0);
-}
+// que la recherche), sans relancer une recherche complète. Ordinateur (≥ 1024 px) : DesktopFavoritesPage (maquette 4),
+// avec les mêmes données (favorites/data.ts) ; en dessous, la page du téléphone ci-dessous, inchangée.
 
 function FavoriteHeart({ onRemove }: { onRemove: () => void }) {
   return (
@@ -468,6 +400,8 @@ function FavoritesBody() {
 }
 
 export function FavoritesPage() {
+  const desktop = useDesktop();
+  if (desktop) return <DesktopFavoritesPage />;
   return (
     <Page section="favorites">
       <div className="wrap favorites-wrap">

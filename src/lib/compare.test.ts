@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  addToCompare, clearCompare, compareState, compareToast, removeFromCompare, setCompareReference, toggleCompare,
+  addToCompare, clearCompare, compareState, compareToast, fillCompareIfEmpty, removeFromCompare, setCompareReference, toggleCompare,
 } from './compare';
 
 function fakeStorage() {
@@ -51,6 +51,25 @@ describe('Comparaison (ComparisonStore)', () => {
     expect(compareState().ids).toEqual([]);
     broken.setItem('nidalo.comparer', JSON.stringify({ ids: [id(1), id(1), 3, id(2), id(3), id(4)], referenceId: 'autre' }));
     expect(compareState()).toEqual({ ids: [id(1), id(2), id(3)], referenceId: id(1) });
+  });
+
+  it('bouton des Favoris : une comparaison vide reprend les trois premiers, une comparaison commencée ne change pas (fillIfEmpty)', () => {
+    vi.stubGlobal('sessionStorage', fakeStorage());
+    fillCompareIfEmpty([id(4), id(2), id(7), id(9)]);
+    expect(compareState()).toEqual({ ids: [id(4), id(2), id(7)], referenceId: id(4) });
+    fillCompareIfEmpty([id(1), id(3)]);
+    expect(compareState().ids).toEqual([id(4), id(2), id(7)]);
+    removeFromCompare(id(4));
+    removeFromCompare(id(2));
+    fillCompareIfEmpty([id(1), id(3)]);
+    expect(compareState().ids).toEqual([id(7)]);
+    clearCompare();
+    // Doublons refusés comme par add : deux biens seulement.
+    fillCompareIfEmpty([id(5), id(5), id(6), id(8)]);
+    expect(compareState().ids).toEqual([id(5), id(6)]);
+    clearCompare();
+    fillCompareIfEmpty([]);
+    expect(compareState().ids).toEqual([]);
   });
 
   it('textes du toast (CompareToast)', () => {

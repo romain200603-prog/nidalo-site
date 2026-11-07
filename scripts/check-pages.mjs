@@ -141,6 +141,53 @@ function filtered(rows, params) {
 /** Demandes envoyées au serveur simulé par le compte de test (enregistrements). */
 const writes = [];
 
+// MARK: - Favoris sur ordinateur (maquette 4) : annonces inventées de chaque sorte, mises en favoris par le compte de test.
+
+const favId = (n) => `6b0f6c1e-1d1a-4c55-9a51-0d5f0000000${n}`;
+const favPhotos = (n, files) => files.map((file, index) => ({ id: `pf${n}${index}`, storage_path: `test/${file}`, position: index, width: 1400, height: 800 }));
+const favRow = (n, fields) => ({
+  ...listings[0], id: favId(n), owner_id: '00000000-0000-4000-8000-0000000000b0', previous_price: null, rental_info: null, monthly_charges: null,
+  location_precision: 'approximate', public_street: null, asset_details: null, listing_photos: [], ...fields,
+});
+const hotelFixture = JSON.parse(await readFile(join(root, 'scripts/fixtures/listing-extra.json'), 'utf8')).listings.find((row) => row.property_type === 'hotel');
+/** Une vente, une location, un investissement (rendement de 8,2 %), un hôtel (murs loués, 5,7 %) ; plus une annonce retirée (GONE_ID). */
+const FAV_LISTINGS = [
+  favRow(1, { title: 'Appartement 3 pièces lumineux', city: 'Lyon 3e', postal_code: '69003', insee_code: '69383', living_area: 68, rooms: 3, floor: 2,
+    price: 255000, energy_class: 'C', publish_category: 'residential', published_at: '2026-11-05T09:00:00Z', listing_photos: favPhotos(1, ['photo0.jpg', 'photo1.jpg', 'photo2.jpg']) }),
+  favRow(2, { transaction: 'rent', title: 'Studio meublé', city: 'Lyon 7e', postal_code: '69007', insee_code: '69387', living_area: 24, rooms: 1, floor: 2,
+    price: 640, monthly_charges: 40, energy_class: 'E', publish_category: 'rental', rental_info: { isFurnished: true }, published_at: '2026-11-04T08:00:00Z',
+    listing_photos: favPhotos(2, ['photo1.jpg']) }),
+  favRow(3, { title: 'T2 loué près du métro', city: 'Villeurbanne', postal_code: '69100', insee_code: '69266', living_area: 45, rooms: 2, floor: 1, price: 175000,
+    energy_class: 'D', publish_category: 'investment', rental_info: { isLeased: true, currentMonthlyRent: 1195 }, published_at: '2026-11-06T08:00:00Z',
+    listing_photos: favPhotos(3, ['photo2.jpg']) }),
+  { ...hotelFixture, id: favId(4), title: 'Hôtel 3 étoiles, murs loués', rental_info: { isLeased: true, currentMonthlyRent: 9000 }, published_at: '2026-11-02T10:00:00Z', listing_photos: [] },
+];
+/** Favoris du compte, du plus ancien au plus récent (ordre de lecture de l'app). */
+const FAV_ACCOUNT = {
+  favorites: [
+    { listing_id: favId(1), created_at: '2026-11-01T09:00:00Z' },
+    { listing_id: favId(3), created_at: '2026-11-03T09:00:00Z' },
+    { listing_id: GONE_ID, created_at: '2026-11-04T09:00:00Z' },
+    { listing_id: favId(4), created_at: '2026-11-05T09:00:00Z' },
+    { listing_id: favId(2), created_at: '2026-11-06T09:00:00Z' },
+  ],
+};
+/** Captures pour Romain, au plus près de la maquette : un investissement loué (8,2 %), une vente d'une pièce, une annonce retirée. */
+const MOCKUP_LISTINGS = [
+  favRow(5, { title: 'Appartement 2 pièces – Annemasse', city: 'Annemasse', postal_code: '74100', insee_code: '74012', living_area: 55, rooms: 2, floor: null,
+    price: 205000, energy_class: null, publish_category: 'investment', rental_info: { isLeased: true, currentMonthlyRent: 1400 }, published_at: '2026-11-06T07:00:00Z',
+    listing_photos: favPhotos(5, ['photo0.jpg']) }),
+  favRow(6, { title: 'Studio avec vue dégagée', city: 'Lyon', postal_code: '69002', insee_code: '69382', living_area: 30, rooms: 1, floor: null, price: 100000,
+    energy_class: 'D', publish_category: 'residential', published_at: '2026-11-05T07:00:00Z', listing_photos: favPhotos(6, ['photo1.jpg']) }),
+];
+const MOCKUP_ACCOUNT = {
+  favorites: [
+    { listing_id: favId(6), created_at: '2026-11-02T09:00:00Z' },
+    { listing_id: favId(5), created_at: '2026-11-03T09:00:00Z' },
+    { listing_id: GONE_ID, created_at: '2026-11-04T09:00:00Z' },
+  ],
+};
+
 // MARK: - Ordinateur, barre du haut : conversations et notifications inventées, pour les pastilles.
 
 const HOUR = 3600 * 1000;
@@ -280,7 +327,12 @@ async function mock(context, { signedIn = false, listingRows = listings, account
         if (table === 'saved_searches' && request.method() === 'POST') {
           return json(route, 201, { user_id: USER_ID, created_at: new Date().toISOString(), last_notified_at: null, last_viewed_at: null, alerts_enabled: true, ...body });
         }
-        if (table === 'saved_searches' && request.method() === 'PATCH' && (request.headers().prefer ?? '').includes('return=representation')) return json(route, 200, []);
+        // Mise à jour d'une recherche (saveSearch) : la ligne modifiée revient, comme du serveur ; aucune pour une
+        // recherche nouvelle (le site la crée ensuite, comme l'app).
+        if (table === 'saved_searches' && request.method() === 'PATCH' && (request.headers().prefer ?? '').includes('return=representation')) {
+          const row = filtered(tables.saved_searches, url.searchParams)[0];
+          return json(route, 200, row ? [{ ...row, ...body }] : []);
+        }
         return json(route, request.method() === 'POST' ? 201 : 204);
       }
       const rows = filtered(tables[table], url.searchParams);
@@ -1068,6 +1120,111 @@ async function chatShot(page, file) {
   await page.screenshot({ path: join(out, file) });
 }
 
+// MARK: - Favoris sur ordinateur : aides des vérifications
+
+const FAV_T2 = 'T2 loué près du métro';
+const FAV_FLAT = 'Appartement 3 pièces lumineux';
+const FAV_STUDIO = 'Studio meublé';
+const FAV_HOTEL = 'Hôtel 3 étoiles, murs loués';
+/** Ordre « Pertinence » de l'app : publiées le plus récemment d'abord. */
+const FAV_ALL = [FAV_T2, FAV_FLAT, FAV_STUDIO, FAV_HOTEL];
+const FAV_BUTTONS = [['Retirer des favoris', null], ['Ajouter à la comparaison', 'false']];
+/** Cartes attendues (FavoriteListingCard de l'app) : prix charges comprises pour la location, prix au m² des ventes, DPE, rendement brut. */
+const FAV_CARDS = [
+  { title: FAV_T2, href: `/annonce/?id=${favId(3)}&mode=invest`, details: 'Villeurbanne · 45 m² · 2 pièces · 1er étage', price: '175 000 €', perMeter: '3 889 €/m²', dpe: 'D',
+    yield: 'Rendement brut 8,2 %', tone: 'vert', counter: null, noPhoto: null, buttons: FAV_BUTTONS },
+  { title: FAV_FLAT, href: `/annonce/?id=${favId(1)}`, details: 'Lyon 3e · 68 m² · 3 pièces · 2e étage', price: '255 000 €', perMeter: '3 750 €/m²', dpe: 'C',
+    yield: null, tone: null, counter: '1/3', noPhoto: null, buttons: FAV_BUTTONS },
+  { title: FAV_STUDIO, href: `/annonce/?id=${favId(2)}`, details: 'Lyon 7e · 24 m² · 1 pièce · 2e étage', price: '680 €/mois CC', perMeter: null, dpe: 'E',
+    yield: null, tone: null, counter: null, noPhoto: null, buttons: FAV_BUTTONS },
+  { title: FAV_HOTEL, href: `/annonce/?id=${favId(4)}`, details: 'Annecy · 980 m²', price: '1 890 000 €', perMeter: '1 929 €/m²', dpe: 'D',
+    yield: 'Rendement brut 5,7 %', tone: 'orange', counter: null, noPhoto: 'Pas encore de photo', buttons: FAV_BUTTONS },
+];
+/** Colonnes relues par saveSearch (SupabaseAccountRepositories.swift:314). */
+const SAVED_SELECT = 'id,user_id,name,query,alerts_enabled,created_at,last_notified_at,last_viewed_at';
+
+/** Cartes de la grille des favoris, telles qu'affichées. */
+function favoriteCardsShown(page) {
+  return page.$$eval('.dfav-grid .dfav-card', (cards) => cards.map((card) => {
+    const text = (selector) => card.querySelector(selector)?.textContent.replace(/\s+/g, ' ').trim() ?? null;
+    const pill = card.querySelector('.dfav-yield');
+    return {
+      title: text('.dfav-title'), href: card.querySelector('.dfav-title a')?.getAttribute('href') ?? null, details: text('.dfav-details'), price: text('.dfav-price'),
+      perMeter: text('.dfav-per-meter'), dpe: text('.dfav-dpe-letter'), yield: text('.dfav-yield'), tone: pill ? (pill.classList.contains('is-good') ? 'vert' : 'orange') : null,
+      counter: text('.dfav-counter'), noPhoto: text('.dfav-no-photo'),
+      buttons: [...card.querySelectorAll('.dfav-actions button')].map((button) => [button.getAttribute('aria-label'), button.getAttribute('aria-pressed')]),
+    };
+  }));
+}
+const favoriteTitles = (page) => page.$$eval('.dfav-grid .dfav-card .dfav-title', (els) => els.map((el) => el.textContent));
+
+/** Attend les cartes affichées (titres, dans l'ordre) et le nombre « N biens sauvegardés ». */
+async function waitForFavorites(page, titles, total, name) {
+  try {
+    await page.waitForFunction(([wanted, count]) => JSON.stringify([...document.querySelectorAll('.dfav-grid .dfav-card .dfav-title')].map((el) => el.textContent)) === JSON.stringify(wanted)
+      && (document.querySelector('.dfav-total')?.textContent ?? null) === count, [titles, total], { timeout: 8000 });
+  } catch {
+    const shown = await page.evaluate(() => document.querySelector('.dfav-total')?.textContent ?? null);
+    problems.push(`${name} : cartes ${JSON.stringify(await favoriteTitles(page))} et « ${shown} » au lieu de ${JSON.stringify(titles)} et « ${total} »`);
+  }
+}
+
+/** Première photo de chaque carte chargée (les autres photos d'une carte se chargent en la faisant défiler). */
+async function favoritePhotosLoaded(page, count, name) {
+  try {
+    await page.waitForFunction((wanted) => {
+      const images = [...document.querySelectorAll('.dfav-photo')].map((photo) => photo.querySelector('img')).filter(Boolean);
+      return images.length === wanted && images.every((image) => image.complete && image.naturalWidth > 0);
+    }, count, { timeout: 10000 });
+  } catch {
+    problems.push(`${name} : photos des cartes non chargées`);
+  }
+}
+
+/** Toast de la comparaison (CompareToast) : son texte et son lien « Voir » ou « Gérer ». */
+async function waitForCompareNotice(page, want, name) {
+  try {
+    await page.waitForFunction((target) => {
+      const box = document.querySelector('.dfav-toast-box');
+      return box?.querySelector('.dfav-toast-text')?.textContent === target.text && (box.querySelector('a')?.textContent ?? null) === target.action;
+    }, want, { timeout: 4000 });
+  } catch {
+    const shown = await page.evaluate(() => {
+      const box = document.querySelector('.dfav-toast-box');
+      return box ? { text: box.querySelector('.dfav-toast-text')?.textContent ?? null, action: box.querySelector('a')?.textContent ?? null } : null;
+    });
+    problems.push(`${name} : toast ${JSON.stringify(shown)} au lieu de ${JSON.stringify(want)}`);
+  }
+}
+
+/** Les recherches de l'onglet Recherches ont leur nombre de résultats (plus de « Relancer la recherche »). */
+async function waitForSearchCounts(page, name) {
+  try {
+    await page.waitForFunction(() => {
+      const buttons = [...document.querySelectorAll('.dfav-searches .run-button')];
+      return buttons.length > 0 && buttons.every((button) => !button.textContent.includes('Relancer la recherche'));
+    }, null, { timeout: 8000 });
+  } catch {
+    problems.push(`${name} : nombre de résultats des recherches non affiché`);
+  }
+}
+
+/** Écritures reçues depuis `mark` : méthode, table, paramètres de l'adresse, contenu. */
+async function expectWrites(mark, wanted, name) {
+  await waitFor(() => writes.length - mark >= wanted.length, name);
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  expectSame(name, 'envoi', writes.slice(mark).map((write) => [write.method, write.table, Object.fromEntries(new URLSearchParams(write.search)), write.body]), wanted);
+}
+
+/** Capture pleine page, sans survol ni champ actif, polices chargées. */
+async function favShot(page, file) {
+  await page.mouse.move(2, 2);
+  await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: join(out, file), fullPage: true });
+}
+
 const browser = await chromium.launch();
 try {
   // Ordinateur
@@ -1209,20 +1366,21 @@ try {
   await page.close();
 
   // Favoris : deux annonces chargées, une retirée, la recherche dans les favoris, l'onglet Recherches.
+  // À 1440 px, la page de l'ordinateur (maquette 4, classes .dfav-*) ; voir aussi « Favoris sur ordinateur » plus bas.
   page = await open(signed, '/favoris/', 'favoris-connecte');
-  await page.waitForSelector('.favorite-card');
-  await page.waitForSelector('.missing-card');
-  const favoriteCount = await page.locator('.favorite-card').count();
+  await page.waitForSelector('.dfav-card');
+  await page.waitForSelector('.dfav-missing');
+  const favoriteCount = await page.locator('.dfav-card').count();
   if (favoriteCount !== 2) problems.push(`Favoris : ${favoriteCount} cartes au lieu de 2`);
-  const total = (await page.textContent('.favorites-total'))?.trim();
+  const total = (await page.textContent('.dfav-total'))?.trim();
   if (total !== '2 biens sauvegardés') problems.push(`Favoris : compteur « ${total} »`);
   await page.screenshot({ path: join(out, 'favoris-connecte-ordinateur.png'), fullPage: true });
-  await page.fill('.favorites-search input', 'villeur');
-  await page.waitForFunction(() => document.querySelector('.favorites-total')?.textContent?.trim() === '1 sur 2 biens', null, { timeout: 4000 })
-    .catch(async () => problems.push(`Favoris : recherche « villeur », compteur « ${await page.textContent('.favorites-total')} »`));
+  await page.fill('.dfav-field input', 'villeur');
+  await page.waitForFunction(() => document.querySelector('.dfav-total')?.textContent?.trim() === '1 sur 2 biens', null, { timeout: 4000 })
+    .catch(async () => problems.push(`Favoris : recherche « villeur », compteur « ${await page.textContent('.dfav-total')} »`));
   await page.screenshot({ path: join(out, 'favoris-recherche-ordinateur.png') });
-  await page.click('.favorites-tabs button >> nth=1');
-  await page.waitForSelector('.favorites-searches .saved-search');
+  await page.click('.dfav-tab >> nth=1');
+  await page.waitForSelector('.dfav-searches .saved-search');
   if (!page.url().includes('onglet=recherches')) problems.push(`Favoris : l'onglet Recherches n'est pas dans l'adresse (${page.url()})`);
   await page.screenshot({ path: join(out, 'favoris-recherches-ordinateur.png'), fullPage: true });
   await page.close();
@@ -2168,6 +2326,332 @@ try {
     }
     if (chat.calls.length) problems.push(`messages sans compte : ${chat.calls.map((call) => call.table).join(', ')} demandé(s)`);
     await chatGuest.close();
+  }
+
+  // Favoris sur ordinateur (maquette 4), à 1440 × 900 et 1024 × 768, avec le compte de test et des annonces inventées :
+  // une vente, une location, un investissement loué (rendement), un hôtel et une annonce retirée. Contenu et actions de
+  // l'app (FavoritesView.swift, SavedSearchesView.swift). Captures pour Romain : 4-favoris-*.png.
+  const favContext = async (width, height, listingRows, account, signedIn = true) => {
+    const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR' });
+    const mocked = await mock(context, { signedIn, listingRows, account });
+    return { context, server: mocked };
+  };
+  for (const [width, height] of [[1440, 900], [1024, 768]]) {
+    const F = `favoris ${width}`;
+    // Au plus près de la maquette : un investissement loué, un studio, une annonce retirée ; comparaison vide.
+    {
+      const { context, server: mockupServer } = await favContext(width, height, MOCKUP_LISTINGS, MOCKUP_ACCOUNT);
+      page = await open(context, '/favoris/', `${F} maquette`);
+      await waitForFavorites(page, ['Appartement 2 pièces – Annemasse', 'Studio avec vue dégagée'], '2 biens sauvegardés', `${F} maquette`);
+      await page.waitForSelector('.dfav-missing');
+      await page.waitForSelector('.dfav-dot');
+      await favoritePhotosLoaded(page, 2, `${F} maquette`);
+      await checkBadges(page, mockupServer.state, `${F} maquette`);
+      await favShot(page, `4-favoris-${width}.png`);
+      if (width === 1440) {
+        await page.click('.dfav-tab >> nth=1');
+        await page.waitForSelector('.dfav-searches .saved-search');
+        await waitForSearchCounts(page, `${F} maquette`);
+        await favShot(page, '4-favoris-recherches-1440.png');
+      }
+      await page.close();
+      await context.close();
+    }
+
+    const { context: favDesk, server: favServer } = await favContext(width, height, FAV_LISTINGS, FAV_ACCOUNT);
+    page = await open(favDesk, '/favoris/', F);
+    await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', F);
+    await page.waitForSelector('.dfav-dot');
+    await favoritePhotosLoaded(page, 3, F);
+    await checkChrome(page, F, { signedIn: true, margin: width >= 1280 ? 48 : 32 });
+    await checkBadges(page, favServer.state, F);
+    expectSame(F, 'en-tête', [await textOf(page, '.dfav-titles h1'), await textOf(page, '.dfav-titles p'), await page.getAttribute('.dfav-compare', 'aria-label'),
+      await page.isDisabled('.dfav-compare'), await page.locator('.dfav-compare-count').count(), await page.getAttribute('.dtop-round[href="/favoris/"]', 'aria-current')],
+    ['Vos favoris', 'Retrouvez vos biens favoris et vos recherches', 'Comparer vos favoris', false, 0, 'page']);
+    expectSame(F, 'onglets', await page.$$eval('.dfav-tab', (els) => els.map((el) => [el.firstChild?.nextSibling?.textContent ?? null, el.querySelector('.dfav-tab-count')?.textContent ?? null,
+      el.getAttribute('aria-label'), el.getAttribute('aria-pressed'), Boolean(el.querySelector('.dfav-dot'))])),
+    [['Favoris', null, null, 'true', false], ['Recherches', '(2)', 'Recherches, 2, nouveautés', 'false', true]]);
+    expectSame(F, 'recherche, filtres et tri', [await page.getAttribute('.dfav-field input', 'placeholder'), await page.getAttribute('.dfav-field input', 'aria-label'),
+      await page.getAttribute('.dfav-filters', 'aria-label'), await page.getAttribute('.dfav-sort select', 'aria-label'), await page.textContent('.dfav-sort > span'),
+      await page.$$eval('.dfav-sort option', (els) => els.map((el) => [el.value, el.textContent]))],
+    ['Ville, code postal, type de bien', 'Rechercher dans vos favoris', 'Filtres', 'Trier par', 'Pertinence',
+      [['relevance', 'Pertinence'], ['priceAscending', 'Prix croissant'], ['priceDescending', 'Prix décroissant'], ['recentlyAdded', 'Ajout le plus récent']]]);
+    expectSame(F, 'catégories', await page.$$eval('.dfav-chip', (els) => els.map((el) => [el.textContent.trim(), el.getAttribute('aria-pressed')])),
+      [['Tous', 'true'], ['Résidentiel', 'false'], ['Location', 'false'], ['Investir', 'false'], ['Hôtels', 'false']]);
+    expectSame(F, 'cartes', await favoriteCardsShown(page), FAV_CARDS);
+    // L'annonce retirée vient après les cartes, comme dans l'app.
+    expectSame(F, 'grille', await page.$$eval('.dfav-grid > *', (els) => els.map((el) => el.className)), ['dfav-card', 'dfav-card', 'dfav-card', 'dfav-card', 'dfav-missing']);
+    expectSame(F, 'annonce plus disponible', [await textOf(page, '.dfav-missing-title'), await textOf(page, '.dfav-missing-text'), await textOf(page, '.dfav-missing-remove')],
+      ['Annonce plus disponible', 'Le vendeur l\'a retirée, vendue ou louée.', 'Retirer']);
+    const favLayout = await page.evaluate(() => {
+      const box = (element) => element.getBoundingClientRect();
+      const items = [...document.querySelectorAll('.dfav-grid > *')].map(box);
+      const field = box(document.querySelector('.dfav-field'));
+      const middle = (rect) => Math.round(rect.top + rect.height / 2);
+      return {
+        content: Math.round(box(document.querySelector('.dfav-inner')).width), columns: getComputedStyle(document.querySelector('.dfav-grid')).gridTemplateColumns.split(' ').length,
+        widths: [...new Set(items.map((rect) => Math.round(rect.width)))], heights: new Set(items.map((rect) => Math.round(rect.height))).size,
+        photos: [...new Set([...document.querySelectorAll('.dfav-photo')].map((photo) => Math.round(box(photo).height)))], field: Math.round(field.width),
+        chipsBesideField: [...document.querySelectorAll('.dfav-chip')].every((chip) => Math.abs(middle(box(chip)) - middle(field)) <= 2),
+        overflowX: document.documentElement.scrollWidth - innerWidth, footer: Boolean(document.querySelector('.dfoot')),
+      };
+    });
+    expectSame(F, 'mise en page', favLayout, {
+      content: width === 1440 ? 1200 : 960, columns: 3, widths: [width === 1440 ? 384 : 307], heights: 1, photos: [220], field: 420, chipsBesideField: width === 1440, overflowX: 0, footer: true,
+    });
+    // Tailles de la maquette (titre 36/700, textes 15, titres de carte 17/700) et police Inter partout, boutons compris.
+    const favFonts = await page.evaluate(() => {
+      const font = (selector) => {
+        const style = getComputedStyle(document.querySelector(selector));
+        return `${style.fontSize} ${style.fontWeight}${style.fontFamily.startsWith('"Nidalo Inter"') ? '' : ` ${style.fontFamily}`}`;
+      };
+      return {
+        titre: font('.dfav-titles h1'), 'sous-titre': font('.dfav-titles p'), onglet: font('.dfav-tab'), champ: font('.dfav-field input'), catégorie: font('.dfav-chip'),
+        nombre: font('.dfav-total'), tri: font('.dfav-sort'), 'titre de carte': font('.dfav-title'), infos: font('.dfav-details'), prix: font('.dfav-price strong'),
+        'prix au m²': font('.dfav-per-meter'), rendement: font('.dfav-yield'), 'plus disponible': font('.dfav-missing-title'), Retirer: font('.dfav-missing-remove'),
+      };
+    });
+    expectSame(F, 'polices', favFonts, {
+      titre: '36px 700', 'sous-titre': '15px 400', onglet: '15px 600', champ: '15px 400', catégorie: '15px 600', nombre: '15px 600', tri: '15px 600', 'titre de carte': '17px 700',
+      infos: '15px 400', prix: '20px 700', 'prix au m²': '14px 500', rendement: '14px 600', 'plus disponible': '18px 700', Retirer: '15px 600',
+    });
+    await favShot(page, `favoris-${width}.png`);
+    await page.click('.dfav-tab >> nth=1');
+    await page.waitForSelector('.dfav-searches .saved-search');
+    await waitForSearchCounts(page, F);
+    if (page.url() !== `${base}/favoris/?onglet=recherches`) problems.push(`${F} : adresse de l'onglet Recherches ${page.url()}`);
+    expectSame(F, 'onglet Recherches', [await page.$$eval('.dfav-tab', (els) => els.map((el) => el.getAttribute('aria-pressed'))), await page.locator('.dfav-tools, .dfav-grid').count()],
+      [['false', 'true'], 0]);
+    expectSame(F, 'recherches', await page.$$eval('.dfav-searches .saved-search', (cards) => cards.map((card) => [card.querySelector('h3')?.textContent ?? null,
+      card.querySelector('.saved-search-text p')?.textContent.replace(/\s+/g, ' ') ?? null, card.querySelector('.alerts-on, .alerts-off')?.textContent.trim() ?? null,
+      Math.round(card.getBoundingClientRect().width)])),
+    [[ACCOUNT.saved_searches[0].name, 'Résidentiel · Lyon et alentours · Jusqu\'à 300 000 €', 'Alertes actives', width === 1440 ? 588 : 470],
+      [ACCOUNT.saved_searches[1].name, 'Investir · Jusqu\'à 250 000 €', 'Alertes désactivées', width === 1440 ? 588 : 470]]);
+    await favShot(page, `favoris-recherches-${width}.png`);
+    await page.close();
+
+    if (width === 1440) {
+      const B = F;
+      // Recherche dans les favoris (avec ses suggestions), catégories, tris et filtres : les cartes, leur ordre et le nombre.
+      page = await open(favDesk, '/favoris/', `${B} recherche`);
+      await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : recherche`);
+      await page.fill('.dfav-field input', 'villeur');
+      await waitForFavorites(page, [FAV_T2], '1 sur 4 biens', `${B} : « villeur »`);
+      expectSame(B, 'suggestions de « villeur »', await page.$$eval('.dfav-suggestions button', (els) => els.map((el) => [...el.querySelectorAll('.dfav-suggestion-text > span')]
+        .map((span) => span.textContent))), [['Villeurbanne', '69100 · Ville']]);
+      await page.click('.dfav-suggestions button');
+      expectSame(B, 'suggestion choisie', [await page.inputValue('.dfav-field input'), await page.locator('.dfav-suggestions').count()], ['Villeurbanne', 0]);
+      await waitForFavorites(page, [FAV_T2], '1 sur 4 biens', `${B} : « Villeurbanne »`);
+      await page.click('.dfav-clear');
+      await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : recherche effacée`);
+      for (const text of ['hôtel', 'HOTEL', '69007']) {
+        await page.fill('.dfav-field input', text);
+        await waitForFavorites(page, [text === '69007' ? FAV_STUDIO : FAV_HOTEL], '1 sur 4 biens', `${B} : « ${text} »`);
+      }
+      await page.fill('.dfav-field input', 'zzz');
+      await page.waitForSelector('.dfav .account-empty');
+      expectSame(B, 'aucun favori ne correspond', [await textOf(page, '.dfav .account-empty h2'), await textOf(page, '.dfav .account-empty p'), await textOf(page, '.dfav .account-empty button'),
+        await textOf(page, '.dfav-total'), await page.locator('.dfav-missing').count()], ['Aucun favori ne correspond', 'Modifiez la recherche, la catégorie ou les filtres.', 'Tout afficher', '0 sur 4 biens', 0]);
+      await page.click('.dfav .account-empty button');
+      await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : « Tout afficher »`);
+      if (await page.inputValue('.dfav-field input')) problems.push(`${B} : « Tout afficher » garde la recherche`);
+      for (const [chip, titles] of [['Résidentiel', [FAV_FLAT]], ['Location', [FAV_STUDIO]], ['Investir', [FAV_T2]], ['Hôtels', [FAV_HOTEL]], ['Tous', FAV_ALL]]) {
+        await page.locator('.dfav-chip', { hasText: chip }).click();
+        await waitForFavorites(page, titles, titles.length === 4 ? '4 biens sauvegardés' : `${titles.length} sur 4 biens`, `${B} : catégorie ${chip}`);
+        expectSame(B, `catégorie ${chip}`, await page.$$eval('.dfav-chip[aria-pressed="true"]', (els) => els.map((el) => el.textContent.trim())), [chip]);
+      }
+      for (const [sort, short, titles] of [['priceAscending', 'Prix ↑', [FAV_STUDIO, FAV_T2, FAV_FLAT, FAV_HOTEL]], ['priceDescending', 'Prix ↓', [FAV_HOTEL, FAV_FLAT, FAV_T2, FAV_STUDIO]],
+        ['recentlyAdded', 'Récents', [FAV_STUDIO, FAV_HOTEL, FAV_T2, FAV_FLAT]], ['relevance', 'Pertinence', FAV_ALL]]) {
+        await page.selectOption('.dfav-sort select', sort);
+        await waitForFavorites(page, titles, '4 biens sauvegardés', `${B} : tri ${sort}`);
+        expectSame(B, `tri ${sort}`, await page.textContent('.dfav-sort > span'), short);
+      }
+      // Recherche, catégorie et tri ensemble : les favoris qui correspondent, dans l'ordre du tri.
+      await page.selectOption('.dfav-sort select', 'priceDescending');
+      await page.fill('.dfav-field input', 'lyon');
+      await waitForFavorites(page, [FAV_FLAT, FAV_STUDIO], '2 sur 4 biens', `${B} : « lyon », prix décroissant`);
+      await page.locator('.dfav-chip', { hasText: 'Location' }).click();
+      await waitForFavorites(page, [FAV_STUDIO], '1 sur 4 biens', `${B} : « lyon », Location`);
+      await page.fill('.dfav-field input', '');
+      await page.locator('.dfav-chip', { hasText: 'Tous' }).click();
+      await page.selectOption('.dfav-sort select', 'relevance');
+      await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : tout affiché`);
+      // Filtres : ouverts sur la catégorie de la pastille (« Tous » : Résidentiel) ; appliqués aux favoris chargés.
+      await page.click('.dfav-filters');
+      await page.waitForSelector('dialog.filters-dialog[open]');
+      expectSame(B, 'filtres : catégorie', await textOf(page, 'dialog[open] .mode-tab[aria-checked="true"]'), 'Résidentiel');
+      await page.locator('dialog[open]').getByRole('group', { name: 'Pièces minimum' }).getByRole('button', { name: '3', exact: true }).click();
+      await page.waitForFunction(() => document.querySelector('dialog[open] .filters-apply .btn')?.textContent?.trim() === 'Afficher 1 bien', null, { timeout: 8000 })
+        .catch(async () => problems.push(`${B} : filtres, bouton « ${await textOf(page, 'dialog[open] .filters-apply .btn')} » au lieu de « Afficher 1 bien »`));
+      await page.click('dialog[open] .filters-apply .btn');
+      await page.waitForSelector('dialog.filters-dialog', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${B} : les filtres restent ouverts`));
+      await waitForFavorites(page, [FAV_FLAT], '1 sur 4 biens', `${B} : filtre « 3 pièces »`);
+      expectSame(B, 'filtres appliqués', [await page.getAttribute('.dfav-filters', 'aria-label'), await textOf(page, '.dfav-filters-count'),
+        await page.$$eval('.dfav-chip[aria-pressed="true"]', (els) => els.map((el) => el.textContent.trim()))], ['Filtres, 1 actifs', '1', ['Résidentiel']]);
+      await page.locator('.dfav-chip', { hasText: 'Tous' }).click();
+      // « Tous » garde les filtres posés (FavoritesView : filteredIDs) : seuls les favoris qui y correspondent restent.
+      await waitForFavorites(page, [FAV_FLAT], '1 sur 4 biens', `${B} : filtre gardé sur « Tous »`);
+      await page.close();
+
+      // Comparer : le bouton de chaque carte (CompareButton) ajoute ou retire, 3 biens au plus, avec le toast de l'app ;
+      // le bouton rond remplit une comparaison vide avec les 3 premiers favoris dans l'ordre du tri (fillIfEmpty), puis
+      // ouvre Comparer. Rien n'est envoyé au serveur.
+      page = await open(favDesk, '/favoris/', `${B} comparer`);
+      await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : comparer`);
+      const compareWrites = writes.length;
+      const favCard = (title) => page.locator('.dfav-card', { has: page.locator('.dfav-title', { hasText: title }) });
+      const comparedIds = () => page.evaluate(() => { try { return JSON.parse(sessionStorage.getItem('nidalo.comparer') ?? 'null'); } catch { return 'illisible'; } });
+      const roundButton = () => page.evaluate(() => [document.querySelector('.dfav-compare')?.getAttribute('aria-label') ?? null, document.querySelector('.dfav-compare-count')?.textContent ?? null]);
+      const pressedCards = () => page.$$eval('.dfav-card', (cards) => cards.filter((card) => card.querySelector('.dfav-card-compare')?.getAttribute('aria-pressed') === 'true')
+        .map((card) => card.querySelector('.dfav-title')?.textContent ?? null));
+      await favCard(FAV_FLAT).locator('.dfav-card-compare').click();
+      await waitForCompareNotice(page, { text: 'Ajouté à la comparaison', action: 'Voir' }, `${B} : ajout`);
+      expectSame(B, 'après un ajout', [await comparedIds(), await roundButton(), await pressedCards(), await favCard(FAV_FLAT).locator('.dfav-card-compare').getAttribute('aria-label'),
+        await page.getAttribute('.dfav-toast-box a', 'href'), page.url()],
+      [{ ids: [favId(1)], referenceId: favId(1) }, ['Comparer, 1 bien', '1'], [FAV_FLAT], 'Retirer de la comparaison', '/comparer/', `${base}/favoris/`]);
+      await favCard(FAV_FLAT).locator('.dfav-card-compare').click();
+      await waitForCompareNotice(page, { text: 'Retiré de la comparaison', action: null }, `${B} : retrait`);
+      expectSame(B, 'après un retrait', [await comparedIds(), await roundButton(), await pressedCards()], [{ ids: [], referenceId: null }, ['Comparer vos favoris', null], []]);
+      // Tous les favoris comptent, pas seulement la catégorie affichée (FavoritesView : sorted(listings)).
+      await page.selectOption('.dfav-sort select', 'priceAscending');
+      await page.locator('.dfav-chip', { hasText: 'Hôtels' }).click();
+      await waitForFavorites(page, [FAV_HOTEL], '1 sur 4 biens', `${B} : Hôtels, prix croissant`);
+      await page.click('.dfav-compare');
+      await page.waitForURL(`${base}/comparer/`).catch(() => problems.push(`${B} : le bouton rond n'ouvre pas /comparer/ (${page.url()})`));
+      expectSame(B, 'bouton rond, comparaison vide', await comparedIds(), { ids: [favId(2), favId(3), favId(1)], referenceId: favId(2) });
+      await page.goto(`${base}/favoris/`, { waitUntil: 'networkidle' });
+      await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : retour aux favoris`);
+      expectSame(B, 'trois biens comparés', [await roundButton(), await pressedCards()], [['Comparer, 3 biens', '3'], [FAV_T2, FAV_FLAT, FAV_STUDIO]]);
+      // Un quatrième : refusé, « 3 biens maximum, retirez-en un » avec « Gérer » ; la comparaison ne change pas.
+      await favCard(FAV_HOTEL).locator('.dfav-card-compare').click();
+      await waitForCompareNotice(page, { text: '3 biens maximum, retirez-en un', action: 'Gérer' }, `${B} : quatrième bien`);
+      expectSame(B, 'quatrième bien', [await comparedIds(), await pressedCards(), await page.getAttribute('.dfav-toast-box a', 'href')],
+        [{ ids: [favId(2), favId(3), favId(1)], referenceId: favId(2) }, [FAV_T2, FAV_FLAT, FAV_STUDIO], '/comparer/']);
+      // Retirer la référence la passe au premier qui reste ; l'hôtel a ensuite sa place.
+      await favCard(FAV_STUDIO).locator('.dfav-card-compare').click();
+      await waitForCompareNotice(page, { text: 'Retiré de la comparaison', action: null }, `${B} : retrait du studio`);
+      await favCard(FAV_HOTEL).locator('.dfav-card-compare').click();
+      await waitForCompareNotice(page, { text: 'Ajouté à la comparaison (3 biens)', action: 'Voir' }, `${B} : ajout de l'hôtel`);
+      expectSame(B, 'comparaison changée', [await comparedIds(), await roundButton(), await pressedCards()],
+        [{ ids: [favId(3), favId(1), favId(4)], referenceId: favId(3) }, ['Comparer, 3 biens', '3'], [FAV_T2, FAV_FLAT, FAV_HOTEL]]);
+      // Comparaison commencée : le bouton rond l'ouvre telle quelle.
+      await page.click('.dfav-compare');
+      await page.waitForURL(`${base}/comparer/`).catch(() => problems.push(`${B} : le bouton rond n'ouvre pas /comparer/ (${page.url()})`));
+      expectSame(B, 'bouton rond, comparaison commencée', await comparedIds(), { ids: [favId(3), favId(1), favId(4)], referenceId: favId(3) });
+      if (writes.length !== compareWrites) problems.push(`${B} : la comparaison a écrit au serveur ${JSON.stringify(writes.slice(compareWrites))}`);
+      await page.close();
+
+      // Cœur et « Retirer » : FavoritesStore.toggle → DELETE favorites?listing_id=eq.<id> ; la carte quitte la grille.
+      page = await open(favDesk, '/favoris/', `${B} cœur`);
+      await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : cœur`);
+      let mark = writes.length;
+      await favCard(FAV_FLAT).locator('.dfav-heart').click();
+      await waitForFavorites(page, [FAV_T2, FAV_STUDIO, FAV_HOTEL], '3 biens sauvegardés', `${B} : après le cœur`);
+      await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${favId(1)}` }, null]], `${B} : cœur`);
+      if (page.url() !== `${base}/favoris/`) problems.push(`${B} : le cœur a ouvert ${page.url()}`);
+      mark = writes.length;
+      await page.click('.dfav-missing-remove');
+      await page.waitForSelector('.dfav-missing', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${B} : « Retirer » laisse l'annonce plus disponible`));
+      await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${GONE_ID}` }, null]], `${B} : « Retirer »`);
+      expectSame(B, 'après les retraits', [await favoriteTitles(page), await textOf(page, '.dfav-total')], [[FAV_T2, FAV_STUDIO, FAV_HOTEL], '3 biens sauvegardés']);
+      await page.close();
+
+      // Onglet Recherches : les actions de SavedSearchesView, envoyées comme l'app (AccountStore.save, deleteSearch,
+      // markSearchViewed) : nom, critères et alertes ensemble, mise à jour par l'id.
+      page = await open(favDesk, '/favoris/?onglet=recherches', `${B} recherches`);
+      await page.waitForSelector('.dfav-searches .saved-search');
+      await waitForSearchCounts(page, `${B} : recherches`);
+      const [lyon, invest] = ACCOUNT.saved_searches;
+      const searchCard = (n) => page.locator('.dfav-searches .saved-search').nth(n);
+      const openMenu = async (n) => {
+        await searchCard(n).locator('.round-menu').click();
+        await searchCard(n).locator('.menu-popover').waitFor({ timeout: 8000 });
+        return searchCard(n).locator('[role="menuitem"]').allTextContents();
+      };
+      const choose = (n, label) => searchCard(n).getByRole('menuitem', { name: label, exact: true }).click();
+      const saved = (fields) => [['PATCH', 'saved_searches', { id: `eq.${lyon.id}`, select: SAVED_SELECT }, fields]];
+      expectSame(B, 'menu d\'une recherche', await openMenu(0), ['Modifier les critères', 'Renommer', 'Désactiver les alertes', 'Supprimer']);
+      mark = writes.length;
+      await choose(0, 'Renommer');
+      expectSame(B, 'renommer', [await dialogTitle(page), await page.inputValue('dialog[open] .text-input')], ['Renommer la recherche', lyon.name]);
+      await page.fill('dialog[open] .text-input', 'Lyon centre');
+      await page.locator('dialog[open]').getByRole('button', { name: 'Renommer', exact: true }).click();
+      await expectWrites(mark, saved({ name: 'Lyon centre', query: lyon.query, alerts_enabled: true }), `${B} : renommer`);
+      await page.waitForFunction(() => document.querySelector('.dfav-searches .saved-search h3')?.textContent === 'Lyon centre', null, { timeout: 8000 })
+        .catch(() => problems.push(`${B} : le nouveau nom n'est pas affiché`));
+      mark = writes.length;
+      await openMenu(0);
+      await choose(0, 'Désactiver les alertes');
+      await expectWrites(mark, saved({ name: 'Lyon centre', query: lyon.query, alerts_enabled: false }), `${B} : désactiver les alertes`);
+      await searchCard(0).locator('.alerts-off').waitFor({ timeout: 8000 }).catch(() => problems.push(`${B} : « Alertes désactivées » absent`));
+      mark = writes.length;
+      expectSame(B, 'menu, alertes désactivées', await openMenu(0), ['Modifier les critères', 'Renommer', 'Activer les alertes', 'Supprimer']);
+      await choose(0, 'Activer les alertes');
+      await expectWrites(mark, saved({ name: 'Lyon centre', query: lyon.query, alerts_enabled: true }), `${B} : activer les alertes`);
+      await searchCard(0).locator('.alerts-on').waitFor({ timeout: 8000 }).catch(() => problems.push(`${B} : « Alertes actives » absent`));
+      // Modifier les critères : la catégorie de la recherche est gardée ; la requête de l'app (SearchDraft.query(for:)).
+      mark = writes.length;
+      await openMenu(0);
+      await choose(0, 'Modifier les critères');
+      await page.waitForSelector('dialog.filters-dialog[open]');
+      if (await page.locator('dialog[open] .mode-tab').count()) problems.push(`${B} : modifier les critères propose de changer de catégorie`);
+      await page.locator('dialog[open]').getByRole('group', { name: 'Pièces minimum' }).getByRole('button', { name: '3', exact: true }).click();
+      await checkApplyButton(page, `${B} : modifier les critères`);
+      await page.click('dialog[open] .filters-apply .btn');
+      await expectWrites(mark, saved({ name: 'Lyon centre', query: { ...lyon.query, rooms: { min: 3 }, excludesLeased: true }, alerts_enabled: true }), `${B} : modifier les critères`);
+      // Supprimer, après confirmation : DELETE saved_searches?id=eq.<id>.
+      expectSame(B, 'menu de la deuxième recherche', await openMenu(1), ['Modifier les critères', 'Renommer', 'Activer les alertes', 'Supprimer']);
+      mark = writes.length;
+      await choose(1, 'Supprimer');
+      expectSame(B, 'supprimer', await dialogTitle(page), 'Supprimer cette recherche ?');
+      await alertButton(page, `Supprimer « ${invest.name} »`);
+      await expectWrites(mark, [['DELETE', 'saved_searches', { id: `eq.${invest.id}` }, null]], `${B} : supprimer`);
+      await page.waitForFunction(() => document.querySelectorAll('.dfav-searches .saved-search').length === 1, null, { timeout: 8000 })
+        .catch(() => problems.push(`${B} : la recherche supprimée reste affichée`));
+      expectSame(B, 'après la suppression', [await textOf(page, '.dfav-tab-count'), await textOf(page, '.dfav-searches .saved-search h3')], ['(1)', 'Lyon centre']);
+      // Voir les résultats : la recherche est vue (last_viewed_at), puis ses résultats s'ouvrent.
+      mark = writes.length;
+      await searchCard(0).locator('.run-button').click();
+      await page.waitForURL((url) => url.pathname === '/recherche/', { timeout: 8000 }).catch(() => problems.push(`${B} : « Voir » n'ouvre pas la recherche (${page.url()})`));
+      const viewed = writes.slice(mark);
+      expectSame(B, 'recherche vue', viewed.map((write) => [write.method, write.table, Object.fromEntries(new URLSearchParams(write.search)), Object.keys(write.body ?? {})]),
+        [['PATCH', 'saved_searches', { id: `eq.${lyon.id}` }, ['last_viewed_at']]]);
+      if (Number.isNaN(Date.parse(viewed[0]?.body?.last_viewed_at ?? ''))) problems.push(`${B} : date de consultation « ${viewed[0]?.body?.last_viewed_at} »`);
+      expectSame(B, 'résultats de la recherche', new URL(page.url()).searchParams.get('mode'), 'buy');
+      await page.close();
+    }
+    await favDesk.close();
+  }
+  {
+    // Aucun favori : le texte de l'app et « Rechercher un bien » ; rien à comparer.
+    const { context } = await favContext(1440, 900, FAV_LISTINGS, { favorites: [] });
+    page = await open(context, '/favoris/', 'favoris vide');
+    await page.waitForSelector('.dfav .account-empty');
+    expectSame('favoris vide', 'texte', [await textOf(page, '.dfav .account-empty h2'), await textOf(page, '.dfav .account-empty p'), await textOf(page, '.dfav .account-empty a'),
+      await page.getAttribute('.dfav .account-empty a', 'href'), await page.isDisabled('.dfav-compare'), await page.locator('.dfav-toolbar').count()],
+    ['Aucun favori pour l\'instant', 'Touchez le cœur d\'une annonce pour la retrouver ici et la comparer.', 'Rechercher un bien', '/recherche/', true, 0]);
+    await page.close();
+    await context.close();
+  }
+  {
+    // Sans compte : l'invitation à se connecter, sans rien demander des favoris ni des recherches.
+    const { context, server: guestServer } = await favContext(1440, 900, FAV_LISTINGS, FAV_ACCOUNT, false);
+    page = await open(context, '/favoris/', 'favoris sans compte');
+    await page.waitForSelector('.signin-card');
+    await checkChrome(page, 'favoris sans compte', { signedIn: false, margin: 48 });
+    expectSame('favoris sans compte', 'page', [await page.locator('.dfav').count(), guestServer.requests.filter((request) => ['favorites', 'saved_searches'].includes(request.table)).length], [0, 0]);
+    await page.close();
+    await context.close();
+  }
+  {
+    // À 1023 px : la page du téléphone, inchangée.
+    const context = await browser.newContext({ viewport: { width: 1023, height: 768 }, locale: 'fr-FR' });
+    await mock(context, { signedIn: true, listingRows: FAV_LISTINGS, account: FAV_ACCOUNT });
+    page = await open(context, '/favoris/', 'favoris 1023');
+    await page.waitForSelector('.favorite-card');
+    expectSame('favoris 1023', 'page du téléphone', [await page.locator('.favorite-card').count(), await page.locator('.dfav, .dtop, .dfoot').count()], [4, 0]);
+    await page.close();
+    await context.close();
   }
 
   // Téléphone

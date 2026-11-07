@@ -98,6 +98,12 @@ export function clearCompare(): void {
   save(EMPTY);
 }
 
+/** Bouton « Comparer » des Favoris : une comparaison vide reprend les premiers biens donnés, trois au plus (fillIfEmpty). */
+export function fillCompareIfEmpty(candidates: string[]): void {
+  if (compareState().ids.length) return;
+  for (const id of candidates.slice(0, COMPARE_MAX)) addToCompare(id);
+}
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
