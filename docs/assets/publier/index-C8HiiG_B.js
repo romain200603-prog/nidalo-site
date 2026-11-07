@@ -1,0 +1,1 @@
+import{n as e,wt as t}from"../client-IczIkSAG.js";import{t as n}from"../SoonCard-Dy3HoKxt.js";import{t as r}from"../soonPages-C9rQ0pap.js";import{t as i}from"../mount-NoG4PPb_.js";var a=t(),o=document.body.dataset.section===`publish`?r.publish:r.messages;i((0,a.jsx)(e,{section:o.section,children:(0,a.jsx)(n,{icon:o.icon,title:o.title,text:o.text})}));

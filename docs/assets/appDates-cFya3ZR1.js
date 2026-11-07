@@ -1,0 +1,1 @@
+var e=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;function t(t){if(typeof t!=`string`||!t)return null;let n=new Date(e.test(t)?`${t}Z`:t);return Number.isNaN(n.getTime())?null:n}function n(e){return e.toISOString().slice(0,-1)}export{n,t};
