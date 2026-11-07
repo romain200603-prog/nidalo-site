@@ -82,6 +82,8 @@ export type ListingRow = {
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function photoUrl(path: string): string {
+  // Aperçu de la publication : une photo choisie sur l'ordinateur, pas encore envoyée.
+  if (path.startsWith('blob:')) return path;
   return `${SUPABASE_URL}/storage/v1/object/public/${PHOTO_BUCKET}/${path.split('/').map(encodeURIComponent).join('/')}`;
 }
 

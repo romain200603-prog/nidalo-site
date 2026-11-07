@@ -1,0 +1,77 @@
+/* « Publier une annonce » sur ordinateur (src/pages/publish), dans la colonne de 640 px de Mon espace : mêmes cartes,
+   champs, pastilles et barre d'actions que .dsc (ordinateur-mon-espace.css), plus ce qui est propre à la publication
+   (progression en 7 étapes, photos, aperçu, vérification, confirmation). Sous 1024 px, la page garde le message
+   « bientôt » du téléphone : rien ici ne s'applique. */
+@media (min-width: 1024px) {
+  /* Progression : une barre par étape, remplie jusqu'à l'étape en cours. */
+  .dpub-progress { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin: 0 0 4px; }
+  .dpub-progress > span { height: 5px; border-radius: 999px; background: var(--d-card-border); }
+  .dpub-progress > span.is-done { background: var(--d-blue); }
+  .dpub-spinner { width: 18px; height: 18px; border-width: 2px; }
+  .dpub-progress-text { color: var(--d-grey); font-size: 14px; font-weight: 600; text-align: center; }
+  .dpub .dsc-action-buttons.is-single { grid-template-columns: minmax(0, 1fr); }
+
+  /* Choix : grilles de pastilles (stationnement, équipements, état). */
+  .dpub-choices-wide { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+  .dpub-choices-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .dpub .dpub-error { margin: 0; }
+
+  /* Adresse : code postal et ville côte à côte. */
+  .dpub-postal-row { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; align-items: start; }
+  .dpub .dpub-place.has-error .place-field input { border-color: var(--d-red); }
+
+  /* Indicateurs calculés (Investissement, Hôtels). */
+  .dpub-indicator { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px; background: var(--d-separator); }
+  .dpub-indicator-top { display: flex; align-items: center; gap: 8px; }
+  .dpub-indicator-title { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; }
+  .dpub-hypothesis { flex: none; padding: 2px 8px; border-radius: 999px; background: #FDF1E1; color: #A25311; font-size: 12px; font-weight: 700; }
+  .dpub-indicator-value { flex: none; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .dpub-indicator-value.is-empty { color: var(--d-help); }
+  .dpub-indicator-formula { color: var(--d-grey); font-size: 13px; line-height: 18px; }
+
+  /* Photos : grille de miniatures carrées, la première est la photo principale. */
+  .dpub-photos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .dpub-photo { position: relative; aspect-ratio: 1; }
+  .dpub-photo > img { display: block; width: 100%; height: 100%; border-radius: 12px; background: var(--d-separator); object-fit: cover; }
+  .dpub-photo-main { position: absolute; left: 8px; top: 8px; padding: 3px 8px; border-radius: 999px; background: rgba(36, 45, 56, 0.78); color: #FFFFFF; font-size: 12px; font-weight: 700; }
+  .dpub-photo > .dsc-menu { position: absolute; right: 6px; top: 6px; }
+  .dpub-photo-menu { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.92); color: var(--d-text); box-shadow: 0 2px 8px rgba(36, 45, 56, 0.18); cursor: pointer; }
+  .dpub-photo-menu:hover { background: #FFFFFF; }
+  .dpub-photo-menu .icon { width: 18px; height: 18px; }
+  .dpub-importing { display: flex; align-items: center; gap: 8px; color: var(--d-grey); font-size: 14px; font-weight: 600; }
+  .dpub-importing .spinner { width: 16px; height: 16px; border-width: 2px; }
+
+  /* Description et aperçu. */
+  .dpub-propose { align-self: flex-start; padding: 2px 0; border: 0; background: none; color: var(--d-blue); font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; }
+  .dpub-propose:hover { text-decoration: underline; }
+  .dpub .dpub-textarea { height: auto; min-height: 200px; padding: 12px 14px; font-family: inherit; font-weight: 500; line-height: 22px; resize: vertical; }
+  .dpub-preview { width: 100%; max-width: 380px; }
+  .dpub-preview .listing-card { width: 100%; }
+
+  /* Vérification : champs à compléter et récapitulatif. */
+  .dpub-missing { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+  .dpub-missing > li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; color: var(--d-red); font-size: 15px; font-weight: 600; }
+  .dpub-missing > li + li { border-top: 1px solid var(--d-separator); }
+  .dpub-link { flex: none; padding: 4px 8px; border: 0; border-radius: 8px; background: none; color: var(--d-blue); font-size: 14px; font-weight: 700; cursor: pointer; }
+  .dpub-link:hover { text-decoration: underline; }
+  .dpub-recap { display: flex; flex-direction: column; margin: 0; }
+  .dpub-recap-row { display: grid; grid-template-columns: 130px minmax(0, 1fr); align-items: center; gap: 12px; padding: 9px 0; }
+  .dpub-recap-row + .dpub-recap-row { border-top: 1px solid var(--d-separator); }
+  .dpub-recap-row dt { color: var(--d-grey); font-size: 14px; font-weight: 600; }
+  .dpub-recap-row dd { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 15px; font-weight: 600; }
+  .dpub-recap-row dd > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .dpub-recap-edit { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--d-blue-light); color: var(--d-blue); cursor: pointer; }
+  .dpub-recap-edit:hover { background: #E2E8F6; }
+  .dpub-recap-edit .icon { width: 15px; height: 15px; }
+
+  /* Confirmation. */
+  .dpub-success { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 24px; padding: 36px 28px; border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; text-align: center; }
+  .dpub-success-icon { display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; border-radius: 50%; background: var(--d-green-pill); color: var(--d-green-text); }
+  .dpub-success-icon .icon { width: 32px; height: 32px; }
+  .dpub-success h1 { color: var(--d-text); font-size: 24px; font-weight: 700; line-height: 30px; }
+  .dpub-success p { max-width: 460px; color: var(--d-grey); font-size: 15px; line-height: 22px; }
+  .dpub-success-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 8px; }
+
+  /* « Votre prénom » avant la première publication. */
+  .dpub-name-input { margin-top: 4px; }
+}

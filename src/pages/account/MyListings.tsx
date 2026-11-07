@@ -5,7 +5,8 @@ import { deleteListing, loadMyListings, myListingsStore, ONLINE_STATUSES, setLis
 import { useStore } from '../../lib/account/session';
 import { formatCardPrice, cardContent } from '../../lib/cardContent';
 import { photoUrl, sortedPhotos, type ListingRow } from '../../lib/listings';
-import { listingPath } from '../../lib/paths';
+import { useDesktop } from '../../lib/desktop';
+import { listingPath, publishPath } from '../../lib/paths';
 import { EmptyState, ScreenHeader, Spinner } from './parts';
 import { soonPath } from './Screens';
 
@@ -46,6 +47,10 @@ export function MyListings() {
   const [toDelete, setToDelete] = useState<ListingRow | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // Sur ordinateur, « Reprendre », « Modifier » et « Déposer » ouvrent la page Publier ; sur téléphone, toujours
+  // l'écran « bientôt ».
+  const desktop = useDesktop();
+  const editPath = (id: string, step: 'photos' | null = null) => (desktop ? publishPath(id, step) : soonPath('publier'));
 
   useEffect(() => {
     void loadMyListings();
@@ -86,7 +91,7 @@ export function MyListings() {
           );
         })}
       </div>
-      <a className="btn btn-primary deposit-button" href={soonPath('publier')}><Icon name="plus" />Déposer une annonce</a>
+      <a className="btn btn-primary deposit-button" href={desktop ? publishPath() : soonPath('publier')}><Icon name="plus" />Déposer une annonce</a>
       {state.status === 'loading' && <Spinner />}
       {state.status === 'error' && <EmptyState icon="triangleAlert" title="Erreur" text={state.message} />}
       {state.status === 'ready' && shown.length === 0 && (
@@ -121,9 +126,9 @@ export function MyListings() {
                     <Icon name="rotateCcw" />Republier
                   </button>
                 ) : row.status === 'draft' ? (
-                  <a className="action-button is-filled" href={soonPath('publier')}><Icon name="pen" />Reprendre</a>
+                  <a className="action-button is-filled" href={editPath(row.id)}><Icon name="pen" />Reprendre</a>
                 ) : (
-                  <a className="action-button" href={soonPath('publier')}><Icon name="pen" />Modifier</a>
+                  <a className="action-button" href={editPath(row.id)}><Icon name="pen" />Modifier</a>
                 )}
                 <div className="menu-anchor">
                   <button
@@ -137,8 +142,8 @@ export function MyListings() {
                   </button>
                   {menu === row.id && (
                     <div className="menu-popover" role="menu">
-                      <a role="menuitem" href={soonPath('publier')}>Modifier l&apos;annonce</a>
-                      <a role="menuitem" href={soonPath('publier')}>Mettre à jour les photos</a>
+                      <a role="menuitem" href={editPath(row.id)}>Modifier l&apos;annonce</a>
+                      <a role="menuitem" href={editPath(row.id, 'photos')}>Mettre à jour les photos</a>
                       {isOnline && <button type="button" role="menuitem" onClick={() => void changeStatus(row, 'archived')}>Suspendre</button>}
                       <button type="button" role="menuitem" className="is-danger" onClick={() => { setMenu(null); setToDelete(row); }}>Supprimer</button>
                     </div>

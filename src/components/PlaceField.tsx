@@ -45,6 +45,7 @@ export function PlaceField({ value, onChange, onChoose, onSubmit, label, placeho
   const [error, setError] = useState<string | null>(null);
   const typed = useRef(false);
   const blurTimer = useRef<number | undefined>(undefined);
+  const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!typed.current) return;
@@ -55,7 +56,9 @@ export function PlaceField({ value, onChange, onChoose, onSubmit, label, placeho
           setSuggestions(found);
           setActive(-1);
           setError(null);
-          setOpen(found.length > 0);
+          // La liste ne s'ouvre que sous le champ en cours de saisie : un texte rempli par une autre suggestion (code
+          // postal et ville d'une adresse choisie) n'ouvre rien ; ses suggestions reviennent si on retourne au champ.
+          setOpen(found.length > 0 && document.activeElement === input.current);
         })
         .catch((reason: unknown) => {
           if (controller.signal.aborted) return;
@@ -109,6 +112,7 @@ export function PlaceField({ value, onChange, onChoose, onSubmit, label, placeho
       <label className={variant === 'home' ? 'place-field-caption' : 'visually-hidden'} htmlFor={id}>{label}</label>
       <Icon name={variant === 'home' ? 'pin' : 'search'} className="icon place-field-icon" />
       <input
+        ref={input}
         id={id}
         type="text"
         inputMode="search"

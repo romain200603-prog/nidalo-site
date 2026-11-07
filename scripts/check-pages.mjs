@@ -1724,13 +1724,14 @@ try {
     await page.waitForFunction(() => !document.querySelector('.map-column.is-open'), null, { timeout: 4000 })
       .catch(() => problems.push(`recherche ${width} : Échap ne referme pas la carte`));
     await page.close();
-    // Écrans absents des maquettes : leur version actuelle, dans une colonne de 640 px.
-    for (const [path, name, selector] of [['/aide/', 'aide', 'article.doc'], ['/mentions-legales/', 'mentions-legales', 'article.doc'], ['/page-inexistante/', '404', 'main .wrap-narrow'],
-      ['/publier/', 'publier', 'main .wrap-narrow'], ['/compte/', 'connexion', '.account-wrap']]) {
+    // Écrans absents des maquettes : leur version actuelle, dans une colonne de 640 px. Publier sans compte :
+    // l'invitation à se connecter de Favoris (la publication elle-même est vérifiée par check-publish.mjs).
+    for (const [path, name, selector, wanted] of [['/aide/', 'aide', 'article.doc', 640], ['/mentions-legales/', 'mentions-legales', 'article.doc', 640],
+      ['/page-inexistante/', '404', 'main .wrap-narrow', 640], ['/publier/', 'publier', 'main .favorites-signin', 480], ['/compte/', 'connexion', '.account-wrap', 640]]) {
       const p = await open(guest, path, `${name}-${width}`);
       await p.waitForSelector(`${selector} h1, ${selector} .signin-card`);
       const column = await contentWidth(p, selector);
-      if (column !== 640) problems.push(`${name} ${width} : colonne de ${column} px au lieu de 640`);
+      if (column !== wanted) problems.push(`${name} ${width} : colonne de ${column} px au lieu de ${wanted}`);
       if (name === 'mentions-legales' && !(await p.textContent('article.doc'))?.includes('Inter (SIL Open Font License 1.1)')) problems.push('mentions légales : crédit de la police Inter absent');
       await p.screenshot({ path: join(out, `${name}-${width}.png`), fullPage: true });
       await p.close();

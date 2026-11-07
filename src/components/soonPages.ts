@@ -1,8 +1,8 @@
 import type { IconName } from './iconPaths';
 import type { Section } from './Layout';
 
-// Pages « bientôt sur le site » (Messages sur téléphone, Publier) : leur texte, partagé par soon.tsx et par la page
-// Messages, qui garde ce message en dessous de 1024 px.
+// Pages « bientôt sur le site » sur téléphone (Messages, Publier) : leur texte, affiché par ces deux pages en dessous
+// de 1024 px.
 export type SoonPage = { section: Section; icon: IconName; title: string; text: string };
 
 export const SOON_PAGES: Record<'messages' | 'publish', SoonPage> = {
