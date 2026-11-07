@@ -118,12 +118,12 @@ describe('pastilles des critères', () => {
     const plain = (s: string) => s.replace(/[  ]/g, ' ');
     const labels = (d: Parameters<typeof filterChips>[0]) => filterChips(d).map((c) => plain(c.label));
     expect(labels({ ...defaultDraft('buy'), priceMin: 150000, priceMax: 250000, livingAreaMin: 40, roomsMin: 3, types: ['house'] }))
-      .toEqual(['Budget : 150 k€ – 250 k€', 'Maison', 'Surface : min 40 m²', '3 pièces et +']);
+      .toEqual(['Budget : 150 k€ – 250 k€', 'Maison', 'Surface : min 40 m²', '3 pièces min']);
     expect(labels({ ...defaultDraft('rent'), priceMax: 900 })).toEqual(['Loyer : 900 €']);
     expect(labels({ ...defaultDraft('buy'), priceMin: 300000, priceMax: 100000 })).toEqual([]);
     expect(labels({ ...defaultDraft('invest'), minGrossYieldPercent: 7, minMonthlyCashFlow: -50, downPayment: 30000 }))
       .toEqual(['Rendement : 7 %', 'Cash-flow : −50 €', 'Apport : 30 k€']);
-    expect(labels({ ...defaultDraft('hotel'), roomsMin: 1 })).toEqual(['1 chambre et +']);
+    expect(labels({ ...defaultDraft('hotel'), roomsMin: 1 })).toEqual(['1 chambre min']);
     expect(plain(compactPrice(1250))).toBe('1 250 €');
   });
 });

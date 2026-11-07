@@ -92,15 +92,30 @@ export function OptionalBoolPicker({ title, value, onChange, trueLabel, falseLab
   );
 }
 
-/** « Pièces minimum » (Studio, 2, 3, 4, 5+) ou « Chambres minimum » (1 à 5+) ; retoucher le choix l'enlève. */
-export function RoomsPicker({ title, value, onChange, startsAtOne = false }: { title: string; value: number | null; onChange: (value: number | null) => void; startsAtOne?: boolean }) {
+/**
+ * « Pièces minimum » (Studio, 2, 3, 4, 5+) ou « Chambres minimum » (1 à 5+) ; avec `bound="max"`, « Pièces maximum »
+ * (Studio, 2, 3, 4, 5) ou « Chambres maximum » (1 à 5). Retoucher le choix l'enlève.
+ */
+export function RoomsPicker({ title, value, onChange, startsAtOne = false, bound = 'min', issue = null }: {
+  title: string;
+  value: number | null;
+  onChange: (value: number | null) => void;
+  startsAtOne?: boolean;
+  bound?: 'min' | 'max';
+  /** Fourchette incohérente (minimum au-dessus du maximum). */
+  issue?: string | null;
+}) {
+  const isMax = bound === 'max';
   return (
-    <ChoiceGroup label={`${title} minimum`}>
-      {[1, 2, 3, 4, 5].map((count) => (
-        <ChoiceChip key={count} title={count === 5 ? '5+' : count === 1 && !startsAtOne ? 'Studio' : String(count)}
-          selected={value === count} onClick={() => onChange(value === count ? null : count)} expands />
-      ))}
-    </ChoiceGroup>
+    <>
+      <ChoiceGroup label={`${title} ${isMax ? 'maximum' : 'minimum'}`}>
+        {[1, 2, 3, 4, 5].map((count) => (
+          <ChoiceChip key={count} title={count === 5 ? (isMax ? '5' : '5+') : count === 1 && !startsAtOne ? 'Studio' : String(count)}
+            selected={value === count} onClick={() => onChange(value === count ? null : count)} expands />
+        ))}
+      </ChoiceGroup>
+      {issue && <p className="field-error">{issue}</p>}
+    </>
   );
 }
 

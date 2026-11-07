@@ -183,7 +183,7 @@ describe('adresse de la page et pastilles', () => {
       floorMin: 2, yearBuiltMin: 2000, yearBuiltMax: 2020, zoning: 'UB', excludesGroundFloor: true, requiresElevator: true,
       outdoorSpaces: ['garden', 'balcony'], requiresParking: true,
     })).toEqual([
-      'Prix au m² : 4 000 €/m²', 'Neuf', '1 chambre et +', 'DPE A à C', 'Étage : min 2e', 'Construction : 2000 – 2020',
+      'Prix au m² : 4 000 €/m²', 'Neuf', '1 chambre min', 'DPE A à C', 'Étage : min 2e', 'Construction : 2000 – 2020',
       'Zone UB', 'Hors rez-de-chaussée', 'Ascenseur', 'Balcon ou Jardin', 'Parking',
     ]);
     expect(labels({ ...defaultDraft('rent'), furnished: false, maxMonthlyCharges: 50, availableBy: '2026-12-05' }))
@@ -196,7 +196,7 @@ describe('adresse de la page et pastilles', () => {
       ...defaultDraft('hotel'), roomsMin: 12, minHotelStars: 1, hotelScope: 'wallsOnly', minAnnualRevenue: 1_000_000,
       minEbitda: 150_000, minOperatingIncome: 90_000, minOccupancyRatePercent: 70,
     })).toEqual([
-      '12 chambres et +', '1 étoile et +', 'Murs seuls', 'CA : 1 000 k€ min', 'EBITDA : 150 k€ min',
+      '12 chambres min', '1 étoile et +', 'Murs seuls', 'CA : 1 000 k€ min', 'EBITDA : 150 k€ min',
       "Résultat d'exploitation : 90 k€ min", 'Occupation : 70 % min',
     ]);
   });

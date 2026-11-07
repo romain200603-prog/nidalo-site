@@ -258,7 +258,11 @@ export function FiltersDialog({ open, draft, remembered, onClose, onApply, onSho
               {!onlyLand && (
                 <>
                   <RoomsPicker title="Pièces" value={working.roomsMin} onChange={(roomsMin) => update({ roomsMin })} />
+                  <RoomsPicker title="Pièces" bound="max" value={working.roomsMax} onChange={(roomsMax) => update({ roomsMax })}
+                    issue={rangeIssue(working.roomsMin, working.roomsMax)} />
                   <RoomsPicker title="Chambres" value={working.bedroomsMin} onChange={(bedroomsMin) => update({ bedroomsMin })} startsAtOne />
+                  <RoomsPicker title="Chambres" bound="max" value={working.bedroomsMax} onChange={(bedroomsMax) => update({ bedroomsMax })} startsAtOne
+                    issue={rangeIssue(working.bedroomsMin, working.bedroomsMax)} />
                 </>
               )}
               <EnergyPicker value={working.worstEnergyClass} onChange={(worstEnergyClass) => update({ worstEnergyClass })} />

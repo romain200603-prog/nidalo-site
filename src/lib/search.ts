@@ -45,6 +45,8 @@ export type SearchDraft = {
   livingAreaMin: number | null;
   livingAreaMax: number | null;
   roomsMin: number | null;
+  /** Pièces maximum (filtres ; jamais pour un hôtel). */
+  roomsMax: number | null;
   types: PropertyType[];
   sort: SortOrder;
   /** Investir : apport, rendements minimum (en %), cash-flow minimum par mois. */
@@ -61,8 +63,9 @@ export type SearchDraft = {
   hotelScope: HotelScope | null;
 
   // Critères des filtres (feuille « Filtres de recherche » de l'app), vides par défaut.
-  /** Chambres minimum (logements). */
+  /** Chambres minimum et maximum (logements). */
   bedroomsMin: number | null;
+  bedroomsMax: number | null;
   /** Classe énergie la moins bonne acceptée (« D » = A à D). */
   worstEnergyClass: EnergyClass | null;
   excludesGroundFloor: boolean;
@@ -216,6 +219,7 @@ export function defaultDraft(mode: SearchMode = 'buy'): SearchDraft {
     livingAreaMin: null,
     livingAreaMax: null,
     roomsMin: null,
+    roomsMax: null,
     types: [],
     // « Pertinence » : les plus récentes d'abord, dans tous les modes (comme l'app).
     sort: 'newest',
@@ -228,6 +232,7 @@ export function defaultDraft(mode: SearchMode = 'buy'): SearchDraft {
     furnished: null,
     hotelScope: null,
     bedroomsMin: null,
+    bedroomsMax: null,
     worstEnergyClass: null,
     excludesGroundFloor: false,
     floorMin: null,
@@ -502,11 +507,16 @@ export function matches(row: ListingRow, draft: SearchDraft, highlights: Highlig
   // En location, pièces, chambres et ameublement ne concernent que les logements ;
   // le DPE, seulement les biens qui y sont soumis (pas un parking ni un terrain).
   const appliesHousingCriteria = !isRent || isDwelling(type);
-  if (appliesHousingCriteria && draft.roomsMin !== null) {
-    const rooms = draft.mode === 'hotel' ? hotelRoomCount(row) : row.rooms;
-    if (!(rooms !== null && rooms >= draft.roomsMin)) return false;
+  if (appliesHousingCriteria) {
+    // Pièces (chambres d'un hôtel) et chambres : bornes incluses ; une fourchette min > max n'est pas appliquée.
+    const roomRange = range(draft.roomsMin, draft.mode === 'hotel' ? null : draft.roomsMax);
+    if (!isUnbounded(roomRange)) {
+      const rooms = draft.mode === 'hotel' ? hotelRoomCount(row) : row.rooms;
+      if (!(rooms !== null && inRange(rooms, roomRange))) return false;
+    }
+    const bedroomRange = range(draft.bedroomsMin, draft.bedroomsMax);
+    if (!isUnbounded(bedroomRange) && !(row.bedrooms !== null && inRange(row.bedrooms, bedroomRange))) return false;
   }
-  if (appliesHousingCriteria && draft.bedroomsMin !== null && !(row.bedrooms !== null && row.bedrooms >= draft.bedroomsMin)) return false;
   const floors = floorRange(draft);
   if (!isUnbounded(floors) && !(row.floor !== null && inRange(row.floor, floors))) return false;
   if (draft.worstEnergyClass !== null && (!isRent || requiresEnergyDiagnostic(type))) {
@@ -609,7 +619,11 @@ export async function fetchCandidates(draft: SearchDraft): Promise<ListingRow[]>
   const [areaMin] = range(draft.livingAreaMin, draft.livingAreaMax);
   if (areaMin !== null) request = request.gte('living_area', areaMin);
   // Hôtels : les chambres sont lues dans les détails de l'annonce, pas sur le serveur (voir hotelRoomCount).
-  if (draft.roomsMin !== null && draft.mode !== 'hotel') request = request.gte('rooms', draft.roomsMin);
+  if (draft.mode !== 'hotel') {
+    const [roomsMin, roomsMax] = range(draft.roomsMin, draft.roomsMax);
+    if (roomsMin !== null) request = request.gte('rooms', roomsMin);
+    if (roomsMax !== null) request = request.lte('rooms', roomsMax);
+  }
   const location = locationFor(draft);
   let box: BoundingBox | null = null;
   if (location.kind === 'area') box = location.box;
@@ -702,7 +716,9 @@ export function draftFromParams(params: URLSearchParams): SearchDraft {
   const flag = (name: string) => params.get(name) === '1';
   // Chaque mode ne lit que les critères que ses filtres proposent (pas de critère invisible).
   if (draft.mode !== 'hotel') {
+    draft.roomsMax = whole('piecesMax');
     draft.bedroomsMin = whole('chambresMin');
+    draft.bedroomsMax = whole('chambresMax');
     const dpe = params.get('dpe')?.toUpperCase() as EnergyClass | undefined;
     draft.worstEnergyClass = dpe && ENERGY_CLASSES.includes(dpe) ? dpe : null;
     draft.yearBuiltMin = whole('anneeMin');
@@ -790,7 +806,9 @@ export function paramsFromDraft(draft: SearchDraft): URLSearchParams {
   const set = (name: string, value: number | null) => { if (value !== null) params.set(name, String(value)); };
   const setFlag = (name: string, on: boolean) => { if (on) params.set(name, '1'); };
   if (draft.mode !== 'hotel') {
+    set('piecesMax', draft.roomsMax);
     set('chambresMin', draft.bedroomsMin);
+    set('chambresMax', draft.bedroomsMax);
     if (draft.worstEnergyClass) params.set('dpe', draft.worstEnergyClass);
     set('anneeMin', draft.yearBuiltMin);
     set('anneeMax', draft.yearBuiltMax);
@@ -864,6 +882,26 @@ export function compactPrice(value: number): string {
   return `${thousands.format(k)} k€`;
 }
 
+export const ROOM_NOUNS = ['pièce', 'pièces'] as const;
+export const BEDROOM_NOUNS = ['chambre', 'chambres'] as const;
+
+/**
+ * Pièces ou chambres : « 2 à 4 pièces », « 3 pièces » (minimum = maximum), « 2 pièces min », « 4 pièces max » ;
+ * `null` si vide ou incohérent (minimum au-dessus du maximum).
+ */
+export function countRangeLabel(min: number | null | undefined, max: number | null | undefined, [one, many]: readonly [string, string]): string | null {
+  const noun = (count: number) => (count > 1 ? many : one);
+  const low = min ?? null;
+  const high = max ?? null;
+  if (low !== null && high !== null) {
+    if (low > high) return null;
+    return low === high ? `${low} ${noun(low)}` : `${low} à ${high} ${many}`;
+  }
+  if (low !== null) return `${low} ${noun(low)} min`;
+  if (high !== null) return `${high} ${noun(high)} max`;
+  return null;
+}
+
 /** « 150 k€ – 250 k€ », « min 40 m² », « 250 k€ » ; `null` si vide ou incohérent. */
 export function rangeLabel(min: number | null, max: number | null, format: (n: number) => string): string | null {
   if (min !== null && max !== null) return min <= max ? `${format(min)} – ${format(max)}` : null;
@@ -913,10 +951,10 @@ export function filterChips(draft: SearchDraft): FilterChip[] {
   if (mode !== 'hotel' && types.length) add('types', types.map((t) => TYPE_NAMES[t]).join(', '), (d) => ({ ...d, types: [] }));
   const area = rangeLabel(draft.livingAreaMin, draft.livingAreaMax, (n) => `${areaFormat.format(n)} m²`);
   add('area', area && `Surface : ${area}`, (d) => ({ ...d, livingAreaMin: null, livingAreaMax: null }));
-  if (draft.roomsMin !== null) {
-    const [one, many] = mode === 'hotel' ? ['chambre', 'chambres'] : ['pièce', 'pièces'];
-    add('rooms', draft.roomsMin > 1 ? `${draft.roomsMin} ${many} et +` : `1 ${one} et +`, (d) => ({ ...d, roomsMin: null }));
-  }
+  const rooms = mode === 'hotel'
+    ? countRangeLabel(draft.roomsMin, null, BEDROOM_NOUNS)
+    : countRangeLabel(draft.roomsMin, draft.roomsMax, ROOM_NOUNS);
+  add('rooms', rooms, (d) => ({ ...d, roomsMin: null, roomsMax: null }));
   if (mode === 'buy' && draft.isNewBuild !== null) add('newBuild', draft.isNewBuild ? 'Neuf' : 'Ancien', (d) => ({ ...d, isNewBuild: null }));
   if (mode === 'hotel') {
     if (draft.minHotelStars !== null) {
@@ -932,8 +970,8 @@ export function filterChips(draft: SearchDraft): FilterChip[] {
       add('occupancy', `Occupation : ${roundPercent(draft.minOccupancyRatePercent)} min`, (d) => ({ ...d, minOccupancyRatePercent: null }));
     }
   }
-  if (mode !== 'hotel' && draft.bedroomsMin !== null) {
-    add('bedrooms', draft.bedroomsMin > 1 ? `${draft.bedroomsMin} chambres et +` : '1 chambre et +', (d) => ({ ...d, bedroomsMin: null }));
+  if (mode !== 'hotel') {
+    add('bedrooms', countRangeLabel(draft.bedroomsMin, draft.bedroomsMax, BEDROOM_NOUNS), (d) => ({ ...d, bedroomsMin: null, bedroomsMax: null }));
   }
   if (mode === 'rent') {
     if (draft.furnished !== null) add('furnished', draft.furnished ? 'Meublée' : 'Non meublée', (d) => ({ ...d, furnished: null }));
