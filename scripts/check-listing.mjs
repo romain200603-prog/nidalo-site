@@ -1233,9 +1233,15 @@ try {
   page = await open(member, `/annonce/?id=${FICHE}&vue=visite`, 'adresse-visite');
   await page.waitForSelector('.dl-visit-screen h1');
   expect('adresse-visite', 'titre', await page.textContent('.dl-visit-screen h1'), 'Demander une visite');
+  expect('adresse-visite', 'type de visite choisi', await page.textContent('.dl-visit-screen .dl-option[aria-pressed="true"]'), 'Sur place');
   await page.click('.dl-screen-close');
   await waitForAddress(page, `${base}/annonce/?id=${FICHE}`);
   await page.waitForSelector('.dl .dl-price-value');
+  await page.close();
+  // « Vidéo » des Détails d'une conversation (&type=visio) : le même formulaire, sur « En visio », comme l'app.
+  page = await open(member, `/annonce/?id=${FICHE}&vue=visite&type=visio`, 'adresse-visite-visio');
+  await page.waitForSelector('.dl-visit-screen h1');
+  expect('adresse-visite-visio', 'type de visite choisi', await page.textContent('.dl-visit-screen .dl-option[aria-pressed="true"]'), 'En visio');
   await page.close();
   // Une offre attend déjà une réponse : comme l'app, l'offre ouvre la conversation, qui la montre.
   page = await open(member, `/annonce/?id=${FICHE}&vue=offre`, 'adresse-offre-en-attente');

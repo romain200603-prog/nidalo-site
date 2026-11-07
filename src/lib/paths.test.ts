@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { comparePath, conversationPath, listingPath, listingScreenFromParams, PATHS, searchModePath, visitRequestPath } from './paths';
+import {
+  comparePath, conversationPath, listingPath, listingScreenFromParams, PATHS, searchModePath, videoVisitPath, visitRequestPath, wantsVideoVisit,
+} from './paths';
 import { defaultDraft, paramsFromDraft } from './search';
 import type { SearchMode } from './labels';
 
@@ -24,6 +26,11 @@ describe('fiche d\'un bien sur ordinateur', () => {
     expect(listingScreenFromParams(new URLSearchParams('id=x&vue=visite'))).toBe('visite');
     expect(listingScreenFromParams(new URLSearchParams('id=x&vue=offre'))).toBe('offre');
     expect(listingScreenFromParams(new URLSearchParams('id=x&vue=autre'))).toBeNull();
+    // « Vidéo » des Détails d'une conversation : le formulaire de visite sur « En visio ».
+    expect(videoVisitPath(id)).toBe(`/annonce/?id=${id}&vue=visite&type=visio`);
+    expect(listingScreenFromParams(new URL(videoVisitPath(id), 'https://nidalo.fr').searchParams)).toBe('visite');
+    expect(wantsVideoVisit(new URL(videoVisitPath(id), 'https://nidalo.fr').searchParams)).toBe(true);
+    expect(wantsVideoVisit(new URLSearchParams(`id=${id}&vue=visite`))).toBe(false);
     expect(comparePath()).toBe('/comparer/');
     expect(comparePath('invest')).toBe('/comparer/?mode=invest');
     expect(comparePath('rent')).toBe('/comparer/');

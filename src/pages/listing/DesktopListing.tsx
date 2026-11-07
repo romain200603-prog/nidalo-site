@@ -24,7 +24,7 @@ import {
 } from '../../lib/listing/visits';
 import { placeLine, sortedPhotos, type ListingRow } from '../../lib/listings';
 import {
-  accountPath, comparePath, conversationPath, listingPath, listingScreenFromParams, visitRequestPath, type ListingScreen,
+  accountPath, comparePath, conversationPath, listingPath, listingScreenFromParams, visitRequestPath, wantsVideoVisit, type ListingScreen,
 } from '../../lib/paths';
 import { recordView } from '../../lib/recentlyViewed';
 import { HotelSection, ProfitabilityCard, RentalCostCard } from './CategoryCards';
@@ -296,7 +296,14 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
   if (shown === 'visite') {
     return (
       <div className="listing dl">
-        <VisitRequestScreen row={row} photo={photos[0]} recipientName={recipientName} onClose={close} onSent={addRequest} />
+        <VisitRequestScreen
+          row={row}
+          photo={photos[0]}
+          recipientName={recipientName}
+          initialMode={wantsVideoVisit(new URLSearchParams(window.location.search)) ? 'video' : 'onSite'}
+          onClose={close}
+          onSent={addRequest}
+        />
       </div>
     );
   }

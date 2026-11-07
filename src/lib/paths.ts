@@ -34,6 +34,19 @@ export function listingPath(id: string, mode: SearchMode | null = null, view: Li
   return `/annonce/?id=${encodeURIComponent(id)}${mode === 'invest' ? '&mode=invest' : ''}${view ? `&vue=${view}` : ''}`;
 }
 
+/**
+ * « Vidéo » des Détails d'une conversation : le formulaire de visite de la fiche, ouvert sur « En visio » (comme
+ * l'app, VisitRequestFormView initialMode .video).
+ */
+export function videoVisitPath(id: string): string {
+  return `${listingPath(id, null, 'visite')}&type=visio`;
+}
+
+/** Visite en visio demandée par l'adresse du formulaire (&type=visio). */
+export function wantsVideoVisit(params: URLSearchParams): boolean {
+  return params.get('type') === 'visio';
+}
+
 /** Écrans de la fiche sur ordinateur, chacun à son adresse : « Demander une visite » et « Faire une offre ». */
 export type ListingScreen = 'visite' | 'offre';
 

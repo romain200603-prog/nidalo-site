@@ -25,7 +25,8 @@
   }
   .dm-starting { display: flex; align-items: center; justify-content: center; }
   .dm :is(a, button, input, textarea, select, summary):focus-visible { outline: 3px solid var(--d-blue); outline-offset: 2px; }
-  .dm button { font: inherit; }
+  /* :where() : sans poids, pour que la classe de chaque bouton (.dm-chip…) garde sa taille et sa graisse. */
+  :where(.dm) button { font: inherit; }
   .dm-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .dm-link-button { padding: 0; border: 0; background: none; color: var(--d-blue); font-size: 14px; font-weight: 600; cursor: pointer; }
   .dm-link-button:hover { text-decoration: underline; }
@@ -71,10 +72,10 @@
   .dm-search-clear .icon { width: 14px; height: 14px; stroke-width: 3; }
   .dm-search-cancel { flex: none; padding: 0; border: 0; background: none; color: var(--d-blue); font-size: 15px; font-weight: 600; cursor: pointer; }
 
-  .dm-chips { display: flex; gap: 8px; padding: 15px 0 0 22px; overflow-x: auto; scrollbar-width: none; }
+  /* Coupés à 22 px du bord droit de la colonne, comme la maquette (et non au bord de la colonne). */
+  .dm-chips { display: flex; gap: 8px; margin-right: 22px; padding: 15px 0 0 22px; overflow-x: auto; scrollbar-width: none; }
   .dm-chips::-webkit-scrollbar { display: none; }
-  .dm-chips::after { content: ''; flex: none; width: 14px; }
-  .dm-chip { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: 1px solid var(--d-field-border); border-radius: 999px; background: #FFFFFF; color: var(--d-text); font-size: 15px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+  .dm-chip { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: 1px solid var(--d-field-border); border-radius: 999px; background: #FFFFFF; color: var(--d-text); font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
   .dm-chip:hover { background: var(--d-hover); }
   .dm-chip[aria-pressed="true"] { border-color: var(--d-blue); background: var(--d-blue); color: #FFFFFF; }
   .dm-chip-count { color: var(--d-blue); font-variant-numeric: tabular-nums; }

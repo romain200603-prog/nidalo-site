@@ -15,7 +15,7 @@ import {
   bannerLocation, callState, EMPTY_MEDIA_TEXT, linkTitle, mediaEntries, mediaPreview, MUTE_OPTIONS, mutedUntil, muteNotice, senderName,
   sharedItems, videoState, visitState, visibleMessages, type ActionState, type ListingAvailability, type SharedItem,
 } from '../../lib/messages/thread';
-import { accountPath, listingPath } from '../../lib/paths';
+import { accountPath, listingPath, videoVisitPath } from '../../lib/paths';
 import { BlockDialog, CallDialog, DELETED_ACCOUNT, directMenuItems, ReportSheet, unblockWithNotice } from './actions';
 import { listingStore, loadListingRow, type ListingRowState } from './listingRow';
 import { ActionMenu, CounterpartAvatar, PublisherBadge, showIphoneOnly, showNotice, useSignedUrl } from './parts';
@@ -93,6 +93,7 @@ export function DetailsView({ conversation, messages, visits, blocked, me }: Det
     else showNotice('L\'annonce n\'a pas pu être chargée. Réessayez dans un instant.');
   };
   const requestVisit = () => { if (listing) window.location.assign(listingPath(listing.listingId, null, 'visite')); };
+  const requestVideoVisit = () => { if (listing) window.location.assign(videoVisitPath(listing.listingId)); };
   const photo = profile ? avatarUrl(counterpart.kind === 'agency' ? profile.agency_logo_path ?? null : profile.avatar_path) : null;
   const since = profile?.member_since ? memberSince(profile.member_since) : null;
   const openMedia = (item: SharedItem) => {
@@ -131,7 +132,7 @@ export function DetailsView({ conversation, messages, visits, blocked, me }: Det
 
           <div className="dm-detail-actions">
             <QuickAction icon="phone" title="Appeler" state={callState(counterpart.name, counterpart.phone)} onClick={() => setCalling(true)} />
-            <QuickAction icon="video" title="Vidéo" state={videoState(availability)} onClick={requestVisit} />
+            <QuickAction icon="video" title="Vidéo" state={videoState(availability)} onClick={requestVideoVisit} />
             <QuickAction icon="calendarPlus" title="Visite" state={visitState(availability)} onClick={requestVisit} />
             <QuickAction icon="userRound" title="Profil" state={{ enabled: true }} onClick={() => showIphoneOnly('Profil')} />
             <QuickAction

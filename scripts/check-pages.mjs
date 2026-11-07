@@ -2040,6 +2040,16 @@ try {
     await page.click('.dm-details-bar button[aria-label="Retour"]');
     await page.waitForURL(`${base}/messages/?c=${chatId(1)}`);
     await page.waitForSelector('.dm-thread-inner');
+    // « Vidéo » des Détails : le formulaire de visite de la fiche, sur « En visio » (initialMode de l'app) ; dans un
+    // onglet à part, pour ne rien changer à la suite.
+    {
+      const extra = await chatDesk.newPage();
+      await extra.goto(`${base}/messages/?c=${chatId(1)}&vue=details`);
+      await extra.waitForSelector('.dm-detail-actions .dm-detail-action:not(.is-dim):has-text("Vidéo")');
+      await extra.click('.dm-detail-actions .dm-detail-action:has-text("Vidéo")');
+      await extra.waitForURL(`${base}/annonce/?id=${homeId(1)}&vue=visite&type=visio`);
+      await extra.close();
+    }
 
     // « Nouvelle discussion » : actions rapides, contacts ; groupes, communautés et diffusions dans l'app iPhone.
     await page.click('.dm-compose');

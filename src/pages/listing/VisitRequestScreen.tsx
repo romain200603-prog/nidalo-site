@@ -77,11 +77,13 @@ function Section({ icon, title, children }: { icon: ReactNode; title: string; ch
   );
 }
 
-export function VisitRequestScreen({ row, photo, recipientName, onClose, onSent }: {
+export function VisitRequestScreen({ row, photo, recipientName, initialMode = 'onSite', onClose, onSent }: {
   row: ListingRow;
   photo: PhotoRow | undefined;
   /** Particulier ou agence qui reçoit la demande, nommé dans la confirmation (« Claire M. », l'agence). */
   recipientName: string;
+  /** « En visio » d'emblée quand l'annonce la propose (« Vidéo » des Détails d'une conversation, initialMode de l'app). */
+  initialMode?: VisitMode;
   onClose: () => void;
   /** Demande enregistrée (relue sur le serveur) : la fiche l'ajoute aux demandes du compte. */
   onSent: (request: VisitRequestRow) => void;
@@ -90,13 +92,13 @@ export function VisitRequestScreen({ row, photo, recipientName, onClose, onSent 
   const [first, setFirst] = useState<SlotDraft>(() => suggestedSlot(opened));
   const [second, setSecond] = useState<SlotDraft>(() => suggestedSlot(opened, new Date(opened.getFullYear(), opened.getMonth(), opened.getDate() + 1)));
   const [hasSecond, setHasSecond] = useState(false);
-  const [mode, setMode] = useState<VisitMode>('onSite');
+  const offersVideo = row.accepts_video_visits === true;
+  const [mode, setMode] = useState<VisitMode>(() => (initialMode === 'video' && offersVideo ? 'video' : 'onSite'));
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<Date[] | null>(null);
   const busy = useRef(false);
-  const offersVideo = row.accepts_video_visits === true;
   const today = dayString(new Date());
 
   const send = async () => {
