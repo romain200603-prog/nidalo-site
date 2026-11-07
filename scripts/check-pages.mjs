@@ -499,6 +499,575 @@ async function open(context, path, name) {
   return page;
 }
 
+// MARK: - Messages sur ordinateur (maquette 3) : la messagerie de l'app, avec des personnes et des échanges inventés.
+
+/** Heure des pages de la messagerie : vendredi 6 novembre 2026, 10 h 50 à Paris (horloge du navigateur figée). */
+const CHAT_NOW = new Date('2026-11-06T09:50:00Z');
+const chatId = (n) => `c1000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const offerId = (n) => `f1000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const messageId = (n) => `d1000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const AGENT_ID = 'a0000000-0000-4000-8000-0000000000e1';
+const MARC_ID = 'a0000000-0000-4000-8000-0000000000e2';
+const CAMILLE_ID = 'a0000000-0000-4000-8000-0000000000e3';
+const LUCAS_ID = 'a0000000-0000-4000-8000-0000000000e4';
+const PRO_ID = 'a0000000-0000-4000-8000-0000000000e5';
+const NINA_ID = 'a0000000-0000-4000-8000-0000000000e6';
+/** Numéro du compte trouvé par « Nouveau contact » (plage de la fiction). */
+const NINA_PHONE = '0639985678';
+/** Identifiant écrit comme Swift l'envoie (`uuidString`). */
+const UPPER_UUID = /^[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/;
+const sameChatId = (a, b) => !!a && !!b && String(a).toLowerCase() === String(b).toLowerCase();
+/** Tables et fonctions de la messagerie : jamais demandées sans compte ni sous 1024 px. */
+const CHAT_TABLES = [
+  'rpc/my_conversations', 'conversation_participants', 'rpc/public_profiles', 'rpc/my_communities', 'rpc/professional_contacts', 'user_blocks',
+  'messages', 'rpc/mark_conversation_read', 'message_reactions', 'conversation_preferences', 'reports', 'rpc/find_account_by_phone',
+  'rpc/start_phone_conversation', 'rpc/start_direct_conversation', 'rpc/my_offers', 'rpc/make_offer', 'rpc/accept_offer', 'rpc/decline_offer',
+  'rpc/withdraw_offer', 'rpc/counter_offer', 'agenda_visits', 'rpc/my_visit_requests', 'rpc/start_listing_conversation',
+];
+const chatProfile = (userId, publicName, fields = {}) => ({
+  user_id: userId, public_name: publicName, avatar_path: null, account_type: 'individual', member_since: '2026-01-15', agency_id: null,
+  agency_name: null, agency_logo_path: null, agency_postal_code: null, agency_city: null, agency_phone: null, ...fields,
+});
+/** Profils publics (public_profiles) : une agence avec son numéro publié, des particuliers sans numéro. */
+const CHAT_PROFILES = [
+  chatProfile(AGENT_ID, 'Sophie D.', {
+    account_type: 'professional', member_since: '2025-03-01', agency_id: 'b1000000-0000-4000-8000-000000000001', agency_name: 'Agence Démo Lyon',
+    agency_postal_code: '69002', agency_city: 'Lyon 2e', agency_phone: '06 39 98 12 00',
+  }),
+  chatProfile(OTHER_ID, 'Julien M.'), chatProfile(MARC_ID, 'Marc P.'), chatProfile(CAMILLE_ID, 'Camille R.'), chatProfile(LUCAS_ID, 'Lucas G.'),
+  chatProfile(NINA_ID, 'Nina L.'), chatProfile(USER_ID, 'Claire M.', { member_since: '2026-10-01' }),
+  chatProfile(PRO_ID, 'Paul D.', {
+    account_type: 'professional', member_since: '2024-06-01', agency_id: 'b1000000-0000-4000-8000-000000000002', agency_name: 'Immo Démo Croix-Rousse',
+    agency_postal_code: '69004', agency_city: 'Lyon 4e', agency_phone: '06 39 98 77 00',
+  }),
+];
+/** Agence qui publie, pas encore contactée (professional_contacts). */
+const PRO_CONTACTS = [{
+  user_id: PRO_ID, agency_id: 'b1000000-0000-4000-8000-000000000002', agency_name: 'Immo Démo Croix-Rousse', agency_logo_path: null,
+  agency_postal_code: '69004', agency_city: 'Lyon 4e', agency_is_verified: true,
+}];
+/** Photos envoyées par l'agence et document envoyé par le compte (bucket message-attachments). */
+const AGENT_PHOTOS = [`${chatId(1)}/7A1C2E3F-4B5D-4E6F-8A9B-0C1D2E3F4A51.jpg`, `${chatId(1)}/7A1C2E3F-4B5D-4E6F-8A9B-0C1D2E3F4A52.jpg`];
+const LOAN_PDF = `${chatId(1)}/7A1C2E3F-4B5D-4E6F-8A9B-0C1D2E3F4A53.pdf`;
+const PDF_BYTES = Buffer.from('%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [] /Count 0 >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n');
+const chatText = (value) => ({ text: { _0: value } });
+
+/** Ce que le serveur sait du compte de test : six conversations (annonce, groupe, archivée, sans message, compte supprimé). */
+function chatState() {
+  const conversation = (n, fields) => ({ id: chatId(n), kind: 'listing', listing: null, buyer: USER_ID, seller: null, other: null, name: null, unread: 0, ...fields });
+  const participant = (conversationId, userId, role, lastReadAt) => ({ conversation_id: conversationId, user_id: userId, role, left_at: null, last_read_at: lastReadAt });
+  const message = (n, conversationId, senderId, createdAt, content, preview) => ({
+    id: messageId(n), conversation_id: conversationId, sender_id: senderId, kind: Object.keys(content)[0], client_id: messageId(n), content,
+    created_at: createdAt, expires_at: null, message_reactions: [], preview: preview ?? content.text?._0 ?? content.system?._0 ?? '',
+  });
+  const photo = (end, path) => ({ id: `0B6D1F2A-3C4E-4F5A-9B6C-7D8E9F0A1B${end}`, kind: 'photo', fileName: 'Photo.jpg', storagePath: path, byteCount: 182000 });
+  return {
+    conversations: [
+      // A : l'agence, sur un appartement à vendre ; visite confirmée jeudi, offre en attente.
+      conversation(1, { listing: homeId(1), seller: AGENT_ID, other: AGENT_ID, created_at: '2026-11-05T16:55:00Z', unread: 1 }),
+      // B : le compte vend, un acheteur fait une offre (favori).
+      conversation(2, { listing: homeId(7), buyer: OTHER_ID, seller: USER_ID, other: OTHER_ID, created_at: '2026-11-04T18:00:00Z', unread: 2 }),
+      // C : archivée, avec des non-lus (hors de la pastille).
+      conversation(3, { listing: homeId(3), seller: MARC_ID, other: MARC_ID, created_at: '2026-11-01T09:00:00Z', unread: 2 }),
+      // D : groupe en sourdine.
+      conversation(4, { kind: 'group', buyer: null, name: 'Visite groupée Lyon 2e', created_at: '2026-11-05T16:30:00Z', unread: 3 }),
+      // E : ouverte depuis une annonce, aucun message encore.
+      conversation(5, { listing: homeId(5), seller: LUCAS_ID, other: LUCAS_ID, created_at: '2026-11-03T15:00:00Z' }),
+      // F : l'autre compte a été supprimé.
+      conversation(6, { listing: homeId(4), created_at: '2026-10-27T12:55:00Z' }),
+    ],
+    messages: [
+      message(1, chatId(1), AGENT_ID, '2026-11-05T17:02:00Z', chatText('Bonjour Claire, merci pour votre intérêt. Voici quelques photos du séjour et de la salle à manger.')),
+      message(2, chatId(1), AGENT_ID, '2026-11-05T17:03:00Z', { attachments: { _0: [photo('01', AGENT_PHOTOS[0]), photo('02', AGENT_PHOTOS[1])] } }, '📷 2 photos'),
+      message(3, chatId(1), USER_ID, '2026-11-05T17:20:00Z', chatText('Bonjour, oui avec plaisir ! Je suis disponible jeudi en fin de journée.')),
+      message(4, chatId(1), AGENT_ID, '2026-11-06T08:58:00Z', chatText('Parfait, je vous confirme la visite pour jeudi à 18h.')),
+      message(5, chatId(1), USER_ID, '2026-11-06T09:30:00Z', {
+        attachments: { _0: [{ id: '0B6D1F2A-3C4E-4F5A-9B6C-7D8E9F0A1B03', kind: 'document', fileName: 'Simulation_pret.pdf', storagePath: LOAN_PDF, byteCount: 245000, category: 'incomeProof' }] },
+      }, '📎 Simulation_pret.pdf'),
+      message(6, chatId(1), USER_ID, '2026-11-06T09:38:00Z', { offer: { offerId: offerId(1) } }, '💶 Offre'),
+      message(7, chatId(1), AGENT_ID, '2026-11-06T09:45:00Z', chatText('Bien reçu, je transmets votre offre au propriétaire.')),
+      message(11, chatId(2), OTHER_ID, '2026-11-04T18:05:00Z', chatText('Bonjour, l\'appartement est-il toujours disponible ?')),
+      message(12, chatId(2), USER_ID, '2026-11-04T18:40:00Z', chatText('Bonjour Julien, oui, il est toujours disponible.')),
+      message(13, chatId(2), OTHER_ID, '2026-11-05T19:10:00Z', { offer: { offerId: offerId(2) } }, '💶 Offre'),
+      message(14, chatId(2), OTHER_ID, '2026-11-05T19:15:00Z', chatText('Je peux signer rapidement si l\'offre vous convient.')),
+      message(21, chatId(3), MARC_ID, '2026-11-02T09:58:00Z', chatText('Bonjour, la maison est toujours en vente.')),
+      message(22, chatId(3), MARC_ID, '2026-11-02T10:00:00Z', chatText('Les diagnostics sont disponibles sur demande.')),
+      message(31, chatId(4), null, '2026-11-05T16:30:00Z', { system: { _0: 'Claire M. a créé le groupe « Visite groupée Lyon 2e »' } }),
+      message(32, chatId(4), CAMILLE_ID, '2026-11-06T07:40:00Z', chatText('Bonjour à tous ! Je serai là samedi à 10h.')),
+      message(33, chatId(4), AGENT_ID, '2026-11-06T07:55:00Z', chatText('Parfait, rendez-vous devant l\'immeuble.')),
+      message(34, chatId(4), CAMILLE_ID, '2026-11-06T08:12:00Z', chatText('Merci, à samedi !')),
+      message(51, chatId(6), null, '2026-10-27T13:00:00Z', chatText('Bonjour, le studio est toujours disponible.')),
+      message(52, chatId(6), USER_ID, '2026-10-27T13:20:00Z', chatText('Merci, je reviens vers vous rapidement.')),
+    ],
+    participants: [
+      participant(chatId(1), USER_ID, 'member', '2026-11-06T09:38:00Z'), participant(chatId(1), AGENT_ID, 'member', '2026-11-06T09:45:00Z'),
+      participant(chatId(2), USER_ID, 'member', '2026-11-04T18:40:00Z'), participant(chatId(2), OTHER_ID, 'member', '2026-11-04T18:45:00Z'),
+      participant(chatId(3), USER_ID, 'member', '2026-11-01T09:00:00Z'), participant(chatId(3), MARC_ID, 'member', '2026-11-02T10:00:00Z'),
+      participant(chatId(4), USER_ID, 'owner', '2026-11-05T16:30:00Z'), participant(chatId(4), CAMILLE_ID, 'member', '2026-11-06T08:12:00Z'),
+      participant(chatId(4), AGENT_ID, 'admin', '2026-11-06T07:55:00Z'),
+      participant(chatId(5), USER_ID, 'member', null), participant(chatId(5), LUCAS_ID, 'member', null),
+      participant(chatId(6), USER_ID, 'member', '2026-10-27T13:20:00Z'),
+    ],
+    offers: [
+      {
+        id: offerId(1), conversation_id: chatId(1), listing_id: homeId(1), buyer_id: USER_ID, seller_id: AGENT_ID, author_id: USER_ID, parent_offer_id: null,
+        amount: 228000, conditions: 'Sous réserve d\'obtention du prêt', status: 'pending', created_at: '2026-11-06T09:38:00Z', expires_at: '2026-11-13T09:38:00Z',
+        responded_at: null, decline_reason: null,
+      },
+      {
+        id: offerId(2), conversation_id: chatId(2), listing_id: homeId(7), buyer_id: OTHER_ID, seller_id: USER_ID, author_id: OTHER_ID, parent_offer_id: null,
+        amount: 255000, conditions: null, status: 'pending', created_at: '2026-11-05T19:10:00Z', expires_at: '2026-11-12T19:10:00Z', responded_at: null, decline_reason: null,
+      },
+    ],
+    agenda: [{
+      id: 'e1000000-0000-4000-8000-000000000001', start_at: '2026-11-12T17:00:00Z', status: 'confirmed', request_id: 'e2000000-0000-4000-8000-000000000001',
+      listing_id: homeId(1), visit: {
+        id: 'e1000000-0000-4000-8000-000000000001', conversationId: chatId(1),
+        listing: { listingId: homeId(1), title: 'Appartement 3 pièces', price: 238000, transaction: 'sale', city: 'Lyon 2e' },
+        start: '2026-11-12T17:00:00Z', durationMinutes: 60, status: 'confirmed', contactName: 'Agence Démo Lyon', address: '12 rue de l\'Exemple, 69002 Lyon',
+      },
+    }],
+    preferences: { [chatId(2)]: { is_favorite: true }, [chatId(3)]: { is_archived: true }, [chatId(4)]: { muted_until: '4001-01-01T00:00:00+00:00' } },
+    blocks: [],
+    reports: [],
+    files: new Map([[AGENT_PHOTOS[0], { type: 'image/jpeg', body: photos['photo1.jpg'] }], [AGENT_PHOTOS[1], { type: 'image/jpeg', body: photos['photo2.jpg'] }],
+      [LOAN_PDF, { type: 'application/pdf', body: PDF_BYTES }]]),
+    /** Demandes reçues (tables et fonctions), URL signées demandées et fichiers envoyés. */
+    calls: [],
+    signs: [],
+    uploads: [],
+    tick: 0,
+  };
+}
+
+/** Heure du serveur simulé : une seconde de plus à chaque écriture, après l'heure figée des pages. */
+function chatClock(chat) {
+  chat.tick += 1;
+  return new Date(CHAT_NOW.getTime() + chat.tick * 1000).toISOString();
+}
+
+const MESSAGE_KEYS = ['id', 'conversation_id', 'sender_id', 'kind', 'client_id', 'content', 'created_at', 'expires_at', 'message_reactions'];
+const messageColumns = (row) => Object.fromEntries(MESSAGE_KEYS.map((key) => [key, row[key]]));
+
+/** Lignes de my_conversations, comme la fonction du serveur : dernier message, non-lus, réglages, lectures ; la plus récente d'abord. */
+function chatRows(chat) {
+  const rows = chat.conversations.map((conversation) => {
+    const settings = { is_archived: false, is_favorite: false, muted_until: null, saves_photos: false, cleared_at: null, ...chat.preferences[conversation.id] };
+    const messages = chat.messages.filter((item) => sameChatId(item.conversation_id, conversation.id)).sort((a, b) => a.created_at.localeCompare(b.created_at));
+    const last = messages.at(-1) ?? null;
+    const members = chat.participants.filter((item) => sameChatId(item.conversation_id, conversation.id) && item.left_at === null);
+    const mine = members.find((item) => sameChatId(item.user_id, USER_ID));
+    const other = conversation.other ? members.find((item) => sameChatId(item.user_id, conversation.other)) : null;
+    const listing = HOME_LISTINGS.find((row) => row.id === conversation.listing) ?? null;
+    return {
+      conversation_id: conversation.id, kind: conversation.kind, listing_id: listing?.id ?? null,
+      listing_snapshot: listing ? {
+        listingId: listing.id, title: listing.title, price: listing.price, transaction: listing.transaction, city: listing.city,
+        coverPath: listing.listing_photos[0]?.storage_path ?? null,
+      } : null,
+      buyer_id: conversation.buyer, seller_id: conversation.seller, group_name: conversation.name, group_details: null, group_image_path: null,
+      group_purpose: null, ephemeral_seconds: null, created_by: USER_ID, created_at: conversation.created_at, my_role: mine?.role ?? 'member',
+      joined_at: conversation.created_at, left_at: null, last_read_at: mine?.last_read_at ?? null, ...settings, other_user_id: conversation.other,
+      other_last_read_at: other?.last_read_at ?? null, member_count: members.length, unread_count: conversation.unread,
+      last_message_id: last?.id ?? null, last_message_sender_id: last?.sender_id ?? null, last_message_kind: last?.kind ?? null,
+      last_message_content: last?.content ?? null, last_message_preview: last?.preview ?? null, last_message_at: last?.created_at ?? null,
+    };
+  });
+  return rows.sort((a, b) => (b.last_message_at ?? b.created_at).localeCompare(a.last_message_at ?? a.created_at));
+}
+
+/** Offre telle que my_offers la rend (OfferServerRow) : rôle, auteur et actions permises selon le compte. */
+function chatOffer(offer) {
+  const listing = HOME_LISTINGS.find((row) => row.id === offer.listing_id);
+  const mine = sameChatId(offer.author_id, USER_ID);
+  return {
+    ...offer,
+    listing_snapshot: listing ? { listingId: listing.id, title: listing.title, price: listing.price, transaction: listing.transaction, city: listing.city } : null,
+    my_role: sameChatId(offer.buyer_id, USER_ID) ? 'buyer' : 'seller', is_mine: mine,
+    allowed_actions: offer.status !== 'pending' ? [] : mine ? ['withdraw'] : ['accept', 'decline', 'counter'],
+  };
+}
+
+/** Filtres PostgREST de la messagerie (`eq.`, `in.(…)`), sans tenir compte de la casse des identifiants, comme le serveur. */
+function chatFiltered(rows, params) {
+  let result = rows;
+  for (const [column, value] of params) {
+    if (['select', 'order', 'limit', 'offset', 'on_conflict', 'columns'].includes(column)) continue;
+    if (value.startsWith('eq.')) result = result.filter((row) => sameChatId(row[column], value.slice(3)));
+    else if (value.startsWith('in.(') && value.endsWith(')')) {
+      const allowed = value.slice(4, -1).split(',').map((item) => item.replace(/^"|"$/g, '').toLowerCase());
+      result = result.filter((row) => allowed.includes(String(row[column]).toLowerCase()));
+    }
+  }
+  return result;
+}
+
+/** Parties d'un corps multipart/form-data : nom, nom de fichier, type et octets. */
+function multipartParts(buffer, contentType) {
+  const boundary = /boundary=(?:"([^"]+)"|([^;]+))/.exec(contentType ?? '');
+  if (!buffer || !boundary) return [];
+  const marker = Buffer.from(`--${boundary[1] ?? boundary[2]}`);
+  const parts = [];
+  let start = buffer.indexOf(marker);
+  while (start !== -1) {
+    const next = buffer.indexOf(marker, start + marker.length);
+    if (next === -1) break;
+    const chunk = buffer.subarray(start + marker.length + 2, next - 2);
+    const split = chunk.indexOf('\r\n\r\n');
+    if (split !== -1) {
+      const head = chunk.subarray(0, split).toString('utf8');
+      parts.push({
+        name: /name="([^"]*)"/.exec(head)?.[1] ?? null, filename: /filename="([^"]*)"/.exec(head)?.[1] ?? null,
+        type: /content-type:\s*([^\r\n]+)/i.exec(head)?.[1]?.trim() ?? null, body: chunk.subarray(split + 4),
+      });
+    }
+    start = next;
+  }
+  return parts;
+}
+
+/** Réponses du serveur simulé pour la messagerie, comme ses tables et ses fonctions. */
+function chatRespond(chat, reply, { table, method, params, body, single }) {
+  const refuse = (message) => reply(400, { code: 'P0001', message, details: null, hint: null });
+  const findConversation = (id) => chat.conversations.find((item) => sameChatId(item.id, id));
+  const addMessage = (conversationId, senderId, content, preview) => {
+    const id = crypto.randomUUID();
+    const row = {
+      id, conversation_id: conversationId, sender_id: senderId, kind: Object.keys(content)[0], client_id: id, content, created_at: chatClock(chat),
+      expires_at: null, message_reactions: [], preview,
+    };
+    chat.messages.push(row);
+    return row;
+  };
+  const answer = (offer, change) => {
+    if (!offer) return refuse('Cette offre n\'existe plus.');
+    Object.assign(offer, { responded_at: chatClock(chat), ...change });
+    return reply(200, [chatOffer(offer)]);
+  };
+  const direct = (otherId, n) => {
+    let conversation = chat.conversations.find((item) => item.kind === 'direct' && sameChatId(item.other, otherId));
+    if (!conversation) {
+      conversation = { id: chatId(n), kind: 'direct', listing: null, buyer: USER_ID, seller: otherId, other: otherId, name: null, unread: 0, created_at: chatClock(chat) };
+      chat.conversations.push(conversation);
+      for (const userId of [USER_ID, otherId]) chat.participants.push({ conversation_id: conversation.id, user_id: userId, role: 'member', left_at: null, last_read_at: null });
+    }
+    return reply(200, conversation.id);
+  };
+  switch (table) {
+    case 'rpc/my_conversations': {
+      const rows = chatRows(chat);
+      return reply(200, body?.p_conversation_id ? rows.filter((row) => sameChatId(row.conversation_id, body.p_conversation_id)) : rows);
+    }
+    case 'conversation_participants':
+      return reply(200, chatFiltered(chat.participants, params));
+    case 'rpc/public_profiles': {
+      const ids = (body?.user_ids ?? []).map((id) => String(id).toLowerCase());
+      return reply(200, CHAT_PROFILES.filter((row) => ids.includes(row.user_id)));
+    }
+    case 'rpc/my_communities':
+      return reply(200, []);
+    case 'rpc/professional_contacts':
+      return reply(200, PRO_CONTACTS);
+    case 'user_blocks':
+      if (method === 'POST') {
+        if (!chat.blocks.some((id) => sameChatId(id, body?.blocked_id))) chat.blocks.push(String(body?.blocked_id).toLowerCase());
+        return reply(201);
+      }
+      if (method === 'DELETE') {
+        const blocked = params.get('blocked_id')?.slice(3);
+        chat.blocks = chat.blocks.filter((id) => !sameChatId(id, blocked));
+        return reply(204);
+      }
+      return reply(200, chat.blocks.map((id) => ({ blocked_id: id })));
+    case 'messages': {
+      if (method === 'POST') {
+        // L'expéditeur et l'heure viennent du serveur ; les identifiants reviennent en minuscules (type uuid).
+        const row = {
+          id: String(body.id).toLowerCase(), conversation_id: String(body.conversation_id).toLowerCase(), sender_id: USER_ID,
+          kind: Object.keys(body.content ?? {})[0] ?? 'text', client_id: String(body.client_id).toLowerCase(), content: body.content,
+          created_at: chatClock(chat), expires_at: null, message_reactions: [], preview: body.preview,
+        };
+        chat.messages.push(row);
+        return reply(201, single ? messageColumns(row) : [messageColumns(row)]);
+      }
+      const rows = chatFiltered(chat.messages, params).sort((a, b) => b.created_at.localeCompare(a.created_at))
+        .slice(0, Number(params.get('limit') ?? 1000)).map(messageColumns);
+      if (single) return rows.length === 1 ? reply(200, rows[0]) : reply(406, { code: 'PGRST116', message: 'no rows' });
+      return reply(200, rows);
+    }
+    case 'rpc/mark_conversation_read': {
+      const conversation = findConversation(body?.p_conversation_id);
+      if (conversation) {
+        conversation.unread = 0;
+        const mine = chat.participants.find((item) => sameChatId(item.conversation_id, conversation.id) && sameChatId(item.user_id, USER_ID));
+        if (mine) mine.last_read_at = chatClock(chat);
+      }
+      return reply(204);
+    }
+    case 'message_reactions': {
+      const message = chat.messages.find((item) => sameChatId(item.id, method === 'POST' ? body?.message_id : params.get('message_id')?.slice(3)));
+      if (method === 'POST') {
+        if (message) message.message_reactions = [...message.message_reactions.filter((item) => !sameChatId(item.user_id, USER_ID)), { user_id: USER_ID, emoji: body.emoji, created_at: chatClock(chat) }];
+        return reply(201);
+      }
+      if (method === 'DELETE') {
+        if (message) message.message_reactions = message.message_reactions.filter((item) => !sameChatId(item.user_id, params.get('user_id')?.slice(3)));
+        return reply(204);
+      }
+      return reply(200, []);
+    }
+    case 'conversation_preferences': {
+      if (method !== 'POST') return reply(200, []);
+      const { conversation_id: id, ...settings } = body ?? {};
+      const key = String(id).toLowerCase();
+      chat.preferences[key] = { ...chat.preferences[key], ...settings };
+      return reply(201);
+    }
+    case 'reports':
+      chat.reports.push(body);
+      return reply(201);
+    case 'rpc/find_account_by_phone':
+      return reply(200, body?.p_phone === NINA_PHONE
+        ? [{ user_id: NINA_ID, public_name: 'Nina L.', avatar_path: null, account_type: 'individual', agency_name: null, agency_city: null }] : []);
+    case 'rpc/start_phone_conversation':
+      return body?.p_phone === NINA_PHONE ? direct(NINA_ID, 7) : refuse('Aucun compte NIDALO avec ce numéro.');
+    case 'rpc/start_direct_conversation':
+      return sameChatId(body?.p_user_id, PRO_ID) ? direct(PRO_ID, 8) : refuse('Ce compte ne peut pas être contacté.');
+    case 'rpc/my_offers':
+      return reply(200, chat.offers.map(chatOffer));
+    case 'rpc/make_offer': {
+      // Comme la fonction du serveur : l'offre est enregistrée et sa bulle écrite dans la conversation.
+      const conversation = findConversation(body?.p_conversation_id);
+      if (!conversation) return refuse('Conversation introuvable.');
+      const offer = {
+        id: String(body.p_id).toLowerCase(), conversation_id: conversation.id, listing_id: conversation.listing, buyer_id: USER_ID, seller_id: conversation.seller,
+        author_id: USER_ID, parent_offer_id: null, amount: body.p_amount, conditions: body.p_conditions ?? null, status: 'pending', created_at: chatClock(chat),
+        expires_at: body.p_expires_at ?? new Date(CHAT_NOW.getTime() + 7 * 86_400_000).toISOString(), responded_at: null, decline_reason: null,
+      };
+      chat.offers.push(offer);
+      addMessage(conversation.id, USER_ID, { offer: { offerId: offer.id } }, '💶 Offre');
+      return reply(200, [chatOffer(offer)]);
+    }
+    case 'rpc/counter_offer': {
+      const parent = chat.offers.find((item) => sameChatId(item.id, body?.p_parent_offer_id));
+      if (!parent) return refuse('Cette offre n\'existe plus.');
+      Object.assign(parent, { status: 'countered', responded_at: chatClock(chat) });
+      const offer = {
+        ...parent, id: String(body.p_id).toLowerCase(), author_id: USER_ID, parent_offer_id: parent.id, amount: body.p_amount, conditions: body.p_conditions ?? null,
+        status: 'pending', created_at: chatClock(chat), expires_at: body.p_expires_at ?? new Date(CHAT_NOW.getTime() + 7 * 86_400_000).toISOString(),
+        responded_at: null, decline_reason: null,
+      };
+      chat.offers.push(offer);
+      addMessage(parent.conversation_id, USER_ID, { offer: { offerId: offer.id } }, '💶 Offre');
+      return reply(200, [chatOffer(offer)]);
+    }
+    case 'rpc/accept_offer':
+      return answer(chat.offers.find((item) => sameChatId(item.id, body?.p_offer_id)), { status: 'accepted' });
+    case 'rpc/decline_offer':
+      return answer(chat.offers.find((item) => sameChatId(item.id, body?.p_offer_id)), { status: 'rejected', decline_reason: body?.p_reason ?? null });
+    case 'rpc/withdraw_offer':
+      return answer(chat.offers.find((item) => sameChatId(item.id, body?.p_offer_id)), { status: 'withdrawn' });
+    case 'agenda_visits':
+      return reply(200, chat.agenda);
+    case 'rpc/my_visit_requests':
+      return reply(200, []);
+    case 'rpc/start_listing_conversation': {
+      const conversation = chat.conversations.find((item) => item.listing === body?.p_listing_id);
+      return conversation ? reply(200, conversation.id) : refuse('Annonce introuvable.');
+    }
+    default:
+      return reply(200, []);
+  }
+}
+
+/**
+ * Messagerie du serveur simulé, avec l'état `chat` ; à appeler après mock(…) : Playwright essaie d'abord la route la
+ * plus récente. Les fichiers du bucket privé message-attachments : URL signées, lecture et envoi (multipart).
+ */
+async function mockMessaging(context, chat, { signedIn = true } = {}) {
+  const cors = { 'access-control-allow-origin': '*' };
+  await context.route('https://izzsoitqtzzswkpvdozd.supabase.co/rest/v1/**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const table = url.pathname.replace('/rest/v1/', '');
+    if (!CHAT_TABLES.includes(table)) return route.fallback();
+    let body = null;
+    try { body = request.postDataJSON(); } catch { body = request.postData(); }
+    const headers = await request.allHeaders();
+    const width = pageWidth(request);
+    chat.calls.push({ table, method: request.method(), search: decodeURIComponent(url.search), body, prefer: headers.prefer ?? '', width, path: pagePath(request), writesBefore: writes.length });
+    if (width !== null && width < 1024) problems.push(`téléphone : ${table} demandé (rien ne doit changer sous 1024 px)`);
+    const reply = (status, value) => route.fulfill({ status, contentType: 'application/json', headers: cors, body: value === undefined ? '' : JSON.stringify(value) });
+    if (!signedIn) {
+      problems.push(`sans compte : ${table} demandé`);
+      return reply(200, []);
+    }
+    return chatRespond(chat, reply, { table, method: request.method(), params: url.searchParams, body, single: (headers.accept ?? '').includes('vnd.pgrst.object') });
+  });
+  await context.route(/^https:\/\/izzsoitqtzzswkpvdozd\.supabase\.co\/storage\/v1\/object\/(sign\/)?message-attachments\//, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const signing = url.pathname.startsWith('/storage/v1/object/sign/');
+    const path = decodeURIComponent(url.pathname.replace(/^\/storage\/v1\/object\/(sign\/)?message-attachments\//, ''));
+    const width = pageWidth(request);
+    if (width !== null && width < 1024) problems.push(`téléphone : fichier ${path} demandé`);
+    if (!signedIn) problems.push(`sans compte : fichier ${path} demandé`);
+    const reply = (status, value) => route.fulfill({ status, contentType: 'application/json', headers: cors, body: JSON.stringify(value) });
+    if (signing && request.method() === 'POST') {
+      // createSignedUrl : { expiresIn } → { signedURL } (chemin relatif à /storage/v1).
+      let body = null;
+      try { body = request.postDataJSON(); } catch { body = request.postData(); }
+      chat.signs.push({ path, body });
+      if (!chat.files.has(path)) return reply(400, { statusCode: '404', error: 'not_found', message: 'Object not found' });
+      return reply(200, { signedURL: `/object/sign/message-attachments/${path}?token=jeton-de-test` });
+    }
+    if (signing) {
+      const file = chat.files.get(path);
+      if (!file || url.searchParams.get('token') !== 'jeton-de-test') return reply(400, { statusCode: '400', error: 'InvalidJWT', message: 'invalid signature' });
+      return route.fulfill({ status: 200, contentType: file.type, headers: cors, body: file.body });
+    }
+    if (request.method() !== 'POST') return reply(400, { statusCode: '400', error: 'invalid', message: 'lecture directe refusée (bucket privé)' });
+    const headers = await request.allHeaders();
+    const parts = multipartParts(request.postDataBuffer(), headers['content-type']);
+    chat.uploads.push({ path, headers, parts });
+    const file = parts.find((part) => part.filename !== null);
+    if (file) chat.files.set(path, { type: file.type ?? 'application/octet-stream', body: Buffer.from(file.body) });
+    return reply(200, { Id: crypto.randomUUID(), Key: `message-attachments/${path}` });
+  });
+}
+
+// MARK: - Messages : aides des vérifications
+
+/** Demandes de la messagerie reçues depuis `mark`, pour une table ou une fonction. */
+const chatCalls = (chat, table, mark = 0) => chat.calls.slice(mark).filter((call) => call.table === table);
+
+/** Valeur aux clés triées, pour comparer un envoi sans dépendre de l'ordre de ses champs. */
+function sortedValue(value) {
+  if (Array.isArray(value)) return value.map(sortedValue);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortedValue(value[key])]));
+  return value;
+}
+
+function expectSame(name, what, actual, wanted) {
+  if (JSON.stringify(sortedValue(actual)) !== JSON.stringify(sortedValue(wanted))) {
+    problems.push(`${name} : ${what} ${JSON.stringify(actual)} au lieu de ${JSON.stringify(wanted)}`);
+  }
+}
+
+/** La seule demande `table` arrivée depuis `mark` (attendue, puis comptée après un court délai). */
+async function oneCall(chat, table, mark, what, filter = () => true) {
+  await waitFor(() => chatCalls(chat, table, mark).some(filter), `${what} : ${table}`);
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  const calls = chatCalls(chat, table, mark).filter(filter);
+  if (calls.length !== 1) problems.push(`${what} : ${calls.length} appel(s) à ${table} au lieu d'un (${JSON.stringify(calls.map((call) => call.body))})`);
+  return calls[0] ?? null;
+}
+
+/** Texte affiché d'un élément (innerText), espaces et retours à la ligne (insécables compris) ramenés à un seul. */
+async function textOf(page, selector) {
+  const text = await page.locator(selector).first().innerText({ timeout: 8000 }).catch(() => null);
+  return text?.replace(/\s+/g, ' ').trim() ?? null;
+}
+
+async function messagesBadge(page) {
+  return page.evaluate(() => document.querySelector('.dtop-round[href="/messages/"] .dtop-badge')?.textContent ?? '');
+}
+
+/** Pastille Messages de la barre du haut (« » : aucune). */
+async function waitForMessagesBadge(page, want, name) {
+  try {
+    await page.waitForFunction((target) => (document.querySelector('.dtop-round[href="/messages/"] .dtop-badge')?.textContent ?? '') === target, want, { timeout: 8000 });
+  } catch {
+    problems.push(`${name} : pastille Messages « ${await messagesBadge(page)} » au lieu de « ${want} »`);
+  }
+}
+
+/** Lignes de la boîte de réception, telles qu'affichées. */
+function inboxRows(page) {
+  return page.$$eval('.dm-list .dm-row', (rows) => rows.map((row) => ({
+    name: row.querySelector('.dm-row-name')?.textContent ?? null,
+    badge: row.querySelector('.dm-badge')?.textContent ?? null,
+    time: row.querySelector('.dm-row-time')?.textContent ?? null,
+    preview: row.querySelector('.dm-row-preview')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+    check: row.querySelector('.dm-row-preview .dm-check')?.getAttribute('aria-label') ?? null,
+    unread: row.querySelector('.dm-unread')?.textContent ?? null,
+    greyPill: Boolean(row.querySelector('.dm-unread.is-muted')),
+    bell: Boolean(row.querySelector('.dm-row-muted')),
+    sub: row.querySelector('.dm-row-sub')?.textContent ?? null,
+  })));
+}
+const rowNames = async (page) => (await inboxRows(page)).map((row) => row.name);
+
+/** Attend les noms des lignes affichées (filtre, recherche, temps réel). */
+async function waitForRows(page, names, name) {
+  try {
+    await page.waitForFunction((wanted) => JSON.stringify([...document.querySelectorAll('.dm-list .dm-row .dm-row-name')].map((el) => el.textContent)) === JSON.stringify(wanted), names, { timeout: 8000 });
+  } catch {
+    problems.push(`${name} : conversations ${JSON.stringify(await rowNames(page))} au lieu de ${JSON.stringify(names)}`);
+  }
+}
+
+/** Titre de la fenêtre ouverte : alerte, confirmation ou avis (`alert`), sinon feuille. */
+async function dialogTitle(page, kind = 'alert') {
+  const selector = kind === 'alert' ? 'dialog.alert-dialog[open] h2' : 'dialog.dm-sheet[open] h2';
+  await page.waitForSelector(selector, { timeout: 8000 }).catch(() => undefined);
+  return (await page.locator(selector).first().textContent().catch(() => null))?.replace(/\s+/g, ' ').trim() ?? null;
+}
+
+/** Bouton d'une alerte ouverte, par son texte. */
+async function alertButton(page, label) {
+  await page.locator('dialog.alert-dialog[open]').last().getByRole('button', { name: label, exact: true }).click();
+}
+
+/** Alerte « OK » de l'app (domiaAlert) : son texte, puis on la referme. */
+async function noticeText(page, name) {
+  const text = await dialogTitle(page);
+  if (text === null) problems.push(`${name} : aucun avis affiché`);
+  else await alertButton(page, 'OK');
+  await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${name} : l'avis reste ouvert`));
+  return text;
+}
+
+/** « Dans l'app iPhone pour l'instant » : titre de l'action, message, puis « Fermer ». */
+async function iphoneOnly(page, name, title) {
+  const shown = await dialogTitle(page);
+  const message = await textOf(page, 'dialog.alert-dialog[open] .alert-body p');
+  expectSame(name, `« ${title} »`, [shown, message], [title, 'Dans l’app iPhone pour l’instant.']);
+  await alertButton(page, 'Fermer').catch(() => problems.push(`${name} : « Fermer » absent pour « ${title} »`));
+  await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached', timeout: 8000 }).catch(() => undefined);
+}
+
+/** Menu ⋮ de l'en-tête : ses actions, ou l'action choisie. */
+async function headerMenu(page, choose = null) {
+  await page.click('.dm-head button[aria-label="Plus d\'options"]');
+  await page.waitForSelector('.dm-head .dm-menu-list');
+  const items = await page.$$eval('.dm-head .dm-menu-list [role="menuitem"]', (els) => els.map((el) => el.textContent.trim()));
+  if (choose) await page.locator('.dm-head .dm-menu-list').getByRole('menuitem', { name: choose, exact: true }).click();
+  else await page.keyboard.press('Escape');
+  return items;
+}
+
+/** Images chargées dans la page (photos des messages, bandeau, prochaine visite). */
+async function imagesLoaded(page, selector, count, name) {
+  try {
+    await page.waitForFunction(([sel, wanted]) => {
+      const images = [...document.querySelectorAll(sel)];
+      return images.length >= wanted && images.every((image) => image.complete && image.naturalWidth > 0);
+    }, [selector, count], { timeout: 10000 });
+  } catch {
+    problems.push(`${name} : images ${selector} non chargées (${await page.locator(selector).count()} sur ${count})`);
+  }
+}
+
+/** Capture d'écran sans survol ni curseur dans un champ. */
+async function chatShot(page, file) {
+  await page.mouse.move(430, 400);
+  await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: join(out, file) });
+}
+
 const browser = await chromium.launch();
 try {
   // Ordinateur
@@ -1015,6 +1584,580 @@ try {
     if (JSON.stringify(shown) !== JSON.stringify(wanted)) problems.push(`barre ${width} : ${JSON.stringify(shown)} au lieu de ${JSON.stringify(wanted)}`);
     await p.close();
     await edge.close();
+  }
+
+  // Messages sur ordinateur (maquette 3) : boîte de réception, conversation, actions envoyées au serveur simulé comme
+  // l'app les envoie, temps réel, à 1440 × 960 puis 1024 × 768 ; horloge figée au vendredi 6 novembre 2026, 10 h 50
+  // à Paris. Captures pour Romain : 3-messages-*.png.
+  const chatContext = async ({ width = 1440, height = 960, account = {}, signedIn = true, phone = false } = {}) => {
+    const context = await browser.newContext(phone ? { ...devices['iPhone 13'], locale: 'fr-FR', timezoneId: 'Europe/Paris' }
+      : { viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR', timezoneId: 'Europe/Paris' });
+    await context.clock.setFixedTime(CHAT_NOW);
+    const server = await mock(context, { signedIn, listingRows: [...listings, ...HOME_LISTINGS], account });
+    const chat = chatState();
+    await mockMessaging(context, chat, { signedIn });
+    return { context, server, chat };
+  };
+  const A = chatId(1).toUpperCase();
+  const rowLink = (n) => `.dm-list .dm-row[href="/messages/?c=${chatId(n)}"]`;
+  const INITIAL_ROWS = [
+    { name: 'Agence Démo Lyon', badge: 'PRO', time: '10:45', preview: 'Bien reçu, je transmets votre offre au propriétaire.', check: null, unread: '1', greyPill: false, bell: false, sub: 'Appartement 3 pièces · Lyon 2e' },
+    { name: 'Visite groupée Lyon 2e', badge: null, time: '09:12', preview: 'Merci, à samedi !', check: null, unread: '3', greyPill: true, bell: false, sub: '3 membres' },
+    { name: 'Julien M.', badge: 'Particulier', time: 'Hier', preview: 'Je peux signer rapidement si l\'offre vous convient.', check: null, unread: '2', greyPill: false, bell: false, sub: 'Appartement 2 pièces · Lyon 6e' },
+    { name: 'Lucas G.', badge: 'Particulier', time: 'Mar.', preview: 'Nouvelle conversation', check: null, unread: null, greyPill: false, bell: false, sub: 'Maison familiale 5 pièces · Écully' },
+    { name: 'Compte supprimé', badge: 'Particulier', time: '27 octobre', preview: 'Vous : Merci, je reviens vers vous rapidement.', check: 'Envoyé', unread: null, greyPill: false, bell: false, sub: 'Studio rénové' },
+  ];
+  const ALL_NAMES = INITIAL_ROWS.map((row) => row.name);
+
+  for (const [width, height] of [[1440, 960], [1024, 768]]) {
+    const M = `messages ${width}`;
+    const { context: chatDesk, server: chatServer, chat } = await chatContext({ width, height });
+    page = await open(chatDesk, '/messages/', `messages-${width}`);
+    await page.waitForSelector('.dm-list .dm-row');
+    await page.waitForSelector('.dm-next-card');
+    await imagesLoaded(page, '.dm-next-photo img', 1, M);
+    // Pastille : 1 + 2 + 3 non-lus ; l'archivée n'y compte pas.
+    await waitForMessagesBadge(page, '6', M);
+    expectSame(M, 'volet de droite sans ?c=', await textOf(page, '.dm-main'), 'Sélectionnez une conversation');
+    if (chatCalls(chat, 'messages').length || chatCalls(chat, 'rpc/mark_conversation_read').length) problems.push(`${M} : sans ?c=, une conversation est lue ou marquée lue`);
+    const layout = await page.evaluate(() => {
+      const box = (selector) => document.querySelector(selector)?.getBoundingClientRect();
+      return {
+        side: box('.dm-side')?.width, chips: [...document.querySelectorAll('.dm-chip')].map((chip) => Math.round(chip.getBoundingClientRect().height)), top: box('.dm')?.top, bottom: box('.dm')?.bottom, pageScroll: document.documentElement.scrollHeight - innerHeight,
+        overflowX: document.documentElement.scrollWidth - innerWidth, footer: Boolean(document.querySelector('.dfoot, footer.footer')),
+        active: document.querySelector('.dtop-round[href="/messages/"]')?.getAttribute('aria-current') ?? null,
+      };
+    });
+    expectSame(M, 'mise en page', layout, { side: 420, chips: [34, 34, 34, 34, 34], top: 72, bottom: height, pageScroll: 0, overflowX: 0, footer: false, active: 'page' });
+    expectSame(M, 'en-tête de la colonne', [await textOf(page, '.dm-side-head h1'), await textOf(page, '.dm-side-head p'), await page.getAttribute('.dm-compose', 'aria-label'),
+      await page.getAttribute('.dm-search input', 'placeholder')], ['Messages', 'Vos échanges, votre futur chez-vous.', 'Nouveau message', 'Rechercher un contact ou un bien']);
+    expectSame(M, 'conversations', await inboxRows(page), INITIAL_ROWS);
+    expectSame(M, 'nombre de conversations', await textOf(page, '.dm-list-head'), `Toutes les conversations ${INITIAL_ROWS.length}`);
+    expectSame(M, 'filtres', await page.$$eval('.dm-chip', (els) => els.map((el) => [el.getAttribute('aria-label'), el.getAttribute('aria-pressed')])),
+      [['Tous', 'true'], ['Non lus, 3', 'false'], ['Favoris', 'false'], ['Visites', 'false'], ['Archivés', 'false']]);
+    expectSame(M, 'prochaine visite', [await textOf(page, '.dm-next .dm-section-head'), await page.getAttribute('.dm-next .dm-section-head a', 'href'), await textOf(page, '.dm-next-card')],
+      ['Prochaine visite Voir l’agenda', '/compte/?vue=bientot&ecran=agenda', 'VISITE CONFIRMÉE Jeu. 12 nov. · 18h00 Appartement 3 pièces · Lyon 2e 238 000 € AD Avec Agence Démo Lyon']);
+    // Aucune conversation n'est ouverte d'elle-même : aucune ligne n'est sélectionnée.
+    if (await page.locator('.dm-row[aria-current="true"]').count()) problems.push(`${M} : une conversation est sélectionnée sans ?c=`);
+    await chatShot(page, `3-messages-vide-${width}.png`);
+
+    if (width === 1440) {
+      // Filtres de l'app : non lus (sans les archivées), favoris, visite à venir, archivées.
+      for (const [label, names] of [['Non lus, 3', ['Agence Démo Lyon', 'Visite groupée Lyon 2e', 'Julien M.']], ['Favoris', ['Julien M.']], ['Visites', ['Agence Démo Lyon']],
+        ['Archivés', ['Marc P.']], ['Tous', ALL_NAMES]]) {
+        await page.click(`.dm-chip[aria-label="${label}"]`);
+        await waitForRows(page, names, `${M} : filtre ${label}`);
+        if ((await page.getAttribute(`.dm-chip[aria-label="${label}"]`, 'aria-pressed')) !== 'true') problems.push(`${M} : filtre ${label} non enfoncé`);
+        if (label === 'Archivés' && await page.locator('.dm-next').count()) problems.push(`${M} : prochaine visite affichée dans les archivées`);
+      }
+      // Recherche : contacts, conversations et annonces (une ville) ; puis un nom ; « Annuler » rend la liste.
+      await page.fill('.dm-search input', 'Écully');
+      await page.waitForSelector('.dm-listing-result');
+      await page.waitForFunction(() => !document.querySelector('.dm-results .spinner'), null, { timeout: 8000 }).catch(() => undefined);
+      const results = () => page.evaluate(() => ({
+        titles: [...document.querySelectorAll('.dm-results-title')].map((el) => el.textContent.trim()),
+        contacts: [...document.querySelectorAll('.dm-results button.dm-contact .dm-contact-name')].map((el) => el.textContent),
+        conversations: [...document.querySelectorAll('.dm-results a.dm-contact .dm-contact-name')].map((el) => el.textContent),
+        listings: [...document.querySelectorAll('.dm-listing-result .dm-listing-title')].map((el) => el.textContent),
+      }));
+      expectSame(M, 'recherche « Écully »', await results(), { titles: ['Contacts', 'Conversations', 'Annonces'], contacts: ['Lucas G.'], conversations: ['Lucas G.'], listings: ['Maison familiale 5 pièces'] });
+      await page.fill('.dm-search input', 'Julien');
+      await page.waitForFunction(() => document.querySelector('.dm-results a.dm-contact .dm-contact-name')?.textContent === 'Julien M.' && !document.querySelector('.dm-results .spinner'), null, { timeout: 8000 })
+        .catch(() => undefined);
+      await page.waitForTimeout(400);
+      expectSame(M, 'recherche « Julien »', await results(), { titles: ['Contacts', 'Conversations'], contacts: ['Julien M.'], conversations: ['Julien M.'], listings: [] });
+      await page.click('.dm-search-cancel');
+      await waitForRows(page, ALL_NAMES, `${M} : après « Annuler »`);
+    }
+
+    // Ouvrir la conversation de l'agence : elle s'ouvre à droite sans recharger la page, est lue puis marquée lue une fois.
+    let mark = chat.calls.length;
+    await page.evaluate(() => { window.nidaloMarker = 'même page'; });
+    await page.click(rowLink(1));
+    await page.waitForURL(`${base}/messages/?c=${chatId(1)}`);
+    await page.waitForSelector('.dm-thread-inner .dm-day');
+    await page.waitForSelector('.dm-offer .dm-offer-amount');
+    const read = await oneCall(chat, 'rpc/mark_conversation_read', mark, `${M} : ouverture`);
+    if (read) expectSame(M, 'conversation marquée lue', read.body, { p_conversation_id: A });
+    await waitForMessagesBadge(page, '5', `${M} : après l'ouverture`);
+    if ((await page.evaluate(() => window.nidaloMarker)) !== 'même page') problems.push(`${M} : la page s'est rechargée à l'ouverture`);
+    expectSame(M, 'lecture des messages', chatCalls(chat, 'messages', mark).map((call) => `${call.method} ${call.search}`),
+      [`GET ?select=id,conversation_id,sender_id,kind,client_id,content,created_at,expires_at,message_reactions(user_id,emoji,created_at)&conversation_id=eq.${A}&order=created_at.desc&limit=200`]);
+    const opened = await page.evaluate(() => {
+      const row = document.querySelector('.dm-row[aria-current="true"]');
+      const sent = document.querySelector('.dm-bubble.is-out');
+      const received = document.querySelector('.dm-bubble:not(.is-out)');
+      const style = (el) => (el ? [getComputedStyle(el).backgroundColor, getComputedStyle(el).color] : null);
+      return {
+        row: row?.querySelector('.dm-row-name')?.textContent ?? null, rowBackground: row ? getComputedStyle(row).backgroundColor : null,
+        unread: row?.querySelector('.dm-unread')?.textContent ?? null, sent: style(sent), received: style(received),
+        column: Math.round(document.querySelector('.dm-thread-inner')?.getBoundingClientRect().width ?? 0),
+      };
+    });
+    expectSame(M, 'conversation ouverte', opened, {
+      row: 'Agence Démo Lyon', rowBackground: 'rgb(238, 242, 250)', unread: null, sent: ['rgb(60, 92, 176)', 'rgb(255, 255, 255)'],
+      received: ['rgb(255, 255, 255)', 'rgb(36, 45, 56)'], column: width === 1440 ? 760 : 556,
+    });
+    expectSame(M, 'en-tête', [await textOf(page, '.dm-head-title'), await textOf(page, '.dm-head .dm-badge'), await textOf(page, '.dm-head-sub'),
+      await page.getAttribute('.dm-head-who', 'href')], ['Agence Démo Lyon', 'PRO', 'Appartement 3 pièces · Lyon 2e', `/messages/?c=${chatId(1)}&vue=details`]);
+    await page.waitForSelector('.dm-banner-link');
+    expectSame(M, 'bandeau du bien', [await textOf(page, '.dm-banner-title'), await textOf(page, '.dm-banner-line'), await textOf(page, '.dm-banner-link'),
+      await page.getAttribute('a.dm-banner', 'href')], ['Appartement 3 pièces', 'Lyon 2e · Rue de l\'Exemple · 238 000 €', 'Voir l\'annonce', `/annonce/?id=${homeId(1)}`]);
+    expectSame(M, 'jours', await page.$$eval('.dm-day-label', (els) => els.map((el) => el.textContent)), ['Hier · 18:02', 'Aujourd\'hui · 09:58']);
+    // Coches : l'agence a tout lu jusqu'à 10:45 ; aucun « Lu », « En ligne » ni « écrit… » (absents de l'app).
+    expectSame(M, 'coches', await page.$$eval('.dm-msg.is-out .dm-check', (els) => els.map((el) => el.getAttribute('aria-label'))), ['Vu', 'Vu', 'Vu']);
+    const paneText = await textOf(page, '.dm-pane');
+    if (/En ligne|écrit…|écrit\.\.\.|\bLu\b/.test(paneText ?? '')) problems.push(`${M} : « En ligne », « écrit… » ou « Lu » affiché`);
+    expectSame(M, 'carte d\'offre', [await textOf(page, '.dm-offer-head'), await textOf(page, '.dm-offer-amount'), await textOf(page, '.dm-offer-gap'),
+      await textOf(page, '.dm-offer-conditions'), await textOf(page, '.dm-offer-expiry'), await page.$$eval('.dm-offer-actions button', (els) => els.map((el) => el.textContent))],
+      ['OFFRE En attente', '228 000 €', '4,2 % sous le prix affiché', 'Sous réserve d\'obtention du prêt', 'Valable jusqu\'au 13 novembre', ['Retirer']]);
+    await imagesLoaded(page, '.dm-media-tile img', 2, `${M} : photos`);
+    await page.waitForSelector('a.dm-doc');
+    const signedPhotos = await page.$$eval('.dm-media-tile img', (els) => els.map((el) => el.getAttribute('src')));
+    expectSame(M, 'photos (URL signées)', signedPhotos, AGENT_PHOTOS.map((path) => `https://izzsoitqtzzswkpvdozd.supabase.co/storage/v1/object/sign/message-attachments/${path}?token=jeton-de-test`));
+    expectSame(M, 'URL signées demandées', [...new Map(chat.signs.map((sign) => [sign.path, sign.body])).entries()].sort(),
+      [[AGENT_PHOTOS[0], { expiresIn: 600 }], [AGENT_PHOTOS[1], { expiresIn: 600 }], [LOAN_PDF, { expiresIn: 600 }]]);
+    expectSame(M, 'document', [await textOf(page, '.dm-doc-name'), await textOf(page, '.dm-doc-line'), await page.getAttribute('a.dm-doc', 'href'), await page.getAttribute('a.dm-doc', 'target')],
+      ['Simulation_pret.pdf', 'Justificatif de revenus · PDF · 245 Ko', `https://izzsoitqtzzswkpvdozd.supabase.co/storage/v1/object/sign/message-attachments/${LOAN_PDF}?token=jeton-de-test`, '_blank']);
+    expectSame(M, 'réponses rapides', await page.$$eval('.dm-quick button', (els) => els.map((el) => el.textContent)), ['Parfait, merci\u00a0!', 'Décaler la visite', 'Questions']);
+    expectSame(M, 'barre d\'écriture', [await page.getAttribute('.dm-composer textarea', 'placeholder'), await page.getAttribute('.dm-plus', 'aria-label'),
+      await page.getAttribute('.dm-emoji', 'aria-label'), await page.isDisabled('.dm-send')], ['Votre message...', 'Ajouter une pièce jointe', 'Ajouter un émoji', true]);
+    const atBottom = await page.evaluate(() => { const el = document.querySelector('.dm-thread'); return el.scrollHeight - el.scrollTop - el.clientHeight; });
+    if (atBottom > 2) problems.push(`${M} : la conversation ne s'ouvre pas en bas (${atBottom} px plus bas)`);
+    await chatShot(page, `3-messages-${width}.png`);
+
+    if (width === 1440) {
+      // Cœur (message_reactions, comme setReaction) : posé, puis retiré.
+      const lastReceived = page.locator('.dm-msg:not(.is-out)').last();
+      mark = chat.calls.length;
+      await lastReceived.locator('.dm-bubble').hover();
+      await lastReceived.locator('.dm-heart-button').click();
+      await lastReceived.locator('.dm-heart').waitFor({ timeout: 8000 }).catch(() => problems.push(`${M} : cœur non affiché`));
+      const liked = await oneCall(chat, 'message_reactions', mark, `${M} : cœur`);
+      if (liked) {
+        expectSame(M, 'cœur posé', [liked.method, liked.search, liked.body], ['POST', '?on_conflict=message_id,user_id', { message_id: messageId(7).toUpperCase(), emoji: '♥' }]);
+        if (!liked.prefer.includes('resolution=merge-duplicates')) problems.push(`${M} : cœur sans fusion (Prefer « ${liked.prefer} »)`);
+      }
+      mark = chat.calls.length;
+      await lastReceived.locator('.dm-heart-button').click();
+      await lastReceived.locator('.dm-heart').waitFor({ state: 'detached', timeout: 8000 }).catch(() => problems.push(`${M} : cœur non retiré`));
+      const unliked = await oneCall(chat, 'message_reactions', mark, `${M} : cœur retiré`);
+      if (unliked) expectSame(M, 'cœur retiré', [unliked.method, unliked.search], ['DELETE', `?message_id=eq.${messageId(7).toUpperCase()}&user_id=eq.${USER_ID.toUpperCase()}`]);
+
+      // Envois : une réponse rapide, puis un texte (émoji, Entrée), avec exactement les colonnes de l'app (MessageInsert).
+      const checkInsert = (call, what, content, preview) => {
+        if (!call) return;
+        const body = call.body ?? {};
+        if (!UPPER_UUID.test(body.id ?? '') || body.client_id !== body.id) problems.push(`${M} : ${what} : identifiants ${body.id} / ${body.client_id}`);
+        expectSame(M, what, [call.method, call.search, body], ['POST', '?select=id,conversation_id,sender_id,kind,client_id,content,created_at,expires_at,message_reactions(user_id,emoji,created_at)',
+          { id: body.id, conversation_id: A, client_id: body.id, content, preview }]);
+        if (!call.prefer.includes('return=representation')) problems.push(`${M} : ${what} : Prefer « ${call.prefer} »`);
+      };
+      mark = chat.calls.length;
+      await page.click('.dm-quick button:text-is("Parfait, merci !")');
+      checkInsert(await oneCall(chat, 'messages', mark, `${M} : réponse rapide`, (call) => call.method === 'POST'), 'réponse rapide', chatText('Parfait, merci\u00a0!'), 'Parfait, merci\u00a0!');
+      await page.waitForFunction(() => [...document.querySelectorAll('.dm-bubble.is-out')].at(-1)?.textContent === 'Parfait, merci\u00a0!', null, { timeout: 8000 })
+        .catch(() => problems.push(`${M} : la réponse rapide n'apparaît pas`));
+      if (await page.locator('.dm-quick').count()) problems.push(`${M} : réponses rapides affichées après mon message`);
+      mark = chat.calls.length;
+      await page.fill('.dm-composer textarea', 'Merci, à jeudi ');
+      await page.click('.dm-emoji');
+      expectSame(M, 'émoji ajouté', await page.inputValue('.dm-composer textarea'), 'Merci, à jeudi 🙂');
+      await page.focus('.dm-composer textarea');
+      await page.keyboard.press('Enter');
+      checkInsert(await oneCall(chat, 'messages', mark, `${M} : texte`, (call) => call.method === 'POST'), 'texte envoyé', chatText('Merci, à jeudi 🙂'), 'Merci, à jeudi 🙂');
+      await page.waitForFunction(() => [...document.querySelectorAll('.dm-bubble.is-out')].at(-1)?.textContent === 'Merci, à jeudi 🙂', null, { timeout: 8000 })
+        .catch(() => problems.push(`${M} : le texte envoyé n'apparaît pas`));
+      expectSame(M, 'après l\'envoi', [await page.inputValue('.dm-composer textarea'), await page.$$eval('.dm-msg.is-out .dm-check', (els) => els.at(-1)?.getAttribute('aria-label')),
+        (await inboxRows(page))[0]], ['', 'Envoyé', { ...INITIAL_ROWS[0], preview: 'Vous : Merci, à jeudi 🙂', check: 'Envoyé', unread: null, time: '10:50' }]);
+      if (await page.locator('dialog.alert-dialog[open]').count()) problems.push(`${M} : une fenêtre (prénom ?) s'ouvre alors que le compte a un prénom`);
+
+      // « + » : sources de l'app (Photos et vidéos, Documents depuis l'ordinateur), pas d'offre tant qu'une offre attend.
+      await page.click('.dm-plus');
+      expectSame(M, 'menu « + »', [await dialogTitle(page, 'sheet'), await page.$$eval('dialog[open] .dm-sources button', (els) => els.map((el) => el.querySelector('.dm-source-title').textContent)),
+        await page.$$eval('dialog[open] .dm-wide-title', (els) => els.map((el) => el.textContent))],
+        ['Joindre', ['Appareil photo', 'Photos et vidéos', 'Documents', 'Caméra vidéo', 'Localisation', 'Contacts', 'Mon dossier'], ['Documents immobiliers']]);
+      // Une photo de l'ordinateur : envoyée dans message-attachments au chemin de l'app, puis le message qui la cite.
+      mark = chat.calls.length;
+      let uploads = chat.uploads.length;
+      const [photoChooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('dialog[open] .dm-sources button[aria-label="Photos et vidéos"]')]);
+      await photoChooser.setFiles({ name: 'sejour.jpg', mimeType: 'image/jpeg', buffer: photos['photo1.jpg'] });
+      await page.waitForSelector('dialog.dm-preview-sheet[open] .dm-tile img');
+      expectSame(M, 'aperçu de la photo', await dialogTitle(page, 'sheet'), 'Aperçu');
+      await page.click('dialog.dm-preview-sheet[open] .dm-pill');
+      const photoMessage = await oneCall(chat, 'messages', mark, `${M} : photo`, (call) => call.method === 'POST');
+      const photoUpload = chat.uploads[uploads] ?? null;
+      if (chat.uploads.length !== uploads + 1 || !photoUpload) problems.push(`${M} : ${chat.uploads.length - uploads} fichier(s) envoyé(s) pour une photo`);
+      else {
+        const file = photoUpload.parts.find((part) => part.filename !== null);
+        if (!new RegExp(`^${chatId(1)}/[0-9A-F-]{36}\\.jpg$`).test(photoUpload.path) || !UPPER_UUID.test(photoUpload.path.split('/')[1].slice(0, -4))) problems.push(`${M} : chemin de la photo ${photoUpload.path}`);
+        expectSame(M, 'envoi de la photo', [photoUpload.headers['x-upsert'], photoUpload.parts.map((part) => [part.name, part.type]), photoUpload.parts.find((part) => part.name === 'cacheControl')?.body.toString(),
+          file?.body.subarray(0, 3).toString('hex')], ['false', [['cacheControl', null], ['', 'image/jpeg']], '3600', 'ffd8ff']);
+        if (photoMessage) {
+          const items = photoMessage.body?.content?.attachments?._0 ?? [];
+          const item = items[0] ?? {};
+          if (!UPPER_UUID.test(item.id ?? '')) problems.push(`${M} : identifiant de la photo ${item.id}`);
+          expectSame(M, 'message de la photo', [photoMessage.body?.content, photoMessage.body?.preview],
+            [{ attachments: { _0: [{ id: item.id, kind: 'photo', fileName: 'Photo.jpg', storagePath: photoUpload.path, byteCount: file?.body.length }] } }, '📷 Photo']);
+        }
+        await imagesLoaded(page, '.dm-media-tile img', 3, `${M} : photo envoyée`);
+      }
+      // Un document « DPE » (Documents immobiliers) : même chemin, type de l'app, catégorie dans le message.
+      mark = chat.calls.length;
+      uploads = chat.uploads.length;
+      await page.click('.dm-plus');
+      await page.click('dialog[open] .dm-wide-row:has-text("Documents immobiliers")');
+      expectSame(M, 'documents immobiliers', await dialogTitle(page, 'sheet'), 'Documents immobiliers');
+      const [documentChooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('dialog[open] .dm-action-row:has-text("DPE")')]);
+      await documentChooser.setFiles({ name: 'dpe.pdf', mimeType: 'application/pdf', buffer: PDF_BYTES });
+      await page.waitForSelector('dialog.dm-preview-sheet[open] .dm-tile-doc');
+      expectSame(M, 'aperçu du document', await textOf(page, 'dialog.dm-preview-sheet[open] .dm-tile-doc'), 'dpe.pdf DPE · PDF · 1 Ko');
+      await page.click('dialog.dm-preview-sheet[open] .dm-pill');
+      const documentMessage = await oneCall(chat, 'messages', mark, `${M} : document`, (call) => call.method === 'POST');
+      const documentUpload = chat.uploads[uploads] ?? null;
+      if (!documentUpload || !new RegExp(`^${chatId(1)}/[0-9A-F-]{36}\\.pdf$`).test(documentUpload.path)) problems.push(`${M} : envoi du document ${documentUpload?.path}`);
+      else {
+        expectSame(M, 'envoi du document', documentUpload.parts.map((part) => [part.name, part.type, part.name === 'cacheControl' ? part.body.toString() : part.body.length]),
+          [['cacheControl', null, '3600'], ['', 'application/pdf', PDF_BYTES.length]]);
+        const item = documentMessage?.body?.content?.attachments?._0?.[0] ?? {};
+        expectSame(M, 'message du document', [documentMessage?.body?.content, documentMessage?.body?.preview],
+          [{ attachments: { _0: [{ id: item.id, kind: 'document', fileName: 'dpe.pdf', storagePath: documentUpload.path, byteCount: PDF_BYTES.length, category: 'energyDiagnostic' }] } }, '📎 dpe.pdf']);
+      }
+      await page.waitForFunction(() => [...document.querySelectorAll('.dm-doc-name')].some((el) => el.textContent === 'dpe.pdf'), null, { timeout: 8000 })
+        .catch(() => problems.push(`${M} : le document envoyé n'apparaît pas`));
+
+      // Temps réel : l'agence lit (coches « Vu »), puis écrit ; tout arrive sans recharger, et la conversation est relue
+      // puis marquée lue une fois de plus.
+      chat.participants.find((item) => item.conversation_id === chatId(1) && item.user_id === AGENT_ID).last_read_at = new Date(CHAT_NOW.getTime() + 60_000).toISOString();
+      chatServer.pushChange('conversation_participants');
+      await page.waitForFunction(() => [...document.querySelectorAll('.dm-msg.is-out .dm-check')].every((el) => el.getAttribute('aria-label') === 'Vu')
+        && document.querySelector('.dm-row[aria-current="true"] .dm-row-preview .dm-check')?.getAttribute('aria-label') === 'Vu', null, { timeout: 8000 })
+        .catch(() => problems.push(`${M} : coches non mises à jour après la lecture de l'agence`));
+      mark = chat.calls.length;
+      chat.messages.push({
+        id: messageId(8), conversation_id: chatId(1), sender_id: AGENT_ID, kind: 'text', client_id: messageId(8), content: chatText('Je vous appelle demain matin pour organiser la suite.'),
+        created_at: new Date(CHAT_NOW.getTime() + 120_000).toISOString(), expires_at: null, message_reactions: [], preview: 'Je vous appelle demain matin pour organiser la suite.',
+      });
+      chat.conversations[0].unread += 1;
+      chatServer.pushChange('messages');
+      await page.waitForFunction(() => [...document.querySelectorAll('.dm-bubble')].at(-1)?.textContent === 'Je vous appelle demain matin pour organiser la suite.', null, { timeout: 8000 })
+        .catch(() => problems.push(`${M} : le message reçu en temps réel n'apparaît pas`));
+      const liveRead = await oneCall(chat, 'rpc/mark_conversation_read', mark, `${M} : message reçu`);
+      if (liveRead) expectSame(M, 'message reçu marqué lu', liveRead.body, { p_conversation_id: A });
+      await waitForMessagesBadge(page, '5', `${M} : après le message reçu`);
+      if ((await page.evaluate(() => window.nidaloMarker)) !== 'même page') problems.push(`${M} : la page s'est rechargée`);
+      expectSame(M, 'temps réel suivi', ['messages', 'conversation_participants', 'message_reactions', 'offers'].filter((table) => !chatServer.followed().includes(table)), []);
+
+      // Menu ⋮ : les actions de l'app ; chaque réglage relit la conversation puis enregistre tous ses réglages.
+      expectSame(M, 'menu ⋮', await headerMenu(page), ['Archiver', 'Mettre en sourdine', 'Ajouter aux favoris', 'Bloquer', 'Signaler']);
+      const settings = { is_archived: false, is_favorite: false, muted_until: null, saves_photos: false, cleared_at: null };
+      const setting = async (label, change, notice = null) => {
+        const before = chat.calls.length;
+        await headerMenu(page, label);
+        if (notice) expectSame(M, `avis de « ${label} »`, await noticeText(page, M), notice);
+        const write = await oneCall(chat, 'conversation_preferences', before, `${M} : ${label}`);
+        const reread = chatCalls(chat, 'rpc/my_conversations', before).filter((call) => call.body?.p_conversation_id);
+        expectSame(M, `« ${label} » : relecture`, reread.map((call) => call.body), [{ p_conversation_id: A }]);
+        Object.assign(settings, change);
+        if (write) {
+          expectSame(M, `« ${label} »`, [write.method, write.search, write.body], ['POST', '?on_conflict=conversation_id,user_id', { conversation_id: A, ...settings }]);
+          if (!write.prefer.includes('resolution=merge-duplicates')) problems.push(`${M} : « ${label} » sans fusion (Prefer « ${write.prefer} »)`);
+        }
+      };
+      await setting('Archiver', { is_archived: true });
+      await waitForRows(page, ALL_NAMES.slice(1), `${M} : après « Archiver »`);
+      await setting('Désarchiver', { is_archived: false });
+      await waitForRows(page, ALL_NAMES, `${M} : après « Désarchiver »`);
+      await setting('Mettre en sourdine', { muted_until: '4001-01-01T00:00:00.000Z' });
+      await page.waitForSelector(`${rowLink(1)} .dm-row-muted`, { timeout: 8000 }).catch(() => problems.push(`${M} : cloche barrée absente après la sourdine`));
+      await setting('Réactiver les notifications', { muted_until: null });
+      await setting('Ajouter aux favoris', { is_favorite: true }, 'Conversation ajoutée aux favoris.');
+      await setting('Retirer des favoris', { is_favorite: false }, 'Conversation retirée des favoris.');
+      // Bloquer (user_blocks), puis débloquer depuis la barre qui remplace la saisie.
+      mark = chat.calls.length;
+      await headerMenu(page, 'Bloquer');
+      expectSame(M, 'confirmation du blocage', await dialogTitle(page), 'Bloquer ce compte ?');
+      await alertButton(page, 'Bloquer');
+      expectSame(M, 'avis du blocage', await noticeText(page, M), 'Compte bloqué.');
+      const blocked = await oneCall(chat, 'user_blocks', mark, `${M} : bloquer`, (call) => call.method !== 'GET');
+      if (blocked) expectSame(M, 'blocage', [blocked.method, blocked.body], ['POST', { blocked_id: AGENT_ID.toUpperCase() }]);
+      expectSame(M, 'compte bloqué', [await textOf(page, '.dm-bottom-line'), await page.locator('.dm-composer').count(), (await headerMenu(page))[3]],
+        ['Vous avez bloqué ce compte Débloquer', 0, 'Débloquer']);
+      mark = chat.calls.length;
+      await page.click('.dm-bottom-line .dm-link-button');
+      await page.waitForSelector('.dm-composer');
+      const unblocked = await oneCall(chat, 'user_blocks', mark, `${M} : débloquer`, (call) => call.method !== 'GET');
+      if (unblocked) expectSame(M, 'déblocage', [unblocked.method, unblocked.search], ['DELETE', `?blocker_id=eq.${USER_ID.toUpperCase()}&blocked_id=eq.${AGENT_ID.toUpperCase()}`]);
+      // Signaler (reports) : motif, description, puis l'avis de l'app.
+      mark = chat.calls.length;
+      await headerMenu(page, 'Signaler');
+      expectSame(M, 'signalement', await dialogTitle(page, 'sheet'), 'Signaler la conversation');
+      expectSame(M, 'motifs', await page.$$eval('dialog[open] .dm-choice', (els) => els.map((el) => el.textContent)),
+        ['Spam', 'Fraude immobilière ou arnaque', 'Contenu inapproprié', 'Harcèlement', 'Usurpation d\'identité', 'Autre']);
+      await page.click('dialog[open] .dm-choice:has-text("Fraude immobilière ou arnaque")');
+      await page.fill('#dm-report-details', '  Demande de virement avant la visite.  ');
+      await page.click('dialog[open] button:text-is("Enregistrer le signalement")');
+      expectSame(M, 'avis du signalement', await noticeText(page, M), 'Signalement transmis à l’équipe NIDALO.');
+      const report = await oneCall(chat, 'reports', mark, `${M} : signaler`);
+      if (report) {
+        if (!UPPER_UUID.test(report.body?.id ?? '')) problems.push(`${M} : identifiant du signalement ${report.body?.id}`);
+        expectSame(M, 'signalement envoyé', [report.method, report.body], ['POST', { id: report.body?.id, target_type: 'conversation', target_id: A, reason: 'scam', details: 'Demande de virement avant la visite.' }]);
+      }
+      // Appeler : « Appeler X ? » puis le numéro publié de l'agence (lien tel:) ; ici, « Annuler ».
+      await page.click('.dm-head button[aria-label="Appeler"]');
+      expectSame(M, 'appel', [await dialogTitle(page), await page.locator('dialog.alert-dialog[open] .alert-actions button').first().textContent()],
+        ['Appeler Agence Démo Lyon ?', 'Appeler le 06 39 98 12 00']);
+      await alertButton(page, 'Annuler');
+
+      // Offres de A : retirer (withdraw_offer), puis « Faire une offre » revient dans le « + » (make_offer).
+      mark = chat.calls.length;
+      await page.click('.dm-offer-actions button:text-is("Retirer")');
+      expectSame(M, 'retirer l\'offre', await dialogTitle(page), 'Retirer votre offre de 228 000 € ?');
+      await alertButton(page, 'Retirer');
+      const withdrawn = await oneCall(chat, 'rpc/withdraw_offer', mark, `${M} : retirer`);
+      if (withdrawn) expectSame(M, 'offre retirée', withdrawn.body, { p_offer_id: offerId(1).toUpperCase() });
+      await page.waitForFunction(() => document.querySelector('.dm-offer .dm-offer-status')?.textContent === 'Retirée', null, { timeout: 8000 })
+        .catch(() => problems.push(`${M} : l'offre retirée n'est pas « Retirée »`));
+      if (!chatCalls(chat, 'rpc/my_offers', mark).length) problems.push(`${M} : offres non relues après « Retirer »`);
+      await page.click('.dm-plus');
+      await page.click('dialog[open] .dm-wide-row:has-text("Faire une offre")');
+      await page.waitForSelector('.dm-pane .dl-offer-screen h1');
+      expectSame(M, 'écran de l\'offre', [await textOf(page, '.dl-offer-screen h1'), await textOf(page, '.dl-offer-screen .dl-screen-head p')],
+        ['Faire une offre', 'Appartement 3 pièces · prix affiché 238 000 €']);
+      mark = chat.calls.length;
+      // Montant saisi d'un coup : l'horloge figée de Playwright remplace requestAnimationFrame, dont le champ se sert
+      // pour replacer le curseur après chaque chiffre (la saisie chiffre par chiffre est vérifiée par check-listing).
+      await page.fill('#offre-montant', '230000');
+      expectSame(M, 'montant de l\'offre', (await page.inputValue('#offre-montant')).replace(/\s/g, ' '), '230 000');
+      await page.click('.dl-offer-screen .dl-submit');
+      await page.waitForSelector('.dm-thread .dm-offer');
+      const made = await oneCall(chat, 'rpc/make_offer', mark, `${M} : faire une offre`);
+      if (made) expectSame(M, 'offre faite', made.body, { p_id: made.body?.p_id, p_conversation_id: chatId(1), p_amount: 230000 });
+      await page.waitForFunction(() => {
+        const cards = [...document.querySelectorAll('.dm-offer')];
+        return cards.length === 2 && cards[1].querySelector('.dm-offer-amount')?.textContent.replace(/\s/g, ' ') === '230 000 €'
+          && cards[1].querySelector('.dm-offer-status')?.textContent === 'En attente';
+      }, null, { timeout: 8000 }).catch(() => problems.push(`${M} : la nouvelle offre n'apparaît pas dans la conversation`));
+
+      // B : le compte vend ; refuser (motif), accepter, contre-offre (decline_offer, accept_offer, counter_offer).
+      mark = chat.calls.length;
+      await page.click(rowLink(2));
+      await page.waitForURL(`${base}/messages/?c=${chatId(2)}`);
+      await page.waitForSelector('.dm-offer-actions');
+      const readB = await oneCall(chat, 'rpc/mark_conversation_read', mark, `${M} : ouverture de B`);
+      if (readB) expectSame(M, 'B marquée lue', readB.body, { p_conversation_id: chatId(2).toUpperCase() });
+      await waitForMessagesBadge(page, '3', `${M} : après l'ouverture de B`);
+      expectSame(M, 'offre reçue', [await textOf(page, '.dm-offer-head'), await textOf(page, '.dm-offer-gap'), await page.$$eval('.dm-offer-actions button', (els) => els.map((el) => el.textContent))],
+        ['OFFRE En attente', '3,8 % sous le prix affiché', ['Accepter', 'Contre-offre', 'Refuser']]);
+      // « Faire une offre » n'est pas proposé au vendeur.
+      await page.click('.dm-plus');
+      expectSame(M, '« + » du vendeur', await page.$$eval('dialog[open] .dm-wide-title', (els) => els.map((el) => el.textContent)), ['Documents immobiliers']);
+      await page.click('dialog.dm-sheet[open] .dm-sheet-close');
+      const pendingAgain = async () => {
+        Object.assign(chat.offers[1], { status: 'pending', decline_reason: null, responded_at: null });
+        chatServer.pushChange('offers');
+        await page.waitForFunction(() => document.querySelectorAll('.dm-offer-actions button').length === 3, null, { timeout: 8000 })
+          .catch(() => problems.push(`${M} : l'offre remise en attente (temps réel) n'est pas relue`));
+      };
+      mark = chat.calls.length;
+      await page.click('.dm-offer-actions button:text-is("Refuser")');
+      expectSame(M, 'refuser l\'offre', await textOf(page, 'dialog.dm-decline[open] h2'), 'Refuser l\'offre de 255 000 € ?');
+      await page.fill('dialog.dm-decline[open] textarea', ' Prix trop bas pour le moment. ');
+      await page.click('dialog.dm-decline[open] button[type="submit"]');
+      const declined = await oneCall(chat, 'rpc/decline_offer', mark, `${M} : refuser`);
+      if (declined) expectSame(M, 'offre refusée', declined.body, { p_offer_id: offerId(2).toUpperCase(), p_reason: 'Prix trop bas pour le moment.' });
+      await page.waitForFunction(() => document.querySelector('.dm-offer .dm-offer-status')?.textContent === 'Refusée', null, { timeout: 8000 })
+        .catch(() => problems.push(`${M} : l'offre refusée n'est pas « Refusée »`));
+      expectSame(M, 'motif affiché', await textOf(page, '.dm-offer-reason'), 'Motif : Prix trop bas pour le moment.');
+      await pendingAgain();
+      mark = chat.calls.length;
+      await page.click('.dm-offer-actions button:text-is("Accepter")');
+      expectSame(M, 'accepter l\'offre', await dialogTitle(page), 'Accepter l\'offre de 255 000 € ?');
+      await alertButton(page, 'Accepter');
+      const accepted = await oneCall(chat, 'rpc/accept_offer', mark, `${M} : accepter`);
+      if (accepted) expectSame(M, 'offre acceptée', accepted.body, { p_offer_id: offerId(2).toUpperCase() });
+      await page.waitForFunction(() => document.querySelector('.dm-offer .dm-offer-status')?.textContent === 'Acceptée', null, { timeout: 8000 })
+        .catch(() => problems.push(`${M} : l'offre acceptée n'est pas « Acceptée »`));
+      await pendingAgain();
+      mark = chat.calls.length;
+      await page.click('.dm-offer-actions button:text-is("Contre-offre")');
+      await page.waitForSelector('.dm-pane .dl-offer-screen h1');
+      expectSame(M, 'contre-offre', [await textOf(page, '.dl-offer-screen h1'), (await page.inputValue('#offre-montant')).replace(/\s/g, ' '), await textOf(page, '.dl-offer-screen .dl-submit')],
+        ['Faire une contre-offre', '255 000', 'Envoyer la contre-offre']);
+      await page.fill('#offre-montant', '260000');
+      expectSame(M, 'montant de la contre-offre', (await page.inputValue('#offre-montant')).replace(/\s/g, ' '), '260 000');
+      await page.click('.dl-offer-screen .dl-submit');
+      await page.waitForSelector('.dm-thread .dm-offer');
+      const countered = await oneCall(chat, 'rpc/counter_offer', mark, `${M} : contre-offre`);
+      if (countered) {
+        if (!UPPER_UUID.test(countered.body?.p_id ?? '')) problems.push(`${M} : identifiant de la contre-offre ${countered.body?.p_id}`);
+        expectSame(M, 'contre-offre envoyée', countered.body, { p_id: countered.body?.p_id, p_parent_offer_id: offerId(2).toUpperCase(), p_amount: 260000 });
+      }
+      await page.waitForFunction(() => {
+        const cards = [...document.querySelectorAll('.dm-offer')].map((card) => card.textContent.replace(/\s/g, ' '));
+        return cards.length === 2 && cards[0].includes('Contre-offre envoyée') && cards[1].includes('CONTRE-OFFRE') && cards[1].includes('260 000 €') && cards[1].includes('Retirer');
+      }, null, { timeout: 8000 }).catch(async () => problems.push(`${M} : cartes après la contre-offre ${JSON.stringify(await page.$$eval('.dm-offer', (els) => els.map((el) => el.textContent)))}`));
+      // Un numéro non publié : l'avis de l'app, pas d'appel.
+      await page.click('.dm-head button[aria-label="Numéro non partagé"]');
+      expectSame(M, 'appel sans numéro', await noticeText(page, M), 'Julien M. n\'a pas partagé son numéro. Vous pouvez lui écrire ici.');
+    }
+
+    // D : groupe en sourdine, marqué lu à l'ouverture ; ses infos et l'ajout de membres restent dans l'app iPhone.
+    mark = chat.calls.length;
+    await page.click(rowLink(4));
+    await page.waitForURL(`${base}/messages/?c=${chatId(4)}`);
+    await page.waitForSelector('.dm-thread-inner .dm-day');
+    const readD = await oneCall(chat, 'rpc/mark_conversation_read', mark, `${M} : ouverture du groupe`);
+    if (readD) expectSame(M, 'groupe marqué lu', readD.body, { p_conversation_id: chatId(4).toUpperCase() });
+    await waitForMessagesBadge(page, width === 1440 ? '' : '2', `${M} : après le groupe`);
+    expectSame(M, 'groupe', [await textOf(page, '.dm-head-title'), await textOf(page, '.dm-head-sub'), await page.locator('.dm-head button[aria-label="Appeler"]').count(),
+      await page.locator('.dm-head button[aria-label="Ajouter des membres"]').count(), await page.$$eval('.dm-sender', (els) => [...new Set(els.map((el) => el.textContent))]),
+      await textOf(page, '.dm-system'), await page.locator('.dm-quick, .dm-banner').count()],
+      ['Visite groupée Lyon 2e', 'Vous, Camille R., Agence Démo Lyon', 0, 1, ['Camille R.', 'Agence Démo Lyon'], 'Claire M. a créé le groupe « Visite groupée Lyon 2e »', 0]);
+    await chatShot(page, `3-messages-groupe-${width}.png`);
+    if (width === 1440) {
+      await page.click('.dm-head-who');
+      await iphoneOnly(page, `${M} : groupe`, 'Infos du groupe');
+      await page.click('.dm-head button[aria-label="Ajouter des membres"]');
+      await iphoneOnly(page, `${M} : groupe`, 'Ajouter des membres');
+      expectSame(M, 'menu ⋮ du groupe', await headerMenu(page), ['Infos du groupe', 'Ajouter aux favoris', 'Réactiver les notifications', 'Archiver', 'Signaler le groupe']);
+      mark = chat.calls.length;
+      await headerMenu(page, 'Réactiver les notifications');
+      const unmuted = await oneCall(chat, 'conversation_preferences', mark, `${M} : groupe réactivé`);
+      if (unmuted) expectSame(M, 'groupe réactivé', unmuted.body, { conversation_id: chatId(4).toUpperCase(), is_archived: false, is_favorite: false, muted_until: null, saves_photos: false, cleared_at: null });
+    }
+
+    // « Détails » : ouvert par l'en-tête de la conversation à deux, à sa propre adresse ; « Retour » revient.
+    await page.click(rowLink(1));
+    await page.waitForSelector('.dm-head-who[href]');
+    await page.click('.dm-head-who');
+    await page.waitForURL(`${base}/messages/?c=${chatId(1)}&vue=details`);
+    await page.waitForSelector('section.dm-details');
+    expectSame(M, 'détails', [await textOf(page, '.dm-details-bar h2'), await textOf(page, '.dm-details-who h3'), await textOf(page, '.dm-details-badges')],
+      ['Détails', 'Agence Démo Lyon', 'PRO Sur Nidalo depuis mars 2025']);
+    await page.waitForTimeout(300);
+    await chatShot(page, `3-messages-details-${width}.png`);
+    await page.click('.dm-details-bar button[aria-label="Retour"]');
+    await page.waitForURL(`${base}/messages/?c=${chatId(1)}`);
+    await page.waitForSelector('.dm-thread-inner');
+
+    // « Nouvelle discussion » : actions rapides, contacts ; groupes, communautés et diffusions dans l'app iPhone.
+    await page.click('.dm-compose');
+    expectSame(M, 'nouvelle discussion', [await dialogTitle(page, 'sheet'), await page.$$eval('dialog[open] .dm-quick-actions .dm-action-text', (els) => els.map((el) => el.textContent)),
+      await page.$$eval('dialog[open] .dm-results-title', (els) => els.map((el) => el.textContent))],
+      ['Nouvelle discussion', ['Nouveau groupe', 'Nouvelle communauté', 'Nouveau contact', 'Nouvelle diffusion'], ['Contacts fréquents', 'A', 'C', 'I', 'J', 'L', 'M']]);
+    await page.waitForTimeout(300);
+    await chatShot(page, `3-messages-nouvelle-${width}.png`);
+    if (width === 1440) {
+      for (const title of ['Nouveau groupe', 'Nouvelle communauté', 'Nouvelle diffusion']) {
+        await page.click(`dialog[open] .dm-quick-actions .dm-action-row:has-text("${title}")`);
+        await iphoneOnly(page, `${M} : nouvelle discussion`, title);
+      }
+      // « Nouveau contact » : le compte NIDALO d'un numéro (find_account_by_phone), puis « Écrire » (start_phone_conversation).
+      await page.click('dialog[open] .dm-quick-actions .dm-action-row:has-text("Nouveau contact")');
+      expectSame(M, 'nouveau contact', await dialogTitle(page, 'sheet'), 'Nouveau contact');
+      mark = chat.calls.length;
+      await page.fill('dialog[open] input[aria-label="Numéro de téléphone"]', '0639985678');
+      await page.waitForSelector('dialog[open] .dm-phone-account');
+      expectSame(M, 'compte trouvé', [await page.inputValue('dialog[open] input[aria-label="Numéro de téléphone"]'), await textOf(page, 'dialog[open] .dm-phone-card')],
+        ['06 39 98 56 78', '06 39 98 56 78 Compte NIDALO trouvé NL Nina L. Particulier Ajouter aux contacts Écrire']);
+      const lookup = await oneCall(chat, 'rpc/find_account_by_phone', mark, `${M} : nouveau contact`);
+      if (lookup) expectSame(M, 'recherche du numéro', lookup.body, { p_phone: NINA_PHONE });
+      await page.click('dialog[open] .dm-phone-actions button:text-is("Ajouter aux contacts")');
+      await iphoneOnly(page, `${M} : nouveau contact`, 'Ajouter aux contacts');
+      mark = chat.calls.length;
+      await page.click('dialog[open] .dm-phone-actions button:text-is("Écrire")');
+      await page.waitForURL(`${base}/messages/?c=${chatId(7)}`);
+      await page.waitForSelector('section.dm-pane[aria-label="Conversation avec Nina L."]');
+      const started = await oneCall(chat, 'rpc/start_phone_conversation', mark, `${M} : écrire`);
+      if (started) expectSame(M, 'conversation par numéro', started.body, { p_phone: NINA_PHONE });
+      if (await page.locator('dialog.dm-sheet[open]').count()) problems.push(`${M} : « Nouvelle discussion » reste ouverte`);
+      // Une agence qui publie, pas encore contactée : start_direct_conversation.
+      await page.click('.dm-compose');
+      await page.fill('dialog[open] input[aria-label="Nom, numéro ou nom de profil"]', 'Immo');
+      mark = chat.calls.length;
+      await page.click('dialog[open] button.dm-contact:has-text("Immo Démo Croix-Rousse")');
+      await page.waitForURL(`${base}/messages/?c=${chatId(8)}`);
+      await page.waitForSelector('section.dm-pane[aria-label="Conversation avec Immo Démo Croix-Rousse"]');
+      const direct = await oneCall(chat, 'rpc/start_direct_conversation', mark, `${M} : agence`);
+      if (direct) expectSame(M, 'conversation avec l\'agence', direct.body, { p_user_id: PRO_ID.toUpperCase() });
+    }
+    await page.close();
+    await chatDesk.close();
+  }
+
+  // Premier message sans prénom : « Votre prénom » (comme l'app), enregistré comme updateUser, puis le message part.
+  // Aussi « Faire une offre » proposé à l'acheteur, et les sources du « + » qui restent dans l'app iPhone.
+  {
+    const M = 'messages prénom';
+    const { context: nameDesk, chat } = await chatContext({ account: { profile_details: [{ ...ACCOUNT.profile_details[0], first_name: null }] } });
+    page = await open(nameDesk, `/messages/?c=${chatId(5)}`, 'messages-prenom');
+    await page.waitForSelector('.dm-thread-empty');
+    if (chatCalls(chat, 'rpc/mark_conversation_read').length) problems.push(`${M} : conversation sans non-lus marquée lue`);
+    await page.click('.dm-plus');
+    expectSame(M, '« + » de l\'acheteur', await page.$$eval('dialog[open] .dm-wide-title', (els) => els.map((el) => el.textContent)), ['Documents immobiliers', 'Faire une offre']);
+    await page.click('dialog[open] .dm-sources button[aria-label="Localisation"]');
+    await iphoneOnly(page, M, 'Localisation');
+    await page.click('.dm-plus');
+    await page.click('dialog[open] .dm-sources button[aria-label="Depuis mon dossier"]');
+    await iphoneOnly(page, M, 'Mon dossier');
+    const writesMark = writes.length;
+    let mark = chat.calls.length;
+    await page.fill('.dm-composer textarea', 'Bonjour, la maison est-elle toujours disponible ?');
+    await page.keyboard.press('Enter');
+    expectSame(M, 'fenêtre du prénom', [await dialogTitle(page), await textOf(page, 'dialog.alert-dialog[open] .alert-body p')], ['Votre prénom', 'Affiché à votre interlocuteur : Prénom M..']);
+    if (chatCalls(chat, 'messages', mark).some((call) => call.method === 'POST')) problems.push(`${M} : message envoyé avant le prénom`);
+    await page.fill('dialog.alert-dialog[open] input[aria-label="Prénom"]', 'Claire');
+    expectSame(M, 'nom affiché', await textOf(page, 'dialog.alert-dialog[open] .alert-body p'), 'Affiché à votre interlocuteur : Claire M..');
+    await alertButton(page, 'Envoyer');
+    const first = await oneCall(chat, 'messages', mark, `${M} : premier message`, (call) => call.method === 'POST');
+    expectSame(M, 'prénom enregistré', writes.slice(writesMark).map((write) => [write.method, write.table, write.search, write.body]), [
+      ['PATCH', 'profiles', `?id=eq.${USER_ID}`, { display_name: 'Claire Martin', avatar_path: null, account_type: 'individual', shows_full_name: false }],
+      ['PATCH', 'profile_details', `?user_id=eq.${USER_ID}`, {
+        first_name: 'Claire', last_name: 'Martin', birth_date: null, phone: '0639981234', street: null, postal_code: '69003', city: 'Lyon', insee_code: '69383',
+        country_code: 'FR', professional_situation: 'employee',
+      }],
+    ]);
+    if (first) {
+      if (first.writesBefore < writesMark + 2) problems.push(`${M} : le message part avant l'enregistrement du prénom`);
+      expectSame(M, 'premier message', [first.body?.content, first.body?.preview], [chatText('Bonjour, la maison est-elle toujours disponible ?'), 'Bonjour, la maison est-elle toujours disponible ?']);
+    }
+    await page.waitForSelector('.dm-bubble.is-out');
+    // Une conversation qui a déjà des messages : pas de prénom demandé.
+    await page.click(rowLink(1));
+    await page.waitForSelector('.dm-thread-inner .dm-day');
+    mark = chat.calls.length;
+    await page.fill('.dm-composer textarea', 'Bonjour');
+    await page.keyboard.press('Enter');
+    await oneCall(chat, 'messages', mark, `${M} : conversation avec messages`, (call) => call.method === 'POST');
+    if (await page.locator('dialog.alert-dialog[open]').count()) problems.push(`${M} : prénom demandé dans une conversation qui a des messages`);
+    await page.close();
+    await nameDesk.close();
+  }
+
+  // Sous 1024 px : la page « bientôt » du téléphone, même avec le compte et une adresse ?c= ; rien n'est demandé.
+  {
+    const { context: chatPhone, chat } = await chatContext({ phone: true });
+    for (const path of ['/messages/', `/messages/?c=${chatId(1)}`]) {
+      page = await open(chatPhone, path, `messages-telephone-connecte ${path}`);
+      await page.waitForSelector('.card.state h1');
+      expectSame('messages téléphone', `page ${path}`, [await textOf(page, '.card.state h1'), await page.locator('.dm').count()], ['Vos messages', 0]);
+      await page.close();
+    }
+    if (chat.calls.length) problems.push(`messages téléphone : ${chat.calls.map((call) => call.table).join(', ')} demandé(s)`);
+    await chatPhone.close();
+  }
+  // Sans compte, sur ordinateur : l'invitation à se connecter ; rien de la messagerie n'est demandé.
+  {
+    const { context: chatGuest, chat } = await chatContext({ signedIn: false });
+    for (const path of ['/messages/', `/messages/?c=${chatId(1)}`]) {
+      page = await open(chatGuest, path, `messages-sans-compte ${path}`);
+      await page.waitForSelector('.signin-card');
+      if (await page.locator('.dm').count()) problems.push(`messages sans compte : la messagerie est affichée (${path})`);
+      await page.close();
+    }
+    if (chat.calls.length) problems.push(`messages sans compte : ${chat.calls.map((call) => call.table).join(', ')} demandé(s)`);
+    await chatGuest.close();
   }
 
   // Téléphone

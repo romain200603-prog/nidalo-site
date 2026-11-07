@@ -309,9 +309,10 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
           price={offerConversation.price ?? price}
           onClose={close}
           onSent={async () => {
-            // Comme l'app : les offres et les conversations sont relues ; la colonne de droite montre « Offre en attente ».
+            // Comme l'app (ListingDetailView.swift:165-176) : offres et conversations relues, puis la conversation de
+            // l'offre s'ouvre dans Messages ; « Retour » ramène à la fiche, qui montre « Offre en attente ».
             await Promise.all([refreshOffers(), refreshConversations()]);
-            close();
+            window.location.replace(conversationPath(offerConversation.id));
           }}
         />
       </div>

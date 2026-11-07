@@ -275,14 +275,15 @@ export type PhotoChange = Blob | null | undefined;
 /**
  * Enregistre « Mes informations » (SupabaseAccountRepositories.swift 169–228) : la photo d'abord, puis le profil et
  * ses détails. Si l'enregistrement échoue, la nouvelle photo est retirée ; s'il réussit, l'ancienne l'est.
- * Renvoie le message d'erreur, ou `null`.
+ * `displayName` : nom gardé tel quel au lieu de « prénom nom » (prénom demandé avant un premier message, que l'app
+ * enregistre sans toucher au nom du profil). Renvoie le message d'erreur, ou `null`.
  */
-export async function saveProfile(account: Account, form: ProfileForm, photo: PhotoChange): Promise<string | null> {
+export async function saveProfile(account: Account, form: ProfileForm, photo: PhotoChange, { displayName: kept }: { displayName?: string } = {}): Promise<string | null> {
   const userId = currentUserId();
   if (!userId || userId !== account.profile.id) return 'Votre session a expiré. Reconnectez-vous.';
   const first = trimmed(form.firstName);
   const last = trimmed(form.lastName);
-  const displayName = [...`${first} ${last}`.trim()].slice(0, 80).join('');
+  const displayName = [...(kept ?? `${first} ${last}`).trim()].slice(0, 80).join('');
   if (!displayName) return 'Indiquez votre nom.';
   const normalized = trimmed(form.phone) ? normalizedPhone(form.phone) : null;
   const phone = normalized ? normalized.replace(/[^\d+]/g, '') : null;

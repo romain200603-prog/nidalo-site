@@ -7,7 +7,7 @@ import type { ListingConversation } from './conversation';
 // Le serveur applique les règles et écrit la bulle d'offre dans la conversation ; le site appelle make_offer et
 // relit my_offers, comme l'app.
 
-/** Colonnes de my_offers lues par la fiche (OfferServerRow). */
+/** Colonnes de my_offers lues par la fiche ; la messagerie lit aussi les suivantes (OfferServerRow). */
 export type OfferRow = {
   id: string;
   conversation_id: string;
@@ -16,6 +16,16 @@ export type OfferRow = {
   status: string;
   created_at: string;
   expires_at: string | null;
+  buyer_id?: string | null;
+  seller_id?: string | null;
+  author_id?: string | null;
+  parent_offer_id?: string | null;
+  conditions?: string | null;
+  responded_at?: string | null;
+  decline_reason?: string | null;
+  my_role?: string | null;
+  is_mine?: boolean | null;
+  allowed_actions?: string[] | null;
 };
 
 export type OfferStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'countered' | 'expired';
@@ -175,6 +185,85 @@ export function offerErrorMessage(error: unknown): string {
   }
   if (code && ['23514', '23502', '22001', '22P02'].includes(code)) return 'Certaines informations n\'ont pas été acceptées. Vérifiez-les, puis réessayez.';
   return 'L\'offre n\'a pas pu être enregistrée. Vérifiez votre connexion et réessayez.';
+}
+
+// MARK: - Dans la conversation (OfferCard, OfferStore.make et answer)
+
+export type OfferAction = 'accept' | 'decline' | 'counter' | 'withdraw';
+const ACTIONS: readonly OfferAction[] = ['accept', 'decline', 'counter', 'withdraw'];
+
+/**
+ * Boutons de la carte : les actions permises par le serveur, seulement tant que l'offre est en attente et valable
+ * (allowedActions avec serverActions).
+ */
+export function allowedActions(offer: OfferRow, now: Date): Set<OfferAction> {
+  if (effectiveStatus(offer, now) !== 'pending') return new Set();
+  return new Set((offer.allowed_actions ?? []).filter((action): action is OfferAction => (ACTIONS as readonly string[]).includes(action)));
+}
+
+/** « En attente », « Acceptée »… ; une contre-offre faite à mon offre est « reçue » (OfferFormatting.statusLabel). */
+export function offerStatusLabel(status: OfferStatus, isCounterOfferReceived: boolean): string {
+  switch (status) {
+    case 'pending': return 'En attente';
+    case 'accepted': return 'Acceptée';
+    case 'rejected': return 'Refusée';
+    case 'withdrawn': return 'Retirée';
+    case 'expired': return 'Expirée';
+    case 'countered': return isCounterOfferReceived ? 'Contre-offre reçue' : 'Contre-offre envoyée';
+  }
+}
+
+/** Arguments de counter_offer, comme l'app : les champs vides sont omis. */
+export type CounterOfferParams = {
+  p_id: string;
+  p_parent_offer_id: string;
+  p_amount: number;
+  p_conditions?: string;
+  p_expires_at?: string;
+};
+
+export function counterOfferParams({ id, parentId, amount, conditions, validityDays, now }: {
+  id: string;
+  parentId: string;
+  amount: number;
+  conditions: string;
+  validityDays: number;
+  now: Date;
+}): CounterOfferParams {
+  // Identifiants écrits comme Swift les envoie (`uuidString`, en majuscules).
+  const params: CounterOfferParams = { p_id: id.toUpperCase(), p_parent_offer_id: parentId.toUpperCase(), p_amount: amount };
+  const cleaned = cleanText(conditions);
+  if (cleaned !== null) params.p_conditions = cleaned;
+  const expiry = offerExpiry(validityDays, now);
+  if (expiry !== null) params.p_expires_at = expiry;
+  return params;
+}
+
+async function firstOffer(name: string, params: Record<string, unknown>): Promise<OfferRow> {
+  const { data, error } = await supabase.rpc(name, params);
+  if (error) throw error;
+  const row = (data as OfferRow[] | null)?.[0];
+  if (!row) throw new Error(`${name}: aucune offre rendue`);
+  return row;
+}
+
+/** Contre-offre (counter_offer) ; lève l'erreur du serveur telle quelle. */
+export function sendCounterOffer(params: CounterOfferParams): Promise<OfferRow> {
+  return firstOffer('counter_offer', params);
+}
+
+/**
+ * Accepter, refuser (motif facultatif, omis s'il est vide) ou retirer (accept_offer, decline_offer, withdraw_offer,
+ * avec p_offer_id comme l'app). Lève l'erreur du serveur telle quelle.
+ */
+export function answerOffer(offerId: string, action: 'accept' | 'decline' | 'withdraw', reason: string | null = null): Promise<OfferRow> {
+  if (action === 'decline') {
+    const params: Record<string, unknown> = { p_offer_id: offerId.toUpperCase() };
+    const cleaned = cleanText(reason);
+    if (cleaned !== null) params.p_reason = cleaned;
+    return firstOffer('decline_offer', params);
+  }
+  return firstOffer(action === 'accept' ? 'accept_offer' : 'withdraw_offer', { p_offer_id: offerId.toUpperCase() });
 }
 
 /** Offres du compte (my_offers sans paramètre, refreshRemote). */

@@ -136,16 +136,20 @@ export function SiteFooter() {
   return useDesktop() ? <DesktopFooter /> : <Footer />;
 }
 
-/** `mode` : la catégorie de la recherche affichée, mise en avant dans la barre du haut sur ordinateur. */
-export function Page({ section, children, wide = false, mode = null }: {
+/**
+ * `mode` : la catégorie de la recherche affichée, mise en avant dans la barre du haut sur ordinateur.
+ * `fill` : la page occupe l'écran sous la barre du haut, sans pied de page (Messages sur ordinateur).
+ */
+export function Page({ section, children, wide = false, mode = null, fill = false }: {
   section: Section;
   children: ReactNode;
   wide?: boolean;
   mode?: SearchMode | null;
+  fill?: boolean;
 }) {
   if (isFramed()) return <Framed />;
   return (
-    <div className={wide ? 'page page-wide' : 'page'}>
+    <div className={fill ? 'page page-fill' : wide ? 'page page-wide' : 'page'}>
       <a className="skip-link" href="#contenu">
         Aller au contenu
       </a>
@@ -153,7 +157,7 @@ export function Page({ section, children, wide = false, mode = null }: {
       <main id="contenu" tabIndex={-1}>
         {children}
       </main>
-      <SiteFooter />
+      {!fill && <SiteFooter />}
       <TabBar section={section} />
       <SignInSheet />
     </div>

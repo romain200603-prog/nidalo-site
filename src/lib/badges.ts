@@ -62,6 +62,24 @@ export function coalesced(run: () => Promise<void>): () => Promise<void> {
 
 export const unreadMessagesStore = createStore(0);
 
+/** Ligne de my_conversations : la page Messages lit toutes ses colonnes, la pastille seulement ses non-lus. */
+export type ConversationRow = ConversationUnreadRow & { conversation_id: string } & Record<string, unknown>;
+
+/**
+ * Dernières lignes de my_conversations du compte, partagées par la pastille et la page Messages (une seule lecture
+ * pour les deux). `failed` : la première lecture a échoué ; `local` : lignes changées sur place (conversation lue).
+ */
+export type ConversationRows = { userId: string | null; rows: ConversationRow[] | null; failed: boolean; local: boolean };
+
+export const conversationRowsStore = createStore<ConversationRows>({ userId: null, rows: null, failed: false, local: false });
+
+function setRows(next: ConversationRows) {
+  conversationRowsStore.set(next);
+  // Un abonné a pu changer les lignes entre-temps (conversation ouverte marquée lue) : la pastille suit les dernières.
+  const { rows } = conversationRowsStore.get();
+  unreadMessagesStore.set(rows ? unreadMessagesTotal(rows) : 0);
+}
+
 let messagesOwner: string | null = null;
 
 /** Relit les conversations du compte (RPC my_conversations, sans paramètre, comme SupabaseMessagingRepository). */
@@ -69,19 +87,64 @@ export const loadUnreadMessages = coalesced(async () => {
   const session = sessionStore.get();
   if (session.status !== 'signedIn') {
     messagesOwner = null;
-    unreadMessagesStore.set(0);
+    setRows({ userId: null, rows: null, failed: false, local: false });
     return;
   }
   if (messagesOwner !== session.userId) {
     messagesOwner = session.userId;
-    unreadMessagesStore.set(0);
+    setRows({ userId: session.userId, rows: null, failed: false, local: false });
   }
   const { data, error } = await supabase.rpc('my_conversations');
   if (currentUserId() !== session.userId) return;
   // Comme refreshFromServer (`try?`) : une lecture qui échoue garde le dernier nombre connu.
-  if (error || !Array.isArray(data)) return;
-  unreadMessagesStore.set(unreadMessagesTotal(data as ConversationUnreadRow[]));
+  if (error || !Array.isArray(data)) {
+    const current = conversationRowsStore.get();
+    if (!current.rows) setRows({ ...current, failed: true });
+    return;
+  }
+  setRows({ userId: session.userId, rows: data as ConversationRow[], failed: false, local: false });
 });
+
+const sameConversation = (row: ConversationRow, id: string) => String(row.conversation_id).toLowerCase() === id.toLowerCase();
+
+/**
+ * Change une conversation sur place, sans relire le serveur (conversation lue, archivée…) : la pastille suit tout de
+ * suite, comme dans l'app (MessagingStore modifie sa liste avant d'appeler le serveur).
+ */
+export function patchConversationRow(id: string, patch: Record<string, unknown>, { toTop = false }: { toTop?: boolean } = {}) {
+  const current = conversationRowsStore.get();
+  if (!current.rows?.some((row) => sameConversation(row, id))) return;
+  const rows = current.rows.map((row) => (sameConversation(row, id) ? { ...row, ...patch } : row));
+  // Message envoyé : la conversation remonte en tête de liste, comme dans l'app (MessagingStore.send).
+  if (toTop) rows.sort((a, b) => Number(sameConversation(b, id)) - Number(sameConversation(a, id)));
+  setRows({ ...current, local: true, rows });
+}
+
+const messagingListeners = new Set<() => void>();
+
+/**
+ * Chaque changement reçu en temps réel (ou au retour sur l'onglet) : après la relecture des conversations, la page
+ * Messages relit aussi la conversation ouverte et les offres (refreshFromServer puis offers.refreshRemote).
+ */
+export function onMessagingChange(listener: () => void): () => void {
+  messagingListeners.add(listener);
+  return () => messagingListeners.delete(listener);
+}
+
+let notifyPending = false;
+
+/** Relecture déclenchée par le temps réel : conversations, puis la page Messages si elle écoute. */
+export function liveReload(): Promise<void> {
+  const run = loadUnreadMessages();
+  if (!notifyPending) {
+    notifyPending = true;
+    void run.then(() => {
+      notifyPending = false;
+      for (const listener of [...messagingListeners]) listener();
+    });
+  }
+  return run;
+}
 
 /** Tables suivies : celles de l'app qui changent ces nombres (MessagingRealtime.messagingTables et visitTables). */
 export const MESSAGE_TABLES = ['messages', 'conversation_participants'] as const;
@@ -95,7 +158,7 @@ function channelName(table: string): string {
 }
 
 /** Un canal par groupe de tables : chaque changement relit ; une reconnexion après une coupure relit aussi. */
-function follow(tables: readonly string[], onChange: () => void): RealtimeChannel {
+export function follow(tables: readonly string[], onChange: () => void): RealtimeChannel {
   const channel = supabase.channel(channelName(tables[0]));
   for (const table of tables) {
     channel.on('postgres_changes', { event: '*', schema: 'public', table }, () => onChange());
@@ -110,17 +173,16 @@ function follow(tables: readonly string[], onChange: () => void): RealtimeChanne
 }
 
 function startLive(): () => void {
-  const reloadAll = () => {
-    void loadUnreadMessages();
-    void loadNotifications();
-  };
-  reloadAll();
+  void loadUnreadMessages();
+  void loadNotifications();
   const channels = [
-    follow(MESSAGE_TABLES, () => void loadUnreadMessages()),
+    follow(MESSAGE_TABLES, () => void liveReload()),
     follow(NOTIFICATION_TABLES, () => void loadNotifications()),
   ];
   const onVisible = () => {
-    if (document.visibilityState === 'visible') reloadAll();
+    if (document.visibilityState !== 'visible') return;
+    void liveReload();
+    void loadNotifications();
   };
   document.addEventListener('visibilitychange', onVisible);
   return () => {

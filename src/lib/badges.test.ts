@@ -17,7 +17,10 @@ vi.mock('./supabase', () => ({
 }));
 
 import { sessionStore } from './account/session';
-import { badgeText, coalesced, loadUnreadMessages, messagesLabel, notificationsLabel, unreadMessagesStore, unreadMessagesTotal } from './badges';
+import {
+  badgeText, coalesced, conversationRowsStore, loadUnreadMessages, messagesLabel, notificationsLabel, patchConversationRow, unreadMessagesStore,
+  unreadMessagesTotal,
+} from './badges';
 
 describe('pastilles : mêmes nombres que l’app', () => {
   it('Messages : somme des non-lus, sans les conversations archivées (MessagingStore.unreadTotal)', () => {
@@ -85,6 +88,19 @@ describe('pastille Messages : RPC my_conversations, comme l’app', () => {
     server.error = { message: 'réseau coupé' };
     await loadUnreadMessages();
     expect(unreadMessagesStore.get()).toBe(3);
+  });
+
+  it('conversation ouverte marquée lue à l’arrivée des lignes : la pastille suit les lignes changées', async () => {
+    server.conversations = [{ conversation_id: 'c1', unread_count: 2, is_archived: false }, { conversation_id: 'c2', unread_count: 1, is_archived: false }];
+    // Comme la page Messages : la conversation ouverte passe à 0 dès que les lignes arrivent.
+    const stop = conversationRowsStore.subscribe(() => {
+      const row = conversationRowsStore.get().rows?.find((item) => item.conversation_id === 'c1');
+      if (row && (row.unread_count ?? 0) > 0) patchConversationRow('c1', { unread_count: 0 });
+    });
+    await loadUnreadMessages();
+    stop();
+    expect(conversationRowsStore.get().rows?.map((row) => row.unread_count)).toEqual([0, 1]);
+    expect(unreadMessagesStore.get()).toBe(1);
   });
 
   it('sans compte : 0, sans rien demander', async () => {

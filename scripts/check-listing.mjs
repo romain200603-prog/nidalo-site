@@ -136,16 +136,22 @@ const conversationId = (n) => `d0000000-0000-4000-8000-${String(n).padStart(12, 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const ISO_SECONDS = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/;
 
+/** Messagerie (page Messages, ouverte par « Envoyer un message » et après une offre). */
+const MESSAGING_TABLES = [
+  'messages', 'conversation_participants', 'user_blocks', 'rpc/my_communities', 'rpc/professional_contacts', 'rpc/mark_conversation_read',
+  'message_reactions', 'conversation_preferences',
+];
 /** Tables et fonctions du compte : jamais demandées sans compte. */
 const ACCOUNT_TABLES = [
   'profiles', 'profile_details', 'favorites', 'notifications', 'rpc/mark_notifications_read', 'rpc/my_conversations',
   'rpc/start_listing_conversation', 'rpc/my_offers', 'rpc/make_offer', 'rpc/my_visit_requests', 'rpc/create_visit_request',
   'agenda_visits', 'saved_searches', 'real_estate_projects', 'professional_profiles', 'professional_profile_details',
+  ...MESSAGING_TABLES,
 ];
 /** Celles qui ne servent que sur ordinateur (pastilles, actions de la fiche) : sous 1024 px, rien ne change. */
 const DESKTOP_ONLY = [
   'notifications', 'rpc/mark_notifications_read', 'rpc/my_conversations', 'rpc/start_listing_conversation', 'rpc/my_offers',
-  'rpc/make_offer', 'rpc/my_visit_requests', 'rpc/create_visit_request', 'agenda_visits',
+  'rpc/make_offer', 'rpc/my_visit_requests', 'rpc/create_visit_request', 'agenda_visits', ...MESSAGING_TABLES,
 ];
 
 /** Appels du compte, dans l'ordre : ce que chaque bouton envoie est vérifié d'après eux. */
@@ -190,7 +196,7 @@ const listingById = (listingId) => listings.find((row) => row.id === listingId);
 
 /** Ce que le serveur sait du compte : conversations, offres, agenda, demandes de visite et favoris. */
 function accountState() {
-  return { conversations: [], offers: [], agenda: [], requests: [], favorites: [] };
+  return { conversations: [], offers: [], messages: [], agenda: [], requests: [], favorites: [] };
 }
 
 /** Le compte comme sur la maquette : une conversation sur FICHE, une offre en attente et une visite confirmée. */
@@ -211,15 +217,29 @@ function seededState() {
   return state;
 }
 
-/** Ligne de my_conversations d'une conversation d'annonce (colonnes lues par la fiche et par la pastille Messages). */
-function inboxRow({ id, listing }) {
+/**
+ * Ligne de my_conversations d'une conversation d'annonce, avec toutes les colonnes de la fonction du serveur (lues par la
+ * fiche, la pastille et la page Messages) ; le dernier message vient de ceux de la conversation.
+ */
+function inboxRow({ id, listing }, messages = []) {
+  const last = messages.filter((message) => message.conversation_id === id).sort((a, b) => a.created_at.localeCompare(b.created_at)).at(-1) ?? null;
   return {
     conversation_id: id, kind: 'listing', listing_id: listing.id,
     listing_snapshot: { listingId: listing.id, title: listing.title, price: listing.price, transaction: listing.transaction, city: listing.city },
-    buyer_id: USER_ID, seller_id: listing.owner_id, other_user_id: listing.owner_id, created_by: USER_ID, created_at: '2026-11-05T09:00:00Z',
-    is_archived: false, is_favorite: false, muted_until: null, unread_count: 0, last_message_preview: null, last_message_at: null,
+    buyer_id: USER_ID, seller_id: listing.owner_id, group_name: null, group_details: null, group_image_path: null, group_purpose: null,
+    ephemeral_seconds: null, created_by: USER_ID, created_at: '2026-11-05T09:00:00Z', my_role: 'member', joined_at: '2026-11-05T09:00:00Z', left_at: null,
+    last_read_at: null, is_archived: false, is_favorite: false, muted_until: null, saves_photos: false, cleared_at: null, other_user_id: listing.owner_id,
+    other_last_read_at: null, member_count: 2, unread_count: 0, last_message_id: last?.id ?? null, last_message_sender_id: last?.sender_id ?? null,
+    last_message_kind: last?.kind ?? null, last_message_content: last?.content ?? null, last_message_preview: last?.preview ?? null,
+    last_message_at: last?.created_at ?? null,
   };
 }
+
+/** Offre telle que my_offers la rend (OfferServerRow) : le compte est l'acheteur et l'auteur de ses offres. */
+const offerRow = (offer) => ({
+  author_id: USER_ID, parent_offer_id: null, responded_at: null, decline_reason: null, ...offer, my_role: 'buyer', is_mine: true,
+  allowed_actions: offer.status === 'pending' ? ['withdraw'] : [],
+});
 
 /** Réponses du serveur simulé pour le compte, comme les fonctions du serveur. */
 function respond(route, state, table, request, url, body) {
@@ -248,7 +268,7 @@ function respond(route, state, table, request, url, body) {
     case 'agenda_visits':
       return json(route, state.agenda);
     case 'rpc/my_conversations': {
-      const rows = state.conversations.map(inboxRow);
+      const rows = state.conversations.map((conversation) => inboxRow(conversation, state.messages));
       return json(route, body?.p_conversation_id ? rows.filter((row) => row.conversation_id === body.p_conversation_id) : rows);
     }
     case 'rpc/start_listing_conversation': {
@@ -264,7 +284,7 @@ function respond(route, state, table, request, url, body) {
       return json(route, conversation.id);
     }
     case 'rpc/my_offers':
-      return json(route, state.offers);
+      return json(route, state.offers.map(offerRow));
     case 'rpc/make_offer': {
       const conversation = state.conversations.find((item) => item.id === body?.p_conversation_id);
       if (!conversation) return refuse('Conversation introuvable.');
@@ -274,8 +294,25 @@ function respond(route, state, table, request, url, body) {
         expires_at: body.p_expires_at ?? isoSeconds(new Date(Date.now() + 7 * 86_400_000)),
       };
       state.offers.push(offer);
-      return json(route, [offer]);
+      // Comme la fonction du serveur : la bulle de l'offre est écrite dans la conversation.
+      state.messages.push({
+        id: crypto.randomUUID(), conversation_id: conversation.id, sender_id: USER_ID, kind: 'offer', client_id: crypto.randomUUID(),
+        content: { offer: { offerId: offer.id } }, created_at: new Date().toISOString(), expires_at: null, message_reactions: [], preview: '💶 Offre',
+      });
+      return json(route, [offerRow(offer)]);
     }
+    case 'messages': {
+      // Les 200 derniers messages de la conversation ouverte (aucun envoi ici).
+      const filter = url.searchParams.get('conversation_id')?.slice(3)?.toLowerCase();
+      const rows = state.messages.filter((message) => message.conversation_id === filter).sort((a, b) => b.created_at.localeCompare(a.created_at))
+        .slice(0, Number(url.searchParams.get('limit') ?? 1000)).map(({ preview, ...columns }) => columns);
+      return json(route, rows);
+    }
+    case 'rpc/mark_conversation_read':
+      return empty(204);
+    case 'message_reactions':
+    case 'conversation_preferences':
+      return method === 'GET' ? json(route, []) : empty(method === 'DELETE' ? 204 : 201);
     case 'rpc/my_visit_requests':
       return json(route, body?.p_request_id ? state.requests.filter((row) => row.id === body.p_request_id) : state.requests);
     case 'rpc/create_visit_request': {
@@ -1096,8 +1133,18 @@ try {
   mark = calls.length;
   const offerSentAt = Date.now();
   await page.click('.dl-offer-screen .dl-submit');
+  // Comme l'app (ListingDetailView) : l'offre envoyée, sa conversation s'ouvre dans Messages, avec la carte de l'offre.
+  await waitForAddress(page, `${base}/messages/?c=${conversationId(1)}`);
+  await page.waitForSelector('.dm-thread .dm-offer .dm-offer-amount', { timeout: 10000 })
+    .catch(() => problems.push('offre: la carte de l’offre n’apparaît pas dans la conversation'));
+  expect('offre', 'carte dans la conversation', await page.textContent('.dm-thread .dm-offer').catch(() => null),
+    /^OFFRE\s*En attente\s*228\s000\s€\s*4,2\s%\ssous le prix affiché\s*Sous réserve d'obtention du prêt\s*Valable jusqu'au .+Retirer$/);
+  const offerCalls = calls.length;
+  // « Retour » : la fiche, avec « Offre en attente ».
+  await page.goBack();
   await waitForAddress(page, `${base}/annonce/?id=${FICHE}`);
   await page.waitForSelector('.dl-aside a.dl-offer');
+  if (calls.slice(offerCalls).some((call) => call.table === 'rpc/make_offer')) problems.push('offre: make_offer rappelé au retour sur la fiche');
   const offer = once('offre', mark, 'rpc/make_offer');
   if (offer) {
     const body = offer.body ?? {};

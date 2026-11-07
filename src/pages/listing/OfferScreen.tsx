@@ -2,24 +2,27 @@ import { useRef, useState, type ChangeEvent } from 'react';
 import { Icon } from '../../components/Icon';
 import { formatPrice } from '../../lib/format';
 import {
-  amountDigits, DEFAULT_OFFER_VALIDITY, groupedAmount, LOAN_CONDITION, lowercasedFirst, makeOfferParams, OFFER_VALIDITY_OPTIONS,
-  offerErrorMessage, offerGapLabel, sendOffer,
+  amountDigits, counterOfferParams, DEFAULT_OFFER_VALIDITY, groupedAmount, LOAN_CONDITION, lowercasedFirst, makeOfferParams,
+  OFFER_VALIDITY_OPTIONS, offerErrorMessage, offerGapLabel, sendCounterOffer, sendOffer,
 } from '../../lib/listing/offers';
 
 // « Faire une offre » sur ordinateur, dans une colonne de 640 px (/annonce/?id=…&vue=offre) : la feuille de l'app
 // (OfferComposerSheet, Features/Messages/OfferViews.swift) avec ses textes, son ordre et ses règles. L'offre part avec
 // make_offer et les mêmes arguments que l'app ; le serveur écrit lui-même la bulle d'offre dans la conversation.
+// Dans Messages, la même feuille répond à une offre (contre-offre, counter_offer), comme l'app.
 
-export function OfferScreen({ conversationId, title, price, onClose, onSent }: {
+export function OfferScreen({ conversationId, title, price, parent = null, onClose, onSent }: {
   conversationId: string;
   /** Titre et prix du bien enregistrés avec la conversation (ListingSnapshot). */
   title: string;
   price: number;
+  /** Offre à laquelle on répond (contre-offre) : son montant est repris. */
+  parent?: { id: string; amount: number } | null;
   onClose: () => void;
   /** Offre enregistrée : la fiche relit les offres et revient. */
   onSent: () => Promise<void>;
 }) {
-  const [amountText, setAmountText] = useState('');
+  const [amountText, setAmountText] = useState(() => (parent ? groupedAmount(parent.amount) : ''));
   const [conditions, setConditions] = useState('');
   const [validityDays, setValidityDays] = useState<number>(DEFAULT_OFFER_VALIDITY);
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +57,11 @@ export function OfferScreen({ conversationId, title, price, onClose, onSent }: {
     busy.current = true;
     setSending(true);
     try {
-      await sendOffer(makeOfferParams({ id: crypto.randomUUID(), conversationId, amount, conditions, validityDays, now: new Date() }));
+      if (parent) {
+        await sendCounterOffer(counterOfferParams({ id: crypto.randomUUID(), parentId: parent.id, amount, conditions, validityDays, now: new Date() }));
+      } else {
+        await sendOffer(makeOfferParams({ id: crypto.randomUUID(), conversationId, amount, conditions, validityDays, now: new Date() }));
+      }
     } catch (failure) {
       setError(offerErrorMessage(failure));
       busy.current = false;
@@ -70,7 +77,7 @@ export function OfferScreen({ conversationId, title, price, onClose, onSent }: {
     <div className="wrap wrap-narrow dl-screen dl-offer-screen">
       <header className="dl-screen-head">
         <div className="dl-screen-titles">
-          <h1 tabIndex={-1}>Faire une offre</h1>
+          <h1 tabIndex={-1}>{parent ? 'Faire une contre-offre' : 'Faire une offre'}</h1>
           <p>{title} · prix affiché {formatPrice(price)}</p>
         </div>
         <button type="button" className="dl-screen-close" onClick={onClose} aria-label="Fermer" title="Fermer">
@@ -150,7 +157,7 @@ export function OfferScreen({ conversationId, title, price, onClose, onSent }: {
 
         {error && <p className="dl-error" role="alert">{error}</p>}
         <button type="submit" className={`dl-submit${amount === null ? ' is-dim' : ''}`} aria-busy={sending}>
-          {sending ? 'Envoi…' : 'Envoyer l\'offre'}
+          {sending ? 'Envoi…' : parent ? 'Envoyer la contre-offre' : 'Envoyer l\'offre'}
         </button>
         <p className="dl-form-note">
           Proposition non engageante : l'accord se formalise ensuite par écrit (offre signée, puis compromis chez le notaire). Ne versez aucune somme à ce stade.

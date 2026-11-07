@@ -32,6 +32,8 @@ export const CONTENT_SECURITY_POLICY = [
   "style-src 'self'",
   `img-src 'self' data: blob: ${SUPABASE} https://data.geopf.fr`,
   "font-src 'self'",
+  // Vidéos des messages (URL signées du bucket message-attachments) et vidéo choisie avant envoi (blob:).
+  `media-src ${SUPABASE} blob:`,
   `connect-src 'self' ${SUPABASE} ${SUPABASE.replace('https:', 'wss:')} https://tiles.openfreemap.org https://data.geopf.fr https://geo.api.gouv.fr`,
   "worker-src 'self' blob:",
   "child-src 'self' blob:",
