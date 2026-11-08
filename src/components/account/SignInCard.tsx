@@ -3,14 +3,15 @@ import { Icon } from '../Icon';
 import type { IconName } from '../iconPaths';
 import { AlertDialog } from '../../pages/listing/Dialogs';
 import {
-  authMessage, cleanEmail, emailError, passwordError, RESEND_DELAY_SECONDS, resendConfirmation, sendPasswordReset, signIn,
-  signUp, updatePassword, type LinkPurpose,
+  authMessage, cleanEmail, emailError, GOOGLE_MESSAGE, isNetworkError, passwordError, RESEND_DELAY_SECONDS, resendConfirmation,
+  sendPasswordReset, signIn, signInWithGoogle, signUp, updatePassword, type LinkPurpose,
 } from '../../lib/account/auth';
 import { recoveryStore } from '../../lib/account/session';
 import { PATHS } from '../../lib/paths';
 
 // Carte de connexion de l'app (Features/Account/AccountSignInView.swift) : se connecter, créer un compte,
-// mot de passe oublié, « Vérifiez votre boîte mail » et « Nouveau mot de passe ».
+// mot de passe oublié, « Vérifiez votre boîte mail » et « Nouveau mot de passe ». « Continuer avec Google » ouvre
+// la page de Google, qui revient sur Mon compte ; Apple arrive plus tard : une fenêtre le dit.
 
 type Flow = { kind: 'form' } | { kind: 'checkEmail'; email: string; purpose: LinkPurpose } | { kind: 'newPassword' };
 
@@ -40,7 +41,9 @@ export function SignInCard({ onClose, onSignedIn, linkError = null, recovery = f
   const [info, setInfo] = useState<string | null>(null);
   const [resendAt, setResendAt] = useState(0);
   const [now, setNow] = useState(() => Date.now());
-  const [notice, setNotice] = useState<'apple' | 'google' | null>(null);
+  const [appleNotice, setAppleNotice] = useState(false);
+  /** Départ vers la page de Google en cours : le bouton attend, les autres ne répondent plus. */
+  const [leaving, setLeaving] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
@@ -48,6 +51,17 @@ export function SignInCard({ onClose, onSignedIn, linkError = null, recovery = f
   useEffect(() => {
     if (recovery) setFlow({ kind: 'newPassword' });
   }, [recovery]);
+
+  // Retour arrière depuis la page de Google : le navigateur peut remontrer cette page telle quelle ; elle se réveille.
+  useEffect(() => {
+    const wake = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      setLeaving(false);
+      setBusy(false);
+    };
+    window.addEventListener('pageshow', wake);
+    return () => window.removeEventListener('pageshow', wake);
+  }, []);
 
   // Compte à rebours de « Renvoyer l'e-mail ».
   useEffect(() => {
@@ -174,6 +188,21 @@ export function SignInCard({ onClose, onSignedIn, linkError = null, recovery = f
     }
   }
 
+  async function continueWithGoogle() {
+    if (busy) return;
+    clearMessages();
+    setBusy(true);
+    setLeaving(true);
+    try {
+      // On revient ensuite sur cette page (fiche, favoris…), comme après une connexion dans la fenêtre.
+      await signInWithGoogle(`${window.location.pathname}${window.location.search}`);
+    } catch (failure) {
+      setLeaving(false);
+      setBusy(false);
+      setError(isNetworkError(failure) ? authMessage(failure) : GOOGLE_MESSAGE);
+    }
+  }
+
   async function saveNewPassword(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
@@ -278,13 +307,12 @@ export function SignInCard({ onClose, onSignedIn, linkError = null, recovery = f
             )}
             <div className="signin-divider"><span>ou continuer avec</span></div>
             <div className="signin-providers">
-              <button type="button" className="provider provider-apple" onClick={() => setNotice('apple')}>
+              <button type="button" className="provider provider-apple" onClick={() => setAppleNotice(true)} disabled={busy}>
                 <AppleLogo />
                 Continuer avec Apple
               </button>
-              <button type="button" className="provider provider-google" onClick={() => setNotice('google')}>
-                <GoogleLogo />
-                Continuer avec Google
+              <button type="button" className="provider provider-google" onClick={continueWithGoogle} disabled={busy} aria-busy={leaving || undefined}>
+                {leaving ? <span className="spinner" aria-label="Patientez" /> : <><GoogleLogo />Continuer avec Google</>}
               </button>
             </div>
             {!isSignUp && <LegalLine />}
@@ -345,13 +373,11 @@ export function SignInCard({ onClose, onSignedIn, linkError = null, recovery = f
       </section>
 
       <AlertDialog
-        open={notice !== null}
-        onClose={() => setNotice(null)}
+        open={appleNotice}
+        onClose={() => setAppleNotice(false)}
         title="Bientôt disponible"
-        message={notice === 'apple'
-          ? 'La connexion avec Apple arrivera dans une prochaine version. En attendant, connectez-vous avec votre adresse e-mail.'
-          : 'La connexion avec Google arrivera dans une prochaine version. En attendant, connectez-vous avec votre adresse e-mail.'}
-        actions={[{ label: 'J\'ai compris', onClick: () => setNotice(null), tone: 'primary' }]}
+        message="La connexion avec Apple arrivera dans une prochaine version. En attendant, connectez-vous avec votre adresse e-mail."
+        actions={[{ label: 'J\'ai compris', onClick: () => setAppleNotice(false), tone: 'primary' }]}
       />
     </div>
   );

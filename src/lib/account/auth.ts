@@ -5,9 +5,13 @@ import { supabase } from '../supabase';
 
 // Connexion, création de compte et mot de passe oublié, comme l'app (Data/Supabase/AuthStore.swift).
 // Les liens des e-mails envoyés depuis le site reviennent sur la page Mon compte du site (PKCE : le lien ne
-// fonctionne que dans le navigateur qui a fait la demande, comme sur l'iPhone).
+// fonctionne que dans le navigateur qui a fait la demande, comme sur l'iPhone). La connexion avec Google revient
+// au même endroit, de la même façon.
 
-/** Adresse où reviennent les liens des e-mails (à déclarer dans Supabase › Authentication › URL Configuration). */
+/**
+ * Adresse où reviennent les liens des e-mails et la connexion avec Google (déclarée dans Supabase › Authentication ›
+ * URL Configuration). Toujours exactement celle-ci, sans rien ajouter : Supabase compare l'adresse entière.
+ */
 export const AUTH_REDIRECT_URL = `${SITE_URL}${PATHS.account}`;
 
 /** Délai avant de pouvoir renvoyer un e-mail, en secondes (AuthStore.resendDelay). */
@@ -15,10 +19,11 @@ export const RESEND_DELAY_SECONDS = 60;
 
 export type LinkPurpose = 'signup' | 'recovery';
 
-// Marques gardées dans le navigateur (comme UserDefaults dans l'app) : le type du prochain lien, et le compte
-// tout neuf qui doit encore choisir son profil.
+// Marques gardées dans le navigateur (comme UserDefaults dans l'app) : le type du prochain lien, le compte
+// tout neuf qui doit encore choisir son profil, et la page à retrouver après la connexion avec Google.
 const PENDING_LINK_KEY = 'nidalo.authPendingLink';
 const NEW_ACCOUNT_KEY = 'nidalo.newAccount';
+const GOOGLE_RETURN_KEY = 'nidalo.googleReturn';
 
 function readStorage(key: string): string | null {
   try {
@@ -52,6 +57,51 @@ export function isNewAccount(): boolean {
 
 export function setNewAccount(value: boolean) {
   writeStorage(NEW_ACCOUNT_KEY, value ? '1' : null);
+}
+
+// MARK: - Connexion avec Google
+
+/** Au-delà, la marque d'un départ vers Google est oubliée (page de Google quittée sans revenir, par exemple). */
+const GOOGLE_RETURN_TTL_MS = 15 * 60 * 1000;
+
+/** Une page du site (« /favoris/ », « /annonce/?id=… »), jamais une autre adresse. */
+function isSitePath(path: unknown): path is string {
+  return typeof path === 'string' && path.startsWith('/') && !path.startsWith('//') && !path.includes('\\');
+}
+
+/** Note la page d'où l'on part vers Google, pour y revenir après la connexion. */
+export function setGoogleReturn(path: string, now = Date.now()) {
+  writeStorage(GOOGLE_RETURN_KEY, isSitePath(path) ? JSON.stringify({ to: path, at: now }) : null);
+}
+
+/**
+ * Retour de Google sur la page Mon compte : la page d'où l'on était parti (la marque est effacée), ou `null` si
+ * personne n'est parti vers Google depuis ce navigateur dans le dernier quart d'heure.
+ */
+export function takeGoogleReturn(now = Date.now()): string | null {
+  const raw = readStorage(GOOGLE_RETURN_KEY);
+  if (raw === null) return null;
+  writeStorage(GOOGLE_RETURN_KEY, null);
+  try {
+    const value = JSON.parse(raw) as { to?: unknown; at?: unknown };
+    if (!isSitePath(value.to) || typeof value.at !== 'number') return null;
+    return now - value.at >= 0 && now - value.at < GOOGLE_RETURN_TTL_MS ? value.to : null;
+  } catch {
+    return null;
+  }
+}
+
+type AccountUser = { app_metadata?: { provider?: string }; created_at?: string; last_sign_in_at?: string | null };
+
+/**
+ * Compte tout juste créé par Google (règle de l'app, AuthStore) : créé par Google, et moins de 2 minutes entre sa
+ * création et cette connexion. Il choisit alors son profil, comme après la confirmation d'un e-mail. Un compte qui
+ * existait déjà avec la même adresse est relié par Supabase : il garde son profil.
+ */
+export function isFreshGoogleAccount(user: AccountUser | null | undefined): boolean {
+  if (!user || user.app_metadata?.provider !== 'google' || !user.created_at || !user.last_sign_in_at) return false;
+  const gap = Date.parse(user.last_sign_in_at) - Date.parse(user.created_at);
+  return Number.isFinite(gap) && Math.abs(gap) < 2 * 60 * 1000;
 }
 
 // MARK: - Vérification du formulaire (ImmoDomain/User/AccountSession.swift)
@@ -95,6 +145,8 @@ const MESSAGES: Record<string, string> = {
 
 export const NETWORK_MESSAGE = 'Connexion impossible. Vérifiez votre accès à Internet, puis réessayez.';
 export const GENERIC_MESSAGE = 'L\'opération n\'a pas abouti. Réessayez dans un instant.';
+/** Connexion avec Google refusée, annulée ou impossible à terminer (même texte que l'app). */
+export const GOOGLE_MESSAGE = 'La connexion avec Google n\'a pas abouti. Réessayez, ou connectez-vous avec votre adresse e-mail.';
 
 /** Une demande qui n'a pas pu partir (hors ligne, serveur injoignable). */
 export function isNetworkError(error: unknown): boolean {
@@ -163,12 +215,29 @@ export async function sendPasswordReset(email: string): Promise<void> {
   setPendingLink('recovery');
 }
 
-/** Lien d'un e-mail ouvert sur la page Mon compte : échange du code contre une session. */
+/**
+ * Connexion avec Google : la page de Google remplace le site, puis revient sur Mon compte avec un code (PKCE, comme
+ * les liens des e-mails). `from` est la page à retrouver ensuite. Les marques d'un e-mail en attente sont effacées :
+ * c'est cette connexion qui compte.
+ */
+export async function signInWithGoogle(from: string): Promise<void> {
+  setPendingLink(null);
+  setNewAccount(false);
+  setGoogleReturn(from);
+  const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: AUTH_REDIRECT_URL } });
+  if (error) {
+    writeStorage(GOOGLE_RETURN_KEY, null);
+    throw error;
+  }
+}
+
+/** Lien d'un e-mail, ou retour de Google, ouvert sur la page Mon compte : échange du code contre une session. */
 export async function openLink(code: string): Promise<LinkPurpose | null> {
   const purpose = pendingLink();
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
   if (error) throw error;
   setPendingLink(null);
+  if (isFreshGoogleAccount(data.user)) setNewAccount(true);
   return purpose;
 }
 
