@@ -66,6 +66,8 @@ function matches(row, key, filter) {
 // workers de la carte n'ont pas de page, d'où l'heure plutôt que la page.
 const pending = new Map();
 const failedRequests = [];
+/** Vues envoyées au serveur (record_listing_view), pour les Statistiques de l'espace pro. */
+const viewCalls = [];
 async function mock(context) {
   context.on('request', (request) => pending.set(request, Date.now()));
   context.on('requestfinished', (request) => pending.delete(request));
@@ -77,6 +79,13 @@ async function mock(context) {
     const request = route.request();
     const url = new URL(request.url());
     const table = url.pathname.replace('/rest/v1/', '');
+    if (table === 'rpc/record_listing_view') {
+      // Vue d'une fiche, avec ou sans compte : notée ; la fonction du serveur ne répond rien.
+      let body = null;
+      try { body = request.postDataJSON(); } catch { body = request.postData(); }
+      viewCalls.push(body);
+      return route.fulfill({ status: 204, headers: cors, body: '' });
+    }
     if (ACCOUNT_TABLES.includes(table)) {
       // Avec un compte, la route du compte (signIn) répond avant celle-ci : arriver ici, c'est demander sans compte.
       problems.push(`sans compte : ${table} demandé (${request.method()} ${decodeURIComponent(url.search)})`);
@@ -1356,6 +1365,28 @@ try {
   await page.screenshot({ path: join(out, 'comparer-erreur-1440.png') });
   await page.close();
   await member.close();
+
+  // Vues (Statistiques de l'espace pro) : une seule par annonce et par jour dans un navigateur, sur téléphone sans
+  // compte comme sur ordinateur avec le compte ; rien pour une annonce introuvable.
+  for (const [name, options, member] of [
+    ['vues-telephone', { ...devices['iPhone 13'] }, false],
+    ['vues-ordinateur', { viewport: { width: 1440, height: 900 } }, true],
+  ]) {
+    const context = await browser.newContext({ ...options, locale: 'fr-FR', timezoneId: 'Europe/Paris' });
+    await mock(context);
+    if (member) await signIn(context, seededState());
+    const before = viewCalls.length;
+    for (const listingId of [FICHE, FICHE, SALE]) {
+      page = await open(context, `/annonce/?id=${listingId}`, name);
+      await ready(page, name);
+      await page.close();
+    }
+    page = await open(context, `/annonce/?id=${UNKNOWN}`, name);
+    await page.waitForLoadState('networkidle');
+    await page.close();
+    expectJSON(name, 'vues envoyées', viewCalls.slice(before), [{ p_listing_id: FICHE }, { p_listing_id: SALE }]);
+    await context.close();
+  }
 
   // Captures pour Romain : la fiche comme sur la maquette (une offre en attente, une visite confirmée), à 1440 et 1024 px.
   for (const [width, height] of [[1440, 900], [1024, 768]]) {

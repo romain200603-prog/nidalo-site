@@ -14,6 +14,7 @@ import {
   rentalRows, saleCondition,
 } from '../lib/listing/rows';
 import { shareListing } from '../lib/listing/share';
+import { countListingView } from '../lib/listing/views';
 import { listingModeFromParams, listingScreenFromParams, PATHS } from '../lib/paths';
 import { recordView } from '../lib/recentlyViewed';
 import type { SearchMode } from '../lib/labels';
@@ -60,9 +61,11 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
     document.title = `${row.title} à ${row.city} · Nidalo`;
   }, [row]);
 
-  // « Consultés récemment » de l'accueil : la fiche ouverte est notée dans l'onglet (recordView de l'app).
+  // « Consultés récemment » de l'accueil : la fiche ouverte est notée dans l'onglet (recordView de l'app). Et une vue
+  // pour les statistiques de son auteur, une fois par jour.
   useEffect(() => {
     recordView(row.id);
+    countListingView(row.id);
   }, [row.id]);
 
   useEffect(() => {

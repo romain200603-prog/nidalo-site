@@ -569,6 +569,39 @@ a.save-capsule { text-decoration: none; }
 .contact-save { width: 100%; }
 .contact-delete { align-self: center; margin-top: 4px; }
 
+/* Statistiques */
+.stats-periods { display: flex; gap: 8px; }
+.stats-card { display: flex; flex-direction: column; gap: 14px; padding: 16px; }
+.stats-card-title { font-size: 17px; font-weight: 700; }
+.stats-totals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; }
+.stats-total { display: flex; flex-direction: column-reverse; gap: 4px; padding: 12px 14px; border-radius: 14px; background: var(--page); }
+/* Sur deux colonnes, le cinquième chiffre prend toute la ligne. */
+.stats-total:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.stats-total dt { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 13.5px; font-weight: 600; }
+.stats-total dt .icon { width: 16px; height: 16px; color: var(--blue); }
+.stats-total dd { margin: 0; color: var(--ink); font-size: 26px; font-weight: 800; line-height: 1.1; }
+.stats-listings { display: flex; flex-direction: column; gap: 12px; }
+.stats-listings-title { font-size: 17px; font-weight: 700; }
+.stats-listing { display: flex; flex-direction: column; gap: 12px; padding: 12px 12px 14px; }
+.stats-listing-head { display: flex; align-items: center; gap: 12px; color: var(--ink); text-decoration: none; }
+.stats-thumb { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 56px; height: 56px; overflow: hidden; border-radius: 12px; background: var(--chip); color: var(--placeholder); }
+.stats-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.stats-thumb .icon { width: 22px; height: 22px; }
+.stats-listing-text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.stats-listing-name { overflow: hidden; font-size: 15px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.stats-listing-status { color: var(--text-secondary); font-size: 13px; font-weight: 500; }
+.stats-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
+.stats-row li { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 2px; border-radius: 12px; background: var(--page); text-align: center; }
+.stats-row .icon { width: 16px; height: 16px; color: var(--blue); }
+.stats-row strong { font-size: 16px; font-weight: 800; }
+.stats-row span { overflow: hidden; max-width: 100%; color: var(--text-secondary); font-size: 11.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.stats-favorites { margin: 0; color: var(--text-secondary); font-size: 13px; }
+.stats-note { margin: 0; color: var(--text-secondary); font-size: 12.5px; line-height: 1.5; }
+@media (min-width: 1024px) {
+  .stats-totals { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .stats-total:last-child:nth-child(odd) { grid-column: auto; }
+}
+
 @media print {
   @page { size: A4 portrait; margin: 0; }
   html, body { margin: 0 !important; padding: 0 !important; background: #FFFFFF !important; }

@@ -8,7 +8,9 @@
 // Mes contacts : les personnes qui ont écrit, demandé une visite ou fait une offre sur mes annonces (pas celles à
 // qui j'ai écrit), les contacts ajoutés à la main ; filtres, recherche, fiche, note privée, ajout, modification et
 // suppression, avec seulement les écritures attendues dans pro_contacts.
-// Captures pour Romain : agence-*.png, diffusion-*.png, diffusion-affiche.pdf, contacts-*.png.
+// Statistiques : sur 30 puis 7 jours, le total et chaque annonce publiée (vues et favoris de my_listing_stats,
+// conversations, demandes de visite et offres de la période) ; un serveur sans la fonction, un compte sans annonce.
+// Captures pour Romain : agence-*.png, diffusion-*.png, diffusion-affiche.pdf, contacts-*.png, statistiques-*.png.
 // Lancer après la construction : node scripts/check-espace-pro.mjs [dossier construit, docs/ par défaut] [dossier des captures]
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
@@ -147,6 +149,17 @@ const MARC = {
 };
 const CONTACT_WRITABLE = ['contact_user_id', 'name', 'phone', 'email', 'note'];
 
+/** Statistiques : premier jour (de Paris) des 7 ou 30 derniers jours, et réponses de my_listing_stats (sans brouillon). */
+const parisDay = (date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+const startDay = (period) => {
+  const [year, month, day] = parisDay(new Date()).split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day - (period - 1))).toISOString().slice(0, 10);
+};
+const STATS = {
+  30: [{ listing_id: SALE.id, views: 128, favorites_total: 9, favorites_new: 3 }, { listing_id: RENT.id, views: 41, favorites_total: 1, favorites_new: 1 }],
+  7: [{ listing_id: SALE.id, views: 30, favorites_total: 9, favorites_new: 1 }, { listing_id: RENT.id, views: 12, favorites_total: 1, favorites_new: 0 }],
+};
+
 // MARK: - Serveur simulé
 
 const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
@@ -186,6 +199,9 @@ function newState({ pro = false, listings = null, contacts = false } = {}) {
     visits: structuredClone(contacts ? VISITS : []),
     offers: structuredClone(contacts ? OFFERS : []),
     contactRows: structuredClone(contacts ? [MARC] : []),
+    /** Statistiques : réponses de my_listing_stats par jour de début ; `statsMissing` : fonction absente du serveur. */
+    stats: { [startDay(30)]: STATS[30], [startDay(7)]: STATS[7] },
+    statsMissing: false,
     /** Le serveur refuse les détails (contrôle d'une colonne). */
     refuseDetails: false,
   };
@@ -256,6 +272,15 @@ function rest(state, route) {
     case 'rpc/my_conversations': return json(route, state.conversations);
     case 'rpc/my_visit_requests': return json(route, state.visits);
     case 'rpc/my_offers': return json(route, state.offers);
+    case 'rpc/my_listing_stats': {
+      if (state.statsMissing) {
+        expectedServerErrors += 1;
+        return json(route, { code: 'PGRST202', message: 'Could not find the function public.my_listing_stats(p_since) in the schema cache', details: null, hint: null }, 404);
+      }
+      const rows = state.stats[body?.p_since];
+      if (!rows || Object.keys(body ?? {}).length !== 1) problems.push(`my_listing_stats : paramètres ${JSON.stringify(body)}`);
+      return json(route, rows ?? []);
+    }
     case 'rpc/public_profiles': {
       const wanted = (body?.user_ids ?? []).map((id) => id.toLowerCase());
       return json(route, PUBLIC_PROFILES.filter((row) => wanted.includes(row.user_id)));
@@ -413,7 +438,7 @@ async function open(context, path, name) {
   const page = await context.newPage();
   page.on('console', (msg) => {
     const text = msg.text();
-    if (expectedServerErrors > 0 && /status of (400|409)/.test(text)) {
+    if (expectedServerErrors > 0 && /status of (400|404|409)/.test(text)) {
       expectedServerErrors -= 1;
       return;
     }
@@ -1059,6 +1084,91 @@ try {
     expectSame(N, 'sans contact', [
       tidy(await empty.locator('.account-empty h2').textContent()), await empty.locator('.account-empty a').getAttribute('href'),
     ], ['Aucun contact pour le moment', '/compte/?vue=contacts&ecran=ajouter']);
+    await emptyContext.close();
+  }
+
+  // 10. Téléphone, Statistiques : la ligne de Mon compte, puis les 30 derniers jours (le total, puis chaque annonce
+  //     publiée, la plus vue d'abord ; pas le brouillon) et les 7 derniers jours ; aucune écriture.
+  const statsSummary = async (page) => ({
+    periods: await page.$$eval('.stats-periods .select-chip', (els) => els.map((el) => `${el.textContent.trim()}${el.getAttribute('aria-pressed') === 'true' ? ' (choisi)' : ''}`)),
+    title: tidy(await page.locator('.stats-card-title').textContent()),
+    totals: await page.$$eval('.stats-total', (els) => els.map((el) => `${el.querySelector('dt').textContent.trim()} ${el.querySelector('dd').textContent.trim()}`)),
+    listings: await page.$$eval('.stats-listing', (els) => els.map((el) => [
+      el.querySelector('.stats-listing-name').textContent.trim(), el.querySelector('.stats-listing-status').textContent.trim(),
+      el.querySelector('.stats-listing-head').getAttribute('href'), Boolean(el.querySelector('.stats-thumb img')),
+      [...el.querySelectorAll('.stats-row li')].map((li) => li.getAttribute('aria-label')).join(', '),
+      el.querySelector('.stats-favorites')?.textContent.trim() ?? null,
+    ])),
+  });
+  const statsCalls = (state) => state.calls.filter((call) => call.table === 'rpc/my_listing_stats').map((call) => call.body?.p_since);
+  {
+    const N = 'statistiques (téléphone)';
+    const state = newState({ pro: true, listings: [SALE, RENT, DRAFT], contacts: true });
+    const context = await phone();
+    await mock(context, state);
+    const page = await open(context, '/compte/', N);
+    const row = page.locator('a.row', { hasText: 'Statistiques' });
+    expectSame(N, 'ligne de Mon compte', [tidy(await row.locator('.row-subtitle').textContent()), await row.getAttribute('href')],
+      ['Vues, contacts et performances', '/compte/?vue=statistiques']);
+    await row.click();
+    await page.waitForURL('**/compte/?vue=statistiques');
+    await page.locator('.stats-listing').first().waitFor();
+    expectSame(N, '30 jours', await statsSummary(page), {
+      periods: ['7 jours', '30 jours (choisi)'],
+      title: 'Sur les 30 derniers jours',
+      totals: ['Vues 169', 'Favoris 4', 'Message 1', 'Visites 2', 'Offre 1'],
+      listings: [
+        [SALE.title, 'En ligne', `/annonce/?id=${SALE.id}`, true, '128 vues, 3 favoris, 1 message, 2 visites, 1 offre', '9 personnes l\'ont en favori'],
+        [RENT.title, 'En ligne', `/annonce/?id=${RENT.id}`, false, '41 vues, 1 favori, 0 message, 0 visite, 0 offre', '1 personne l\'a en favori'],
+      ],
+    });
+    if (!/^Une vue, c'est une ouverture de l'annonce, comptée une fois par jour et par appareil ; connecté à votre compte, vos propres ouvertures ne comptent pas\. Les vues sont comptées depuis le .+\. Nidalo ne montre jamais qui a vu ou mis en favori une annonce\.$/
+      .test(tidy(await page.locator('.stats-note').textContent()))) problems.push(`${N} : note « ${tidy(await page.locator('.stats-note').textContent())} »`);
+    await shot(page, 'statistiques-telephone.png');
+    await page.locator('.stats-periods .select-chip', { hasText: '7 jours' }).click();
+    await page.waitForFunction(() => document.querySelector('.stats-card-title')?.textContent === 'Sur les 7 derniers jours');
+    expectSame(N, '7 jours', await statsSummary(page), {
+      periods: ['7 jours (choisi)', '30 jours'],
+      title: 'Sur les 7 derniers jours',
+      totals: ['Vues 42', 'Favori 1', 'Message 0', 'Visite 1', 'Offre 0'],
+      listings: [
+        [SALE.title, 'En ligne', `/annonce/?id=${SALE.id}`, true, '30 vues, 1 favori, 0 message, 1 visite, 0 offre', '9 personnes l\'ont en favori'],
+        [RENT.title, 'En ligne', `/annonce/?id=${RENT.id}`, false, '12 vues, 0 favori, 0 message, 0 visite, 0 offre', '1 personne l\'a en favori'],
+      ],
+    });
+    expectSame(N, 'jours demandés', statsCalls(state), [startDay(30), startDay(7)]);
+    expectSame(N, 'écritures', writeNames(writesSince(state, 0)), []);
+    await context.close();
+  }
+
+  // 11. Ordinateur : la même page (les cinq chiffres sur une ligne) ; un serveur sans la fonction (avant sa mise en
+  //     ligne) : un message et « Réessayer » ; un compte sans annonce publiée : la page vide.
+  {
+    const N = 'statistiques (ordinateur)';
+    const state = newState({ pro: true, listings: [SALE, RENT, DRAFT], contacts: true });
+    state.statsMissing = true;
+    const context = await desktop();
+    await mock(context, state);
+    const page = await open(context, '/compte/?vue=statistiques', N);
+    await page.locator('.signin-error').waitFor();
+    expectSame(N, 'sans la fonction', [tidy(await page.locator('.signin-error').textContent()), await page.locator('.stats-listing').count()],
+      ['L\'opération n\'a pas abouti. Réessayez dans un instant.', 0]);
+    state.statsMissing = false;
+    await page.getByRole('button', { name: 'Réessayer' }).click();
+    await page.locator('.stats-listing').first().waitFor();
+    const tops = await page.$$eval('.stats-total', (els) => els.map((el) => Math.round(el.getBoundingClientRect().top)));
+    expectSame(N, 'chiffres sur une ligne', [tops.length, new Set(tops).size], [5, 1]);
+    expectSame(N, 'annonces', (await statsSummary(page)).listings.map((item) => item[0]), [SALE.title, RENT.title]);
+    await shot(page, 'statistiques-ordinateur.png');
+    await context.close();
+
+    const emptyState = newState({ pro: true, listings: [DRAFT] });
+    const emptyContext = await phone();
+    await mock(emptyContext, emptyState);
+    const empty = await open(emptyContext, '/compte/?vue=statistiques', N);
+    await empty.locator('.account-empty').waitFor();
+    expectSame(N, 'sans annonce publiée', [tidy(await empty.locator('.account-empty h2').textContent()), await empty.locator('.stats-periods').count()],
+      ['Aucune annonce publiée', 0]);
     await emptyContext.close();
   }
 } finally {

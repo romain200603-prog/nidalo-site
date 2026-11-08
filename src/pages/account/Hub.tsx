@@ -219,7 +219,7 @@ function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
       </SpaceSection>
       <SpaceSection icon="wrench" title="Outils professionnels">
         <RowGroup rows={[
-          { icon: 'chart', title: 'Statistiques', subtitle: 'Vues, contacts et performances', href: soonPath('statistiques') },
+          { icon: 'chart', title: 'Statistiques', subtitle: 'Vues, contacts et performances', href: accountPath('statistiques') },
           { icon: 'users', title: 'Gestion des équipes', subtitle: 'Inviter des collaborateurs', href: soonPath('equipes') },
           { icon: 'share', title: 'Outils de diffusion', subtitle: 'Partager mes annonces', href: accountPath('diffusion') },
           { icon: 'badgeCheck', title: 'Profil agence', subtitle: agency ? 'Fiche agence' : 'À compléter', href: AGENCY_PATH },

@@ -22,6 +22,7 @@ import { ProjectEditor } from './account/ProjectEditor';
 import { SavedSearchesList } from './account/SavedSearchesList';
 import { ScreenHeader, Spinner } from './account/parts';
 import { DeleteAccountScreen, LegalScreen, PrivacyScreen, SecurityScreen, SoonScreen } from './account/Screens';
+import { Statistics } from './account/Statistics';
 import { ViewedListings } from './account/ViewedListings';
 import '../styles/account.css';
 
@@ -129,6 +130,8 @@ function AccountContent() {
     case 'diffusion': return <Diffusion />;
     case 'affiche': return <Poster listingId={params.get('annonce')} />;
     case 'contacts': return <Contacts contactKey={params.get('contact')} screen={params.get('ecran')} />;
+    // Statistiques : vues, favoris, messages, visites et offres de chaque annonce publiée, sur 7 ou 30 jours.
+    case 'statistiques': return <Statistics />;
     // Ordinateur : Mon espace de la maquette 5 pour un compte particulier ; l'espace professionnel garde son écran.
     default: return desktop && current.profile.account_type !== 'professional' ? <DesktopSpace account={current} /> : <Hub account={current} />;
   }

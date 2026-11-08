@@ -22,6 +22,7 @@ import {
   nextVisit, openRequest, REQUEST_STATUS_LABELS, requestDisplayStatus, VISIT_STATUS_LABELS, visitDateInline, visitDateLong,
   visitDisplayStatus, type AgendaVisit, type VisitRequestRow,
 } from '../../lib/listing/visits';
+import { countListingView } from '../../lib/listing/views';
 import { placeLine, sortedPhotos, type ListingRow } from '../../lib/listings';
 import {
   accountPath, comparePath, conversationPath, listingPath, listingScreenFromParams, visitRequestPath, wantsVideoVisit, type ListingScreen,
@@ -230,9 +231,11 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
         : `${row.title} à ${row.city} · Nidalo`;
   }, [row, shown]);
 
-  // « Consultés récemment » de l'accueil : la fiche ouverte est notée dans l'onglet (recordView de l'app).
+  // « Consultés récemment » de l'accueil : la fiche ouverte est notée dans l'onglet (recordView de l'app). Et une vue
+  // pour les statistiques de son auteur, une fois par jour.
   useEffect(() => {
     recordView(row.id);
+    countListingView(row.id);
   }, [row.id]);
 
   // Le profil public est relu une fois la session connue : connecté, le serveur donne aussi le numéro de l'agence.
