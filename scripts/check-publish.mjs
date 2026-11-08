@@ -68,6 +68,21 @@ const ONLINE_PHOTOS = [
   { id: 'a1000000-0000-4000-8000-000000000002', listing_id: ONLINE_ID, owner_id: USER_ID, storage_path: `${USER_ID}/${ONLINE_ID}/seconde.jpg`, position: 1, width: 1400, height: 800 },
 ];
 const ONLINE_LOCATION = { listing_id: ONLINE_ID, owner_id: USER_ID, street: '8 rue Paul Bert', latitude: 45.7597, longitude: 4.8491 };
+/**
+ * Partage dans l'agence : Claire est responsable de l'équipe de Rhône Immobilier, Inès y est agente. Claire modifie
+ * l'annonce d'Inès : l'adresse et les photos restent au nom d'Inès, dans son dossier.
+ */
+const COLLEAGUE = 'c0000000-0000-4000-8000-0000000000b5';
+const COLLEAGUE_ID = '6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1b53';
+const COLLEAGUE_LISTING = { ...listedRow, id: COLLEAGUE_ID, owner_id: COLLEAGUE };
+const COLLEAGUE_PHOTOS = [{ ...ONLINE_PHOTOS[0], id: 'a1000000-0000-4000-8000-000000000003', listing_id: COLLEAGUE_ID, owner_id: COLLEAGUE, storage_path: `${COLLEAGUE}/${COLLEAGUE_ID}/premiere.jpg` }];
+const COLLEAGUE_LOCATION = { ...ONLINE_LOCATION, listing_id: COLLEAGUE_ID, owner_id: COLLEAGUE };
+const TEAM_AGENCY = { agency_id: 'b0000000-0000-4000-8000-0000000000a1', role: 'manager', agency_name: 'Rhône Immobilier', logo_path: null, postal_code: '69006', city: 'Lyon' };
+const TEAM_MEMBERS = [
+  { user_id: '00000000-0000-4000-8000-0000000000ab', role: 'owner', public_name: 'Gérard G.', avatar_path: null, joined_at: '2026-09-01T08:00:00Z' },
+  { user_id: USER_ID, role: 'manager', public_name: 'Claire M.', avatar_path: null, joined_at: '2026-10-01T08:00:00Z' },
+  { user_id: COLLEAGUE, role: 'agent', public_name: 'Inès K.', avatar_path: null, joined_at: '2026-11-01T08:00:00Z' },
+];
 
 /** Lyon d'après geo.api.gouv.fr (centre de la commune) ; adresses de la Base Adresse Nationale (inventées). */
 const LYON = {
@@ -124,7 +139,7 @@ function pageWidth(request) {
 }
 
 /** Le serveur simulé : tables du compte et des annonces, fichiers des photos, demandes notées dans l'ordre. */
-function newState({ firstName = 'Claire', listings = [], locations = [], photos = [] } = {}) {
+function newState({ firstName = 'Claire', listings = [], locations = [], photos = [], team = false } = {}) {
   return {
     profile: { ...PROFILE },
     details: { ...DETAILS, first_name: firstName },
@@ -136,8 +151,15 @@ function newState({ firstName = 'Claire', listings = [], locations = [], photos 
     geocoding: [],
     /** Message P0001 du serveur pour la mise en ligne (« Publication refusée »), ou null. */
     refuseOnline: null,
+    /** Équipe de l'agence dont Claire est responsable (partage : elle modifie les annonces de l'équipe). */
+    team,
   };
 }
+
+/** Comptes dont Claire peut lire les brouillons et modifier les annonces : le sien, et ceux de son équipe. */
+const editableOwners = (state) => (state.team ? TEAM_MEMBERS.map((member) => member.user_id) : [USER_ID]);
+/** Auteur de l'annonce d'une adresse ou d'une photo. */
+const ownerOf = (state, listingId) => state.listings.find((row) => row.id === listingId)?.owner_id ?? USER_ID;
 
 const withPhotos = (state, row) => ({
   ...row,
@@ -173,8 +195,8 @@ function rest(state, route, signedIn) {
       break;
     case 'listings': {
       if (method === 'GET') {
-        // Comme les règles du serveur : le brouillon d'une autre personne n'est jamais lu.
-        const found = filtered(state.listings, params).filter((row) => row.owner_id === USER_ID || row.status !== 'draft');
+        // Comme les règles du serveur : le brouillon d'une autre personne n'est jamais lu (sauf dans son équipe).
+        const found = filtered(state.listings, params).filter((row) => editableOwners(state).includes(row.owner_id) || row.status !== 'draft');
         return json(route, found.map((row) => withPhotos(state, row)));
       }
       if (method === 'POST') {
@@ -190,7 +212,7 @@ function rest(state, route, signedIn) {
         return empty(route, 201);
       }
       if (method === 'PATCH') {
-        const targets = filtered(state.listings, params).filter((row) => row.owner_id === USER_ID);
+        const targets = filtered(state.listings, params).filter((row) => editableOwners(state).includes(row.owner_id));
         if (targets.length === 0) problems.push(`listings : modification sans annonce du compte (${decodeURIComponent(url.search)})`);
         for (const row of targets) {
           if (body.status === 'active' && row.status === 'draft') {
@@ -212,6 +234,9 @@ function rest(state, route, signedIn) {
         // upsert sur listing_id (clé primaire de la table).
         if (params.get('on_conflict') !== 'listing_id') problems.push(`listing_locations : on_conflict « ${params.get('on_conflict')} »`);
         for (const row of rows) {
+          // L'auteur n'est envoyé que pour l'annonce d'un collègue, et c'est toujours l'auteur de l'annonce.
+          const owner = ownerOf(state, row.listing_id);
+          if (owner === USER_ID ? 'owner_id' in row : row.owner_id !== owner) problems.push(`listing_locations : auteur ${row.owner_id} pour une annonce de ${owner}`);
           const index = state.locations.findIndex((other) => other.listing_id === row.listing_id);
           const next = { owner_id: USER_ID, ...row };
           if (index >= 0) state.locations[index] = next;
@@ -223,7 +248,12 @@ function rest(state, route, signedIn) {
     case 'listing_photos':
       if (method === 'GET') return json(route, filtered(state.photos, params));
       if (method === 'POST') {
-        for (const row of rows) state.photos.push({ id: randomUUID(), owner_id: USER_ID, ...row });
+        for (const row of rows) {
+          const owner = ownerOf(state, row.listing_id);
+          if (owner === USER_ID ? 'owner_id' in row : row.owner_id !== owner) problems.push(`listing_photos : auteur ${row.owner_id} pour une annonce de ${owner}`);
+          if (!String(row.storage_path).startsWith(`${owner}/${row.listing_id}/`)) problems.push(`listing_photos : photo hors du dossier de l'auteur (${row.storage_path})`);
+          state.photos.push({ id: randomUUID(), owner_id: USER_ID, ...row });
+        }
         return empty(route, 201);
       }
       if (method === 'DELETE') {
@@ -236,6 +266,8 @@ function rest(state, route, signedIn) {
         return empty(route);
       }
       break;
+    case 'rpc/my_team_agency': return json(route, state.team ? [TEAM_AGENCY] : []);
+    case 'rpc/my_agency_team': return json(route, state.team ? TEAM_MEMBERS : []);
     default:
       // Barre du haut (pastilles des messages et des notifications) : rien à montrer.
       if (method === 'GET' || table.startsWith('rpc/')) return json(route, []);
@@ -824,8 +856,37 @@ try {
         ['Annonce introuvable', 'Cette annonce n\'existe plus ou n\'est pas l\'une des vôtres.', '/compte/?vue=annonces']);
       await page.close();
     }
+    // L'annonce d'une autre personne est lue (elle est publiée) : sans équipe qui la partage, elle reste introuvable.
     expectSame(N, 'annonces introuvables : demandes', [writeNames(writesSince(state, mark)),
-      state.calls.slice(mark).filter((call) => call.table === 'listings').map((call) => call.search.includes(`owner_id=eq.${USER_ID}`))], [[], [true, true]]);
+      state.calls.slice(mark).filter((call) => ['listings', 'listing_locations', 'rpc/my_team_agency'].includes(call.table)).map((call) => call.table)],
+    [[], ['listings', 'rpc/my_team_agency', 'listings']]);
+    await context.close();
+  }
+
+  // 6. Responsable d'une équipe : l'annonce d'Inès (agente) s'ouvre comme la sienne ; à l'enregistrement d'une photo de
+  //    plus, l'adresse et la photo restent au nom d'Inès, dans son dossier (l'auteur n'est envoyé que pour elle).
+  {
+    const N = 'annonce d\'un collègue';
+    const state = newState({ listings: [COLLEAGUE_LISTING], photos: COLLEAGUE_PHOTOS, locations: [COLLEAGUE_LOCATION], team: true });
+    const context = await desktop(1024, 768);
+    await mock(context, state);
+    const page = await open(context, `/publier/?annonce=${COLLEAGUE_ID}&etape=photos`, N);
+    await page.waitForSelector('.dpub-photo img');
+    await waitStep(page, 5, 'Photos', N);
+    expectSame(N, 'ouverture', (await head(page))[0], 'Modifier l\'annonce');
+    await page.setInputFiles('.dpub input[type="file"]', [{ name: 'IMG_0003.jpg', mimeType: 'image/jpeg', buffer: PHOTO }]);
+    await imagesLoaded(page, '.dpub-photo img', 2, `${N} : photo ajoutée`);
+    const mark = state.calls.length;
+    await page.click('.dsc-head-action button');
+    await page.waitForSelector('.dpub-success', { timeout: 15000 }).catch(() => problems.push(`${N} : confirmation absente`));
+    const saved = writesSince(state, mark);
+    const upload = saved.find((call) => call.table === 'storage');
+    const photo = saved.find((call) => call.table === 'listing_photos');
+    expectSame(N, 'écritures', writeNames(saved), ['PATCH listings', 'POST listing_locations', 'POST storage', 'POST listing_photos']);
+    expectSame(N, 'au nom d\'Inès', [
+      saved[1]?.body?.owner_id, upload?.search.startsWith(`${COLLEAGUE}/${COLLEAGUE_ID}/`), photo?.body?.owner_id, photo?.body?.storage_path === upload?.search,
+      'owner_id' in (saved[0]?.body ?? {}),
+    ], [COLLEAGUE, true, COLLEAGUE, true, false]);
     await context.close();
   }
 } finally {

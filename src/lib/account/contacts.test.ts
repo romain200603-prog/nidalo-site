@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ProfileRow, ServerInboxRow } from '../messages/inbox';
 import {
-  buildContacts, contactErrors, contactLine, contactsSubtitle, contactWrite, filterContacts,
+  buildContacts, contactErrors, contactLine, contactsSubtitle, contactWrite, filterContacts, isOwnContact,
   type ContactOfferRow, type ContactRow, type ContactVisitRow,
 } from './contacts';
 
@@ -42,7 +42,7 @@ const profiles = new Map([
 ]);
 
 const manual = (over: Partial<ContactRow>): ContactRow => ({
-  id: 'eeeeeeee-0000-4000-8000-000000000005', contact_user_id: null, name: 'Marc Petit', phone: '0612345678', email: 'marc@example.fr',
+  id: 'eeeeeeee-0000-4000-8000-000000000005', owner_id: ME, contact_user_id: null, name: 'Marc Petit', phone: '0612345678', email: 'marc@example.fr',
   note: 'Cherche un T3 à Lyon 6e', created_at: '2026-11-02T09:00:00Z', updated_at: '2026-11-03T09:00:00Z', ...over,
 });
 
@@ -150,6 +150,22 @@ describe('Mes contacts', () => {
     expect(names(filterContacts(contacts, 'all', 'marc@'))).toEqual(['Marc Petit']);
     expect(contactsSubtitle(contacts)).toBe('3 contacts · 1 nouveau');
     expect(contactsSubtitle([])).toBe('0 contact · 0 nouveau');
+  });
+
+  it('ajoute les contacts saisis par l\'équipe, jamais ses notes sur les personnes de Nidalo', () => {
+    const JULIEN = 'c0000000-0000-4000-8000-0000000000b4';
+    const contacts = buildContacts({
+      me: ME, conversations: [], visits: [], offers: [], profiles, now: NOW,
+      rows: [
+        manual({}),
+        manual({ id: 'eeeeeeee-0000-4000-8000-000000000006', owner_id: JULIEN, name: 'Client de Julien', updated_at: '2026-11-04T09:00:00Z' }),
+        manual({ id: 'eeeeeeee-0000-4000-8000-000000000007', owner_id: JULIEN, contact_user_id: CLAIRE, name: null, note: 'Note de Julien' }),
+      ],
+    });
+    expect(contacts.map((contact) => [contact.name, contact.ownerId, isOwnContact(contact, ME)])).toEqual([
+      ['Client de Julien', JULIEN, false],
+      ['Marc Petit', ME, true],
+    ]);
   });
 
   it('vérifie et prépare le formulaire d\'un contact', () => {

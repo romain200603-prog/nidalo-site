@@ -2,23 +2,25 @@ import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent } from 'r
 import { Icon } from '../../components/Icon';
 import { AlertDialog } from '../listing/Dialogs';
 import {
-  deleteMandate, documentName, EXCLUSIVITY_LABELS, KIND_LABELS, loadMandates, MANDATE_FILTERS, MANDATE_NAME_MAX, MANDATE_NOTE_MAX,
+  deleteMandate, documentName, EXCLUSIVITY_LABELS, isOwnMandate, KIND_LABELS, loadMandates, MANDATE_FILTERS, MANDATE_NAME_MAX, MANDATE_NOTE_MAX,
   MANDATE_NUMBER_MAX, MANDATE_TITLE_MAX, mandateAmount, mandateErrors, mandateFileIssue, mandateFileUrl, mandateFormFor, mandatesIn,
   mandatesStore, mandateStage, mandateState, saveMandate, setMandateEnded,
   type MandateDocumentChange, type MandateExclusivity, type MandateForm, type MandateKind, type MandateRow,
   type MandateState,
 } from '../../lib/account/mandates';
-import { loadMyListings, myListingsStore } from '../../lib/account/myListings';
+import { agencyListingsStore, loadAgencyListings, loadMyListings, myListingsStore } from '../../lib/account/myListings';
 import { dayLabel, groupedPrice } from '../../lib/account/sales';
-import { useStore } from '../../lib/account/session';
+import { currentUserId, useStore } from '../../lib/account/session';
+import { authorOf, canEditOf, savedTeamView, saveTeamView, teamIds, useTeamScope, type TeamScope, type TeamView } from '../../lib/account/team';
 import { formatPrice } from '../../lib/format';
 import { parisDay } from '../../lib/listing/views';
 import { photoUrl, sortedPhotos, type ListingRow } from '../../lib/listings';
 import { accountPath, listingPath, MANDATES_PATH, mandatePath, NEW_MANDATE_PATH } from '../../lib/paths';
-import { EmptyState, ScreenHeader, Spinner, Toast } from './parts';
+import { AuthorLine, EmptyState, ScreenHeader, Spinner, TeamViewSwitch, Toast } from './parts';
 
 // « Mes mandats » de l'espace professionnel : le registre des mandats (en cours, terminés), la fiche d'un mandat
-// (ses informations, le PDF signé, la note) et son formulaire. Mêmes styles que Mes ventes (classes sale-*).
+// (ses informations, le PDF signé, la note) et son formulaire. Mêmes styles que Mes ventes (classes sale-*). Avec une
+// équipe : « Les miens » ou « L'agence » (le registre de toute l'agence ; un agent ne modifie que les siens).
 
 const SAVED_TOASTS: Record<string, string> = {
   ajoute: 'Mandat ajouté',
@@ -46,12 +48,21 @@ const goTo = (id: string, ok: string) => window.location.assign(accountPath('man
 
 export function Mandates({ mandateId, screen }: { mandateId: string | null; screen: string | null }) {
   const state = useStore(mandatesStore);
-  const listings = useStore(myListingsStore);
+  const scope = useTeamScope();
+  const mine = useStore(myListingsStore);
+  const agency = useStore(agencyListingsStore);
+  // Avec une équipe, l'annonce liée peut être celle de n'importe qui dans l'agence (les miennes en attendant).
+  const listings = scope && agency.status === 'ready' ? agency : mine;
+  const ids = scope ? teamIds(scope).join(',') : '';
 
   useEffect(() => {
     void loadMandates();
     void loadMyListings();
   }, []);
+
+  useEffect(() => {
+    if (ids) void loadAgencyListings(ids.split(','));
+  }, [ids]);
 
   if (state.status === 'error') {
     return (
@@ -64,8 +75,8 @@ export function Mandates({ mandateId, screen }: { mandateId: string | null; scre
   }
   if (state.status !== 'ready') return <Spinner />;
   const myListings = listings.status === 'ready' ? listings.items : [];
-  if (screen === 'ajouter') return <MandateEditor row={null} listings={myListings} />;
-  if (!mandateId) return <MandateList rows={state.rows} listings={myListings} />;
+  if (screen === 'ajouter') return <MandateEditor row={null} listings={myListings} scope={scope} />;
+  if (!mandateId) return <MandateList rows={state.rows} listings={myListings} scope={scope} />;
   const row = state.rows.find((item) => item.id.toLowerCase() === mandateId.toLowerCase()) ?? null;
   if (!row) {
     return (
@@ -75,8 +86,8 @@ export function Mandates({ mandateId, screen }: { mandateId: string | null; scre
       </div>
     );
   }
-  if (screen === 'modifier') return <MandateEditor row={row} listings={myListings} />;
-  return <MandateDetail row={row} listing={listingOf(row, myListings)} />;
+  if (screen === 'modifier' && canEditOf(scope, row.owner_id, currentUserId())) return <MandateEditor row={row} listings={myListings} scope={scope} />;
+  return <MandateDetail row={row} listing={listingOf(row, myListings)} scope={scope} />;
 }
 
 const listingOf = (row: MandateRow, listings: ListingRow[]): ListingRow | null => (
@@ -102,21 +113,33 @@ const NONE: Record<MandateState, string> = {
   ended: 'Aucun mandat terminé.',
 };
 
-function MandateList({ rows, listings }: { rows: MandateRow[]; listings: ListingRow[] }) {
+function MandateList({ rows: all, listings, scope }: { rows: MandateRow[]; listings: ListingRow[]; scope: TeamScope | null }) {
   const toast = useSavedToast();
   const [filter, setFilter] = useState<MandateState>('active');
+  const [view, setView] = useState<TeamView>(() => savedTeamView('mandats'));
+  const me = currentUserId();
+  const showsAgency = scope !== null && view === 'agency';
+  const rows = showsAgency ? all : all.filter((row) => isOwnMandate(row, me));
   const today = parisDay(new Date());
   const shown = mandatesIn(rows, filter, today);
+
+  function chooseView(next: TeamView) {
+    setView(next);
+    saveTeamView('mandats', next);
+  }
 
   return (
     <div className="space sales">
       <Toast text={toast} />
       <ScreenHeader title="Mes mandats" action={<a className="save-capsule" href={NEW_MANDATE_PATH}>Ajouter</a>} />
+      {scope && <TeamViewSwitch value={view} onChange={chooseView} mine="Les miens" />}
       {rows.length === 0 ? (
         <EmptyState
           icon="scrollText"
           title="Aucun mandat"
-          text="Tenez ici votre registre des mandats de vente et de location, avec chaque mandat signé en PDF."
+          text={showsAgency
+            ? 'Le registre de l\'agence réunit les mandats de toute l\'équipe, avec chaque mandat signé en PDF.'
+            : 'Tenez ici votre registre des mandats de vente et de location, avec chaque mandat signé en PDF.'}
           action={<a className="btn btn-primary" href={NEW_MANDATE_PATH}>Ajouter un mandat</a>}
         />
       ) : (
@@ -146,6 +169,7 @@ function MandateList({ rows, listings }: { rows: MandateRow[]; listings: Listing
                       <span className="sale-row-title">{row.title}</span>
                       <span className="sale-row-line">{mandateLine(row)}</span>
                       <span className={`sale-row-stage is-${mandateState(row, today)}`}>{mandateStage(row, today)}</span>
+                      <AuthorLine author={authorOf(scope, row.owner_id)} />
                     </span>
                     <Icon name="chevronRight" className="icon row-chevron" />
                   </a>
@@ -161,7 +185,7 @@ function MandateList({ rows, listings }: { rows: MandateRow[]; listings: Listing
 
 // MARK: - Fiche
 
-function MandateDetail({ row, listing }: { row: MandateRow; listing: ListingRow | null }) {
+function MandateDetail({ row, listing, scope }: { row: MandateRow; listing: ListingRow | null; scope: TeamScope | null }) {
   const toast = useSavedToast();
   const [dialog, setDialog] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -172,6 +196,8 @@ function MandateDetail({ row, listing }: { row: MandateRow; listing: ListingRow 
   const expired = state === 'ended' && !row.ended_on;
   const price = mandateAmount(row.price);
   const fees = mandateAmount(row.fees);
+  const author = authorOf(scope, row.owner_id);
+  const editable = canEditOf(scope, row.owner_id, currentUserId());
 
   async function changeEnded(ended: boolean) {
     setDialog(false);
@@ -205,13 +231,14 @@ function MandateDetail({ row, listing }: { row: MandateRow; listing: ListingRow 
   return (
     <div className="space sales sale-page">
       <Toast text={toast} />
-      <ScreenHeader title="Mandat" back={MANDATES_PATH} action={<a className="save-capsule" href={mandatePath(row.id, true)}>Modifier</a>} />
+      <ScreenHeader title="Mandat" back={MANDATES_PATH} action={editable ? <a className="save-capsule" href={mandatePath(row.id, true)}>Modifier</a> : undefined} />
       <section className="sale-head space-card">
         <MandateThumb listing={listing} size="large" />
         <div className="sale-head-text">
           <h2 className="sale-title">{row.title}</h2>
           {row.city && <p className="sale-city">{row.city}</p>}
           <p className={`sale-state is-${state}`}>{state === 'active' ? 'En cours' : expired ? 'Échu' : 'Terminé'}</p>
+          <AuthorLine author={author} />
         </div>
       </section>
 
@@ -244,27 +271,28 @@ function MandateDetail({ row, listing }: { row: MandateRow; listing: ListingRow 
             <button type="button" className="small-button mandate-file-open" onClick={() => void openFile()}>Ouvrir</button>
           </div>
         ) : (
-          <p className="sale-caption">Aucun PDF pour ce mandat. Ajoutez-le avec « Modifier ».</p>
+          <p className="sale-caption">{editable ? 'Aucun PDF pour ce mandat. Ajoutez-le avec « Modifier ».' : 'Aucun PDF pour ce mandat.'}</p>
         )}
         {fileError && <p className="signin-error" role="alert">{fileError}</p>}
       </section>
 
       {row.note?.trim() && (
         <section className="sale-card space-card">
-          <h2 className="sale-card-title"><Icon name="squarePen" />Note privée</h2>
+          <h2 className="sale-card-title"><Icon name="squarePen" />{scope ? 'Note' : 'Note privée'}</h2>
           <p className="sale-note">{row.note.trim()}</p>
-          <p className="sale-caption">Seul vous voyez cette note.</p>
+          <p className="sale-caption">{scope ? 'L\'équipe de l\'agence voit cette note.' : 'Seul vous voyez cette note.'}</p>
         </section>
       )}
 
-      {expired && <p className="sale-caption mandate-expired">Ce mandat est échu. Pour le prolonger, changez sa date de fin avec « Modifier ».</p>}
+      {expired && editable && <p className="sale-caption mandate-expired">Ce mandat est échu. Pour le prolonger, changez sa date de fin avec « Modifier ».</p>}
+      {!editable && <p className="sale-caption mandate-readonly">Seuls son auteur, le gérant et les responsables de l&apos;agence peuvent modifier ce mandat.</p>}
       {error && <p className="signin-error" role="alert">{error}</p>}
-      {row.ended_on && (
+      {editable && row.ended_on && (
         <button type="button" className="btn btn-light sale-resume" disabled={busy} onClick={() => void changeEnded(false)}>
           {busy ? <span className="spinner" aria-label="Enregistrement" /> : 'Reprendre le mandat'}
         </button>
       )}
-      {state === 'active' && (
+      {editable && state === 'active' && (
         <button type="button" className="link-button sale-cancel mandate-end" disabled={busy} onClick={() => setDialog(true)}>Terminer le mandat</button>
       )}
       <AlertDialog
@@ -283,7 +311,7 @@ function MandateDetail({ row, listing }: { row: MandateRow; listing: ListingRow 
 
 // MARK: - Formulaire
 
-function MandateEditor({ row, listings }: { row: MandateRow | null; listings: ListingRow[] }) {
+function MandateEditor({ row, listings, scope }: { row: MandateRow | null; listings: ListingRow[]; scope: TeamScope | null }) {
   const initial = useMemo(() => mandateFormFor(row), [row]);
   const [form, setForm] = useState<MandateForm>(initial);
   const [pdf, setPdf] = useState<MandateDocumentChange>('keep');
@@ -399,7 +427,8 @@ function MandateEditor({ row, listings }: { row: MandateRow | null; listings: Li
                 <option value="">Aucune</option>
                 {listings.map((item) => (
                   <option key={item.id} value={item.id.toLowerCase()}>
-                    {(item.title?.trim() || 'Annonce sans titre') + (item.status === 'draft' ? ' (brouillon)' : '')}
+                    {(item.title?.trim() || 'Annonce sans titre') + (item.status === 'draft' ? ' (brouillon)' : '')
+                      + (authorOf(scope, item.owner_id) ? ` · ${authorOf(scope, item.owner_id)}` : '')}
                   </option>
                 ))}
                 {!listingKnown && <option value={form.listingId}>Annonce liée</option>}
@@ -453,7 +482,7 @@ function MandateEditor({ row, listings }: { row: MandateRow | null; listings: Li
             />
             {errors.note && <span className="field-error">{errors.note}</span>}
           </label>
-          <p className="field-hint">Seul vous voyez ce mandat, son PDF et sa note.</p>
+          <p className="field-hint">{scope ? 'L\'équipe de l\'agence voit ce mandat, son PDF et sa note.' : 'Seul vous voyez ce mandat, son PDF et sa note.'}</p>
         </section>
         {hasErrors && <p className="field-error" role="alert">Vérifiez les champs en rouge.</p>}
         {saveError && <p className="signin-error" role="alert">{saveError}</p>}
@@ -482,7 +511,9 @@ function MandateEditor({ row, listings }: { row: MandateRow | null; listings: Li
         open={dialog === 'delete'}
         onClose={() => setDialog((current) => (current === 'delete' ? null : current))}
         title="Supprimer ce mandat du registre ?"
-        message="Ses informations, son PDF et votre note seront effacés. L'annonce ne change pas."
+        message={authorOf(scope, row?.owner_id)
+          ? 'Ses informations, son PDF et sa note seront effacés pour toute l\'agence. L\'annonce ne change pas.'
+          : 'Ses informations, son PDF et votre note seront effacés. L\'annonce ne change pas.'}
         actions={[
           { label: 'Supprimer', onClick: () => void remove(), tone: 'primary' },
           { label: 'Annuler', onClick: () => setDialog(null), tone: 'quiet' },

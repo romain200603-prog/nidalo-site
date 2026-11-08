@@ -13,11 +13,14 @@ import { createStore, currentUserId, sessionStore } from './session';
 
 // « Mes contacts » de l'espace professionnel : les personnes qui ont écrit, demandé une visite ou fait une offre sur
 // les annonces du compte (lues avec les fonctions de la messagerie, des visites et des offres, rien de nouveau), et
-// les contacts ajoutés à la main, avec une note privée (table pro_contacts, lue et écrite par son seul propriétaire).
+// les contacts ajoutés à la main, avec une note (table pro_contacts). Avec une équipe, les contacts ajoutés à la main
+// sont partagés dans l'agence ; les notes sur les personnes de Nidalo restent à leur seul auteur.
 
 /** Ligne de pro_contacts : un contact ajouté à la main (contact_user_id vide), ou la note sur une personne de Nidalo. */
 export type ContactRow = {
   id: string;
+  /** Auteur : moi, ou une personne de l'équipe (contact ajouté à la main). */
+  owner_id: string;
   contact_user_id: string | null;
   name: string | null;
   phone: string | null;
@@ -27,7 +30,7 @@ export type ContactRow = {
   updated_at: string;
 };
 
-export const CONTACT_COLUMNS = 'id, contact_user_id, name, phone, email, note, created_at, updated_at';
+export const CONTACT_COLUMNS = 'id, owner_id, contact_user_id, name, phone, email, note, created_at, updated_at';
 
 /** Demande de visite telle que my_visit_requests la rend, avec le titre du bien et l'agent. */
 export type ContactVisitRow = Omit<VisitRequestRow, 'listing_snapshot'> & {
@@ -59,6 +62,8 @@ export type Contact = {
   userId: string | null;
   /** Ligne de pro_contacts : le contact ajouté à la main, ou la note sur une personne de Nidalo. */
   rowId: string | null;
+  /** Auteur d'un contact ajouté à la main (moi, ou une personne de l'équipe) ; `null` pour une personne de Nidalo. */
+  ownerId: string | null;
   name: string;
   avatarPath: string | null;
   isAgency: boolean;
@@ -154,8 +159,12 @@ export function buildContacts({ me, conversations, visits, offers, profiles, row
   const notes = new Map<string, ContactRow>();
   const manual: ContactRow[] = [];
   for (const row of rows) {
-    if (row.contact_user_id) notes.set(row.contact_user_id.toLowerCase(), row);
-    else manual.push(row);
+    // Une note sur une personne de Nidalo n'est jamais celle d'un autre compte.
+    if (row.contact_user_id) {
+      if (!row.owner_id || sameId(row.owner_id, me)) notes.set(row.contact_user_id.toLowerCase(), row);
+    } else {
+      manual.push(row);
+    }
   }
   // Une note sur une personne dont les échanges ont disparu reste visible.
   for (const [key, row] of notes) {
@@ -171,6 +180,7 @@ export function buildContacts({ me, conversations, visits, offers, profiles, row
       key: `u-${key}`,
       userId: draft.userId,
       rowId: note?.id ?? null,
+      ownerId: null,
       ...personName(profiles.get(key), draft.fallbackName),
       phone: null,
       email: null,
@@ -187,6 +197,7 @@ export function buildContacts({ me, conversations, visits, offers, profiles, row
       key: `m-${row.id.toLowerCase()}`,
       userId: null,
       rowId: row.id,
+      ownerId: row.owner_id ?? me,
       name: row.name?.trim() || 'Contact',
       avatarPath: null,
       isAgency: false,
@@ -232,6 +243,9 @@ export function filterContacts(contacts: Contact[], filter: ContactFilter, query
     contact.name, ...contact.listingTitles, contact.email ?? '', contact.phone ? `${contact.phone} ${phonePairs(contact.phone)}` : '',
   ])));
 }
+
+/** Les miens : ceux de mes échanges et ceux que j'ai ajoutés (pas ceux de l'équipe). */
+export const isOwnContact = (contact: Contact, me: string | null): boolean => contact.ownerId === null || sameId(contact.ownerId, me);
 
 /** « 3 contacts · 1 nouveau » (ligne « Mes contacts » de l'espace pro, comme l'app). */
 export function contactsSubtitle(contacts: Contact[]): string {
@@ -367,7 +381,8 @@ export async function saveContactNote(contact: Contact, note: string): Promise<s
   if (!error) return null;
   // Créée entre-temps ailleurs (l'app ou un autre onglet) : la note la remplace.
   if (error.code === '23505') {
-    const retry = await supabase.from('pro_contacts').update({ note: value }).eq('contact_user_id', contact.userId);
+    const retry = await supabase.from('pro_contacts').update({ note: value }).eq('contact_user_id', contact.userId)
+      .eq('owner_id', currentUserId() ?? '');
     return retry.error ? failure(retry.error) : null;
   }
   return failure(error);

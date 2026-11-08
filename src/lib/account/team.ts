@@ -1,3 +1,4 @@
+import { useEffect, useMemo } from 'react';
 import { appDate } from '../appDates';
 import { plural } from '../format';
 import { parisDay } from '../listing/views';
@@ -7,7 +8,7 @@ import type { AgencyRecord } from './agency';
 import { GENERIC_MESSAGE, isNetworkError, NETWORK_MESSAGE } from './auth';
 import { listDay } from './opportunities';
 import { isValidProfileEmail } from './profile';
-import { createStore, currentUserId, sessionStore } from './session';
+import { createStore, currentUserId, sessionStore, useStore } from './session';
 
 // « Gestion des équipes » de l'espace professionnel : l'équipe de l'agence (le gérant, qui a créé la fiche agence,
 // puis les responsables et les agents), les liens d'invitation et l'invitation reçue. Tout passe par les fonctions du
@@ -103,6 +104,68 @@ export function teamSubtitle(state: TeamState): string {
 /** Membre de l'équipe d'une autre personne (responsable ou agent), pas le gérant. */
 export function memberAgency(state: TeamState): TeamAgency | null {
   return state.status === 'ready' && state.agency && state.agency.role !== 'owner' ? state.agency : null;
+}
+
+// MARK: - Partage dans l'agence
+
+// Les annonces, les contacts ajoutés à la main et les mandats de l'équipe sont partagés (règle choisie par Romain,
+// « Le sien seulement ») : chacun voit tout ce qui est à l'agence ; un agent ne modifie que ce qu'il a ajouté, le
+// gérant et les responsables modifient tout. Chaque chose garde son auteur (owner_id).
+
+/** Mon équipe pour les pages partagées : le nom de chacun et si je la gère. `null` sans équipe, ou seul dedans. */
+export type TeamScope = { me: string; names: Map<string, string>; manages: boolean };
+
+const sameUser = (a: string | null | undefined, b: string | null | undefined): boolean => (
+  !!a && !!b && a.toLowerCase() === b.toLowerCase()
+);
+
+export function teamScope(state: TeamState, me: string | null): TeamScope | null {
+  if (!me || state.status !== 'ready' || !state.agency) return null;
+  if (!state.members.some((member) => !sameUser(member.user_id, me))) return null;
+  return {
+    me,
+    names: new Map(state.members.map((member) => [member.user_id.toLowerCase(), memberName(member)])),
+    manages: canManage(state.agency.role),
+  };
+}
+
+/** Comptes de l'équipe (moi compris), pour lire ce qui est à l'agence. */
+export const teamIds = (scope: TeamScope): string[] => [...scope.names.keys()];
+
+/** Auteur d'une chose de l'agence ajoutée par quelqu'un d'autre que moi ; `null` si c'est la mienne. */
+export function authorOf(scope: TeamScope | null, ownerId: string | null | undefined): string | null {
+  if (!scope || !ownerId || sameUser(ownerId, scope.me)) return null;
+  return scope.names.get(ownerId.toLowerCase()) ?? 'Un ancien membre';
+}
+
+/** La mienne, ou celle d'une personne de l'équipe que je gère (gérant ou responsable). */
+export function canEditOf(scope: TeamScope | null, ownerId: string | null | undefined, me: string | null): boolean {
+  if (!ownerId || sameUser(ownerId, me)) return !!me;
+  return !!scope && scope.manages && scope.names.has(ownerId.toLowerCase());
+}
+
+/** Lit l'équipe si aucune page ne l'a encore fait, puis la rend telle que les pages partagées s'en servent. */
+export function useTeamScope(): TeamScope | null {
+  const team = useStore(teamStore);
+  const session = useStore(sessionStore);
+  const me = session.status === 'signedIn' ? session.userId : null;
+  useEffect(() => {
+    if (me && teamStore.get().status === 'none') void loadTeam();
+  }, [me]);
+  return useMemo(() => teamScope(team, me), [team, me]);
+}
+
+/** « Les miens » ou « L'agence », gardé dans ce navigateur pour chaque page. */
+export type TeamView = 'mine' | 'agency';
+
+const VIEW_KEY = (page: string) => `nidalo.vueEquipe.${page}`;
+
+export function savedTeamView(page: string): TeamView {
+  return readStorage(VIEW_KEY(page)) === 'agency' ? 'agency' : 'mine';
+}
+
+export function saveTeamView(page: string, view: TeamView) {
+  writeStorage(VIEW_KEY(page), view === 'agency' ? 'agency' : null);
 }
 
 // MARK: - Liens d'invitation

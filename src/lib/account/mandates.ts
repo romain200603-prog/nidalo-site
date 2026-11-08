@@ -7,7 +7,8 @@ import { createStore, currentUserId, sessionStore } from './session';
 
 // « Mes mandats » de l'espace professionnel : le registre des mandats du compte (vente ou location, exclusif ou
 // simple, numéro, mandant, bien, prix, honoraires, dates, note) et le mandat signé en PDF, dans un dossier privé
-// (table pro_mandates et bucket mandate-documents, lus et écrits par leur seul propriétaire).
+// (table pro_mandates et bucket mandate-documents). Avec une équipe, le registre est celui de l'agence : chacun voit
+// les mandats de l'équipe, chaque mandat garde son auteur et son PDF reste dans le dossier de celui-ci.
 
 export type MandateKind = 'sale' | 'rental';
 export type MandateExclusivity = 'exclusive' | 'simple';
@@ -15,6 +16,8 @@ export type MandateExclusivity = 'exclusive' | 'simple';
 /** Ligne de pro_mandates. Les dates sont des jours (« 2026-11-08 »). */
 export type MandateRow = {
   id: string;
+  /** Auteur : moi, ou une personne de l'équipe. */
+  owner_id: string;
   listing_id: string | null;
   kind: MandateKind;
   exclusivity: MandateExclusivity;
@@ -34,7 +37,7 @@ export type MandateRow = {
   updated_at: string;
 };
 
-export const MANDATE_COLUMNS = 'id, listing_id, kind, exclusivity, number, client_name, title, city, price, fees, signed_on, ends_on, '
+export const MANDATE_COLUMNS = 'id, owner_id, listing_id, kind, exclusivity, number, client_name, title, city, price, fees, signed_on, ends_on, '
   + 'ended_on, document_path, document_name, note, created_at, updated_at';
 
 export const MANDATE_BUCKET = 'mandate-documents';
@@ -94,6 +97,11 @@ export const MANDATE_FILTERS: { value: MandateState; label: string }[] = [
 
 export const activeMandatesCount = (rows: MandateRow[], today: string): number => (
   rows.filter((row) => mandateState(row, today) === 'active').length
+);
+
+/** Les miens, pas ceux de l'équipe. */
+export const isOwnMandate = (row: Pick<MandateRow, 'owner_id'>, me: string | null): boolean => (
+  !row.owner_id || (!!me && row.owner_id.toLowerCase() === me.toLowerCase())
 );
 
 /** Ligne de Mon compte, comme l'app : « 2 mandats actifs, vente et location ». */
@@ -230,6 +238,7 @@ export const mandatesStore = createStore<MandatesState>({ status: 'none' });
 export const MANDATES_FULL_MESSAGE = 'Votre registre compte déjà 5 000 mandats. Supprimez-en pour en ajouter.';
 export const MANDATE_LISTING_MESSAGE = 'Cette annonce n\'est plus disponible. Choisissez-en une autre.';
 export const MANDATE_NUMBER_TAKEN = 'Ce numéro est déjà dans votre registre.';
+export const MANDATE_NUMBER_AGENCY = 'Ce numéro est déjà dans le registre de l\'agence.';
 export const MANDATE_FILE_FAILURE = 'Le PDF n\'a pas pu être envoyé. Vérifiez votre connexion et réessayez.';
 export const MANDATE_FILE_INVALID = 'Ce fichier n\'est pas un PDF valide.';
 
@@ -237,6 +246,7 @@ function failure(error: unknown): string {
   const { hint, code } = (error ?? {}) as { hint?: string; code?: string };
   if (hint === 'mandates_full') return MANDATES_FULL_MESSAGE;
   if (hint === 'mandate_listing') return MANDATE_LISTING_MESSAGE;
+  if (hint === 'mandate_number_agency') return MANDATE_NUMBER_AGENCY;
   if (code === '23505') return MANDATE_NUMBER_TAKEN;
   return isNetworkError(error) ? NETWORK_MESSAGE : GENERIC_MESSAGE;
 }
@@ -275,8 +285,9 @@ export type MandateDocumentChange = { file: File } | 'remove' | 'keep';
 type Saved = { id: string } | { error: string };
 
 /**
- * Ajoute ou modifie un mandat. Un nouveau PDF est envoyé d'abord (« <compte>/<uuid>.pdf »), puis la ligne est
- * écrite ; si elle ne l'est pas, le fichier envoyé est retiré. L'ancien PDF, remplacé ou retiré, est effacé ensuite.
+ * Ajoute ou modifie un mandat. Un nouveau PDF est envoyé d'abord (« <auteur>/<uuid>.pdf », dans le dossier de
+ * l'auteur du mandat, même quand un responsable le modifie), puis la ligne est écrite ; si elle ne l'est pas, le
+ * fichier envoyé est retiré. L'ancien PDF, remplacé ou retiré, est effacé ensuite.
  */
 export async function saveMandate(row: MandateRow | null, form: MandateForm, document: MandateDocumentChange): Promise<Saved> {
   const userId = currentUserId();
@@ -287,7 +298,7 @@ export async function saveMandate(row: MandateRow | null, form: MandateForm, doc
     const issue = mandateFileIssue(document.file);
     if (issue) return { error: issue };
     if (!await looksLikePdf(document.file)) return { error: MANDATE_FILE_INVALID };
-    uploaded = `${userId.toLowerCase()}/${crypto.randomUUID().toLowerCase()}.pdf`;
+    uploaded = `${(row?.owner_id ?? userId).toLowerCase()}/${crypto.randomUUID().toLowerCase()}.pdf`;
     const body = document.file.type === 'application/pdf' ? document.file : new Blob([document.file], { type: 'application/pdf' });
     const upload = await supabase.storage.from(MANDATE_BUCKET).upload(uploaded, body, { contentType: 'application/pdf', cacheControl: '3600' })
       .catch((error: unknown) => ({ error }));

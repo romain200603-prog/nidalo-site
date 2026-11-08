@@ -221,6 +221,8 @@ const MANDATE_WRITABLE = [
   'document_path', 'document_name', 'note',
 ];
 const MANDATE_FILE = /^a0000000-0000-4000-8000-0000000000c3\/[0-9a-f-]{36}\.pdf$/;
+/** PDF d'un mandat dans le dossier de son auteur (le mien, ou celui d'un collègue quand je gère l'équipe). */
+const mandateFileOf = (owner) => new RegExp(`^${owner}/[0-9a-f-]{36}\\.pdf$`);
 
 /** Mes opportunités : deux à suivre (une relance en retard, liée à l'annonce ; une nouvelle sans relance), une gagnée, une perdue. */
 const MOREL = {
@@ -296,6 +298,33 @@ const CLAIRE_IN_BELLECOUR = publicProfile(USER_ID, {
   agency_financial_guarantee: 'Galian', agency_rcp_insurer: 'Axa', agency_rcp_policy_number: 'RCP-2024-077',
 });
 const TEAM_RANK = { owner: 0, manager: 1, agent: 2 };
+/**
+ * Partage dans l'agence (règle « Le sien seulement ») : ce qu'ont ajouté Julien (responsable) et Inès (agente) chez
+ * Rhône Immobilier, Gérard (gérant) à l'Agence Bellecour. Le serveur simulé les rend comme le ferait le partage.
+ */
+const JULIEN_DRAFT = {
+  ...SECOND, id: 'f1000000-0000-4000-8000-000000000401', owner_id: JULIEN, status: 'draft', title: 'Loft canut à rénover', city: 'Lyon 4e',
+  updated_at: ago(1),
+};
+const INES_RENT = { ...RENTAL, id: 'f1000000-0000-4000-8000-000000000402', owner_id: INES, status: 'active', title: 'T2 meublé Jean Macé', updated_at: ago(2) };
+const GERARD_SALE = { ...ONLINE, id: 'f1000000-0000-4000-8000-000000000403', owner_id: GERARD, title: 'Duplex place Bellecour', city: 'Lyon 2e', updated_at: ago(1) };
+const GERARD_DRAFT = { ...SECOND, id: 'f1000000-0000-4000-8000-000000000404', owner_id: GERARD, status: 'draft', title: 'Studio quai Saint-Antoine', updated_at: ago(3) };
+const JULIEN_CONTACT = {
+  id: 'e0000000-0000-4000-8000-0000000000d2', owner_id: JULIEN, contact_user_id: null, name: 'Bruno Lefèvre', phone: '0698765432', email: null,
+  note: 'Vend un T4 à Monplaisir, estimation à faire.', created_at: ago(4), updated_at: ago(4),
+};
+const GERARD_CONTACT = { ...JULIEN_CONTACT, id: 'e0000000-0000-4000-8000-0000000000d3', owner_id: GERARD, name: 'Mme Garnier', phone: null, email: 'garnier@exemple.fr', note: 'Investisseuse, cherche un immeuble.' };
+const INES_FILE = `${INES}/1a2b3c4d-1c2d-4e5f-8a9b-0c1d2e3f4a5b.pdf`;
+const INES_MANDATE = {
+  ...DURAND, id: 'e3000000-0000-4000-8000-000000000104', owner_id: INES, listing_id: INES_RENT.id, kind: 'rental', exclusivity: 'simple',
+  number: '2026-021', client_name: 'M. Perrin', title: INES_RENT.title, city: INES_RENT.city, price: 720, fees: 720, signed_on: dayAgo(10),
+  ends_on: dayIn(80), document_path: INES_FILE, document_name: 'Mandat Perrin.pdf', note: 'État des lieux le 20.', created_at: ago(10), updated_at: ago(10),
+};
+const GERARD_MANDATE = {
+  ...INES_MANDATE, id: 'e3000000-0000-4000-8000-000000000105', owner_id: GERARD, listing_id: GERARD_SALE.id, kind: 'sale', exclusivity: 'exclusive',
+  number: '2026-030', client_name: 'Mme Lambert', title: GERARD_SALE.title, city: GERARD_SALE.city, price: 495000, fees: 18000,
+  document_path: null, document_name: null, note: 'Visites le jeudi.',
+};
 
 // MARK: - Serveur simulé
 
@@ -322,22 +351,26 @@ function fakeSession() {
  * `pro` : un professionnel avec sa fiche agence, ses détails et (sauf `listings`) une annonce en ligne ; sinon un
  * particulier sans fiche.
  */
-function newState({ pro = false, listings = null, contacts = false, sales = false, mandates = false, opportunities = false, team = null } = {}) {
+function newState({ pro = false, listings = null, contacts = false, sales = false, mandates = false, opportunities = false, team = null, shared = false } = {}) {
   const agent = team === 'agent';
+  // Partage dans l'agence : les annonces, contacts ajoutés à la main et mandats des collègues s'ajoutent aux miens.
+  const colleagues = !shared ? { listings: [], contacts: [], mandates: [] } : agent
+    ? { listings: [GERARD_SALE, GERARD_DRAFT], contacts: [GERARD_CONTACT], mandates: [GERARD_MANDATE] }
+    : { listings: [JULIEN_DRAFT, INES_RENT], contacts: [JULIEN_CONTACT], mandates: [INES_MANDATE] };
   return {
     profile: pro ? { ...PROFILE, account_type: 'professional', professional_profile_id: AGENCY_ID }
       : agent ? { ...PROFILE, account_type: 'professional', professional_profile_id: BELLECOUR_ID } : { ...PROFILE },
     details: { ...DETAILS },
     agency: pro ? { ...AGENCY } : null,
     agencyDetails: pro ? { ...AGENCY_DETAILS } : null,
-    listings: structuredClone(listings ?? (pro ? [ONLINE] : [])),
+    listings: structuredClone([...(listings ?? (pro ? [ONLINE] : [])), ...colleagues.listings]),
     files: new Map(pro ? [[OLD_LOGO, PHOTO]] : []),
     calls: [],
     /** Mes contacts : échanges sur mes annonces et lignes de pro_contacts. */
     conversations: structuredClone(contacts ? CONVERSATIONS : []),
     visits: structuredClone(contacts ? VISITS : []),
     offers: structuredClone(contacts ? OFFERS : []),
-    contactRows: structuredClone(contacts ? [MARC] : []),
+    contactRows: structuredClone([...(contacts ? [MARC] : []), ...colleagues.contacts]),
     /** Statistiques : réponses de my_listing_stats par jour de début ; `statsMissing` : fonction absente du serveur. */
     stats: { [startDay(30)]: STATS[30], [startDay(7)]: STATS[7] },
     statsMissing: false,
@@ -345,8 +378,10 @@ function newState({ pro = false, listings = null, contacts = false, sales = fals
     saleRows: structuredClone(sales ? [MAISON_SALE, STUDIO_SALE] : []),
     salesMissing: false,
     /** Mes mandats : lignes de pro_mandates et PDF du dossier privé ; `mandatesMissing` : table absente du serveur. */
-    mandateRows: structuredClone(mandates ? [DURAND, ROUX, BLANC] : []),
-    mandateFiles: new Map(mandates ? [[DURAND_FILE, PDF]] : []),
+    mandateRows: structuredClone([...(mandates ? [DURAND, ROUX, BLANC] : []), ...colleagues.mandates]),
+    mandateFiles: new Map([...(mandates ? [[DURAND_FILE, PDF]] : []), ...(shared && !agent ? [[INES_FILE, PDF]] : [])]),
+    /** Dossiers où un PDF de mandat peut être envoyé : le mien, et ceux de l'équipe que je gère. */
+    mandateFolders: shared && !agent ? [USER_ID, JULIEN, INES] : [USER_ID],
     mandatesMissing: false,
     /**
      * Mes opportunités : lignes de pro_opportunities ; `opportunitiesMissing` : table absente du serveur ;
@@ -508,7 +543,9 @@ function rest(state, route) {
       if (method === 'POST' || method === 'PATCH') {
         const extra = Object.keys(body ?? {}).filter((key) => !MANDATE_WRITABLE.includes(key));
         if (extra.length) problems.push(`pro_mandates : colonnes en trop ${extra}`);
-        if (body?.document_path && !MANDATE_FILE.test(body.document_path)) problems.push(`pro_mandates : PDF hors du dossier « ${body.document_path} »`);
+        // Contrôle du serveur : le PDF est dans le dossier de l'auteur du mandat (le mien pour un ajout).
+        const author = method === 'PATCH' ? state.mandateRows.find(match)?.owner_id ?? USER_ID : USER_ID;
+        if (body?.document_path && !mandateFileOf(author).test(body.document_path)) problems.push(`pro_mandates : PDF hors du dossier « ${body.document_path} »`);
       }
       if (method === 'POST') {
         if (state.mandateRows.some((row) => row.number === body.number)) {
@@ -794,7 +831,7 @@ async function storage(state, route) {
   if (method === 'POST' && path.startsWith(`${MANDATES}/`)) {
     const name = path.slice(MANDATES.length + 1);
     const file = multipartFile(request.postDataBuffer(), request.headers()['content-type']);
-    if (!MANDATE_FILE.test(name)) problems.push(`stockage : PDF de mandat « ${name} » hors du dossier`);
+    if (!state.mandateFolders.some((owner) => mandateFileOf(owner).test(name))) problems.push(`stockage : PDF de mandat « ${name} » hors du dossier`);
     if (file.type !== 'application/pdf' || file.bytes.subarray(0, 5).toString('latin1') !== '%PDF-') problems.push(`stockage : PDF de mandat ${file.type}`);
     state.mandateFiles.set(name, file.bytes);
     state.calls.push({ table: 'storage', method, search: name, body: { type: file.type } });
@@ -2827,6 +2864,195 @@ try {
     const individual = await open(individualContext, '/compte/?vue=agence', N);
     await field(individual, 'Nom de l\'agence').waitFor({ timeout: 8000 }).catch(() => problems.push(`${N} : formulaire de la fiche absent sans les fonctions`));
     await individualContext.close();
+  }
+
+  // Partage dans l'agence : ce que montrent Mes annonces, Mes contacts et Mes mandats (le choix « Les miens » ou
+  // « L'agence », l'auteur de ce qu'a ajouté l'équipe, les actions permises).
+  const teamView = (page) => page.$$eval('.team-view [role="radio"]', (els) => els.map((el) => `${el.textContent.trim()}${el.getAttribute('aria-checked') === 'true' ? ' (choisi)' : ''}`));
+  const chooseAgency = async (page) => {
+    await page.locator('.team-view [role="radio"]', { hasText: 'L\'agence' }).click();
+  };
+  const listingCards = (page) => page.$$eval('.my-listing', (els) => els.map((el) => {
+    const text = (node) => (node ? node.textContent.replace(/[\s  ]+/g, ' ').trim() : null);
+    return [
+      text(el.querySelector('h2')), text(el.querySelector('.team-author')),
+      [...el.querySelectorAll('.my-listing-actions > a, .my-listing-actions > button, .my-listing-actions > span')].map(text),
+      Boolean(el.querySelector('.round-menu')),
+    ];
+  }));
+  const contactRows = (page) => page.$$eval('.contact-row', (els) => els.map((el) => [
+    el.querySelector('.contact-row-name').textContent.trim(), el.querySelector('.team-author')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+  ]));
+  const mandateRows = (page) => page.$$eval('.sale-row', (els) => els.map((el) => [
+    el.querySelector('.sale-row-title').textContent.trim(), el.querySelector('.team-author')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+  ]));
+  const agencyRequest = (state) => state.calls.filter((call) => call.table === 'listings' && call.method === 'GET' && call.search.includes('owner_id=in.'))
+    .map((call) => new URLSearchParams(call.search).get('owner_id'));
+
+  // 23. Téléphone, gérante d'une équipe : « Les miennes » d'abord (rien ne change), puis « L'agence » (gardé pour la
+  //     prochaine fois) avec les annonces, contacts ajoutés à la main et mandats de Julien et Inès, leur auteur et les
+  //     mêmes actions que les siens ; elle modifie le contact de Julien et remplace le PDF du mandat d'Inès (envoyé dans
+  //     le dossier d'Inès, l'ancien effacé). Mon compte compte toujours ses seuls mandats.
+  {
+    const N = 'partage dans l\'agence (téléphone, gérante)';
+    const state = newState({ pro: true, team: 'owner', shared: true, listings: [SALE, DRAFT], contacts: true, mandates: true });
+    const context = await phone();
+    await mock(context, state);
+    const page = await open(context, '/compte/?vue=annonces', N);
+    await page.locator('.team-view').waitFor({ timeout: 8000 }).catch(() => problems.push(`${N} : choix « L'agence » absent`));
+    expectSame(N, 'Mes annonces : les miennes', [await teamView(page), await listingCards(page)], [
+      ['Les miennes (choisi)', 'L\'agence'],
+      [[SALE.title, null, ['Voir', 'Modifier'], true], [DRAFT.title, null, ['Reprendre'], true]],
+    ]);
+    await chooseAgency(page);
+    await page.locator('.my-listing', { hasText: 'Loft canut à rénover' }).waitFor();
+    const agencyCards = [
+      [SALE.title, null, ['Voir', 'Modifier'], true], [DRAFT.title, null, ['Reprendre'], true],
+      ['Loft canut à rénover', 'Ajoutée par Julien B.', ['Reprendre'], true], ['T2 meublé Jean Macé', 'Ajoutée par Inès K.', ['Voir', 'Modifier'], true],
+    ];
+    expectSame(N, 'Mes annonces : l\'agence', [await teamView(page), await listingCards(page), agencyRequest(state)], [
+      ['Les miennes', 'L\'agence (choisi)'], agencyCards, [`in.(${USER_ID},${JULIEN},${INES})`],
+    ]);
+    await shot(page, 'partage-telephone-annonces.png');
+    await page.goto(`${base}/compte/?vue=annonces`, { waitUntil: 'networkidle' });
+    await page.locator('.my-listing', { hasText: 'Loft canut à rénover' }).waitFor({ timeout: 8000 }).catch(() => problems.push(`${N} : « L'agence » oublié`));
+    expectSame(N, 'choix gardé', await teamView(page), ['Les miennes', 'L\'agence (choisi)']);
+
+    // Mes contacts : le contact ajouté par Julien, modifiable par la gérante.
+    await page.goto(`${base}/compte/?vue=contacts`, { waitUntil: 'networkidle' });
+    await page.locator('.contact-row').first().waitFor();
+    const mine = await contactRows(page);
+    expectSame(N, 'Mes contacts : les miens', [await teamView(page), mine.some(([name]) => name === 'Bruno Lefèvre'), mine.every(([, author]) => author === null)],
+      [['Les miens (choisi)', 'L\'agence'], false, true]);
+    await chooseAgency(page);
+    await page.locator('.contact-row', { hasText: 'Bruno Lefèvre' }).waitFor();
+    expectSame(N, 'Mes contacts : l\'agence', (await contactRows(page)).filter(([, author]) => author), [['Bruno Lefèvre', 'Ajouté par Julien B.']]);
+    await page.locator('.contact-row', { hasText: 'Bruno Lefèvre' }).click();
+    await page.locator('.contact-head').waitFor();
+    expectSame(N, 'fiche du contact de Julien', [
+      tidy(await page.locator('.screen-header .save-capsule').textContent()), tidy(await page.locator('.contact-head .team-author').textContent()),
+      await page.locator('textarea.contact-note').inputValue(), await texts(page, '.contact-card .contact-caption'),
+    ], ['Modifier', 'Ajouté par Julien B.', JULIEN_CONTACT.note, ['L\'équipe de l\'agence voit ce contact et sa note.']]);
+    await shot(page, 'partage-telephone-contact.png');
+    await page.locator('.screen-header .save-capsule').click();
+    await page.locator('form.info-form').waitFor();
+    expectSame(N, 'formulaire du contact de Julien', tidy(await page.locator('.contact-form-screen .field-hint').textContent()), 'L\'équipe de l\'agence voit ce contact et sa note.');
+    await field(page, 'Note (facultative)').fill('Estimation faite le 6, à rappeler.');
+    let mark = state.calls.length;
+    await page.locator('.contact-save').click();
+    await page.locator('.account-toast', { hasText: 'Modifications enregistrées' }).waitFor();
+    const contactWrites = writesSince(state, mark);
+    expectSame(N, 'contact de Julien modifié', [writeNames(contactWrites), contactWrites[0]?.search, contactWrites[0]?.body], [
+      ['PATCH pro_contacts'], `?id=eq.${JULIEN_CONTACT.id}&select=id`,
+      { name: 'Bruno Lefèvre', phone: '0698765432', email: null, note: 'Estimation faite le 6, à rappeler.' },
+    ]);
+
+    // Mes mandats : le mandat d'Inès ; son nouveau PDF va dans le dossier d'Inès.
+    await page.goto(`${base}/compte/?vue=mandats`, { waitUntil: 'networkidle' });
+    await page.locator('.sale-row').first().waitFor();
+    expectSame(N, 'Mes mandats : les miens', [await teamView(page), await mandateRows(page)], [['Les miens (choisi)', 'L\'agence'], [[SALE.title, null]]]);
+    await chooseAgency(page);
+    await page.locator('.sale-row', { hasText: 'T2 meublé Jean Macé' }).waitFor();
+    expectSame(N, 'Mes mandats : l\'agence', await mandateRows(page), [[SALE.title, null], ['T2 meublé Jean Macé', 'Ajouté par Inès K.']]);
+    await shot(page, 'partage-telephone-mandats.png');
+    await page.locator('.sale-row', { hasText: 'T2 meublé Jean Macé' }).click();
+    await page.locator('.sale-head').waitFor();
+    expectSame(N, 'fiche du mandat d\'Inès', [
+      tidy(await page.locator('.screen-header .save-capsule').textContent()), tidy(await page.locator('.sale-head .team-author').textContent()),
+      await texts(page, '.sale-card-title'), await texts(page, '.sale-card .sale-caption'), await page.locator('.mandate-end').count(),
+    ], ['Modifier', 'Ajouté par Inès K.', ['Le mandat', 'Mandat signé', 'Note'], ['L\'équipe de l\'agence voit cette note.'], 1]);
+    await page.locator('.screen-header .save-capsule').click();
+    await page.locator('form.info-form').waitFor();
+    expectSame(N, 'formulaire du mandat d\'Inès', [
+      await page.locator('.mandate-select select').inputValue(), await texts(page, '.mandate-select option'),
+      tidy(await page.locator('.sale-form-screen .field-hint').last().textContent()),
+    ], [
+      INES_RENT.id, ['Aucune', SALE.title, `${DRAFT.title} (brouillon)`, 'Loft canut à rénover (brouillon) · Julien B.', 'T2 meublé Jean Macé · Inès K.'],
+      'L\'équipe de l\'agence voit ce mandat, son PDF et sa note.',
+    ]);
+    await page.locator('input[type=file]').setInputFiles({ name: 'Mandat Perrin avenant.pdf', mimeType: 'application/pdf', buffer: PDF });
+    mark = state.calls.length;
+    await page.locator('.sale-save').click();
+    await page.locator('.account-toast', { hasText: 'Modifications enregistrées' }).waitFor();
+    const replaced = writesSince(state, mark);
+    const newFile = replaced[0]?.search ?? '';
+    expectSame(N, 'PDF du mandat d\'Inès remplacé', [
+      replaced.map((call) => [call.method, call.table]), mandateFileOf(INES).test(newFile), replaced[1]?.search, replaced[1]?.body?.document_path,
+      replaced[1]?.body?.document_name, 'owner_id' in (replaced[1]?.body ?? {}), replaced[2]?.body,
+    ], [
+      [['POST', 'storage'], ['PATCH', 'pro_mandates'], ['DELETE', 'storage']], true, `?id=eq.${INES_MANDATE.id}&select=id`, newFile,
+      'Mandat Perrin avenant.pdf', false, { prefixes: [INES_FILE] },
+    ]);
+
+    // Mon compte : ses seuls mandats (celui d'Inès n'y est pas compté).
+    await page.goto(`${base}/compte/`, { waitUntil: 'networkidle' });
+    const mandatesRow = page.locator('a.row', { hasText: 'Mes mandats' });
+    await mandatesRow.waitFor();
+    expectSame(N, 'Mon compte', tidy(await mandatesRow.locator('.row-subtitle').textContent()), '1 mandat actif, vente et location');
+    await context.close();
+  }
+
+  // 24. Ordinateur, agente d'une équipe : « L'agence » montre ce qu'a ajouté le gérant, en lecture seule (ni
+  //     « Modifier », ni menu, ni « Terminer le mandat », aussi aux adresses des formulaires) ; rien n'est écrit.
+  {
+    const N = 'partage dans l\'agence (ordinateur, agente)';
+    const state = newState({ team: 'agent', shared: true });
+    const context = await desktop();
+    await mock(context, state);
+    const page = await open(context, '/compte/?vue=annonces', N);
+    await page.locator('.team-view').waitFor({ timeout: 8000 }).catch(() => problems.push(`${N} : choix « L'agence » absent`));
+    await page.locator('.empty-state, .account-empty, .my-listing').first().waitFor().catch(() => {});
+    expectSame(N, 'Mes annonces : les miennes', [await teamView(page), await listingCards(page)], [['Les miennes (choisi)', 'L\'agence'], []]);
+    await chooseAgency(page);
+    await page.locator('.my-listing').first().waitFor();
+    expectSame(N, 'Mes annonces : l\'agence', [await listingCards(page), agencyRequest(state)], [
+      [[GERARD_SALE.title, 'Ajoutée par Gérard G.', ['Voir'], false], [GERARD_DRAFT.title, 'Ajoutée par Gérard G.', ['Lecture seule'], false]],
+      [`in.(${GERARD},${NADIA},${USER_ID})`],
+    ]);
+    await shot(page, 'partage-ordinateur-annonces.png');
+
+    const contactKey = `m-${GERARD_CONTACT.id}`;
+    const readOnlyContact = async (what) => {
+      await page.locator('.contact-head').waitFor();
+      expectSame(N, what, [
+        await page.locator('.screen-header .save-capsule').count(), tidy(await page.locator('.contact-head .team-author').textContent()),
+        await page.locator('textarea.contact-note').count(), tidy(await page.locator('.contact-note-text').textContent()),
+        await texts(page, '.contact-card .contact-caption'),
+      ], [0, 'Ajouté par Gérard G.', 0, GERARD_CONTACT.note, ['Seuls son auteur, le gérant et les responsables de l\'agence peuvent modifier ce contact.']]);
+    };
+    await page.goto(`${base}/compte/?vue=contacts`, { waitUntil: 'networkidle' });
+    await page.locator('.team-view').waitFor();
+    await chooseAgency(page);
+    await page.locator('.contact-row').first().waitFor();
+    expectSame(N, 'Mes contacts : l\'agence', await contactRows(page), [['Mme Garnier', 'Ajouté par Gérard G.']]);
+    await page.locator('.contact-row').first().click();
+    await readOnlyContact('fiche du contact du gérant');
+    await shot(page, 'partage-ordinateur-contact.png');
+    await page.goto(`${base}/compte/?vue=contacts&contact=${contactKey}&ecran=modifier`, { waitUntil: 'networkidle' });
+    await readOnlyContact('adresse du formulaire du contact');
+
+    const readOnlyMandate = async (what) => {
+      await page.locator('.sale-head').waitFor();
+      expectSame(N, what, [
+        await page.locator('.screen-header .save-capsule').count(), tidy(await page.locator('.sale-head .team-author').textContent()),
+        await page.locator('.mandate-end, .sale-resume').count(), await texts(page, '.sale-caption'),
+      ], [0, 'Ajouté par Gérard G.', 0, [
+        'Aucun PDF pour ce mandat.', 'L\'équipe de l\'agence voit cette note.',
+        'Seuls son auteur, le gérant et les responsables de l\'agence peuvent modifier ce mandat.',
+      ]]);
+    };
+    await page.goto(`${base}/compte/?vue=mandats`, { waitUntil: 'networkidle' });
+    await page.locator('.team-view').waitFor();
+    await chooseAgency(page);
+    await page.locator('.sale-row').first().waitFor();
+    expectSame(N, 'Mes mandats : l\'agence', await mandateRows(page), [[GERARD_SALE.title, 'Ajouté par Gérard G.']]);
+    await page.locator('.sale-row').first().click();
+    await readOnlyMandate('fiche du mandat du gérant');
+    await shot(page, 'partage-ordinateur-mandat.png');
+    await page.goto(`${base}/compte/?vue=mandats&mandat=${GERARD_MANDATE.id}&ecran=modifier`, { waitUntil: 'networkidle' });
+    await readOnlyMandate('adresse du formulaire du mandat');
+    expectSame(N, 'rien d\'écrit', writeNames(writesSince(state, 0)), []);
+    await context.close();
   }
 } finally {
   await browser.close();

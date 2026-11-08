@@ -3,8 +3,8 @@ import { Icon } from '../../components/Icon';
 import { AlertDialog } from '../listing/Dialogs';
 import { signOut } from '../../lib/account/auth';
 import { listingsCountText, loadMyListings, myListingsStore, ONLINE_STATUSES } from '../../lib/account/myListings';
-import { contactsStore, contactsSubtitle, loadContacts } from '../../lib/account/contacts';
-import { loadMandates, mandatesStore, mandatesSubtitle } from '../../lib/account/mandates';
+import { contactsStore, contactsSubtitle, isOwnContact, loadContacts } from '../../lib/account/contacts';
+import { isOwnMandate, loadMandates, mandatesStore, mandatesSubtitle } from '../../lib/account/mandates';
 import { loadOpportunities, opportunitiesStore, opportunitiesSubtitle } from '../../lib/account/opportunities';
 import { loadProfessional, professionalStore } from '../../lib/account/professional';
 import { saveAccountType, type Account } from '../../lib/account/profile';
@@ -12,7 +12,7 @@ import { loadProject, PROJECT_KIND_LABELS, PROJECT_STEPS, projectStore, STEP_LAB
 import { activeSalesCount, loadSales, salesStore, salesSubtitle } from '../../lib/account/sales';
 import { loadSavedSearches, savedSearchesStore } from '../../lib/account/savedSearches';
 import { loadTeam, memberAgency, ROLE_LABELS, teamStore, teamSubtitle } from '../../lib/account/team';
-import { useStore } from '../../lib/account/session';
+import { currentUserId, useStore } from '../../lib/account/session';
 import { useDesktop } from '../../lib/desktop';
 import { parisDay } from '../../lib/listing/views';
 import { accountPath, AGENCY_FORM_PATH, AGENCY_PATH, CONTACTS_PATH, MANDATES_PATH, OPPORTUNITIES_PATH, PATHS, SALES_PATH, TEAM_PATH } from '../../lib/paths';
@@ -207,10 +207,12 @@ function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
   const sales = useStore(salesStore);
   const saleRows = sales.status === 'ready' ? sales.rows : [];
   const mandates = useStore(mandatesStore);
-  const mandateRows = mandates.status === 'ready' ? mandates.rows : [];
+  // Les miens : avec une équipe, les pages montrent aussi ceux de l'agence, pas les chiffres de Mon compte.
+  const me = currentUserId();
+  const mandateRows = mandates.status === 'ready' ? mandates.rows.filter((row) => isOwnMandate(row, me)) : [];
   const opportunities = useStore(opportunitiesStore);
   const opportunityRows = opportunities.status === 'ready' ? opportunities.rows : [];
-  const contactItems = contacts.status === 'ready' ? contacts.items : [];
+  const contactItems = contacts.status === 'ready' ? contacts.items.filter((contact) => isOwnContact(contact, me)) : [];
   const newContacts = contactItems.filter((contact) => contact.isNew).length;
   // Ordinateur : l'agenda des visites est sur le site (Mon agenda) ; sur téléphone, « bientôt » comme avant.
   const desktop = useDesktop();

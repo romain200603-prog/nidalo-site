@@ -48,7 +48,8 @@ export function PublishPage() {
   );
 }
 
-type Start = { draft: PublishDraft; listingStatus: string | null };
+/** `ownerId` : l'auteur d'une annonce existante (moi, ou une personne de l'équipe que je gère). */
+type Start = { draft: PublishDraft; listingStatus: string | null; ownerId: string | null };
 
 function DesktopPublish() {
   const session = useSession();
@@ -99,8 +100,8 @@ function DesktopPublish() {
     content = <Problem title="Publier une annonce" text={loaded.message} onRetry={load} />;
   } else {
     const start: Start = loaded?.status === 'ready'
-      ? { draft: loaded.draft, listingStatus: loaded.listingStatus }
-      : { draft: newDraft(newId), listingStatus: null };
+      ? { draft: loaded.draft, listingStatus: loaded.listingStatus, ownerId: loaded.ownerId }
+      : { draft: newDraft(newId), listingStatus: null, ownerId: null };
     content = <PublishFlow key={start.draft.id} start={start} account={account.account} fromMyListings={listingId !== null} photosFirst={photosFirst} />;
   }
   return <div className="wrap account-wrap">{content}</div>;
@@ -273,7 +274,7 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
     const sent = draft;
     setSavingDraft(true);
     setMessage(null);
-    const result = await saveListing(sent, 'draft');
+    const result = await saveListing(sent, 'draft', { ownerId: start.ownerId });
     setSavingDraft(false);
     if (!result.ok) {
       setMessage(result.message);
@@ -317,7 +318,10 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
         showErrors();
         return;
       }
-      const result = await saveListing(final, editing ? 'edit' : 'publish', (sent, total) => setProgress(total > 0 ? { sent, total } : null));
+      const result = await saveListing(final, editing ? 'edit' : 'publish', {
+        ownerId: start.ownerId,
+        onProgress: (sent, total) => setProgress(total > 0 ? { sent, total } : null),
+      });
       if (!result.ok) {
         if (result.refusal) setRefusal(result.message);
         setPublishError(result.message);
@@ -365,7 +369,7 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
     case 'features': stepView = <FeaturesStep draft={draft} update={update} showsErrors={showsErrors} />; break;
     case 'finance': stepView = <FinanceStep draft={draft} update={update} showsErrors={showsErrors} />; break;
     case 'media': stepView = <MediaStep draft={draft} update={update} showsErrors={showsErrors} />; break;
-    case 'description': stepView = <DescriptionStep draft={draft} update={update} showsErrors={showsErrors} ownerId={account.profile.id} />; break;
+    case 'description': stepView = <DescriptionStep draft={draft} update={update} showsErrors={showsErrors} ownerId={start.ownerId ?? account.profile.id} />; break;
     case 'review':
       stepView = <ReviewStep draft={draft} errorMessage={publishError} onEdit={(target) => { setShowsErrors(true); goTo(target); }} />;
       break;

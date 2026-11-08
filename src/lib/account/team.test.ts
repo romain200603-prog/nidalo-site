@@ -4,8 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../supabase', () => ({ supabase: {} }));
 
 import {
-  cleanToken, forgetInvitation, inviteEmailError, inviteLine, inviteMailHref, invitationUrl, inviteTitle, memberAgency, memberLine,
-  memberName, pendingInvitation, rememberInvitation, teamSubtitle, type TeamAgency, type TeamInvite, type TeamMember, type TeamState,
+  authorOf, canEditOf, cleanToken, forgetInvitation, inviteEmailError, inviteLine, inviteMailHref, invitationUrl, inviteTitle, memberAgency,
+  memberLine, memberName, pendingInvitation, rememberInvitation, savedTeamView, saveTeamView, teamIds, teamScope, teamSubtitle,
+  type TeamAgency, type TeamInvite, type TeamMember, type TeamState,
 } from './team';
 
 const NOW = new Date('2026-11-08T15:00:00Z');
@@ -82,6 +83,27 @@ describe('Gestion des équipes', () => {
     expect(inviteMailHref(null, 'agent', 'A', url).startsWith('mailto:?subject=')).toBe(true);
     expect([inviteEmailError(''), inviteEmailError(' julie@exemple.fr '), inviteEmailError('julie@'), inviteEmailError(`${'a'.repeat(250)}@x.fr`)])
       .toEqual([null, null, 'Adresse e-mail invalide.', 'Adresse e-mail invalide.']);
+  });
+
+  it('partage ce qui est à l\'agence : chacun voit tout, un agent ne modifie que le sien', () => {
+    const G = 'AAAAAAAA-0000-4000-8000-000000000001';
+    const H = 'cccccccc-0000-4000-8000-000000000003';
+    const members = [member({ user_id: G, role: 'owner', public_name: 'Gérard G.' }), member({ user_id: H, public_name: 'Hugo T.' })];
+    expect(teamScope(ready('owner', members.slice(0, 1)), G)).toBeNull();
+    expect(teamScope(ready(null), G)).toBeNull();
+    expect(teamScope({ status: 'error', message: 'x' }, G)).toBeNull();
+    const asAgent = teamScope(ready('agent', members), H);
+    const asOwner = teamScope(ready('owner', members), G.toLowerCase());
+    expect(teamIds(asAgent!)).toEqual([G.toLowerCase(), H]);
+    expect([authorOf(asAgent, G), authorOf(asAgent, H), authorOf(asAgent, 'zzz'), authorOf(null, G)]).toEqual(['Gérard G.', null, 'Un ancien membre', null]);
+    expect([canEditOf(asAgent, H, H), canEditOf(asAgent, G, H), canEditOf(asOwner, H, G), canEditOf(asOwner, 'zzz', G), canEditOf(null, G, G)])
+      .toEqual([true, false, true, false, true]);
+    withStorage();
+    expect(savedTeamView('mandats')).toBe('mine');
+    saveTeamView('mandats', 'agency');
+    expect([savedTeamView('mandats'), savedTeamView('contacts')]).toEqual(['agency', 'mine']);
+    saveTeamView('mandats', 'mine');
+    expect(savedTeamView('mandats')).toBe('mine');
   });
 
   it('garde une invitation ouverte avant la connexion, 7 jours au plus', () => {

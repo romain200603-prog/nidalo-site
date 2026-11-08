@@ -131,3 +131,22 @@ export function Toast({ text }: { text: string | null }) {
   if (!text) return null;
   return <div className="account-toast" role="status"><Icon name="check" />{text}</div>;
 }
+
+/**
+ * « Les miens » ou « L'agence » (annonces, contacts, mandats) : seulement pour une personne qui a une équipe. Même
+ * contrôle à deux choix que les filtres (« segmented »).
+ */
+export function TeamViewSwitch({ value, onChange, mine }: { value: 'mine' | 'agency'; onChange: (view: 'mine' | 'agency') => void; mine: string }) {
+  return (
+    <div className="segmented team-view" role="radiogroup" aria-label="Afficher">
+      <button type="button" role="radio" aria-checked={value === 'mine'} onClick={() => onChange('mine')}>{mine}</button>
+      <button type="button" role="radio" aria-checked={value === 'agency'} onClick={() => onChange('agency')}>L&apos;agence</button>
+    </div>
+  );
+}
+
+/** « Ajouté par Julien B. » sur une chose de l'agence ; rien pour les miennes. */
+export function AuthorLine({ author, verb = 'Ajouté par' }: { author: string | null; verb?: string }) {
+  if (!author) return null;
+  return <span className="team-author"><Icon name="user" />{verb} {author}</span>;
+}

@@ -686,6 +686,16 @@ a.save-capsule { text-decoration: none; }
 .opportunity-stages { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
 .opportunity-stages .select-chip { justify-content: center; }
 
+/* Partage dans l'agence : « Les miens » ou « L'agence », et l'auteur de ce qu'a ajouté l'équipe */
+.team-view { margin-top: -8px; }
+.team-view + .my-listings-tabs { margin-top: -10px; }
+.team-author { display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; color: var(--text-secondary); font-size: 12.5px; font-weight: 600; }
+.team-author .icon { flex: none; width: 14px; height: 14px; }
+.contact-head .team-author { margin-top: -4px; }
+.my-listing-readonly { color: var(--text-muted); font-size: 12.5px; }
+.contact-note-text { margin: 0; font-size: 14.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mandate-readonly { text-align: center; }
+
 /* Gestion des équipes (le reste : styles de Mes ventes) */
 .team-list { display: flex; flex-direction: column; margin: 0; padding: 4px 0; list-style: none; }
 .team-list li + li { border-top: 1px solid var(--border); }

@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
-  documentName, mandateErrors, mandateFileIssue, mandateFormFor, mandatesIn, mandatesSubtitle, mandateStage, mandateState, mandateWrite,
+  documentName, isOwnMandate, mandateErrors, mandateFileIssue, mandateFormFor, mandatesIn, mandatesSubtitle, mandateStage, mandateState,
+  mandateWrite,
   type MandateForm, type MandateRow,
 } from './mandates';
 
 const TODAY = '2026-11-08';
 
 const mandate = (over: Partial<MandateRow>): MandateRow => ({
-  id: 'm1', listing_id: null, kind: 'sale', exclusivity: 'exclusive', number: '2026-001', client_name: 'M. Durand', title: 'Appartement',
+  id: 'm1', owner_id: 'aaaaaaaa-0000-4000-8000-000000000001', listing_id: null, kind: 'sale', exclusivity: 'exclusive', number: '2026-001', client_name: 'M. Durand', title: 'Appartement',
   city: 'Lyon 3e', price: '320000', fees: null, signed_on: '2026-10-01', ends_on: null, ended_on: null, document_path: null,
   document_name: null, note: null, created_at: '2026-10-01T10:00:00Z', updated_at: '2026-10-01T10:00:00Z', ...over,
 });
@@ -43,6 +44,12 @@ describe('Mes mandats', () => {
     expect(mandatesIn(rows, 'ended', TODAY).map((row) => row.id)).toEqual(['termine', 'echu']);
     expect(mandatesSubtitle(rows, TODAY)).toBe('4 mandats actifs, vente et location');
     expect(mandatesSubtitle([], TODAY)).toBe('0 mandat actif, vente et location');
+  });
+
+  it('reconnaît les miens dans le registre de l\'agence', () => {
+    const me = 'AAAAAAAA-0000-4000-8000-000000000001';
+    expect([isOwnMandate(mandate({}), me), isOwnMandate(mandate({ owner_id: 'c0000000-0000-4000-8000-0000000000b4' }), me), isOwnMandate(mandate({}), null)])
+      .toEqual([true, false, false]);
   });
 
   it('vérifie le formulaire', () => {

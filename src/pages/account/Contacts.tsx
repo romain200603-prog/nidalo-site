@@ -4,17 +4,19 @@ import type { IconName } from '../../components/iconPaths';
 import { AlertDialog } from '../listing/Dialogs';
 import {
   CONTACT_FILTERS, CONTACT_NAME_MAX, CONTACT_NOTE_MAX, contactErrors, contactFormFor, contactLine, contactsStore,
-  deleteManualContact, filterContacts, loadContacts, saveContactNote, saveManualContact,
+  deleteManualContact, filterContacts, isOwnContact, loadContacts, saveContactNote, saveManualContact,
   type ActivityKind, type Contact, type ContactField, type ContactFilter, type ContactForm,
 } from '../../lib/account/contacts';
 import { phonePairs } from '../../lib/account/profile';
-import { useStore } from '../../lib/account/session';
+import { currentUserId, useStore } from '../../lib/account/session';
+import { authorOf, canEditOf, savedTeamView, saveTeamView, useTeamScope, type TeamScope, type TeamView } from '../../lib/account/team';
 import { listLabel, telHref } from '../../lib/messages/format';
 import { accountPath, contactPath, CONTACTS_PATH, conversationPath, NEW_CONTACT_PATH } from '../../lib/paths';
-import { Avatar, EmptyState, ScreenHeader, Spinner, Toast } from './parts';
+import { AuthorLine, Avatar, EmptyState, ScreenHeader, Spinner, TeamViewSwitch, Toast } from './parts';
 
 // « Mes contacts » de l'espace professionnel : la liste (recherche et filtres), la fiche d'un contact (ses échanges,
-// une note privée) et le formulaire d'un contact ajouté à la main.
+// une note) et le formulaire d'un contact ajouté à la main. Avec une équipe : « Les miens » ou « L'agence » (avec
+// les contacts ajoutés à la main par l'équipe ; un agent ne modifie que les siens).
 
 const SAVED_TOASTS: Record<string, string> = {
   ajoute: 'Contact ajouté',
@@ -38,6 +40,7 @@ function useSavedToast(): string | null {
 
 export function Contacts({ contactKey, screen }: { contactKey: string | null; screen: string | null }) {
   const state = useStore(contactsStore);
+  const scope = useTeamScope();
 
   useEffect(() => {
     void loadContacts();
@@ -53,8 +56,8 @@ export function Contacts({ contactKey, screen }: { contactKey: string | null; sc
     );
   }
   if (state.status !== 'ready') return <Spinner />;
-  if (screen === 'ajouter') return <ContactEditor contact={null} />;
-  if (!contactKey) return <ContactList contacts={state.items} />;
+  if (screen === 'ajouter') return <ContactEditor contact={null} scope={scope} />;
+  if (!contactKey) return <ContactList contacts={state.items} scope={scope} />;
   const contact = state.items.find((item) => item.key === contactKey.toLowerCase()) ?? null;
   if (!contact) {
     return (
@@ -69,23 +72,34 @@ export function Contacts({ contactKey, screen }: { contactKey: string | null; sc
       </div>
     );
   }
-  if (screen === 'modifier' && contact.userId === null) return <ContactEditor contact={contact} />;
-  return <ContactDetail contact={contact} />;
+  if (screen === 'modifier' && contact.userId === null && canEditOf(scope, contact.ownerId, currentUserId())) {
+    return <ContactEditor contact={contact} scope={scope} />;
+  }
+  return <ContactDetail contact={contact} scope={scope} />;
 }
 
 // MARK: - Liste
 
-function ContactList({ contacts }: { contacts: Contact[] }) {
+function ContactList({ contacts: all, scope }: { contacts: Contact[]; scope: TeamScope | null }) {
   const toast = useSavedToast();
   const [filter, setFilter] = useState<ContactFilter>('all');
   const [query, setQuery] = useState('');
+  const [view, setView] = useState<TeamView>(() => savedTeamView('contacts'));
+  const me = currentUserId();
+  const contacts = scope && view === 'agency' ? all : all.filter((contact) => isOwnContact(contact, me));
   const shown = filterContacts(contacts, filter, query);
   const now = new Date();
+
+  function chooseView(next: TeamView) {
+    setView(next);
+    saveTeamView('contacts', next);
+  }
 
   return (
     <div className="space contacts">
       <Toast text={toast} />
       <ScreenHeader title="Mes contacts" action={<a className="save-capsule" href={NEW_CONTACT_PATH}>Ajouter</a>} />
+      {scope && <TeamViewSwitch value={view} onChange={chooseView} mine="Les miens" />}
       {contacts.length === 0 ? (
         <EmptyState
           icon="users"
@@ -141,6 +155,7 @@ function ContactList({ contacts }: { contacts: Contact[] }) {
                       </span>
                       <span className="contact-row-line">{contactLine(contact)}</span>
                       {contact.listingTitles.length > 0 && <span className="contact-row-listing">{contact.listingTitles.join(' · ')}</span>}
+                      <AuthorLine author={authorOf(scope, contact.ownerId)} />
                     </span>
                     <Icon name="chevronRight" className="icon row-chevron" />
                   </a>
@@ -158,7 +173,7 @@ function ContactList({ contacts }: { contacts: Contact[] }) {
 
 const ACTIVITY_ICONS: Record<ActivityKind, IconName> = { message: 'messageCircle', visit: 'calendarDays', offer: 'handshake' };
 
-function ContactDetail({ contact }: { contact: Contact }) {
+function ContactDetail({ contact, scope }: { contact: Contact; scope: TeamScope | null }) {
   const savedToast = useSavedToast();
   const [toast, setToast] = useState<string | null>(null);
   const [note, setNote] = useState(contact.note);
@@ -166,6 +181,10 @@ function ContactDetail({ contact }: { contact: Contact }) {
   const [noteError, setNoteError] = useState<string | null>(null);
   const isManual = contact.userId === null;
   const kind = isManual ? 'Ajouté à la main' : contact.isAgency ? 'Agence sur Nidalo' : 'Membre Nidalo';
+  const author = authorOf(scope, contact.ownerId);
+  const editable = canEditOf(scope, contact.ownerId, currentUserId());
+  // Contact ajouté à la main dans une équipe : l'agence le voit, avec sa note.
+  const shared = isManual && scope !== null;
   const now = new Date();
   const changed = note.trim() !== contact.note.trim();
 
@@ -190,7 +209,7 @@ function ContactDetail({ contact }: { contact: Contact }) {
       <ScreenHeader
         title="Contact"
         back={CONTACTS_PATH}
-        action={isManual ? <a className="save-capsule" href={contactPath(contact.key, true)}>Modifier</a> : undefined}
+        action={isManual && editable ? <a className="save-capsule" href={contactPath(contact.key, true)}>Modifier</a> : undefined}
       />
       <section className="contact-head space-card">
         <Avatar name={contact.name} path={contact.avatarPath} size={76} />
@@ -199,6 +218,7 @@ function ContactDetail({ contact }: { contact: Contact }) {
           {kind}
           {contact.isNew && <span className="contact-new">Nouveau</span>}
         </p>
+        <AuthorLine author={author} />
         {contact.conversationId && (
           <a className="btn btn-primary contact-action" href={conversationPath(contact.conversationId)}>
             <Icon name="messageCircle" />Envoyer un message
@@ -221,7 +241,7 @@ function ContactDetail({ contact }: { contact: Contact }) {
               {contact.email && <div><dt>E-mail</dt><dd><a href={`mailto:${contact.email}`}>{contact.email}</a></dd></div>}
             </dl>
           ) : (
-            <p className="contact-empty">Aucune coordonnée. Ajoutez-en avec « Modifier ».</p>
+            <p className="contact-empty">{editable ? 'Aucune coordonnée. Ajoutez-en avec « Modifier ».' : 'Aucune coordonnée.'}</p>
           )}
         </section>
       )}
@@ -254,30 +274,38 @@ function ContactDetail({ contact }: { contact: Contact }) {
         </section>
       )}
 
-      <section className="contact-card space-card">
-        <h2 className="contact-card-title"><Icon name="squarePen" />Note privée</h2>
-        <textarea
-          className="text-input contact-note"
-          aria-label="Note privée"
-          placeholder="Projet, budget, disponibilités, à rappeler…"
-          rows={4}
-          maxLength={CONTACT_NOTE_MAX}
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-        />
-        <p className="contact-caption">Seul vous voyez cette note.</p>
-        {noteError && <p className="signin-error" role="alert">{noteError}</p>}
-        <button type="button" className="btn btn-light contact-note-save" disabled={!changed || saving} onClick={() => void saveNote()}>
-          {saving ? <span className="spinner" aria-label="Enregistrement" /> : 'Enregistrer la note'}
-        </button>
-      </section>
+      {editable ? (
+        <section className="contact-card space-card">
+          <h2 className="contact-card-title"><Icon name="squarePen" />{shared ? 'Note' : 'Note privée'}</h2>
+          <textarea
+            className="text-input contact-note"
+            aria-label={shared ? 'Note' : 'Note privée'}
+            placeholder="Projet, budget, disponibilités, à rappeler…"
+            rows={4}
+            maxLength={CONTACT_NOTE_MAX}
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+          />
+          <p className="contact-caption">{shared ? 'L\'équipe de l\'agence voit ce contact et sa note.' : 'Seul vous voyez cette note.'}</p>
+          {noteError && <p className="signin-error" role="alert">{noteError}</p>}
+          <button type="button" className="btn btn-light contact-note-save" disabled={!changed || saving} onClick={() => void saveNote()}>
+            {saving ? <span className="spinner" aria-label="Enregistrement" /> : 'Enregistrer la note'}
+          </button>
+        </section>
+      ) : (
+        <section className="contact-card space-card">
+          <h2 className="contact-card-title"><Icon name="squarePen" />Note</h2>
+          {contact.note.trim() ? <p className="contact-note-text">{contact.note.trim()}</p> : <p className="contact-empty">Aucune note.</p>}
+          <p className="contact-caption">Seuls son auteur, le gérant et les responsables de l&apos;agence peuvent modifier ce contact.</p>
+        </section>
+      )}
     </div>
   );
 }
 
 // MARK: - Formulaire
 
-function ContactEditor({ contact }: { contact: Contact | null }) {
+function ContactEditor({ contact, scope }: { contact: Contact | null; scope: TeamScope | null }) {
   const initial = useMemo(() => contactFormFor(contact), [contact]);
   const [form, setForm] = useState<ContactForm>(initial);
   const [submitted, setSubmitted] = useState(false);
@@ -347,7 +375,7 @@ function ContactEditor({ contact }: { contact: Contact | null }) {
             />
             {errors.note && <span className="field-error">{errors.note}</span>}
           </label>
-          <p className="field-hint">Seul vous voyez ce contact et sa note.</p>
+          <p className="field-hint">{scope ? 'L\'équipe de l\'agence voit ce contact et sa note.' : 'Seul vous voyez ce contact et sa note.'}</p>
         </section>
         {hasErrors && <p className="field-error" role="alert">Vérifiez les champs en rouge.</p>}
         {saveError && <p className="signin-error" role="alert">{saveError}</p>}
@@ -376,7 +404,7 @@ function ContactEditor({ contact }: { contact: Contact | null }) {
         open={dialog === 'delete'}
         onClose={() => setDialog((current) => (current === 'delete' ? null : current))}
         title="Supprimer ce contact ?"
-        message="Ses coordonnées et votre note seront effacées."
+        message={authorOf(scope, contact?.ownerId) ? 'Ses coordonnées et sa note seront effacées pour toute l\'agence.' : 'Ses coordonnées et votre note seront effacées.'}
         actions={[
           { label: 'Supprimer', onClick: () => void remove(), tone: 'primary' },
           { label: 'Annuler', onClick: () => setDialog(null), tone: 'quiet' },

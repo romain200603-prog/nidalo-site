@@ -1,7 +1,8 @@
 import { GENERIC_MESSAGE, isNetworkError, NETWORK_MESSAGE } from '../account/auth';
 import { REFUSED_MESSAGE } from '../account/errors';
-import { loadMyListings } from '../account/myListings';
+import { agencyListingsStore, loadAgencyListings, loadMyListings } from '../account/myListings';
 import { currentUserId } from '../account/session';
+import { canEditOf, loadTeam, teamScope, teamStore } from '../account/team';
 import { PHOTO_BUCKET } from '../config';
 import { LISTING_COLUMNS, sortedPhotos, type ListingRow, type PhotoRow } from '../listings';
 import { supabase } from '../supabase';
@@ -16,23 +17,35 @@ import { appDecodingProblems, draftFromRow, listingWrite, type ExactLocation } f
 export const ONLINE_STATUSES = ['active', 'underOffer'];
 
 export type Loaded =
-  | { status: 'ready'; draft: PublishDraft; listingStatus: string }
+  /** `ownerId` : l'auteur de l'annonce (moi, ou une personne de l'équipe que je gère). */
+  | { status: 'ready'; draft: PublishDraft; listingStatus: string; ownerId: string }
   | { status: 'notFound' }
   | { status: 'error'; message: string };
 
-/** Annonce du compte à reprendre ou à modifier : la ligne et son adresse exacte (lisibles par l'auteur seulement). */
+/** Une annonce d'une autre personne : je la modifie si je gère son équipe (l'équipe est lue si besoin). */
+async function canEditColleague(ownerId: string, userId: string): Promise<boolean> {
+  if (teamStore.get().status !== 'ready') await loadTeam();
+  return canEditOf(teamScope(teamStore.get(), userId), ownerId, userId);
+}
+
+/**
+ * Annonce à reprendre ou à modifier : la mienne, ou celle d'une personne de l'équipe que je gère ; la ligne et son
+ * adresse exacte (lisibles par l'auteur et, avec le partage, par l'équipe de l'agence).
+ */
 export async function loadListingForEdit(id: string): Promise<Loaded> {
   const userId = currentUserId();
   if (!userId) return { status: 'notFound' };
   try {
-    const { data, error } = await supabase.from('listings').select(LISTING_COLUMNS).eq('id', id).eq('owner_id', userId).limit(1);
+    const { data, error } = await supabase.from('listings').select(LISTING_COLUMNS).eq('id', id).limit(1);
     if (error) throw error;
     const row = (data as unknown as ListingRow[] | null)?.[0];
     if (!row) return { status: 'notFound' };
+    const mine = row.owner_id.toLowerCase() === userId.toLowerCase();
+    if (!mine && !await canEditColleague(row.owner_id, userId)) return { status: 'notFound' };
     const located = await supabase.from('listing_locations').select('street, latitude, longitude').eq('listing_id', id).limit(1);
     if (located.error) throw located.error;
     const location = ((located.data ?? []) as ExactLocation[])[0] ?? null;
-    return { status: 'ready', draft: draftFromRow(row, location), listingStatus: row.status };
+    return { status: 'ready', draft: draftFromRow(row, location), listingStatus: row.status, ownerId: row.owner_id };
   } catch (error) {
     return { status: 'error', message: isNetworkError(error) ? NETWORK_MESSAGE : GENERIC_MESSAGE };
   }
@@ -61,15 +74,18 @@ const DRAFT_FAILED = 'Le brouillon n\'a pas pu être enregistré. Réessayez dan
 /**
  * Enregistre l'annonce : `draft` (brouillon, jamais mis en ligne), `publish` (nouvelle annonce ou brouillon : en
  * ligne à la fin) ou `edit` (annonce déjà publiée : mêmes statut et date de publication, le serveur les garde).
- * `onProgress` reçoit le nombre de photos envoyées.
+ * `onProgress` reçoit le nombre de photos envoyées. `ownerId` : l'auteur d'une annonce existante, quand c'est une
+ * personne de l'équipe que je gère ; son adresse et ses photos restent à son nom, dans son dossier.
  */
 export async function saveListing(
   source: PublishDraft,
   mode: 'draft' | 'publish' | 'edit',
-  onProgress?: (sent: number, total: number) => void,
+  { onProgress, ownerId = null }: { onProgress?: (sent: number, total: number) => void; ownerId?: string | null } = {},
 ): Promise<SaveResult> {
   const userId = currentUserId();
   if (!userId) return { ok: false, message: 'Votre session a expiré. Reconnectez-vous.', refusal: false };
+  // Auteur envoyé seulement pour l'annonce d'un collègue : pour les miennes, rien ne change (le serveur met le mien).
+  const author = ownerId && ownerId.toLowerCase() !== userId.toLowerCase() ? ownerId : null;
   const fallback = mode === 'draft' ? DRAFT_FAILED : mode === 'edit' ? EDIT_FAILED : PUBLISH_FAILED;
   if (mode !== 'draft' && missingRequiredFields(source).length > 0) return { ok: false, message: fallback, refusal: false };
   try {
@@ -90,12 +106,15 @@ export async function saveListing(
     if (source.coordinate) {
       const street = source.address?.street?.trim() ? [...source.address.street.trim()].slice(0, 200).join('') : null;
       const located = await supabase.from('listing_locations').upsert(
-        { listing_id: source.id, street, latitude: source.coordinate.latitude, longitude: source.coordinate.longitude },
+        {
+          listing_id: source.id, street, latitude: source.coordinate.latitude, longitude: source.coordinate.longitude,
+          ...(author ? { owner_id: author } : {}),
+        },
         { onConflict: 'listing_id' },
       );
       if (located.error) throw located.error;
     }
-    await syncPhotos(source.photos, source.id, userId, onProgress);
+    await syncPhotos(source.photos, source.id, author ?? userId, author !== null, onProgress);
     // Nouvelle annonce, ou brouillon resté sur le serveur : elle passe en ligne (le serveur revérifie tout).
     const goesOnline = mode === 'publish' && (current === null || current.status === 'draft');
     if (goesOnline) {
@@ -105,6 +124,7 @@ export async function saveListing(
     const reloaded = await loadListingForEdit(source.id);
     if (reloaded.status !== 'ready') throw new Error('Annonce introuvable après l\'enregistrement.');
     void loadMyListings();
+    if (agencyListingsStore.get().status !== 'none') void loadAgencyListings();
     // Les champs saisis restent ceux de l'écran ; seules les photos deviennent celles du serveur.
     return { ok: true, draft: { ...source, photos: reloaded.draft.photos }, listingStatus: reloaded.listingStatus };
   } catch (error) {
@@ -114,10 +134,17 @@ export async function saveListing(
 
 /**
  * Photos dans l'ordre du brouillon : les nouvelles envoyées (déjà réencodées, sans métadonnées), puis les retirées
- * supprimées (ligne et fichier), puis les positions mises à jour (SupabaseListingRepository.syncPhotos).
+ * supprimées (ligne et fichier), puis les positions mises à jour (SupabaseListingRepository.syncPhotos). Elles vont
+ * dans le dossier de l'auteur de l'annonce (`ownerId`), à son nom quand c'est un collègue (`forColleague`).
  */
-async function syncPhotos(photos: DraftPhoto[], listingId: string, userId: string, onProgress?: (sent: number, total: number) => void) {
-  const folder = `${userId}/${listingId}`;
+async function syncPhotos(
+  photos: DraftPhoto[],
+  listingId: string,
+  ownerId: string,
+  forColleague: boolean,
+  onProgress?: (sent: number, total: number) => void,
+) {
+  const folder = `${ownerId}/${listingId}`;
   const bucket = supabase.storage.from(PHOTO_BUCKET);
   const rows = await supabase.from('listing_photos').select('id, storage_path, position, width, height').eq('listing_id', listingId);
   if (rows.error) throw rows.error;
@@ -135,7 +162,10 @@ async function syncPhotos(photos: DraftPhoto[], listingId: string, userId: strin
     const path = `${folder}/${crypto.randomUUID()}.jpg`;
     const upload = await bucket.upload(path, photo.blob, { contentType: 'image/jpeg', cacheControl: '31536000' });
     if (upload.error) throw upload.error;
-    const inserted = await supabase.from('listing_photos').insert({ listing_id: listingId, storage_path: path, position, width: photo.width, height: photo.height });
+    const inserted = await supabase.from('listing_photos').insert({
+      listing_id: listingId, storage_path: path, position, width: photo.width, height: photo.height,
+      ...(forColleague ? { owner_id: ownerId } : {}),
+    });
     if (inserted.error) {
       await bucket.remove([path]);
       throw inserted.error;

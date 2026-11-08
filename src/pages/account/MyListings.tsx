@@ -1,16 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { AlertDialog } from '../listing/Dialogs';
-import { deleteListing, loadMyListings, myListingsStore, ONLINE_STATUSES, setListingStatus } from '../../lib/account/myListings';
-import { useStore } from '../../lib/account/session';
+import {
+  agencyListingsStore, deleteListing, loadAgencyListings, loadMyListings, myListingsStore, ONLINE_STATUSES, setListingStatus,
+} from '../../lib/account/myListings';
+import { currentUserId, useStore } from '../../lib/account/session';
+import { authorOf, canEditOf, savedTeamView, saveTeamView, teamIds, useTeamScope, type TeamView } from '../../lib/account/team';
 import { formatCardPrice, cardContent } from '../../lib/cardContent';
 import { photoUrl, sortedPhotos, type ListingRow } from '../../lib/listings';
 import { useDesktop } from '../../lib/desktop';
 import { listingPath, publishPath } from '../../lib/paths';
-import { EmptyState, ScreenHeader, Spinner } from './parts';
+import { AuthorLine, EmptyState, ScreenHeader, Spinner, TeamViewSwitch } from './parts';
 import { soonPath } from './Screens';
 
-// « Mes annonces » (Features/Profile/MyListingsView.swift).
+// « Mes annonces » (Features/Profile/MyListingsView.swift). Avec une équipe : « Les miennes » ou « L'agence » (les
+// annonces de toute l'agence, avec leur auteur ; un agent ne modifie que les siennes).
 
 type Tab = 'all' | 'online' | 'draft' | 'archived' | 'done';
 
@@ -41,7 +45,13 @@ function dateLine(row: ListingRow): string {
 }
 
 export function MyListings() {
-  const state = useStore(myListingsStore);
+  const mine = useStore(myListingsStore);
+  const agency = useStore(agencyListingsStore);
+  const scope = useTeamScope();
+  const [view, setView] = useState<TeamView>(() => savedTeamView('annonces'));
+  const showsAgency = scope !== null && view === 'agency';
+  const state = showsAgency ? agency : mine;
+  const me = currentUserId();
   const [tab, setTab] = useState<Tab>('all');
   const [menu, setMenu] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<ListingRow | null>(null);
@@ -55,6 +65,18 @@ export function MyListings() {
   useEffect(() => {
     void loadMyListings();
   }, []);
+
+  // L'agence : relue quand l'équipe change (un membre arrive ou part).
+  const ids = scope ? teamIds(scope).join(',') : '';
+  useEffect(() => {
+    if (showsAgency && ids) void loadAgencyListings(ids.split(','));
+  }, [showsAgency, ids]);
+
+  function chooseView(next: TeamView) {
+    setView(next);
+    saveTeamView('annonces', next);
+    setMenu(null);
+  }
 
   const items = state.status === 'ready' ? state.items : [];
   const shown = items.filter((row) => TABS.find((t) => t.tab === tab)!.matches(row.status));
@@ -72,7 +94,7 @@ export function MyListings() {
     setToDelete(null);
     if (!row) return;
     setBusy(row.id);
-    const failure = await deleteListing(row.id);
+    const failure = await deleteListing(row.id, row.owner_id);
     setBusy(null);
     if (failure) setNotice(failure);
   }
@@ -80,6 +102,7 @@ export function MyListings() {
   return (
     <div className="space">
       <ScreenHeader title="Mes annonces" />
+      {scope && <TeamViewSwitch value={view} onChange={chooseView} mine="Les miennes" />}
       <div className="chips-row my-listings-tabs" role="tablist" aria-label="Statut des annonces">
         {TABS.map(({ tab: value, title, matches }) => {
           const count = items.filter((row) => matches(row.status)).length;
@@ -95,7 +118,11 @@ export function MyListings() {
       {state.status === 'loading' && <Spinner />}
       {state.status === 'error' && <EmptyState icon="triangleAlert" title="Erreur" text={state.message} />}
       {state.status === 'ready' && shown.length === 0 && (
-        <EmptyState icon="house" title="Aucune annonce ici" text="Vos annonces apparaîtront ici dès que vous en déposerez une." />
+        <EmptyState
+          icon="house"
+          title="Aucune annonce ici"
+          text={showsAgency ? 'Les annonces de l\'agence apparaîtront ici dès que l\'équipe en déposera.' : 'Vos annonces apparaîtront ici dès que vous en déposerez une.'}
+        />
       )}
       <div className="my-listings">
         {shown.map((row) => {
@@ -103,6 +130,8 @@ export function MyListings() {
           const photo = sortedPhotos(row)[0];
           const price = formatCardPrice(cardContent(row, null, null).price);
           const isOnline = ONLINE_STATUSES.includes(row.status);
+          const author = authorOf(scope, row.owner_id);
+          const editable = canEditOf(scope, row.owner_id, me);
           return (
             <article key={row.id} className="my-listing space-card" aria-busy={busy === row.id}>
               <div className="my-listing-top">
@@ -117,11 +146,14 @@ export function MyListings() {
                   <p className="my-listing-line">{row.transaction === 'rent' ? 'Location' : 'Vente'} · {row.city}</p>
                   <p className="my-listing-price"><strong>{price.amount}</strong>{price.suffix && <span>{price.suffix}</span>}</p>
                   <p className="my-listing-date">{dateLine(row)}</p>
+                  <AuthorLine author={author} verb="Ajoutée par" />
                 </div>
               </div>
               <div className="my-listing-actions">
                 {isOnline && <a className="action-button" href={listingPath(row.id)}><Icon name="eye" />Voir</a>}
-                {row.status === 'archived' ? (
+                {!editable ? (
+                  !isOnline && <span className="my-listing-readonly">Lecture seule</span>
+                ) : row.status === 'archived' ? (
                   <button type="button" className="action-button is-filled" onClick={() => void changeStatus(row, 'active')} disabled={busy === row.id}>
                     <Icon name="rotateCcw" />Republier
                   </button>
@@ -130,7 +162,7 @@ export function MyListings() {
                 ) : (
                   <a className="action-button" href={editPath(row.id)}><Icon name="pen" />Modifier</a>
                 )}
-                <div className="menu-anchor">
+                {editable && <div className="menu-anchor">
                   <button
                     type="button"
                     className="round-menu"
@@ -148,7 +180,7 @@ export function MyListings() {
                       <button type="button" role="menuitem" className="is-danger" onClick={() => { setMenu(null); setToDelete(row); }}>Supprimer</button>
                     </div>
                   )}
-                </div>
+                </div>}
               </div>
             </article>
           );
