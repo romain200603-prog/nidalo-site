@@ -9,6 +9,7 @@ import { useDesktop } from '../lib/desktop';
 import { AddVisit } from './account/AddVisit';
 import { AgencyProfile } from './account/AgencyProfile';
 import { AgendaScreen } from './account/Agenda';
+import { Contacts } from './account/Contacts';
 import { DesktopSpace } from './account/DesktopSpace';
 import { Diffusion } from './account/Diffusion';
 import { Hub } from './account/Hub';
@@ -127,6 +128,7 @@ function AccountContent() {
     // Outils de diffusion : lien, QR code, texte et affiche de vitrine (format A4) de chaque annonce en ligne.
     case 'diffusion': return <Diffusion />;
     case 'affiche': return <Poster listingId={params.get('annonce')} />;
+    case 'contacts': return <Contacts contactKey={params.get('contact')} screen={params.get('ecran')} />;
     // Ordinateur : Mon espace de la maquette 5 pour un compte particulier ; l'espace professionnel garde son écran.
     default: return desktop && current.profile.account_type !== 'professional' ? <DesktopSpace account={current} /> : <Hub account={current} />;
   }

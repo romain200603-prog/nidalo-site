@@ -5,7 +5,10 @@
 // professionnel » mène au formulaire depuis Mon compte, Mes informations et l'espace sur ordinateur.
 // Outils de diffusion : les annonces en ligne seulement, avec leur lien copié, leur QR code (PNG téléchargé), leur
 // texte copié et leur affiche A4 (une seule page en PDF) ; rien n'est écrit sur le serveur.
-// Captures pour Romain : agence-*.png, diffusion-*.png, diffusion-affiche.pdf.
+// Mes contacts : les personnes qui ont écrit, demandé une visite ou fait une offre sur mes annonces (pas celles à
+// qui j'ai écrit), les contacts ajoutés à la main ; filtres, recherche, fiche, note privée, ajout, modification et
+// suppression, avec seulement les écritures attendues dans pro_contacts.
+// Captures pour Romain : agence-*.png, diffusion-*.png, diffusion-affiche.pdf, contacts-*.png.
 // Lancer après la construction : node scripts/check-espace-pro.mjs [dossier construit, docs/ par défaut] [dossier des captures]
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
@@ -78,6 +81,72 @@ const SALE = { ...ONLINE, agency_fees_amount: 9500, agency_fees_paid_by: 'buyer'
 const RENT = { ...RENTAL, owner_id: USER_ID, status: 'active' };
 const DRAFT = { ...SECOND, owner_id: USER_ID, status: 'draft' };
 
+/** Mes contacts : dates relatives à maintenant (« Nouveau » : premier échange il y a moins de 7 jours). */
+const DAY = 86_400_000;
+const ago = (days) => new Date(Date.now() - days * DAY).toISOString();
+const SOPHIE = 'c0000000-0000-4000-8000-0000000000b1';
+const PAUL = 'c0000000-0000-4000-8000-0000000000b2';
+const SAONE = 'c0000000-0000-4000-8000-0000000000b3';
+const MARC_ROW = 'e0000000-0000-4000-8000-0000000000d1';
+const SOPHIE_CONVERSATION = 'f0000000-0000-4000-8000-0000000000e1';
+const SALE_SNAPSHOT = { listingId: SALE.id, title: SALE.title, price: SALE.price, transaction: 'sale', city: SALE.city };
+const inbox = (over) => ({
+  kind: 'listing', listing_id: SALE.id, listing_snapshot: SALE_SNAPSHOT, my_role: 'member', joined_at: null, left_at: null, last_read_at: null,
+  is_archived: false, is_favorite: false, muted_until: null, cleared_at: null, member_count: 2, unread_count: 0, last_message_kind: 'text', ...over,
+});
+const CONVERSATIONS = [
+  inbox({
+    conversation_id: SOPHIE_CONVERSATION, buyer_id: SOPHIE, seller_id: USER_ID, other_user_id: SOPHIE, created_at: ago(20),
+    unread_count: 1, last_message_at: ago(2), last_message_sender_id: SOPHIE, last_message_preview: 'Bonjour, le bien est-il toujours disponible ?',
+  }),
+  // Mon message sur l'annonce d'une autre agence : elle n'est pas « intéressée par mes annonces ».
+  inbox({
+    conversation_id: 'f0000000-0000-4000-8000-0000000000e2', listing_id: '90000000-0000-4000-8000-000000000001',
+    listing_snapshot: { title: 'Maison avec jardin à Caluire' }, buyer_id: USER_ID, seller_id: SAONE, other_user_id: SAONE,
+    created_at: ago(3), last_message_at: ago(3), last_message_sender_id: USER_ID, last_message_preview: 'Bonjour',
+  }),
+  // Conversation ouverte sans aucun message.
+  inbox({ conversation_id: 'f0000000-0000-4000-8000-0000000000e3', buyer_id: PAUL, seller_id: USER_ID, other_user_id: PAUL, created_at: ago(1), last_message_at: null }),
+];
+const visitSlot = (days, hour) => {
+  const start = new Date(Date.now() + days * DAY);
+  start.setUTCHours(hour, 0, 0, 0);
+  return { id: randomUUID(), start: start.toISOString(), durationMinutes: 30 };
+};
+const PAUL_SLOT = visitSlot(4, 9);
+const VISITS = [
+  {
+    id: 'd0000000-0000-4000-8000-0000000000f1', listing_id: SALE.id, listing_snapshot: SALE_SNAPSHOT, agent_user_id: null,
+    requester: { userId: PAUL, name: 'Paul D.', kind: 'individual' }, recipient: { userId: USER_ID, name: 'Rhône Immobilier', kind: 'agency' },
+    slots: [PAUL_SLOT], mode: 'onSite', status: 'accepted', accepted_slot: PAUL_SLOT, proposed_slots: null, created_at: ago(1), updated_at: ago(1),
+  },
+  {
+    id: 'd0000000-0000-4000-8000-0000000000f2', listing_id: SALE.id, listing_snapshot: SALE_SNAPSHOT, agent_user_id: null,
+    requester: { userId: SAONE, name: 'Saône Conseil', kind: 'agency' }, recipient: { userId: USER_ID, name: 'Rhône Immobilier', kind: 'agency' },
+    slots: [visitSlot(6, 14)], mode: 'video', status: 'pending', accepted_slot: null, proposed_slots: null, created_at: ago(12), updated_at: ago(12),
+  },
+];
+const OFFERS = [{
+  id: 'a1000000-0000-4000-8000-0000000000c1', conversation_id: SOPHIE_CONVERSATION, listing_id: SALE.id, listing_snapshot: SALE_SNAPSHOT,
+  buyer_id: SOPHIE, seller_id: USER_ID, author_id: SOPHIE, parent_offer_id: null, amount: 230000, conditions: null, status: 'pending',
+  created_at: ago(20), expires_at: new Date(Date.now() + 10 * DAY).toISOString(), responded_at: null, decline_reason: null,
+  my_role: 'seller', is_mine: false, allowed_actions: ['accept', 'decline', 'counter'],
+}];
+const publicProfile = (userId, over) => ({
+  user_id: userId, public_name: null, avatar_path: null, account_type: 'individual', member_since: '2026-09-01', agency_id: null, agency_name: null,
+  agency_logo_path: null, agency_postal_code: null, agency_city: null, agency_phone: null, ...over,
+});
+const PUBLIC_PROFILES = [
+  publicProfile(SOPHIE, { public_name: 'Sophie L.' }),
+  publicProfile(PAUL, { public_name: 'Paul D.' }),
+  publicProfile(SAONE, { account_type: 'professional', public_name: 'Jean R.', agency_name: 'Saône Conseil', agency_city: 'Caluire' }),
+];
+const MARC = {
+  id: MARC_ROW, contact_user_id: null, name: 'Marc Petit', phone: '0612345678', email: 'marc.petit@exemple.fr',
+  note: 'Cherche un T3 à Lyon 6e, budget 300 000 €.', created_at: ago(9), updated_at: ago(9),
+};
+const CONTACT_WRITABLE = ['contact_user_id', 'name', 'phone', 'email', 'note'];
+
 // MARK: - Serveur simulé
 
 const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
@@ -103,7 +172,7 @@ function fakeSession() {
  * `pro` : un professionnel avec sa fiche agence, ses détails et (sauf `listings`) une annonce en ligne ; sinon un
  * particulier sans fiche.
  */
-function newState({ pro = false, listings = null } = {}) {
+function newState({ pro = false, listings = null, contacts = false } = {}) {
   return {
     profile: pro ? { ...PROFILE, account_type: 'professional', professional_profile_id: AGENCY_ID } : { ...PROFILE },
     details: { ...DETAILS },
@@ -112,6 +181,11 @@ function newState({ pro = false, listings = null } = {}) {
     listings: structuredClone(listings ?? (pro ? [ONLINE] : [])),
     files: new Map(pro ? [[OLD_LOGO, PHOTO]] : []),
     calls: [],
+    /** Mes contacts : échanges sur mes annonces et lignes de pro_contacts. */
+    conversations: structuredClone(contacts ? CONVERSATIONS : []),
+    visits: structuredClone(contacts ? VISITS : []),
+    offers: structuredClone(contacts ? OFFERS : []),
+    contactRows: structuredClone(contacts ? [MARC] : []),
     /** Le serveur refuse les détails (contrôle d'une colonne). */
     refuseDetails: false,
   };
@@ -179,6 +253,45 @@ function rest(state, route) {
     case 'listings':
       if (method === 'GET') return json(route, filtered(state.listings, params));
       break;
+    case 'rpc/my_conversations': return json(route, state.conversations);
+    case 'rpc/my_visit_requests': return json(route, state.visits);
+    case 'rpc/my_offers': return json(route, state.offers);
+    case 'rpc/public_profiles': {
+      const wanted = (body?.user_ids ?? []).map((id) => id.toLowerCase());
+      return json(route, PUBLIC_PROFILES.filter((row) => wanted.includes(row.user_id)));
+    }
+    case 'pro_contacts': {
+      const match = (row) => [...params].every(([column, value]) => (
+        !value.startsWith('eq.') || String(row[column]).toLowerCase() === value.slice(3).toLowerCase()
+      ));
+      if (method === 'GET') return json(route, state.contactRows);
+      if (method === 'POST' || method === 'PATCH') {
+        const extra = Object.keys(body ?? {}).filter((key) => !CONTACT_WRITABLE.includes(key) || (method === 'PATCH' && key === 'contact_user_id'));
+        if (extra.length) problems.push(`pro_contacts : colonnes en trop ${extra}`);
+      }
+      if (method === 'POST') {
+        if (body.contact_user_id && state.contactRows.some((row) => row.contact_user_id === body.contact_user_id)) {
+          expectedServerErrors += 1;
+          return json(route, { code: '23505', message: 'duplicate key value violates unique constraint', details: null, hint: null }, 409);
+        }
+        const row = { id: randomUUID(), contact_user_id: null, name: null, phone: null, email: null, note: null, created_at: now, updated_at: now, ...body };
+        state.contactRows.push(row);
+        return single ? json(route, { id: row.id }, 201) : empty(route, 201);
+      }
+      if (method === 'PATCH') {
+        const rows = state.contactRows.filter(match);
+        if (rows.length !== 1) problems.push(`pro_contacts : modification de ${rows.length} ligne(s) ${decodeURIComponent(url.search)}`);
+        for (const row of rows) Object.assign(row, body, { updated_at: now });
+        return single ? json(route, { id: rows[0]?.id }) : empty(route);
+      }
+      if (method === 'DELETE') {
+        const before = state.contactRows.length;
+        state.contactRows = state.contactRows.filter((row) => !match(row));
+        if (before - state.contactRows.length !== 1) problems.push(`pro_contacts : suppression ${decodeURIComponent(url.search)}`);
+        return empty(route);
+      }
+      break;
+    }
     default:
       // Barre du haut (pastilles), projet, recherches : rien à montrer.
       if (method === 'GET' || table.startsWith('rpc/')) return json(route, []);
@@ -300,7 +413,7 @@ async function open(context, path, name) {
   const page = await context.newPage();
   page.on('console', (msg) => {
     const text = msg.text();
-    if (expectedServerErrors > 0 && /status of 400/.test(text)) {
+    if (expectedServerErrors > 0 && /status of (400|409)/.test(text)) {
       expectedServerErrors -= 1;
       return;
     }
@@ -743,6 +856,209 @@ try {
     await empty.locator('.account-empty').waitFor();
     expectSame(N, 'affiche d\'un brouillon', [tidy(await empty.locator('.account-empty h2').textContent()), await empty.locator('.poster').count()],
       ['Affiche indisponible', 0]);
+    await emptyContext.close();
+  }
+
+  // 8. Téléphone, Mes contacts : la ligne de Mon compte, la liste (nouveau, filtres, recherche), la fiche d'une
+  //    personne (échanges, message, note privée), puis l'ajout, la modification et la suppression d'un contact.
+  {
+    const N = 'mes contacts (téléphone)';
+    const state = newState({ pro: true, listings: [SALE], contacts: true });
+    const context = await phone();
+    await mock(context, state);
+    const page = await open(context, '/compte/', N);
+    const row = page.locator('a.row', { hasText: 'Mes contacts' });
+    await page.waitForFunction(() => /4 contacts/.test(document.querySelector('a.row[href*="vue=contacts"]')?.textContent ?? ''), null, { timeout: 8000 })
+      .catch(() => problems.push(`${N} : compteur de Mon compte jamais mis à jour`));
+    expectSame(N, 'ligne de Mon compte', [
+      tidy(await row.locator('.row-subtitle').textContent()), tidy(await row.locator('.row-badge').textContent()), await row.getAttribute('href'),
+      tidy(await page.locator('.pro-stats > div').nth(1).textContent()),
+    ], ['4 contacts · 1 nouveau', '1', '/compte/?vue=contacts', '4Contacts']);
+
+    await row.click();
+    await page.waitForURL('**/compte/?vue=contacts');
+    await page.locator('.contact-row').first().waitFor();
+    const list = await page.$$eval('.contact-row', (els) => els.map((el) => [
+      el.querySelector('.contact-row-name').textContent.trim(), !!el.querySelector('.contact-new'),
+      el.querySelector('.contact-row-line').textContent.replace(/\s+/g, ' ').trim(),
+      el.querySelector('.contact-row-listing')?.textContent.trim() ?? null,
+    ]));
+    if (!/^Demande de visite · Confirmée · .+ · 10h00$/.test(list[0]?.[2] ?? '')) problems.push(`${N} : ligne de Paul « ${list[0]?.[2]} »`);
+    expectSame(N, 'liste', list.map(([name, isNew, line, listing], index) => [name, isNew, index === 0 ? 'visite' : line, listing]), [
+      ['Paul D.', true, 'visite', SALE.title],
+      ['Sophie L.', false, 'Message', SALE.title],
+      ['Marc Petit', false, '06 12 34 56 78 · marc.petit@exemple.fr', null],
+      ['Saône Conseil', false, 'Demande de visite vidéo · En attente', SALE.title],
+    ]);
+    const chip = (label) => page.locator('.contacts-filters .select-chip', { hasText: label });
+    const names = () => texts(page, '.contact-row-name');
+    await chip('Visites').click();
+    expectSame(N, 'filtre Visites', await names(), ['Paul D.', 'Saône Conseil']);
+    await chip('Offres').click();
+    expectSame(N, 'filtre Offres', await names(), ['Sophie L.']);
+    await chip('Ajoutés').click();
+    expectSame(N, 'filtre Ajoutés', await names(), ['Marc Petit']);
+    await chip('Nouveaux').click();
+    expectSame(N, 'filtre Nouveaux', await names(), ['Paul D.']);
+    await chip('Tous').click();
+    const search = page.getByRole('searchbox', { name: 'Rechercher un contact' });
+    await search.fill('06 12');
+    expectSame(N, 'recherche d\'un numéro', await names(), ['Marc Petit']);
+    await search.fill('saône');
+    expectSame(N, 'recherche d\'un nom', await names(), ['Saône Conseil']);
+    await search.fill('zzz');
+    expectSame(N, 'recherche sans résultat', tidy(await page.locator('.contacts-none').textContent()), 'Aucun contact ne correspond à votre recherche.');
+    await search.fill('');
+    await page.waitForTimeout(100);
+    await shot(page, 'contacts-telephone.png');
+
+    // Fiche de Sophie : ses échanges, le message, puis la note privée (créée, puis modifiée).
+    await page.locator('.contact-row', { hasText: 'Sophie L.' }).click();
+    await page.waitForURL(`**/compte/?vue=contacts&contact=u-${SOPHIE}`);
+    await page.locator('.contact-head').waitFor();
+    expectSame(N, 'fiche', {
+      title: tidy(await page.locator('.screen-header h1').textContent()),
+      name: tidy(await page.locator('.contact-name').textContent()),
+      kind: tidy(await page.locator('.contact-kind').textContent()),
+      message: await page.locator('.contact-action').getAttribute('href'),
+      cards: await texts(page, '.contact-card-title'),
+      activities: await page.$$eval('.contact-activity', (els) => els.map((el) => [
+        el.querySelector('.contact-activity-title').textContent.replace(/\s+/g, ' ').trim(),
+        el.querySelector('.contact-activity-detail')?.textContent.trim() ?? null,
+        el.querySelector('.contact-activity-listing')?.textContent.trim() ?? null,
+        el.getAttribute('href'),
+      ])),
+    }, {
+      title: 'Contact', name: 'Sophie L.', kind: 'Membre Nidalo', message: `/messages/?c=${SOPHIE_CONVERSATION}`, cards: ['Échanges', 'Note privée'],
+      activities: [
+        ['Message', 'Bonjour, le bien est-il toujours disponible ?', SALE.title, `/messages/?c=${SOPHIE_CONVERSATION}`],
+        ['Offre de 230 000 €', 'En attente', SALE.title, `/messages/?c=${SOPHIE_CONVERSATION}`],
+      ],
+    });
+    const noteSave = page.getByRole('button', { name: 'Enregistrer la note' });
+    expectSame(N, 'note inchangée', await noteSave.isDisabled(), true);
+    let mark = state.calls.length;
+    await page.locator('textarea.contact-note').fill('  Rappeler lundi : veut visiter avec son conjoint. ');
+    await noteSave.click();
+    await page.locator('.account-toast', { hasText: 'Note enregistrée' }).waitFor();
+    expectSame(N, 'note créée', writesSince(state, mark).map((call) => [call.method, call.table, call.body]), [
+      ['POST', 'pro_contacts', { contact_user_id: SOPHIE, note: 'Rappeler lundi : veut visiter avec son conjoint.' }],
+    ]);
+    const noteRow = state.contactRows.find((item) => item.contact_user_id === SOPHIE);
+    await page.waitForFunction(() => document.querySelector('.contact-note-save')?.disabled === true);
+    mark = state.calls.length;
+    await page.locator('textarea.contact-note').fill('Rappeler lundi.');
+    await noteSave.click();
+    await page.waitForFunction(() => document.querySelector('.contact-note-save')?.disabled === true && !document.querySelector('.contact-note-save .spinner'));
+    expectSame(N, 'note modifiée', writesSince(state, mark).map((call) => [call.method, call.table, call.search, call.body]), [
+      ['PATCH', 'pro_contacts', `?id=eq.${noteRow?.id}`, { note: 'Rappeler lundi.' }],
+    ]);
+    await shot(page, 'contacts-fiche.png');
+
+    // Ajout : vide, puis un e-mail faux, puis le contact ; la page du contact s'ouvre avec « Contact ajouté ».
+    await page.goto(`${base}/compte/?vue=contacts`, { waitUntil: 'networkidle' });
+    await page.getByRole('link', { name: 'Ajouter', exact: true }).click();
+    await page.waitForURL('**/compte/?vue=contacts&ecran=ajouter');
+    await page.locator('.contact-save').waitFor();
+    mark = state.calls.length;
+    await page.locator('.contact-save').click();
+    expectSame(N, 'formulaire vide', await texts(page, '.contact-form-screen .field-error'), ['Indiquez le nom du contact.', 'Vérifiez les champs en rouge.']);
+    await field(page, 'Nom').fill('Julie Bernard');
+    await field(page, 'Téléphone (facultatif)').fill('07 81 22 33 44');
+    await field(page, 'E-mail (facultatif)').fill('julie.bernard@exemple');
+    await field(page, 'Note (facultative)').fill('Vend un T2 à Villeurbanne.');
+    await page.locator('.contact-save').click();
+    expectSame(N, 'e-mail faux', await texts(page, '.contact-form-screen .field-error'), ['Adresse e-mail invalide.', 'Vérifiez les champs en rouge.']);
+    expectSame(N, 'rien d\'écrit avant un formulaire juste', writeNames(writesSince(state, mark)), []);
+    await field(page, 'E-mail (facultatif)').fill('julie.bernard@exemple.fr');
+    await shot(page, 'contacts-ajout.png');
+    await page.locator('.contact-save').click();
+    await page.waitForURL(/contact=m-/);
+    await page.locator('.account-toast', { hasText: 'Contact ajouté' }).waitFor();
+    const julie = state.contactRows.find((item) => item.name === 'Julie Bernard');
+    expectSame(N, 'contact ajouté', writesSince(state, mark).map((call) => [call.method, call.table, call.body]), [
+      ['POST', 'pro_contacts', { name: 'Julie Bernard', phone: '0781223344', email: 'julie.bernard@exemple.fr', note: 'Vend un T2 à Villeurbanne.' }],
+    ]);
+    expectSame(N, 'page du contact ajouté', {
+      url: new URL(page.url()).search,
+      kind: tidy(await page.locator('.contact-kind').textContent()),
+      actions: await page.$$eval('.contact-actions a', (els) => els.map((el) => [el.textContent.trim(), el.getAttribute('href')])),
+      rows: await page.$$eval('.contact-rows > div', (els) => els.map((el) => `${el.querySelector('dt').textContent} : ${el.querySelector('dd').textContent}`)),
+      note: await page.locator('textarea.contact-note').inputValue(),
+    }, {
+      url: `?vue=contacts&contact=m-${julie?.id}`,
+      kind: 'Ajouté à la main',
+      actions: [['Appeler', 'tel:0781223344'], ['E-mail', 'mailto:julie.bernard@exemple.fr']],
+      rows: ['Téléphone : 07 81 22 33 44', 'E-mail : julie.bernard@exemple.fr'],
+      note: 'Vend un T2 à Villeurbanne.',
+    });
+
+    // Modification : quitter sans enregistrer demande confirmation ; un numéro étranger est gardé en chiffres.
+    await page.getByRole('link', { name: 'Modifier', exact: true }).click();
+    await page.waitForURL(/ecran=modifier/);
+    await page.locator('.contact-save').waitFor();
+    expectSame(N, 'formulaire prérempli', [
+      tidy(await page.locator('.screen-header h1').textContent()), await field(page, 'Nom').inputValue(), await field(page, 'Téléphone (facultatif)').inputValue(),
+      await field(page, 'E-mail (facultatif)').inputValue(), tidy(await page.locator('.contact-save').textContent()),
+    ], ['Modifier le contact', 'Julie Bernard', '07 81 22 33 44', 'julie.bernard@exemple.fr', 'Enregistrer les modifications']);
+    await field(page, 'Téléphone (facultatif)').fill('+44 20 7946 0000');
+    await page.locator('.screen-header .round-back').click();
+    await dialog(page).getByRole('button', { name: 'Continuer' }).waitFor();
+    expectSame(N, 'quitter sans enregistrer', tidy(await dialog(page).locator('h2, .alert-title').first().textContent()), 'Quitter sans enregistrer ?');
+    await dialog(page).getByRole('button', { name: 'Continuer' }).click();
+    mark = state.calls.length;
+    await page.locator('.contact-save').click();
+    await page.waitForURL((url) => !url.search.includes('ecran=modifier'));
+    await page.locator('.account-toast', { hasText: 'Modifications enregistrées' }).waitFor();
+    expectSame(N, 'contact modifié', writesSince(state, mark).map((call) => [call.method, call.table, call.search, call.body]), [
+      ['PATCH', 'pro_contacts', `?id=eq.${julie?.id}&select=id`, { name: 'Julie Bernard', phone: '+442079460000', email: 'julie.bernard@exemple.fr', note: 'Vend un T2 à Villeurbanne.' }],
+    ]);
+
+    // Suppression, après confirmation : la liste revient avec « Contact supprimé ».
+    await page.getByRole('link', { name: 'Modifier', exact: true }).click();
+    await page.locator('.contact-delete').click();
+    await dialog(page).getByRole('button', { name: 'Supprimer' }).waitFor();
+    mark = state.calls.length;
+    await dialog(page).getByRole('button', { name: 'Supprimer' }).click();
+    await page.locator('.account-toast', { hasText: 'Contact supprimé' }).waitFor();
+    expectSame(N, 'contact supprimé', [
+      writesSince(state, mark).map((call) => [call.method, call.table, call.search]), new URL(page.url()).search, (await names()).includes('Julie Bernard'),
+    ], [[['DELETE', 'pro_contacts', `?id=eq.${julie?.id}`]], '?vue=contacts', false]);
+    await context.close();
+  }
+
+  // 9. Ordinateur : la liste, la fiche d'une personne sans conversation (pas de bouton Message), un contact
+  //    introuvable, et la page vide d'un compte sans contact ; aucune écriture.
+  {
+    const N = 'mes contacts (ordinateur)';
+    const state = newState({ pro: true, listings: [SALE], contacts: true });
+    const context = await desktop();
+    await mock(context, state);
+    const page = await open(context, '/compte/?vue=contacts', N);
+    await page.locator('.contact-row').first().waitFor();
+    await shot(page, 'contacts-ordinateur.png');
+    await page.goto(`${base}/compte/?vue=contacts&contact=u-${PAUL}`, { waitUntil: 'networkidle' });
+    await page.locator('.contact-head').waitFor();
+    const activities = await page.$$eval('.contact-activity', (els) => els.map((el) => [
+      el.querySelector('.contact-activity-title').textContent.trim(), el.getAttribute('href'),
+    ]));
+    expectSame(N, 'fiche de Paul', [await page.locator('.contact-action').count(), activities],
+      [0, [['Demande de visite', `/compte/?vue=demande-visite&id=${VISITS[0].id}`]]]);
+    await shot(page, 'contacts-ordinateur-fiche.png');
+    await page.goto(`${base}/compte/?vue=contacts&contact=u-00000000-0000-4000-8000-000000000000`, { waitUntil: 'networkidle' });
+    await page.locator('.account-empty').waitFor();
+    expectSame(N, 'contact introuvable', tidy(await page.locator('.account-empty h2').textContent()), 'Contact introuvable');
+    expectSame(N, 'écritures', writeNames(writesSince(state, 0)), []);
+    await context.close();
+
+    const emptyState = newState({ pro: true, listings: [SALE] });
+    const emptyContext = await phone();
+    await mock(emptyContext, emptyState);
+    const empty = await open(emptyContext, '/compte/?vue=contacts', N);
+    await empty.locator('.account-empty').waitFor();
+    expectSame(N, 'sans contact', [
+      tidy(await empty.locator('.account-empty h2').textContent()), await empty.locator('.account-empty a').getAttribute('href'),
+    ], ['Aucun contact pour le moment', '/compte/?vue=contacts&ecran=ajouter']);
     await emptyContext.close();
   }
 } finally {

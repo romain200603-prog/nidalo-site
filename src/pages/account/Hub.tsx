@@ -3,13 +3,14 @@ import { Icon } from '../../components/Icon';
 import { AlertDialog } from '../listing/Dialogs';
 import { signOut } from '../../lib/account/auth';
 import { listingsCountText, loadMyListings, myListingsStore, ONLINE_STATUSES } from '../../lib/account/myListings';
+import { contactsStore, contactsSubtitle, loadContacts } from '../../lib/account/contacts';
 import { loadProfessional, professionalStore } from '../../lib/account/professional';
 import { saveAccountType, type Account } from '../../lib/account/profile';
 import { loadProject, PROJECT_KIND_LABELS, PROJECT_STEPS, projectStore, STEP_LABELS } from '../../lib/account/project';
 import { loadSavedSearches, savedSearchesStore } from '../../lib/account/savedSearches';
 import { useStore } from '../../lib/account/session';
 import { useDesktop } from '../../lib/desktop';
-import { accountPath, AGENCY_FORM_PATH, AGENCY_PATH, PATHS } from '../../lib/paths';
+import { accountPath, AGENCY_FORM_PATH, AGENCY_PATH, CONTACTS_PATH, PATHS } from '../../lib/paths';
 import { ActivityTile, RowGroup, SpaceProfileCard, SpaceSection, type RowItem } from './parts';
 import { soonPath } from './Screens';
 
@@ -27,7 +28,10 @@ export function Hub({ account }: { account: Account }) {
     void loadMyListings();
     void loadSavedSearches();
     void loadProject();
-    if (isPro) void loadProfessional();
+    if (isPro) {
+      void loadProfessional();
+      void loadContacts();
+    }
   }, [isPro]);
 
   const myListings = listings.status === 'ready' ? listings.items : [];
@@ -187,6 +191,9 @@ function ProjectCard() {
 /** Haut de l'espace professionnel : la fiche agence et les chiffres. */
 function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
   const pro = useStore(professionalStore);
+  const contacts = useStore(contactsStore);
+  const contactItems = contacts.status === 'ready' ? contacts.items : [];
+  const newContacts = contactItems.filter((contact) => contact.isNew).length;
   // Ordinateur : l'agenda des visites est sur le site (Mon agenda) ; sur téléphone, « bientôt » comme avant.
   const desktop = useDesktop();
   const agency = pro.status === 'ready' ? pro.agency : null;
@@ -197,7 +204,7 @@ function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
       <SpaceProfileCard name={name} line={line} badge="Professionnel" photo={agency?.logo_path ?? null} href={AGENCY_PATH} />
       <div className="pro-stats space-card">
         <div><strong>{onlineCount}</strong><span>Annonces</span></div>
-        <div><strong>0</strong><span>Contacts</span></div>
+        <div><strong>{contactItems.length}</strong><span>Contacts</span></div>
         <div><strong>0</strong><span>Ventes en cours</span></div>
       </div>
       <SpaceSection icon="briefcase" title="Mon activité professionnelle">
@@ -205,7 +212,7 @@ function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
           { icon: 'house', title: 'Mes annonces', subtitle: listingsSubtitle(), href: accountPath('annonces') },
           { icon: 'fileText', title: 'Mes mandats', subtitle: '0 mandat actif, vente et location', href: soonPath('mandats') },
           { icon: 'handshake', title: 'Mes ventes', subtitle: '0 en cours · 0 compromis signé', href: soonPath('ventes') },
-          { icon: 'users', title: 'Mes contacts', subtitle: '0 contact · 0 nouveau', href: soonPath('contacts') },
+          { icon: 'users', title: 'Mes contacts', subtitle: contactsSubtitle(contactItems), badge: newContacts, href: CONTACTS_PATH },
           { icon: 'calendarDays', title: 'Agenda des visites', subtitle: 'Visites et rendez-vous', href: desktop ? accountPath('agenda') : soonPath('agenda') },
           { icon: 'sparkles', title: 'Mes opportunités', subtitle: '0 opportunité active', href: soonPath('opportunites') },
         ]} />

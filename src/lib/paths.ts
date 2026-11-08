@@ -17,7 +17,8 @@ export const PATHS = {
 /** Écrans de Mon compte : `/compte/?vue=informations`. */
 export type AccountView =
   | 'informations' | 'annonces' | 'recherches' | 'confidentialite' | 'legal' | 'securite' | 'supprimer' | 'bientot'
-  | 'notifications' | 'demande-visite' | 'agenda' | 'ajouter-visite' | 'projet' | 'consultes' | 'agence' | 'diffusion' | 'affiche';
+  | 'notifications' | 'demande-visite' | 'agenda' | 'ajouter-visite' | 'projet' | 'consultes' | 'agence' | 'diffusion' | 'affiche'
+  | 'contacts';
 
 /** « Publier une annonce » ; avec une annonce, reprend son brouillon ou la modifie (`etape=photos` : ses photos). */
 export function publishPath(listingId: string | null = null, step: 'photos' | null = null): string {
@@ -34,6 +35,11 @@ export function accountPath(view: AccountView | null = null, extra: Record<strin
 /** « Profil agence » de Mon compte, et son formulaire (aussi « Passer en professionnel » sans fiche agence). */
 export const AGENCY_PATH = accountPath('agence');
 export const AGENCY_FORM_PATH = accountPath('agence', { ecran: 'modifier' });
+
+/** « Mes contacts » : la liste, un contact (`contact=u-<compte>` ou `m-<ligne>`), son formulaire (`ecran=modifier`) et l'ajout. */
+export const CONTACTS_PATH = accountPath('contacts');
+export const NEW_CONTACT_PATH = accountPath('contacts', { ecran: 'ajouter' });
+export const contactPath = (key: string, edit = false): string => accountPath('contacts', edit ? { contact: key, ecran: 'modifier' } : { contact: key });
 
 /**
  * Page d'une annonce. Comme dans l'app, la catégorie affichée dépend du mode de recherche : un appartement à vendre
