@@ -10,10 +10,12 @@ import { AddVisit } from './account/AddVisit';
 import { AgencyProfile } from './account/AgencyProfile';
 import { AgendaScreen } from './account/Agenda';
 import { DesktopSpace } from './account/DesktopSpace';
+import { Diffusion } from './account/Diffusion';
 import { Hub } from './account/Hub';
 import { MyInfo } from './account/MyInfo';
 import { MyListings } from './account/MyListings';
 import { NotificationsScreen } from './account/Notifications';
+import { Poster } from './account/Poster';
 import { ProfileChoice } from './account/ProfileChoice';
 import { ProjectEditor } from './account/ProjectEditor';
 import { SavedSearchesList } from './account/SavedSearchesList';
@@ -122,6 +124,9 @@ function AccountContent() {
     case 'bientot': return <SoonScreen screen={params.get('ecran')} />;
     // Profil agence : la page de l'agence et son formulaire, sur téléphone et sur ordinateur.
     case 'agence': return <AgencyProfile account={current} editing={params.get('ecran') === 'modifier'} />;
+    // Outils de diffusion : lien, QR code, texte et affiche de vitrine (format A4) de chaque annonce en ligne.
+    case 'diffusion': return <Diffusion />;
+    case 'affiche': return <Poster listingId={params.get('annonce')} />;
     // Ordinateur : Mon espace de la maquette 5 pour un compte particulier ; l'espace professionnel garde son écran.
     default: return desktop && current.profile.account_type !== 'professional' ? <DesktopSpace account={current} /> : <Hub account={current} />;
   }

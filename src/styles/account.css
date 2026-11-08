@@ -462,3 +462,65 @@
 .agency-save { width: 100%; min-height: 52px; font-size: 15px; font-weight: 700; }
 /* « Modifier » de la page de l'agence : un lien qui a l'allure du bouton « Enregistrer ». */
 a.save-capsule { text-decoration: none; }
+
+/* ——— Outils de diffusion : chaque annonce en ligne et ses quatre outils ——— */
+.diffusion { gap: 16px; }
+.diffusion-intro { margin: -6px 0 0; color: var(--text-secondary); font-size: 13.5px; }
+.diffusion-card { display: flex; flex-direction: column; gap: 14px; padding: 14px; }
+.diffusion-head { display: flex; align-items: center; gap: 12px; }
+.diffusion-thumb { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 84px; height: 72px; overflow: hidden; border-radius: 12px; background: var(--chip); color: var(--placeholder); }
+.diffusion-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.diffusion-text { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; }
+.diffusion-title { overflow: hidden; font-size: 15px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.diffusion-line { margin: 0; color: var(--text-secondary); font-size: 13px; }
+.diffusion-price { margin: 0; font-size: 15px; font-weight: 800; }
+.diffusion-tools { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.diffusion-tool { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-height: 64px; padding: 8px 4px; border: 0; border-radius: 14px; background: var(--blue-soft); color: var(--blue); font: inherit; font-size: 12.5px; font-weight: 700; text-decoration: none; cursor: pointer; }
+.diffusion-tool:hover { background: #DDE7F8; }
+.diffusion-tool .icon { width: 21px; height: 21px; }
+.diffusion-qr-box { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 4px; }
+.diffusion-qr { width: min(220px, 70vw); height: auto; border: 1px solid var(--border); border-radius: 12px; }
+.diffusion-qr-url { max-width: 100%; color: var(--text-secondary); font-size: 11.5px; overflow-wrap: anywhere; }
+.diffusion-textarea, .diffusion-link { margin-top: 4px; text-align: left; }
+.diffusion-textarea { height: auto; padding: 10px 12px; font-size: 14px; line-height: 1.45; resize: none; }
+
+/* ——— Affiche de vitrine (A4) : mêmes proportions à l'écran et sur papier (tailles en % de la largeur) ——— */
+.poster-screen { display: flex; flex-direction: column; gap: 12px; padding-bottom: 16px; }
+.poster-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.poster-toolbar h1 { font-size: 17px; font-weight: 800; }
+.poster-hint { margin: 0; color: var(--text-secondary); font-size: 12.5px; }
+.poster { container-type: inline-size; display: flex; flex-direction: column; width: 100%; aspect-ratio: 210 / 297; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; background: #FFFFFF; color: var(--ink); box-shadow: 0 8px 24px rgba(10, 26, 68, 0.08); }
+.poster-band { flex: none; padding: 3cqw 6cqw; background: var(--blue); color: #FFFFFF; font-size: 6.4cqw; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+/* La photo prend la place qui reste : un titre long la réduit, rien ne déborde de la feuille. */
+.poster-photo { display: flex; align-items: center; justify-content: center; flex: 1 1 0; min-height: 16%; overflow: hidden; background: var(--chip); color: var(--placeholder); }
+.poster-photo img { width: 100%; height: 100%; object-fit: cover; }
+.poster-photo .icon { width: 12cqw; height: 12cqw; }
+.poster-body { display: flex; flex: none; flex-direction: column; gap: 1cqw; padding: 4cqw 6cqw 0; }
+.poster-title { font-size: 5cqw; font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; }
+.poster-place { margin: 0; color: var(--text-secondary); font-size: 3.3cqw; font-weight: 600; }
+.poster-price { margin: 0.6cqw 0 0; color: var(--blue); font-size: 7.4cqw; font-weight: 800; line-height: 1.1; }
+.poster-facts { margin: 0; font-size: 3.6cqw; font-weight: 700; }
+.poster-energy { display: flex; gap: 4cqw; margin-top: 1.4cqw; }
+.poster-chip { display: inline-flex; align-items: center; gap: 1.6cqw; color: var(--text-secondary); font-size: 2.8cqw; font-weight: 700; }
+.poster-chip b { display: inline-flex; align-items: center; justify-content: center; width: 6cqw; height: 5.4cqw; border-radius: 1.2cqw; font-size: 3.4cqw; font-weight: 800; }
+.poster-small { margin: 0; color: var(--text-secondary); font-size: 2.4cqw; }
+.poster-foot { display: flex; flex: none; align-items: flex-end; justify-content: space-between; gap: 5cqw; padding: 4cqw 6cqw 5cqw; }
+.poster-qr { display: flex; flex: 0 1 auto; align-items: center; gap: 3cqw; max-width: 50%; }
+.poster-qr-code { flex: none; width: 24cqw; height: 24cqw; }
+.poster-qr p { margin: 0; font-size: 2.9cqw; font-weight: 600; line-height: 1.3; }
+.poster-agency { display: flex; flex: 1 1 0; flex-direction: column; align-items: flex-end; gap: 1.6cqw; min-width: 0; text-align: right; }
+.poster-agency-logo { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 12cqw; height: 12cqw; overflow: hidden; border-radius: 3cqw; background: var(--ink); color: #FFFFFF; font-size: 4cqw; font-weight: 700; }
+.poster-agency-logo img { width: 100%; height: 100%; object-fit: cover; }
+.poster-agency-text { display: flex; max-width: 100%; flex-direction: column; align-items: flex-end; gap: 0.4cqw; font-size: 2.6cqw; color: var(--text-secondary); overflow-wrap: break-word; }
+.poster-agency-text strong { color: var(--ink); font-size: 3.2cqw; font-weight: 800; }
+
+@media print {
+  @page { size: A4 portrait; margin: 0; }
+  html, body { margin: 0 !important; padding: 0 !important; background: #FFFFFF !important; }
+  body:has(.poster) .topbar, body:has(.poster) .dtop, body:has(.poster) .tabbar, body:has(.poster) .footer, body:has(.poster) .dfoot,
+  body:has(.poster) .skip-link, body:has(.poster) .account-toast, .poster-toolbar, .poster-hint { display: none !important; }
+  body:has(.poster) .page, body:has(.poster) main, body:has(.poster) .account-wrap { display: block; max-width: none; min-height: 0; margin: 0; padding: 0; }
+  .poster-screen { padding: 0; }
+  .poster { width: 210mm; height: 297mm; aspect-ratio: auto; border: 0; border-radius: 0; box-shadow: none; break-inside: avoid; }
+  .poster, .poster * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

@@ -1,13 +1,16 @@
-// Vérification de « Profil agence » dans Chromium, sans réseau : Supabase est simulé. Un particulier passe en
-// professionnel en remplissant la fiche agence (erreurs d'abord, puis la fiche, ses détails, le compte et le logo,
-// dans l'ordre de l'app) ; un professionnel ouvre sa page agence, la modifie, change son logo (l'ancien est retiré) ;
-// un refus du serveur s'affiche sans quitter le formulaire ; « Passer en professionnel » mène au formulaire depuis
-// Mon compte, Mes informations et l'espace sur ordinateur. Captures pour Romain : agence-*.png.
-// Lancer après la construction : node scripts/check-agency.mjs [dossier construit, docs/ par défaut] [dossier des captures]
+// Vérification de l'espace professionnel dans Chromium, sans réseau : Supabase est simulé.
+// Profil agence : un particulier passe en professionnel en remplissant la fiche agence (erreurs d'abord, puis la
+// fiche, ses détails, le compte et le logo, dans l'ordre de l'app) ; un professionnel ouvre sa page agence, la modifie,
+// change son logo (l'ancien est retiré) ; un refus du serveur s'affiche sans quitter le formulaire ; « Passer en
+// professionnel » mène au formulaire depuis Mon compte, Mes informations et l'espace sur ordinateur.
+// Outils de diffusion : les annonces en ligne seulement, avec leur lien copié, leur QR code (PNG téléchargé), leur
+// texte copié et leur affiche A4 (une seule page en PDF) ; rien n'est écrit sur le serveur.
+// Captures pour Romain : agence-*.png, diffusion-*.png, diffusion-affiche.pdf.
+// Lancer après la construction : node scripts/check-espace-pro.mjs [dossier construit, docs/ par défaut] [dossier des captures]
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -69,6 +72,11 @@ const AGENCY_DETAILS = {
 };
 const { listing_photos: LISTED_PHOTOS, ...listedRow } = LISTED;
 const ONLINE = { ...listedRow, owner_id: USER_ID, status: 'active', listing_photos: LISTED_PHOTOS };
+const [, SECOND, RENTAL] = JSON.parse(await readFile(join(fixtures, 'listings.json'), 'utf8'));
+/** Outils de diffusion : une vente avec honoraires, une location sans photo, et un brouillon (jamais montré). */
+const SALE = { ...ONLINE, agency_fees_amount: 9500, agency_fees_paid_by: 'buyer' };
+const RENT = { ...RENTAL, owner_id: USER_ID, status: 'active' };
+const DRAFT = { ...SECOND, owner_id: USER_ID, status: 'draft' };
 
 // MARK: - Serveur simulé
 
@@ -91,14 +99,17 @@ function fakeSession() {
   return { access_token: access, token_type: 'bearer', expires_in: 7200, expires_at: now + 7200, refresh_token: 'jeton-de-test', user };
 }
 
-/** `pro` : un professionnel avec sa fiche agence, ses détails et une annonce en ligne ; sinon un particulier sans fiche. */
-function newState({ pro = false } = {}) {
+/**
+ * `pro` : un professionnel avec sa fiche agence, ses détails et (sauf `listings`) une annonce en ligne ; sinon un
+ * particulier sans fiche.
+ */
+function newState({ pro = false, listings = null } = {}) {
   return {
     profile: pro ? { ...PROFILE, account_type: 'professional', professional_profile_id: AGENCY_ID } : { ...PROFILE },
     details: { ...DETAILS },
     agency: pro ? { ...AGENCY } : null,
     agencyDetails: pro ? { ...AGENCY_DETAILS } : null,
-    listings: pro ? [structuredClone(ONLINE)] : [],
+    listings: structuredClone(listings ?? (pro ? [ONLINE] : [])),
     files: new Map(pro ? [[OLD_LOGO, PHOTO]] : []),
     calls: [],
     /** Le serveur refuse les détails (contrôle d'une colonne). */
@@ -351,6 +362,9 @@ async function viewSummary(page) {
 
 // MARK: - Vérifications
 
+/** Nombre de pages d'un PDF (objets « /Type /Page », sans « /Pages »). */
+const pdfPages = (bytes) => (bytes.toString('latin1').match(/\/Type\s*\/Page(?!s)/g) ?? []).length;
+
 const browser = await chromium.launch();
 try {
   const phone = () => browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR', timezoneId: 'Europe/Paris' });
@@ -599,6 +613,138 @@ try {
     expectSame(N, 'écritures', writeNames(writesSince(state, 0)), []);
     await context.close();
   }
+
+  // 6. Ordinateur, professionnel : Outils de diffusion depuis Mon compte. Seules les annonces en ligne ; le lien et
+  //    le texte sont copiés, le QR code téléchargé en PNG, l'affiche tient sur une page A4. Rien n'est écrit.
+  {
+    const N = 'outils de diffusion (ordinateur)';
+    const state = newState({ pro: true, listings: [SALE, DRAFT, RENT] });
+    const context = await desktop();
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base });
+    await mock(context, state);
+    const page = await open(context, '/compte/', N);
+    const row = page.getByRole('link', { name: /Outils de diffusion/ });
+    expectSame(N, 'ligne de Mon compte', await row.getAttribute('href'), '/compte/?vue=diffusion');
+    await row.click();
+    await page.waitForURL('**/compte/?vue=diffusion');
+    await page.locator('.diffusion-card').first().waitFor();
+    expectSame(N, 'annonces', [
+      tidy(await page.locator('.screen-header h1').textContent()),
+      await texts(page, '.diffusion-title'),
+      await texts(page, '.diffusion-line'),
+      await texts(page, '.diffusion-price'),
+      await texts(page, '.diffusion-card:first-of-type .diffusion-tool'),
+    ], [
+      'Outils de diffusion', [SALE.title, RENT.title], ['Lyon 3e · 62 m²', 'Lyon 7e · 24 m²'],
+      ['238 000 €', '690 €/mois charges comprises'], ['Lien', 'QR code', 'Texte', 'Affiche'],
+    ]);
+    await page.waitForFunction(() => [...document.querySelectorAll('.diffusion-thumb img')].every((img) => img.complete && img.naturalWidth > 0), null, { timeout: 8000 })
+      .catch(() => problems.push(`${N} : photo de l'annonce non chargée`));
+    await shot(page, 'diffusion-ordinateur.png');
+
+    const card = page.locator('.diffusion-card').first();
+    // Lien : sans partage du navigateur (ordinateur), il est copié.
+    await card.getByRole('button', { name: 'Lien' }).click();
+    await page.locator('.account-toast').waitFor({ timeout: 3000 }).catch(() => undefined);
+    expectSame(N, 'lien copié', [
+      tidy(await page.locator('.account-toast').textContent().catch(() => null)),
+      await page.evaluate(() => navigator.clipboard.readText()),
+    ], ['Lien copié', `${base}/annonce/?id=${SALE.id}`]);
+
+    // QR code : le dessin, l'adresse publique, et le PNG.
+    await card.getByRole('button', { name: 'QR code' }).click();
+    const qr = dialog(page);
+    expectSame(N, 'fenêtre du QR code', [
+      tidy(await qr.locator('h2').textContent()),
+      tidy(await qr.locator('.diffusion-qr-url').textContent()),
+      await qr.locator('svg.diffusion-qr').getAttribute('viewBox'),
+    ], ['QR code de l\'annonce', `https://nidalo.fr/annonce/?id=${SALE.id}`, '0 0 45 45']);
+    const [download] = await Promise.all([page.waitForEvent('download'), qr.getByRole('button', { name: 'Télécharger le QR code' }).click()]);
+    const pngPath = join(out, 'diffusion-qr.png');
+    await download.saveAs(pngPath);
+    const png = await readFile(pngPath);
+    expectSame(N, 'QR code téléchargé', [download.suggestedFilename(), png.subarray(1, 4).toString('latin1'), png.readUInt32BE(16), png.readUInt32BE(20)],
+      ['nidalo-qr-appartement-lumineux-avec-balcon.png', 'PNG', 990, 990]);
+    await qr.getByRole('button', { name: 'Fermer' }).click();
+
+    // Texte : celui de « Partager », puis l'adresse publique ; copié.
+    await card.getByRole('button', { name: 'Texte' }).click();
+    const wanted = ['Appartement lumineux avec balcon · Lyon 3e (69003)', '238 000 € · 62 m² · 3 pièces', 'À voir sur Nidalo', `https://nidalo.fr/annonce/?id=${SALE.id}`].join('\n');
+    const shown = await dialog(page).locator('textarea').inputValue();
+    expectSame(N, 'texte', shown.replace(/[\u202f\u00a0]/g, ' '), wanted);
+    await shot(page, 'diffusion-texte.png');
+    await dialog(page).getByRole('button', { name: 'Copier le texte' }).click();
+    await page.waitForFunction(() => document.querySelector('.account-toast')?.textContent?.includes('Texte copié'), null, { timeout: 3000 })
+      .catch(() => problems.push(`${N} : pas de message « Texte copié »`));
+    expectSame(N, 'texte copié', (await page.evaluate(() => navigator.clipboard.readText())) === shown, true);
+
+    // Affiche : nouvel onglet, A4, une seule page en PDF.
+    const poster = card.getByRole('link', { name: 'Affiche' });
+    expectSame(N, 'lien de l\'affiche', [await poster.getAttribute('href'), await poster.getAttribute('target')], [`/compte/?vue=affiche&annonce=${SALE.id}`, '_blank']);
+    const [tab] = await Promise.all([context.waitForEvent('page'), poster.click()]);
+    await tab.waitForLoadState('networkidle');
+    await tab.locator('.poster').waitFor();
+    await tab.waitForFunction(() => [...document.querySelectorAll('.poster img')].every((img) => img.complete && img.naturalWidth > 0), null, { timeout: 8000 })
+      .catch(() => problems.push(`${N} : images de l'affiche non chargées`));
+    expectSame(N, 'affiche', {
+      band: tidy(await tab.locator('.poster-band').textContent()),
+      title: tidy(await tab.locator('.poster-title').textContent()),
+      place: tidy(await tab.locator('.poster-place').textContent()),
+      price: tidy(await tab.locator('.poster-price').textContent()),
+      facts: tidy(await tab.locator('.poster-facts').textContent()),
+      energy: await texts(tab, '.poster-chip'),
+      small: await texts(tab, '.poster-small'),
+      agency: await texts(tab, '.poster-agency-text > *'),
+      qr: await tab.locator('.poster-qr-code').getAttribute('aria-label'),
+    }, {
+      band: 'À vendre', title: SALE.title, place: 'Lyon 3e (69003)', price: '238 000 €', facts: '62 m² · 3 pièces',
+      energy: ['DPEC', 'GESC'],
+      small: ['Consommation : 160 kWh/m²/an', 'Dépenses d\'énergie estimées entre 820 € et 1 150 € par an.', 'Honoraires : 9 500 € à la charge de l\'acquéreur'],
+      agency: ['Rhône Immobilier', 'Lyon (69006)', '04 78 12 34 56', 'contact@rhone-immobilier.fr'], qr: 'QR code de l\'annonce',
+    });
+    await shot(tab, 'diffusion-affiche-ecran.png');
+    const pdf = await tab.pdf({ preferCSSPageSize: true, printBackground: true });
+    await writeFile(join(out, 'diffusion-affiche.pdf'), pdf);
+    expectSame(N, 'pages du PDF', pdfPages(pdf), 1);
+    await tab.emulateMedia({ media: 'print' });
+    expectSame(N, 'impression', await tab.evaluate(() => [
+      getComputedStyle(document.querySelector('.poster-toolbar')).display,
+      [...document.querySelectorAll('.dtop, .topbar, .dfoot, .footer, .tabbar')].every((el) => getComputedStyle(el).display === 'none'),
+      Math.round(document.querySelector('.poster').getBoundingClientRect().width / 96 * 25.4),
+    ]), ['none', true, 210]);
+    expectSame(N, 'écritures', writeNames(writesSince(state, 0)), []);
+    await context.close();
+  }
+
+  // 7. Téléphone : la même page ; sans annonce en ligne, un message ; l'affiche d'un brouillon n'existe pas.
+  {
+    const N = 'outils de diffusion (téléphone)';
+    const state = newState({ pro: true, listings: [SALE, RENT] });
+    const context = await phone();
+    await mock(context, state);
+    const page = await open(context, '/compte/?vue=diffusion', N);
+    await page.locator('.diffusion-card').first().waitFor();
+    await page.waitForFunction(() => [...document.querySelectorAll('.diffusion-thumb img')].every((img) => img.complete && img.naturalWidth > 0), null, { timeout: 8000 })
+      .catch(() => undefined);
+    await shot(page, 'diffusion-telephone.png');
+    await page.locator('.diffusion-card').first().getByRole('button', { name: 'QR code' }).click();
+    await dialog(page).locator('svg.diffusion-qr').waitFor();
+    await shot(page, 'diffusion-telephone-qr.png');
+    await context.close();
+
+    const emptyState = newState({ pro: true, listings: [DRAFT] });
+    const emptyContext = await phone();
+    await mock(emptyContext, emptyState);
+    const empty = await open(emptyContext, '/compte/?vue=diffusion', N);
+    await empty.locator('.account-empty').waitFor();
+    expectSame(N, 'sans annonce en ligne', [tidy(await empty.locator('.account-empty h2').textContent()), await empty.locator('.diffusion-card').count()],
+      ['Aucune annonce en ligne', 0]);
+    await empty.goto(`${base}/compte/?vue=affiche&annonce=${DRAFT.id}`, { waitUntil: 'networkidle' });
+    await empty.locator('.account-empty').waitFor();
+    expectSame(N, 'affiche d\'un brouillon', [tidy(await empty.locator('.account-empty h2').textContent()), await empty.locator('.poster').count()],
+      ['Affiche indisponible', 0]);
+    await emptyContext.close();
+  }
 } finally {
   await browser.close();
   server.close();
@@ -608,4 +754,4 @@ if (problems.length) {
   console.error(`${problems.length} problème(s) :\n- ${problems.join('\n- ')}`);
   process.exit(1);
 }
-console.log(`Profil agence : tout est bon. Captures dans ${out}`);
+console.log(`Espace pro : tout est bon. Captures dans ${out}`);

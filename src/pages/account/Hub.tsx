@@ -214,7 +214,7 @@ function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
         <RowGroup rows={[
           { icon: 'chart', title: 'Statistiques', subtitle: 'Vues, contacts et performances', href: soonPath('statistiques') },
           { icon: 'users', title: 'Gestion des équipes', subtitle: 'Inviter des collaborateurs', href: soonPath('equipes') },
-          { icon: 'share', title: 'Outils de diffusion', subtitle: 'Partager mes annonces', href: soonPath('diffusion') },
+          { icon: 'share', title: 'Outils de diffusion', subtitle: 'Partager mes annonces', href: accountPath('diffusion') },
           { icon: 'badgeCheck', title: 'Profil agence', subtitle: agency ? 'Fiche agence' : 'À compléter', href: AGENCY_PATH },
           { icon: 'receipt', title: 'Abonnement NIDALO Pro', subtitle: 'Options, factures et paiement', href: soonPath('abonnement') },
         ]} />
