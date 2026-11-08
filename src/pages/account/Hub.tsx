@@ -11,10 +11,11 @@ import { saveAccountType, type Account } from '../../lib/account/profile';
 import { loadProject, PROJECT_KIND_LABELS, PROJECT_STEPS, projectStore, STEP_LABELS } from '../../lib/account/project';
 import { activeSalesCount, loadSales, salesStore, salesSubtitle } from '../../lib/account/sales';
 import { loadSavedSearches, savedSearchesStore } from '../../lib/account/savedSearches';
+import { loadTeam, memberAgency, ROLE_LABELS, teamStore, teamSubtitle } from '../../lib/account/team';
 import { useStore } from '../../lib/account/session';
 import { useDesktop } from '../../lib/desktop';
 import { parisDay } from '../../lib/listing/views';
-import { accountPath, AGENCY_FORM_PATH, AGENCY_PATH, CONTACTS_PATH, MANDATES_PATH, OPPORTUNITIES_PATH, PATHS, SALES_PATH } from '../../lib/paths';
+import { accountPath, AGENCY_FORM_PATH, AGENCY_PATH, CONTACTS_PATH, MANDATES_PATH, OPPORTUNITIES_PATH, PATHS, SALES_PATH, TEAM_PATH } from '../../lib/paths';
 import { ActivityTile, RowGroup, SpaceProfileCard, SpaceSection, type RowItem } from './parts';
 import { soonPath } from './Screens';
 
@@ -23,6 +24,7 @@ import { soonPath } from './Screens';
 export function Hub({ account }: { account: Account }) {
   const listings = useStore(myListingsStore);
   const searches = useStore(savedSearchesStore);
+  const team = useStore(teamStore);
   const [dialog, setDialog] = useState<'logout' | 'type' | 'review' | null>(null);
   const [typeError, setTypeError] = useState<string | null>(null);
   const isPro = account.profile.account_type === 'professional';
@@ -38,6 +40,7 @@ export function Hub({ account }: { account: Account }) {
       void loadSales();
       void loadMandates();
       void loadOpportunities();
+      void loadTeam();
     }
   }, [isPro]);
 
@@ -102,7 +105,8 @@ export function Hub({ account }: { account: Account }) {
         </>
       )}
       <SpaceSection icon="user" title="Compte et sécurité">
-        <RowGroup rows={isPro
+        {/* Seul le gérant modifie la fiche de l'agence : un membre de l'équipe n'a pas cette ligne. */}
+        <RowGroup rows={isPro && !memberAgency(team)
           ? [{ icon: 'badgeCheck', title: 'Informations de l\'agence', subtitle: 'SIREN, carte professionnelle, justificatifs', href: AGENCY_FORM_PATH }, securityRow, privacyRow, typeRow]
           : [securityRow, privacyRow, typeRow]} />
         {typeError && <p className="field-error">{typeError}</p>}
@@ -198,6 +202,7 @@ function ProjectCard() {
 /** Haut de l'espace professionnel : la fiche agence et les chiffres. */
 function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
   const pro = useStore(professionalStore);
+  const team = useStore(teamStore);
   const contacts = useStore(contactsStore);
   const sales = useStore(salesStore);
   const saleRows = sales.status === 'ready' ? sales.rows : [];
@@ -210,11 +215,19 @@ function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
   // Ordinateur : l'agenda des visites est sur le site (Mon agenda) ; sur téléphone, « bientôt » comme avant.
   const desktop = useDesktop();
   const agency = pro.status === 'ready' ? pro.agency : null;
-  const name = agency?.agency_name?.trim() || 'Votre agence';
-  const line = agency?.email?.trim() || agency?.city?.trim() || 'Fiche agence à compléter';
+  // Membre de l'équipe d'une agence (responsable ou agent) : la carte montre l'agence et son rôle, et mène à l'équipe.
+  const member = agency ? null : memberAgency(team);
+  const name = (member?.agency_name ?? agency?.agency_name)?.trim() || 'Votre agence';
+  const line = member ? `${ROLE_LABELS[member.role]} de l'équipe` : agency?.email?.trim() || agency?.city?.trim() || 'Fiche agence à compléter';
   return (
     <>
-      <SpaceProfileCard name={name} line={line} badge="Professionnel" photo={agency?.logo_path ?? null} href={AGENCY_PATH} />
+      <SpaceProfileCard
+        name={name}
+        line={line}
+        badge="Professionnel"
+        photo={(member ? member.logo_path : agency?.logo_path) ?? null}
+        href={member ? TEAM_PATH : AGENCY_PATH}
+      />
       <div className="pro-stats space-card">
         <div><strong>{onlineCount}</strong><span>Annonces</span></div>
         <div><strong>{contactItems.length}</strong><span>Contacts</span></div>
@@ -233,9 +246,9 @@ function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
       <SpaceSection icon="wrench" title="Outils professionnels">
         <RowGroup rows={[
           { icon: 'chart', title: 'Statistiques', subtitle: 'Vues, contacts et performances', href: accountPath('statistiques') },
-          { icon: 'users', title: 'Gestion des équipes', subtitle: 'Inviter des collaborateurs', href: soonPath('equipes') },
+          { icon: 'users', title: 'Gestion des équipes', subtitle: teamSubtitle(team), href: TEAM_PATH },
           { icon: 'share', title: 'Outils de diffusion', subtitle: 'Partager mes annonces', href: accountPath('diffusion') },
-          { icon: 'badgeCheck', title: 'Profil agence', subtitle: agency ? 'Fiche agence' : 'À compléter', href: AGENCY_PATH },
+          { icon: 'badgeCheck', title: 'Profil agence', subtitle: agency || member ? 'Fiche agence' : 'À compléter', href: AGENCY_PATH },
           { icon: 'receipt', title: 'Abonnement NIDALO Pro', subtitle: 'Options, factures et paiement', href: soonPath('abonnement') },
         ]} />
       </SpaceSection>

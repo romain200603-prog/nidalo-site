@@ -328,6 +328,16 @@ async function mock(context, { signedIn = false, listingRows = listings, account
       else if (!['rpc/my_offers', 'rpc/my_visit_requests', 'agenda_visits'].includes(table)) problems.push(`${table} appelé sans action de la personne`);
       return json(route, 200, []);
     }
+    if (/^rpc\/(my_team_agency|my_agency_team|agency_invites|agency_invite_preview)$/.test(table)) {
+      // Gestion des équipes (Mon compte d'un professionnel, Profil agence) : aucune équipe ici ; les écrans des équipes
+      // sont vérifiés par scripts/check-espace-pro.mjs. Rien de cela sans compte.
+      if (!signedIn) problems.push(`sans compte : ${table} demandé`);
+      return json(route, 200, []);
+    }
+    if (/^rpc\/(create_agency_invite|revoke_agency_invite|set_agency_member_role|remove_agency_member|leave_agency|accept_agency_invite)$/.test(table)) {
+      problems.push(`${table} appelé sans action de la personne`);
+      return json(route, 400, { message: 'non simulé' });
+    }
     if (signedIn && table in tables) {
       if (request.method() !== 'GET' && request.method() !== 'HEAD') {
         let body = null;

@@ -10,16 +10,18 @@ import {
 import { loadMyListings, myListingsStore, ONLINE_STATUSES } from '../../lib/account/myListings';
 import { avatarUrl, initials, phonePairs, preparedPhoto, type Account } from '../../lib/account/profile';
 import { useStore } from '../../lib/account/session';
+import { loadMemberAgency } from '../../lib/account/team';
 import { cardContent } from '../../lib/cardContent';
-import { accountPath, AGENCY_FORM_PATH, AGENCY_PATH } from '../../lib/paths';
+import { accountPath, AGENCY_FORM_PATH, AGENCY_PATH, TEAM_PATH } from '../../lib/paths';
 import { ScreenHeader, Spinner, Toast } from './parts';
 
 // « Profil agence » de Mon compte : la page de l'agence telle que les autres la voient
 // (Features/ListingDetail/PublisherViews.swift, AgencyProfileView) avec « Modifier », et son formulaire
 // (Features/Profile/ProfessionalOnboardingView.swift). Sans fiche agence, le formulaire s'ouvre directement : c'est
-// aussi « Passer en professionnel » sur le site.
+// aussi « Passer en professionnel » sur le site. Un membre de l'équipe d'une agence (responsable ou agent) voit la page de
+// cette agence, sans « Modifier » : seul son gérant la modifie.
 
-type LoadState = { status: 'loading' } | { status: 'error' } | { status: 'ready'; agency: AgencyRecord | null };
+type LoadState = { status: 'loading' } | { status: 'error' } | { status: 'ready'; agency: AgencyRecord | null; member: boolean };
 
 export function AgencyProfile({ account, editing }: { account: Account; editing: boolean }) {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
@@ -29,7 +31,9 @@ export function AgencyProfile({ account, editing }: { account: Account; editing:
   async function load() {
     setState({ status: 'loading' });
     try {
-      setState({ status: 'ready', agency: await loadAgency() });
+      const agency = await loadAgency();
+      const team = agency ? null : await loadMemberAgency();
+      setState({ status: 'ready', agency: agency ?? team?.agency ?? null, member: team !== null });
     } catch {
       setState({ status: 'error' });
     }
@@ -49,7 +53,7 @@ export function AgencyProfile({ account, editing }: { account: Account; editing:
       return;
     }
     window.history.replaceState(null, '', AGENCY_PATH);
-    setState({ status: 'ready', agency });
+    setState({ status: 'ready', agency, member: false });
     setMode('view');
     window.scrollTo(0, 0);
     setToast(created ? 'Fiche agence enregistrée' : 'Modifications enregistrées');
@@ -66,6 +70,7 @@ export function AgencyProfile({ account, editing }: { account: Account; editing:
       </div>
     );
   }
+  if (state.member && state.agency) return <AgencyView agency={state.agency} toast={null} member />;
   if (mode === 'edit' || !state.agency) return <AgencyEditor account={account} agency={state.agency} onSaved={saved} />;
   return <AgencyView agency={state.agency} toast={toast} />;
 }
@@ -102,7 +107,7 @@ function InfoRows({ rows }: { rows: { label: string; value: string }[] }) {
   );
 }
 
-function AgencyView({ agency, toast }: { agency: AgencyRecord; toast: string | null }) {
+function AgencyView({ agency, toast, member = false }: { agency: AgencyRecord; toast: string | null; member?: boolean }) {
   const details = agency.details;
   const place = agencyPlace(agency);
   const about = details?.about?.trim() || null;
@@ -116,7 +121,7 @@ function AgencyView({ agency, toast }: { agency: AgencyRecord; toast: string | n
   return (
     <div className="space agency-page">
       <Toast text={toast} />
-      <ScreenHeader title="Profil agence" action={<a className="save-capsule" href={AGENCY_FORM_PATH}>Modifier</a>} />
+      <ScreenHeader title="Profil agence" action={member ? undefined : <a className="save-capsule" href={AGENCY_FORM_PATH}>Modifier</a>} />
       <section className="agency-head space-card">
         <AgencyLogo name={agency.agency_name} url={avatarUrl(agency.logo_path)} size={88} />
         <h2 className="agency-name">{agency.agency_name}</h2>
@@ -126,6 +131,12 @@ function AgencyView({ agency, toast }: { agency: AgencyRecord; toast: string | n
         </div>
         {place && <p className="agency-place">{place}</p>}
       </section>
+      {member && (
+        <AgencyCard icon="users" title="L'équipe de l'agence">
+          <p className="agency-note">Vous faites partie de l&apos;équipe de cette agence. Seul son gérant modifie cette fiche.</p>
+          <a className="btn btn-light agency-site" href={TEAM_PATH}><Icon name="users" />Gestion des équipes</a>
+        </AgencyCard>
+      )}
       {about && (
         <AgencyCard icon="fileText" title="Présentation">
           <p className="agency-about">{about}</p>
@@ -149,7 +160,7 @@ function AgencyView({ agency, toast }: { agency: AgencyRecord; toast: string | n
           <p className="agency-caption">Ces informations sont déclarées par l&apos;agence et n&apos;ont pas encore été vérifiées par Nidalo.</p>
         )}
       </AgencyCard>
-      <AgencyListings />
+      {!member && <AgencyListings />}
     </div>
   );
 }

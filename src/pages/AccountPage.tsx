@@ -4,6 +4,7 @@ import { SignInCard } from '../components/account/SignInCard';
 import { authMessage, GOOGLE_MESSAGE, isNetworkError, isNewAccount, linkErrorMessage, openLink, takeGoogleReturn } from '../lib/account/auth';
 import { PATHS } from '../lib/paths';
 import { accountStore, loadAccount } from '../lib/account/profile';
+import { cleanToken, invitationPath, pendingInvitation, rememberInvitation } from '../lib/account/team';
 import { recoveryStore, useSession, useStore } from '../lib/account/session';
 import { useDesktop } from '../lib/desktop';
 import { AddVisit } from './account/AddVisit';
@@ -26,6 +27,7 @@ import { SavedSearchesList } from './account/SavedSearchesList';
 import { ScreenHeader, Spinner } from './account/parts';
 import { DeleteAccountScreen, LegalScreen, PrivacyScreen, SecurityScreen, SoonScreen } from './account/Screens';
 import { Statistics } from './account/Statistics';
+import { InvitationIntro, Team } from './account/Team';
 import { ViewedListings } from './account/ViewedListings';
 import '../styles/account.css';
 
@@ -87,16 +89,24 @@ function AccountContent() {
   const [, refresh] = useState(0);
   const params = new URLSearchParams(window.location.search);
   const view = params.get('vue');
+  // Lien d'invitation d'une équipe (`?vue=equipes&invitation=<jeton>`) : gardé dans le navigateur, il s'ouvre aussi
+  // après la connexion ou la création du compte.
+  const invitation = view === 'equipes' ? params.get('invitation') : null;
 
   useEffect(() => {
     if (session.status !== 'loading') void loadAccount();
   }, [session.status, session.status === 'signedIn' ? session.userId : null]);
 
+  useEffect(() => {
+    const token = cleanToken(invitation);
+    if (token) rememberInvitation(token);
+  }, [invitation]);
+
   // Rien tant que la session n'est pas connue : la carte ne clignote pas.
   if (session.status === 'loading' || !link.checked) return <Spinner />;
   // Ordinateur : comme la cloche de l'app, l'écran Notifications s'ouvre aussi sans compte, avec son message.
   if (desktop && view === 'notifications' && session.status === 'signedOut' && !link.error) return <NotificationsScreen signedIn={false} />;
-  if (session.status === 'signedOut') return <SignInCard linkError={link.error} />;
+  if (session.status === 'signedOut') return <SignInCard linkError={link.error} notice={invitation !== null ? <InvitationIntro /> : undefined} />;
   if (recovery) return <SignInCard recovery onPasswordSaved={() => refresh((n) => n + 1)} />;
   if (account.status === 'error') {
     return (
@@ -109,6 +119,14 @@ function AccountContent() {
   }
   if (account.status !== 'ready') return <Spinner />;
   const current = account.account;
+  // Invitation ouverte avant de se connecter (ou de créer son compte) : elle s'ouvre maintenant, à son adresse, avant
+  // « Quel est votre profil ? » pour un compte tout neuf.
+  const pending = invitation === null && (view === null || isNewAccount()) ? pendingInvitation() : null;
+  if (pending) {
+    window.history.replaceState(null, '', invitationPath(pending));
+    return <Team screen={null} invitation={pending} />;
+  }
+  if (invitation !== null) return <Team screen={null} invitation={invitation} />;
   if (isNewAccount()) return <ProfileChoice account={current} onDone={() => refresh((n) => n + 1)} />;
   switch (view) {
     case 'informations': return <MyInfo account={current} />;
@@ -141,6 +159,8 @@ function AccountContent() {
     case 'opportunites': return <Opportunities opportunityId={params.get('opportunite')} screen={params.get('ecran')} />;
     // Statistiques : vues, favoris, messages, visites et offres de chaque annonce publiée, sur 7 ou 30 jours.
     case 'statistiques': return <Statistics />;
+    // Gestion des équipes : l'équipe de l'agence, les invitations en cours et « Inviter un collaborateur ».
+    case 'equipes': return <Team screen={params.get('ecran')} invitation={null} />;
     // Ordinateur : Mon espace de la maquette 5 pour un compte particulier ; l'espace professionnel garde son écran.
     default: return desktop && current.profile.account_type !== 'professional' ? <DesktopSpace account={current} /> : <Hub account={current} />;
   }

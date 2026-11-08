@@ -18,8 +18,13 @@
 // Mes opportunités : la liste (à suivre, la relance en retard d'abord ; gagnées ; perdues), la fiche, l'étape changée
 // d'un geste (gagnée datée du jour, puis reprise), la modification (téléphone et e-mail vérifiés), l'ajout (plafond du
 // serveur atteint, puis bon) et la suppression, avec seulement les écritures attendues dans pro_opportunities.
+// Gestion des équipes : une gérante voit son équipe et ses liens en cours, copie un lien, change un rôle, retire un
+// membre, annule un lien et en crée un (e-mail vérifié, plafond du serveur) ; une agente voit l'équipe et la fiche de
+// l'agence sans pouvoir les modifier, puis quitte l'équipe ; une invitation ouverte sans être connecté s'ouvre après la
+// connexion, ou au retour sur Mon compte d'un compte tout neuf ; les liens qui ne servent pas ; un serveur sans les
+// fonctions des équipes. Seules les fonctions attendues sont appelées.
 // Captures pour Romain : agence-*.png, diffusion-*.png, diffusion-affiche.pdf, contacts-*.png, statistiques-*.png,
-// ventes-*.png, mandats-*.png, opportunites-*.png.
+// ventes-*.png, mandats-*.png, opportunites-*.png, equipes-*.png.
 // Lancer après la construction : node scripts/check-espace-pro.mjs [dossier construit, docs/ par défaut] [dossier des captures]
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
@@ -242,6 +247,56 @@ const STATS = {
   7: [{ listing_id: SALE.id, views: 30, favorites_total: 9, favorites_new: 1 }, { listing_id: RENT.id, views: 12, favorites_total: 1, favorites_new: 0 }],
 };
 
+/**
+ * Gestion des équipes : Claire gère l'équipe de Rhône Immobilier (Julien, responsable, et Inès, agente ; deux liens en
+ * cours, dont un créé par Julien), ou Claire est agente de l'Agence Bellecour (Gérard, gérant, et Nadia, responsable).
+ * Les liens d'invitation portent un jeton de 32 caractères hexadécimaux.
+ */
+const JULIEN = 'c0000000-0000-4000-8000-0000000000b4';
+const INES = 'c0000000-0000-4000-8000-0000000000b5';
+const GERARD = 'c0000000-0000-4000-8000-0000000000b6';
+const NADIA = 'c0000000-0000-4000-8000-0000000000b7';
+const BELLECOUR_ID = 'b0000000-0000-4000-8000-0000000000a2';
+const TOKEN_LINK = '0d1e2f3a4b5c4d6e8f90a1b2c3d4e5f6';
+const TOKEN_LEA = '1a2b3c4d5e6f40718293a4b5c6d7e8f9';
+const TOKEN_BELLECOUR = '2b3c4d5e6f7a48b9c0d1e2f3a4b5c6d7';
+const TOKEN_OTHER = '3c4d5e6f7a8b49c0d1e2f3a4b5c6d7e8';
+const TOKEN_GONE = '4d5e6f7a8b9c4ad1e2f3a4b5c6d7e8f9';
+const later = (days) => new Date(Date.now() + days * DAY).toISOString();
+const RHONE_TEAM = { agency_id: AGENCY_ID, role: 'owner', agency_name: AGENCY.agency_name, logo_path: OLD_LOGO, postal_code: AGENCY.postal_code, city: AGENCY.city };
+const BELLECOUR_TEAM = { agency_id: BELLECOUR_ID, role: 'agent', agency_name: 'Agence Bellecour', logo_path: null, postal_code: '69002', city: 'Lyon' };
+const teamMember = (userId, role, name, joinedAt) => ({ user_id: userId, role, public_name: name, avatar_path: null, joined_at: joinedAt });
+const RHONE_MEMBERS = [
+  teamMember(USER_ID, 'owner', 'Claire M.', AGENCY.created_at),
+  teamMember(JULIEN, 'manager', 'Julien B.', ago(30)),
+  teamMember(INES, 'agent', 'Inès K.', ago(5)),
+];
+const RHONE_INVITES = [
+  {
+    id: 'd0000000-0000-4000-8000-000000000301', token: TOKEN_LINK, role: 'agent', email: null, created_by: USER_ID, created_by_name: 'Claire M.',
+    created_at: ago(1), expires_at: later(6),
+  },
+  {
+    id: 'd0000000-0000-4000-8000-000000000302', token: TOKEN_LEA, role: 'manager', email: 'lea.girard@exemple.fr', created_by: JULIEN,
+    created_by_name: 'Julien B.', created_at: ago(2), expires_at: later(5),
+  },
+];
+const bellecourMembers = (claireJoinedAt) => [
+  teamMember(GERARD, 'owner', 'Gérard G.', '2026-09-15T08:00:00Z'),
+  teamMember(NADIA, 'manager', 'Nadia R.', ago(40)),
+  teamMember(USER_ID, 'agent', 'Claire M.', claireJoinedAt),
+];
+const BELLECOUR_PREVIEW = { agency_name: 'Agence Bellecour', agency_logo_path: null, agency_city: 'Lyon', role: 'agent', invited_by_name: 'Gérard G.', status: 'ok' };
+/** Fiche de l'Agence Bellecour telle que la lisent ses membres : public_profiles de Claire, agente. */
+const CLAIRE_IN_BELLECOUR = publicProfile(USER_ID, {
+  public_name: 'Claire M.', account_type: 'professional', agency_id: BELLECOUR_ID, agency_name: 'Agence Bellecour', agency_postal_code: '69002',
+  agency_city: 'Lyon', agency_phone: '0478654321', agency_email: 'contact@agence-bellecour.fr', agency_website: 'https://www.agence-bellecour.fr',
+  agency_about: 'Transactions et location dans la Presqu\'île.', agency_is_verified: false, agency_siren: '812345678',
+  agency_professional_card_number: 'CPI 6901 2024 000 000 042', agency_professional_card_cci: 'CCI Lyon Métropole',
+  agency_financial_guarantee: 'Galian', agency_rcp_insurer: 'Axa', agency_rcp_policy_number: 'RCP-2024-077',
+});
+const TEAM_RANK = { owner: 0, manager: 1, agent: 2 };
+
 // MARK: - Serveur simulé
 
 const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
@@ -267,9 +322,11 @@ function fakeSession() {
  * `pro` : un professionnel avec sa fiche agence, ses détails et (sauf `listings`) une annonce en ligne ; sinon un
  * particulier sans fiche.
  */
-function newState({ pro = false, listings = null, contacts = false, sales = false, mandates = false, opportunities = false } = {}) {
+function newState({ pro = false, listings = null, contacts = false, sales = false, mandates = false, opportunities = false, team = null } = {}) {
+  const agent = team === 'agent';
   return {
-    profile: pro ? { ...PROFILE, account_type: 'professional', professional_profile_id: AGENCY_ID } : { ...PROFILE },
+    profile: pro ? { ...PROFILE, account_type: 'professional', professional_profile_id: AGENCY_ID }
+      : agent ? { ...PROFILE, account_type: 'professional', professional_profile_id: BELLECOUR_ID } : { ...PROFILE },
     details: { ...DETAILS },
     agency: pro ? { ...AGENCY } : null,
     agencyDetails: pro ? { ...AGENCY_DETAILS } : null,
@@ -298,6 +355,21 @@ function newState({ pro = false, listings = null, contacts = false, sales = fals
     opportunityRows: structuredClone(opportunities ? [MOREL, HUGO, FAURE, LEROY] : []),
     opportunitiesMissing: false,
     opportunitiesFull: false,
+    /**
+     * Gestion des équipes (`team` : 'owner', Claire gère Rhône Immobilier avec deux collaborateurs ; 'agent', Claire est
+     * agente de l'Agence Bellecour ; sinon un professionnel est seul dans l'équipe de sa fiche) : mon agence et mon
+     * rôle, l'équipe, les liens en cours et l'aperçu de chaque lien par jeton (TOKEN_BELLECOUR ouvert à tous,
+     * TOKEN_OTHER réservé à une autre adresse). `teamMissing` : fonctions absentes du serveur ; `invitesFull` : le
+     * prochain lien est refusé (20 en cours) ; `acceptHint` : l'entrée dans l'équipe est refusée.
+     */
+    teamAgency: team === 'owner' || pro ? { ...RHONE_TEAM } : agent ? { ...BELLECOUR_TEAM } : null,
+    teamMembers: structuredClone(team === 'owner' ? RHONE_MEMBERS : pro ? RHONE_MEMBERS.slice(0, 1) : agent ? bellecourMembers(ago(3)) : []),
+    teamInvites: structuredClone(team === 'owner' ? RHONE_INVITES : []),
+    previews: { [TOKEN_BELLECOUR]: { ...BELLECOUR_PREVIEW }, [TOKEN_OTHER]: { ...BELLECOUR_PREVIEW, status: 'other_email' } },
+    publicProfiles: agent ? [...PUBLIC_PROFILES, CLAIRE_IN_BELLECOUR] : PUBLIC_PROFILES,
+    teamMissing: false,
+    invitesFull: false,
+    acceptHint: null,
     /** Le serveur refuse les détails (contrôle d'une colonne). */
     refuseDetails: false,
   };
@@ -379,8 +451,19 @@ function rest(state, route) {
     }
     case 'rpc/public_profiles': {
       const wanted = (body?.user_ids ?? []).map((id) => id.toLowerCase());
-      return json(route, PUBLIC_PROFILES.filter((row) => wanted.includes(row.user_id)));
+      return json(route, state.publicProfiles.filter((row) => wanted.includes(row.user_id)));
     }
+    case 'rpc/my_team_agency':
+    case 'rpc/my_agency_team':
+    case 'rpc/agency_invites':
+    case 'rpc/create_agency_invite':
+    case 'rpc/revoke_agency_invite':
+    case 'rpc/set_agency_member_role':
+    case 'rpc/remove_agency_member':
+    case 'rpc/leave_agency':
+    case 'rpc/agency_invite_preview':
+    case 'rpc/accept_agency_invite':
+      return teamRpc(state, route, table.slice(4), body ?? {});
     case 'pro_contacts': {
       const match = (row) => [...params].every(([column, value]) => (
         !value.startsWith('eq.') || String(row[column]).toLowerCase() === value.slice(3).toLowerCase()
@@ -545,6 +628,121 @@ function rest(state, route) {
   return json(route, { message: 'non simulé' }, 400);
 }
 
+/**
+ * Gestion des équipes : les fonctions de supabase/migrations/equipes.sql sur l'état simulé, avec les mêmes refus et
+ * les mêmes indices (`hint`) que le serveur.
+ */
+function teamRpc(state, route, name, body) {
+  if (state.teamMissing) {
+    expectedServerErrors += 1;
+    return json(route, { code: 'PGRST202', message: `Could not find the function public.${name} in the schema cache`, details: null, hint: null }, 404);
+  }
+  const refuse = (hint) => {
+    expectedServerErrors += 1;
+    return json(route, { code: 'P0001', message: hint, details: null, hint }, 400);
+  };
+  const args = Object.keys(body).sort().join(',');
+  const expectArgs = (wanted) => {
+    if (args !== wanted) problems.push(`${name} : paramètres ${JSON.stringify(body)}`);
+  };
+  const agency = state.teamAgency;
+  const manages = agency !== null && agency.role !== 'agent';
+  const member = (userId) => state.teamMembers.find((row) => row.user_id === userId);
+  const now = new Date().toISOString();
+  switch (name) {
+    case 'my_team_agency':
+      expectArgs('');
+      return json(route, agency ? [agency] : []);
+    case 'my_agency_team':
+      expectArgs('');
+      return json(route, agency ? [...state.teamMembers].sort((a, b) => (
+        TEAM_RANK[a.role] - TEAM_RANK[b.role] || a.joined_at.localeCompare(b.joined_at) || a.user_id.localeCompare(b.user_id)
+      )) : []);
+    case 'agency_invites':
+      expectArgs('');
+      if (!manages) problems.push('agency_invites demandé par un agent');
+      return json(route, manages ? [...state.teamInvites].sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id)) : []);
+    case 'create_agency_invite': {
+      expectArgs('p_email,p_role');
+      if (!manages) return refuse('team_forbidden');
+      if (!['agent', 'manager'].includes(body.p_role)) return refuse('team_role');
+      const email = body.p_email?.trim().toLowerCase() || null;
+      if (email && (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))) return refuse('team_email');
+      if (state.invitesFull) return refuse('team_invites_full');
+      const invite = {
+        id: randomUUID(), token: randomUUID().replaceAll('-', ''), role: body.p_role, email, created_by: USER_ID, created_by_name: 'Claire M.',
+        created_at: now, expires_at: later(7),
+      };
+      state.teamInvites.push(invite);
+      return json(route, [{ id: invite.id, token: invite.token, role: invite.role, email, created_at: now, expires_at: invite.expires_at }]);
+    }
+    case 'revoke_agency_invite': {
+      expectArgs('p_id');
+      if (!manages) return refuse('team_forbidden');
+      const before = state.teamInvites.length;
+      state.teamInvites = state.teamInvites.filter((invite) => invite.id !== body.p_id);
+      return state.teamInvites.length < before ? empty(route) : refuse('team_invite_invalid');
+    }
+    case 'set_agency_member_role': {
+      expectArgs('p_role,p_user');
+      if (!manages) return refuse('team_forbidden');
+      if (!['agent', 'manager'].includes(body.p_role)) return refuse('team_role');
+      const row = member(body.p_user);
+      if (!row || row.role === 'owner') return refuse('team_member');
+      row.role = body.p_role;
+      // Repassé agent : les liens qu'il avait créés sont annulés.
+      if (body.p_role === 'agent') state.teamInvites = state.teamInvites.filter((invite) => invite.created_by !== row.user_id);
+      return empty(route);
+    }
+    case 'remove_agency_member': {
+      expectArgs('p_user');
+      if (!manages) return refuse('team_forbidden');
+      if (body.p_user === USER_ID) return refuse('team_self');
+      const row = member(body.p_user);
+      if (!row || row.role === 'owner') return refuse('team_member');
+      // Comme le déclencheur du serveur : ses liens en cours sont annulés.
+      state.teamMembers = state.teamMembers.filter((other) => other !== row);
+      state.teamInvites = state.teamInvites.filter((invite) => invite.created_by !== row.user_id);
+      return empty(route);
+    }
+    case 'leave_agency':
+      expectArgs('');
+      if (agency?.role === 'owner') return refuse('team_owner');
+      if (!agency) return refuse('team_member');
+      // Le compte reprend son type d'avant (particulier ici) et n'est plus rattaché à l'agence.
+      state.teamAgency = null;
+      state.teamMembers = [];
+      state.teamInvites = [];
+      Object.assign(state.profile, { account_type: 'individual', professional_profile_id: null });
+      state.publicProfiles = PUBLIC_PROFILES;
+      return empty(route);
+    case 'agency_invite_preview': {
+      expectArgs('p_token');
+      const preview = state.previews[body.p_token];
+      return json(route, preview ? [preview] : []);
+    }
+    case 'accept_agency_invite': {
+      expectArgs('p_token');
+      const preview = state.previews[body.p_token];
+      if (!preview) return refuse('team_invite_invalid');
+      if (state.acceptHint) return refuse(state.acceptHint);
+      if (state.agency) return refuse('team_own_agency');
+      if (agency) return refuse('team_other_team');
+      if (preview.status === 'other_email') return refuse('team_invite_email');
+      state.teamAgency = { ...BELLECOUR_TEAM, role: preview.role };
+      state.teamMembers = bellecourMembers(now);
+      state.teamInvites = [];
+      delete state.previews[body.p_token];
+      Object.assign(state.profile, { account_type: 'professional', professional_profile_id: BELLECOUR_ID });
+      state.publicProfiles = [...PUBLIC_PROFILES, CLAIRE_IN_BELLECOUR];
+      return json(route, BELLECOUR_ID);
+    }
+    default:
+      problems.push(`${name} : fonction inconnue`);
+      return json(route, { message: 'non simulé' }, 400);
+  }
+}
+
 /** Fichier d'un envoi multipart (supabase-js envoie un Blob en FormData : cacheControl, puis le fichier). */
 function multipartFile(buffer, contentType) {
   const boundary = /boundary=(?:"([^"]+)"|([^;]+))/.exec(contentType ?? '');
@@ -641,11 +839,14 @@ async function storage(state, route) {
   return json(route, { message: 'non simulé' }, 400);
 }
 
-async function mock(context, state) {
+/** `signedIn: false` : aucune session au départ (la personne se connecte avec la carte de connexion). */
+async function mock(context, state, { signedIn = true } = {}) {
   const session = JSON.stringify(fakeSession());
-  await context.addInitScript((value) => {
-    try { localStorage.setItem('sb-izzsoitqtzzswkpvdozd-auth-token', value); } catch { /* stockage indisponible */ }
-  }, session);
+  if (signedIn) {
+    await context.addInitScript((value) => {
+      try { localStorage.setItem('sb-izzsoitqtzzswkpvdozd-auth-token', value); } catch { /* stockage indisponible */ }
+    }, session);
+  }
   await context.route(`${SUPABASE}/auth/v1/**`, (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/logout')) return empty(route);
@@ -2179,6 +2380,453 @@ try {
     expectSame(N, 'sans opportunité', [tidy(await missing.locator('.account-empty h2').textContent()), await missing.locator('.account-empty a').getAttribute('href')],
       ['Aucune opportunité', '/compte/?vue=opportunites&ecran=ajouter']);
     await missingContext.close();
+  }
+
+  // 18. Téléphone, Gestion des équipes d'une gérante : la ligne de Mon compte, l'équipe (la gérante, un responsable, une
+  //     agente) et deux liens en cours ; « Copier le lien » ; « Gérer » : Inès passe responsable, Julien est retiré (le
+  //     lien qu'il avait créé est annulé avec lui) ; le dernier lien est annulé ; « Inviter un collaborateur » : l'e-mail
+  //     vérifié, le plafond de 20 liens, puis le lien prêt (copié, e-mail préparé) et « Terminé ». Seules les fonctions
+  //     attendues sont appelées, et rien n'est écrit dans les tables.
+  const teamSummary = (page) => page.evaluate(() => {
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const all = (selector) => [...document.querySelectorAll(selector)];
+    return {
+      header: text(document.querySelector('.screen-header h1')),
+      invite: document.querySelector('.screen-header .save-capsule')?.getAttribute('href') ?? null,
+      title: text(document.querySelector('.team-head .sale-title')),
+      line: text(document.querySelector('.team-head .sale-city')),
+      role: text(document.querySelector('.team-head .sale-state')),
+      sections: all('.team .section-title').map(text),
+      members: all('.team-row:not(.team-invite)').map((el) => [
+        text(el.querySelector('.team-row-title')), text(el.querySelector('.team-row-line')), Boolean(el.querySelector('.team-row-action')),
+      ]),
+      invites: all('.team-invite').map((el) => [
+        text(el.querySelector('.team-row-title')), text(el.querySelector('.team-row-line')), text(el.querySelector('.team-row-note')),
+      ]),
+      none: text(document.querySelector('.team-none p')),
+      roles: all('.team-roles > div').map((el) => `${text(el.querySelector('dt'))} : ${text(el.querySelector('dd'))}`),
+      leave: Boolean(document.querySelector('.team-leave')),
+    };
+  });
+  const ROLE_ROWS = [
+    'Gérant : A créé l\'agence : modifie sa fiche, gère l\'équipe et tout ce qui est à l\'agence.',
+    'Responsable : Gère l\'équipe et modifie les annonces, contacts et mandats de l\'agence.',
+    'Agent : Voit les annonces, contacts et mandats de l\'agence ; ne modifie que ce qu\'il a ajouté.',
+  ];
+  /** Fonctions des équipes qui changent quelque chose, appelées depuis `mark` : « nom {paramètres} ». */
+  const TEAM_WRITES = ['create_agency_invite', 'revoke_agency_invite', 'set_agency_member_role', 'remove_agency_member', 'leave_agency', 'accept_agency_invite'];
+  const teamWrites = (state, mark) => state.calls.slice(mark)
+    .filter((call) => TEAM_WRITES.includes(call.table.replace('rpc/', '')))
+    .map((call) => `${call.table.replace('rpc/', '')} ${JSON.stringify(call.body ?? {})}`);
+  const teamCalls = (state, mark) => state.calls.slice(mark).filter((call) => /^rpc\/(my_team_agency|my_agency_team|agency_invite|accept_agency|leave_agency)/.test(call.table)).length;
+  const toast = async (page, text, name) => {
+    await page.locator('.account-toast', { hasText: text }).waitFor({ timeout: 8000 }).catch(() => problems.push(`${name} : message « ${text} » absent`));
+    // Le message lu, `ok=` est retiré de l'adresse.
+    await page.waitForFunction(() => !window.location.search.includes('ok='), null, { timeout: 5000 })
+      .catch(() => problems.push(`${name} : « ok= » reste dans l'adresse`));
+  };
+  const dialogText = async (page) => [tidy(await dialog(page).locator('h2').textContent()), tidy(await dialog(page).locator('.alert-body > p').textContent())];
+  /** Invitation reçue : l'agence, qui invite, le rôle, et ce que la personne peut faire. */
+  const invitationSummary = (target) => target.evaluate(() => {
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    return {
+      header: text(document.querySelector('.screen-header h1')),
+      name: text(document.querySelector('.team-invitation-name')),
+      city: text(document.querySelector('.team-invitation-city')),
+      text: text(document.querySelector('.team-invitation-text')),
+      role: text(document.querySelector('.team-invitation-role')),
+      caption: text(document.querySelector('.team-caption')),
+      status: text(document.querySelector('.team-status')),
+      buttons: [...document.querySelectorAll('.team-join')].map((el) => [text(el), el.getAttribute('href')]),
+    };
+  });
+  {
+    const N = 'gestion des équipes (téléphone, gérante)';
+    const state = newState({ pro: true, team: 'owner' });
+    const context = await phone();
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base });
+    await mock(context, state);
+    const page = await open(context, '/compte/', N);
+    const row = page.locator('a.row', { hasText: 'Gestion des équipes' });
+    await page.waitForFunction(() => /3 membres/.test(document.querySelector('a.row[href="/compte/?vue=equipes"]')?.textContent ?? ''), null, { timeout: 8000 })
+      .catch(() => problems.push(`${N} : ligne de Mon compte jamais mise à jour`));
+    expectSame(N, 'Mon compte', [
+      tidy(await row.locator('.row-subtitle').textContent()), await row.getAttribute('href'), await page.locator('.space-profile').getAttribute('href'),
+      await page.locator('a.row', { hasText: 'Informations de l\'agence' }).count(),
+    ], ['3 membres', '/compte/?vue=equipes', '/compte/?vue=agence', 1]);
+
+    await row.click();
+    await page.waitForURL('**/compte/?vue=equipes');
+    await page.locator('.team-row').first().waitFor();
+    await imagesLoaded(page, '.team-head img', 1, N);
+    expectSame(N, 'équipe', await teamSummary(page), {
+      header: 'Gestion des équipes', invite: '/compte/?vue=equipes&ecran=inviter', title: 'Rhône Immobilier', line: '3 membres · Lyon',
+      role: 'Votre rôle : Gérant', sections: ['L\'équipe', 'Invitations en cours', 'Les rôles'],
+      members: [
+        ['Claire M. (vous)', 'Gérant · a créé l\'agence', false],
+        ['Julien B.', `Responsable · depuis le ${listDayText(dayAgo(30))}`, true],
+        ['Inès K.', `Agent · depuis le ${listDayText(dayAgo(5))}`, true],
+      ],
+      invites: [
+        ['Lien pour une personne', `Agent · expire le ${listDayText(dayIn(6))}`, 'Créée par Claire M.'],
+        ['lea.girard@exemple.fr', `Responsable · expire le ${listDayText(dayIn(5))}`, 'Créée par Julien B.'],
+      ],
+      none: null, roles: ROLE_ROWS, leave: false,
+    });
+    await shot(page, 'equipes-telephone.png');
+
+    // « Copier le lien » : l'adresse complète du lien, avec son jeton.
+    await page.locator('.team-invite').first().getByRole('button', { name: 'Copier le lien' }).click();
+    await page.locator('.account-toast', { hasText: 'Lien copié' }).waitFor({ timeout: 5000 }).catch(() => problems.push(`${N} : « Lien copié » absent`));
+    expectSame(N, 'lien copié', await page.evaluate(() => navigator.clipboard.readText()), `${base}/compte/?vue=equipes&invitation=${TOKEN_LINK}`);
+
+    // « Gérer » : Inès passe responsable.
+    await page.locator('.team-row', { hasText: 'Inès K.' }).getByRole('button', { name: 'Gérer' }).click();
+    await dialog(page).waitFor();
+    expectSame(N, 'fenêtre Gérer', [...await dialogText(page), await texts(page, 'dialog[open] .alert-actions .btn')],
+      ['Inès K.', 'Rôle actuel : Agent.', ['Passer responsable', 'Retirer de l\'équipe', 'Annuler']]);
+    await dialog(page).getByRole('button', { name: 'Passer responsable' }).click();
+    await toast(page, 'Rôle enregistré', N);
+    await page.locator('.team-row').first().waitFor();
+    expectSame(N, 'Inès responsable', (await teamSummary(page)).members.map((member) => member.slice(0, 2)), [
+      ['Claire M. (vous)', 'Gérant · a créé l\'agence'],
+      ['Julien B.', `Responsable · depuis le ${listDayText(dayAgo(30))}`],
+      ['Inès K.', `Responsable · depuis le ${listDayText(dayAgo(5))}`],
+    ]);
+
+    // Julien est retiré, après confirmation ; le lien qu'il avait créé ne vaut plus.
+    await page.locator('.team-row', { hasText: 'Julien B.' }).getByRole('button', { name: 'Gérer' }).click();
+    await dialog(page).getByRole('button', { name: 'Retirer de l\'équipe' }).click();
+    await page.locator('dialog[open] h2', { hasText: 'Retirer Julien B.' }).waitFor();
+    expectSame(N, 'confirmation du retrait', await dialogText(page), [
+      'Retirer Julien B. de l\'équipe ?',
+      'Son compte ne sera plus rattaché à l\'agence et reprendra son type d\'avant. Ses annonces restent sur son compte.',
+    ]);
+    await dialog(page).getByRole('button', { name: 'Retirer de l\'équipe' }).click();
+    await toast(page, 'Membre retiré de l\'équipe', N);
+    await page.locator('.team-row').first().waitFor();
+    const afterRemoval = await teamSummary(page);
+    expectSame(N, 'Julien retiré', [afterRemoval.line, afterRemoval.members.map((member) => member[0]), afterRemoval.invites.map((invite) => invite[0])],
+      ['2 membres · Lyon', ['Claire M. (vous)', 'Inès K.'], ['Lien pour une personne']]);
+
+    // Le dernier lien est annulé ; « Garder » d'abord ne change rien.
+    await page.locator('.team-invite').getByRole('button', { name: 'Annuler', exact: true }).click();
+    await dialog(page).waitFor();
+    expectSame(N, 'confirmation de l\'annulation', [...await dialogText(page), await texts(page, 'dialog[open] .alert-actions .btn')],
+      ['Annuler cette invitation ?', 'Le lien ne marchera plus. Vous pourrez en créer un autre.', ['Annuler l\'invitation', 'Garder']]);
+    await dialog(page).getByRole('button', { name: 'Garder' }).click();
+    await dialog(page).waitFor({ state: 'detached', timeout: 3000 }).catch(() => undefined);
+    await page.locator('.team-invite').getByRole('button', { name: 'Annuler', exact: true }).click();
+    await dialog(page).getByRole('button', { name: 'Annuler l\'invitation' }).click();
+    await toast(page, 'Invitation annulée', N);
+    await page.locator('.team-none').waitFor();
+    expectSame(N, 'aucun lien', [
+      (await teamSummary(page)).none, await page.locator('.team-none a').getAttribute('href'),
+    ], ['Aucune invitation en cours. Invitez un collaborateur avec un lien à lui envoyer.', '/compte/?vue=equipes&ecran=inviter']);
+
+    // « Inviter un collaborateur » : le rôle, l'e-mail vérifié, le plafond du serveur, puis le lien prêt.
+    await page.locator('.team-none a').click();
+    await page.waitForURL('**/compte/?vue=equipes&ecran=inviter');
+    await page.locator('form.info-form').waitFor();
+    const chips = () => page.$$eval('.team [role=radio]', (els) => els.map((el) => `${el.textContent.trim()}${el.getAttribute('aria-checked') === 'true' ? ' (choisi)' : ''}`));
+    const roleHint = async () => tidy(await page.locator('.mandate-choices + .field-hint').textContent());
+    expectSame(N, 'formulaire', [tidy(await page.locator('.screen-header h1').textContent()), await chips(), await roleHint()],
+      ['Inviter un collaborateur', ['Agent (choisi)', 'Responsable'], ROLE_ROWS[2].replace('Agent : ', '')]);
+    await page.getByRole('radio', { name: 'Responsable' }).click();
+    expectSame(N, 'rôle choisi', [await chips(), await roleHint()], [['Agent', 'Responsable (choisi)'], ROLE_ROWS[1].replace('Responsable : ', '')]);
+    const email = field(page, 'E-mail (facultatif)');
+    const create = page.getByRole('button', { name: 'Créer le lien d\'invitation' });
+    let mark = state.calls.length;
+    await email.fill('lea.girard@');
+    await create.click();
+    await page.locator('.field-error').waitFor({ timeout: 3000 }).catch(() => undefined);
+    expectSame(N, 'e-mail invalide', [await texts(page, '.field-error'), teamWrites(state, mark)], [['Adresse e-mail invalide.'], []]);
+    await shot(page, 'equipes-telephone-inviter.png');
+    state.invitesFull = true;
+    await email.fill('  Lea.Girard@Exemple.fr ');
+    await create.click();
+    await page.locator('.signin-error').waitFor({ timeout: 5000 }).catch(() => undefined);
+    expectSame(N, 'plafond de 20 liens', await texts(page, '.signin-error'), ['Vous avez déjà 20 invitations en cours. Annulez-en pour en créer.']);
+    state.invitesFull = false;
+    await create.click();
+    await page.locator('.team-created').waitFor({ timeout: 8000 }).catch(() => problems.push(`${N} : lien jamais prêt`));
+    const created = state.teamInvites.find((invite) => invite.email === 'lea.girard@exemple.fr');
+    const url = `${base}/compte/?vue=equipes&invitation=${created?.token}`;
+    const body = ['Bonjour,', '', 'Je vous invite à rejoindre l\'équipe Rhône Immobilier sur Nidalo, comme responsable.', 'Ouvrez ce lien pour accepter l\'invitation (valable 7 jours) :', url];
+    expectSame(N, 'lien prêt', {
+      title: tidy(await page.locator('.team-created .sale-card-title').textContent()),
+      caption: tidy(await page.locator('.team-created .sale-caption').textContent()),
+      link: await page.locator('.team-created .team-link-input').inputValue(),
+      mail: await page.getByRole('link', { name: 'Envoyer par e-mail' }).getAttribute('href'),
+      done: await page.getByRole('link', { name: 'Terminé' }).getAttribute('href'),
+    }, {
+      title: 'Lien d\'invitation prêt',
+      caption: 'Réservé à lea.girard@exemple.fr, comme responsable, valable 7 jours. Envoyez-le par e-mail ou par message : la personne l\'ouvre, se connecte et rejoint l\'équipe.',
+      link: url,
+      mail: `mailto:lea.girard@exemple.fr?subject=${encodeURIComponent('Rejoignez l\'équipe Rhône Immobilier sur Nidalo')}&body=${encodeURIComponent(body.join('\n'))}`,
+      done: '/compte/?vue=equipes&ok=invitation',
+    });
+    await page.locator('.team-created').getByRole('button', { name: 'Copier le lien' }).click();
+    await page.locator('.account-toast', { hasText: 'Lien copié' }).waitFor({ timeout: 5000 }).catch(() => problems.push(`${N} : « Lien copié » absent après la création`));
+    expectSame(N, 'nouveau lien copié', await page.evaluate(() => navigator.clipboard.readText()), url);
+    await page.locator('.account-toast').waitFor({ state: 'detached', timeout: 5000 }).catch(() => undefined);
+    await shot(page, 'equipes-telephone-lien.png');
+    await page.getByRole('link', { name: 'Terminé' }).click();
+    await toast(page, 'Invitation créée', N);
+    await page.locator('.team-invite').first().waitFor();
+    expectSame(N, 'lien en cours', (await teamSummary(page)).invites, [['lea.girard@exemple.fr', `Responsable · expire le ${listDayText(dayIn(7))}`, 'Créée par Claire M.']]);
+    expectSame(N, 'fonctions appelées', teamWrites(state, 0), [
+      `set_agency_member_role {"p_user":"${INES}","p_role":"manager"}`,
+      `remove_agency_member {"p_user":"${JULIEN}"}`,
+      `revoke_agency_invite {"p_id":"${RHONE_INVITES[0].id}"}`,
+      'create_agency_invite {"p_role":"manager","p_email":"Lea.Girard@Exemple.fr"}',
+      'create_agency_invite {"p_role":"manager","p_email":"Lea.Girard@Exemple.fr"}',
+    ]);
+    expectSame(N, 'écritures', writeNames(writesSince(state, 0)), []);
+    await context.close();
+  }
+
+  // 19. Téléphone, agente de l'équipe d'une autre agence : Mon compte montre l'agence et son rôle (sans « Informations
+  //     de l'agence ») ; l'équipe sans « Inviter », « Gérer » ni liens en cours ; le Profil agence en lecture seule, aussi
+  //     à l'adresse du formulaire ; « Quitter l'équipe » : le compte reprend son type d'avant.
+  {
+    const N = 'gestion des équipes (téléphone, agente)';
+    const state = newState({ team: 'agent' });
+    const context = await phone();
+    await mock(context, state);
+    const page = await open(context, '/compte/', N);
+    await page.waitForFunction(() => document.querySelector('.space-profile-name')?.textContent === 'Agence Bellecour', null, { timeout: 8000 })
+      .catch(() => problems.push(`${N} : carte de l'agence jamais montrée`));
+    expectSame(N, 'Mon compte', [
+      tidy(await page.locator('.space-profile-line').textContent()), await page.locator('.space-profile').getAttribute('href'),
+      tidy(await page.locator('a.row', { hasText: 'Gestion des équipes' }).locator('.row-subtitle').textContent()),
+      tidy(await page.locator('a.row', { hasText: 'Profil agence' }).locator('.row-subtitle').textContent()),
+      await page.locator('a.row', { hasText: 'Informations de l\'agence' }).count(),
+    ], ['Agent de l\'équipe', '/compte/?vue=equipes', '3 membres', 'Fiche agence', 0]);
+    await shot(page, 'equipes-telephone-agent-compte.png');
+
+    await page.locator('.space-profile').click();
+    await page.waitForURL('**/compte/?vue=equipes');
+    await page.locator('.team-row').first().waitFor();
+    expectSame(N, 'équipe', await teamSummary(page), {
+      header: 'Gestion des équipes', invite: null, title: 'Agence Bellecour', line: '3 membres · Lyon', role: 'Votre rôle : Agent',
+      sections: ['L\'équipe', 'Les rôles'],
+      members: [
+        ['Gérard G.', 'Gérant · a créé l\'agence', false],
+        ['Nadia R.', `Responsable · depuis le ${listDayText(dayAgo(40))}`, false],
+        ['Claire M. (vous)', `Agent · depuis le ${listDayText(dayAgo(3))}`, false],
+      ],
+      invites: [], none: null, roles: ROLE_ROWS, leave: true,
+    });
+    await shot(page, 'equipes-telephone-agent.png');
+
+    // Profil agence : la fiche de l'agence, sans « Modifier » ni « Ses biens », avec le lien vers l'équipe.
+    const memberView = () => page.evaluate(() => {
+      const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+      const team = document.querySelector('.agency-card a[href="/compte/?vue=equipes"]');
+      return {
+        edit: Boolean(document.querySelector('.screen-header .save-capsule')),
+        name: text(document.querySelector('.agency-name')),
+        place: text(document.querySelector('.agency-place')),
+        cards: [...document.querySelectorAll('.agency-card-title')].map(text),
+        note: text(document.querySelector('.agency-card .agency-note')),
+        team: text(team),
+        rows: [...document.querySelectorAll('.agency-rows > div')].map((el) => `${text(el.querySelector('dt'))} : ${text(el.querySelector('dd'))}`),
+        listings: Boolean(document.querySelector('.agency-listings')),
+      };
+    });
+    const wanted = {
+      edit: false, name: 'Agence Bellecour', place: 'Lyon (69002)',
+      cards: ['L\'équipe de l\'agence', 'Présentation', 'Contact', 'Informations professionnelles'],
+      note: 'Vous faites partie de l\'équipe de cette agence. Seul son gérant modifie cette fiche.',
+      team: 'Gestion des équipes',
+      rows: [
+        'Téléphone : 04 78 65 43 21', 'E-mail : contact@agence-bellecour.fr', 'SIREN : 812345678', 'Carte professionnelle : CPI 6901 2024 000 000 042',
+        'CCI de délivrance : CCI Lyon Métropole', 'Garantie financière : Galian', 'Assurance RCP : Axa', 'Contrat RCP : RCP-2024-077',
+      ],
+      listings: false,
+    };
+    await page.goto(`${base}/compte/?vue=agence`, { waitUntil: 'networkidle' });
+    await page.locator('.agency-name').waitFor();
+    expectSame(N, 'Profil agence', await memberView(), wanted);
+    await shot(page, 'equipes-telephone-agent-fiche.png');
+    await page.goto(`${base}${FORM_PATH}`, { waitUntil: 'networkidle' });
+    await page.locator('.agency-name').waitFor();
+    expectSame(N, 'adresse du formulaire', await memberView(), wanted);
+
+    // « Quitter l'équipe », après confirmation.
+    await page.goto(`${base}/compte/?vue=equipes`, { waitUntil: 'networkidle' });
+    await page.locator('.team-leave').click();
+    await dialog(page).waitFor();
+    expectSame(N, 'confirmation du départ', [...await dialogText(page), await texts(page, 'dialog[open] .alert-actions .btn')], [
+      'Quitter l\'équipe ?',
+      'Votre compte ne sera plus rattaché à Agence Bellecour et reprendra son type d\'avant. Vos annonces restent sur votre compte.',
+      ['Quitter l\'équipe', 'Annuler'],
+    ]);
+    await dialog(page).getByRole('button', { name: 'Quitter l\'équipe' }).click();
+    await toast(page, 'Vous avez quitté l\'équipe', N);
+    await page.locator('.account-empty').waitFor();
+    expectSame(N, 'après le départ', [
+      tidy(await page.locator('.account-empty h2').textContent()), await page.locator('.account-empty a').getAttribute('href'), state.profile.account_type,
+    ], ['Pas encore d\'équipe', FORM_PATH, 'individual']);
+    expectSame(N, 'fonctions appelées', teamWrites(state, 0), ['leave_agency {}']);
+    expectSame(N, 'écritures', writeNames(writesSince(state, 0)), []);
+    await context.close();
+  }
+
+  // 20. Téléphone, invitation ouverte sans être connecté : la carte de connexion l'annonce, l'invitation est gardée dans
+  //     le navigateur et aucune fonction des équipes n'est appelée ; une fois connectée, l'invitation de l'Agence
+  //     Bellecour ; « Rejoindre l'équipe » : le compte entre dans l'équipe comme agente, l'invitation est oubliée.
+  {
+    const N = 'invitation (téléphone)';
+    const state = newState();
+    const context = await phone();
+    await mock(context, state, { signedIn: false });
+    // Jeton en majuscules (copié à la main) : lu comme le même lien.
+    const page = await open(context, `/compte/?vue=equipes&invitation=${TOKEN_BELLECOUR.toUpperCase()}`, N);
+    await page.locator('.team-intro').waitFor();
+    const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('nidalo.teamInvitation') ?? 'null')?.token ?? null);
+    expectSame(N, 'carte de connexion', [tidy(await page.locator('.signin-title').textContent()), tidy(await page.locator('.team-intro').textContent()), await stored()], [
+      'Bienvenue sur NIDALO',
+      'Une agence vous invite à rejoindre son équipe. Connectez-vous ou créez votre compte : l\'invitation s\'ouvrira ensuite.',
+      TOKEN_BELLECOUR,
+    ]);
+    await shot(page, 'equipes-telephone-connexion.png');
+    expectSame(N, 'sans compte', teamCalls(state, 0), 0);
+    await page.getByLabel('Adresse e-mail', { exact: true }).fill(USER_EMAIL);
+    await page.getByLabel('Mot de passe', { exact: true }).fill('mot-de-passe-de-test');
+    await page.getByRole('button', { name: 'Se connecter', exact: true }).click();
+    await page.locator('.team-invitation').waitFor({ timeout: 10000 }).catch(() => problems.push(`${N} : invitation jamais ouverte après la connexion`));
+    expectSame(N, 'invitation', await invitationSummary(page), {
+      header: 'Invitation', name: 'Agence Bellecour', city: 'Lyon', text: 'Gérard G. vous invite à rejoindre l\'équipe de l\'agence comme agent.',
+      role: ROLE_ROWS[2],
+      caption: 'En rejoignant l\'équipe, votre compte devient professionnel et vos annonces portent le nom et le logo de l\'agence. Vous pourrez quitter l\'équipe à tout moment.',
+      status: null, buttons: [['Rejoindre l\'équipe', null], ['Pas maintenant', null]],
+    });
+    await shot(page, 'equipes-telephone-invitation.png');
+    await page.getByRole('button', { name: 'Rejoindre l\'équipe' }).click();
+    await toast(page, 'Bienvenue dans l\'équipe', N);
+    await page.locator('.team-row').first().waitFor();
+    const joined = await teamSummary(page);
+    expectSame(N, 'équipe rejointe', [joined.title, joined.role, joined.members.map((member) => member[0]), new URL(page.url()).search, await stored(), state.profile.account_type],
+      ['Agence Bellecour', 'Votre rôle : Agent', ['Gérard G.', 'Nadia R.', 'Claire M. (vous)'], '?vue=equipes', null, 'professional']);
+    expectSame(N, 'fonctions appelées', teamWrites(state, 0), [`accept_agency_invite {"p_token":"${TOKEN_BELLECOUR}"}`]);
+    await context.close();
+  }
+
+  // 21. Téléphone, compte tout neuf créé depuis une invitation : de retour sur Mon compte, l'invitation gardée s'ouvre à
+  //     son adresse, avant « Quel est votre profil ? » ; « Pas maintenant » l'oublie et mène au choix du profil. Puis les
+  //     liens qui ne servent pas : réservé à une autre adresse (gardé ; « Changer de compte » déconnecte), plus valable,
+  //     incomplet (aucune fonction appelée) ; et l'équipe complète au moment de la rejoindre.
+  {
+    const N = 'invitation gardée (téléphone)';
+    const state = newState();
+    const context = await phone();
+    await mock(context, state);
+    const page = await open(context, '/compte/?vue=legal', N);
+    const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('nidalo.teamInvitation') ?? 'null')?.token ?? null);
+    await page.evaluate((token) => {
+      localStorage.setItem('nidalo.newAccount', '1');
+      localStorage.setItem('nidalo.teamInvitation', JSON.stringify({ token, at: Date.now() - 3600_000 }));
+    }, TOKEN_BELLECOUR);
+    await page.goto(`${base}/compte/`, { waitUntil: 'networkidle' });
+    await page.locator('.team-invitation').waitFor({ timeout: 8000 }).catch(() => problems.push(`${N} : invitation gardée jamais ouverte`));
+    expectSame(N, 'invitation gardée', [new URL(page.url()).search, tidy(await page.locator('.team-invitation-name').textContent())],
+      [`?vue=equipes&invitation=${TOKEN_BELLECOUR}`, 'Agence Bellecour']);
+    await page.getByRole('button', { name: 'Pas maintenant' }).click();
+    await page.getByRole('heading', { name: 'Quel est votre profil ?' }).waitFor({ timeout: 8000 }).catch(() => problems.push(`${N} : choix du profil absent`));
+    expectSame(N, 'pas maintenant', [new URL(page.url()).pathname + new URL(page.url()).search, await stored(), teamWrites(state, 0)], ['/compte/', null, []]);
+
+    await page.goto(`${base}/compte/?vue=equipes&invitation=${TOKEN_OTHER}`, { waitUntil: 'networkidle' });
+    await page.locator('.team-status').waitFor();
+    const other = await invitationSummary(page);
+    expectSame(N, 'autre adresse', [other.status, other.buttons, other.caption, await stored()], [
+      'Ce lien est réservé à une autre adresse e-mail. Connectez-vous avec l\'adresse qui a reçu l\'invitation.', [['Changer de compte', null]], null, TOKEN_OTHER,
+    ]);
+    await page.getByRole('button', { name: 'Changer de compte' }).click();
+    await page.locator('.team-intro').waitFor({ timeout: 8000 }).catch(() => problems.push(`${N} : « Changer de compte » ne déconnecte pas`));
+    expectSame(N, 'déconnectée', [await stored(), await page.evaluate(() => localStorage.getItem('nidalo.newAccount'))], [TOKEN_OTHER, null]);
+
+    await page.goto(`${base}/compte/?vue=equipes&invitation=${TOKEN_GONE}`, { waitUntil: 'networkidle' });
+    await page.locator('.account-empty').waitFor();
+    expectSame(N, 'lien plus valable', [tidy(await page.locator('.account-empty h2').textContent()), await page.locator('.account-empty a').getAttribute('href'), await stored()],
+      ['Invitation plus valable', '/compte/', null]);
+    const mark = state.calls.length;
+    await page.goto(`${base}/compte/?vue=equipes&invitation=abc123`, { waitUntil: 'networkidle' });
+    await page.locator('.account-empty').waitFor();
+    expectSame(N, 'lien incomplet', [tidy(await page.locator('.account-empty h2').textContent()), teamCalls(state, mark), await stored()],
+      ['Lien d\'invitation incomplet', 0, null]);
+
+    state.acceptHint = 'team_full';
+    await page.goto(`${base}/compte/?vue=equipes&invitation=${TOKEN_BELLECOUR}`, { waitUntil: 'networkidle' });
+    await page.locator('.team-invitation').waitFor();
+    await page.getByRole('button', { name: 'Rejoindre l\'équipe' }).click();
+    await page.locator('.team .signin-error').waitFor({ timeout: 5000 }).catch(() => undefined);
+    expectSame(N, 'équipe complète', [await texts(page, '.signin-error'), new URL(page.url()).search, state.profile.account_type, await stored()],
+      [['Cette équipe compte déjà 50 membres.'], `?vue=equipes&invitation=${TOKEN_BELLECOUR}`, 'individual', TOKEN_BELLECOUR]);
+    await context.close();
+  }
+
+  // 22. Ordinateur : l'équipe d'une gérante (« Copier le lien » sans accès au presse-papiers : le lien dans une fenêtre),
+  //     « Inviter un collaborateur » et l'invitation reçue, sans rien changer. Puis, serveur sans les fonctions des
+  //     équipes (avant leur mise en ligne) : Mon compte garde sa ligne, la page affiche un message et « Réessayer », et
+  //     un particulier ouvre toujours le formulaire de sa fiche agence.
+  {
+    const N = 'gestion des équipes (ordinateur)';
+    const state = newState({ pro: true, team: 'owner' });
+    const context = await desktop();
+    await mock(context, state);
+    const page = await open(context, '/compte/?vue=equipes', N);
+    await page.locator('.team-row').first().waitFor();
+    await imagesLoaded(page, '.team-head img', 1, N);
+    await shot(page, 'equipes-ordinateur.png');
+    await page.evaluate(() => Object.defineProperty(navigator.clipboard, 'writeText', { value: () => Promise.reject(new DOMException('refusé', 'NotAllowedError')) }));
+    await page.locator('.team-invite').first().getByRole('button', { name: 'Copier le lien' }).click();
+    await dialog(page).waitFor();
+    expectSame(N, 'lien à copier à la main', [tidy(await dialog(page).locator('h2').textContent()), await dialog(page).locator('.team-link-input').inputValue()],
+      ['Lien d\'invitation', `${base}/compte/?vue=equipes&invitation=${TOKEN_LINK}`]);
+    await dialog(page).getByRole('button', { name: 'Fermer' }).click();
+    await page.goto(`${base}/compte/?vue=equipes&ecran=inviter`, { waitUntil: 'networkidle' });
+    await page.locator('form.info-form').waitFor();
+    await shot(page, 'equipes-ordinateur-inviter.png');
+    expectSame(N, 'rien de changé', [teamWrites(state, 0), writeNames(writesSince(state, 0))], [[], []]);
+    await context.close();
+
+    const guestState = newState();
+    const guestContext = await desktop();
+    await mock(guestContext, guestState);
+    const guest = await open(guestContext, `/compte/?vue=equipes&invitation=${TOKEN_BELLECOUR}`, N);
+    await guest.locator('.team-invitation').waitFor();
+    await shot(guest, 'equipes-ordinateur-invitation.png');
+    expectSame(N, 'invitation sans réponse', teamWrites(guestState, 0), []);
+    await guestContext.close();
+
+    const missingState = newState({ pro: true });
+    missingState.teamMissing = true;
+    const missingContext = await phone();
+    await mock(missingContext, missingState);
+    const missing = await open(missingContext, '/compte/', N);
+    const row = missing.locator('a.row', { hasText: 'Gestion des équipes' });
+    await row.waitFor();
+    expectSame(N, 'Mon compte sans les fonctions', [tidy(await row.locator('.row-subtitle').textContent()), await row.getAttribute('href'), await missing.locator('a.row', { hasText: 'Informations de l\'agence' }).count()],
+      ['Inviter des collaborateurs', '/compte/?vue=equipes', 1]);
+    await row.click();
+    await missing.locator('.signin-error').waitFor();
+    expectSame(N, 'page sans les fonctions', tidy(await missing.locator('.signin-error').textContent()), 'L\'opération n\'a pas abouti. Réessayez dans un instant.');
+    missingState.teamMissing = false;
+    await missing.getByRole('button', { name: 'Réessayer' }).click();
+    await missing.locator('.team-none').waitFor();
+    const alone = await teamSummary(missing);
+    expectSame(N, 'seule dans l\'équipe', [alone.line, alone.members, alone.invite], ['1 membre · Lyon', [['Claire M. (vous)', 'Gérant · a créé l\'agence', false]], '/compte/?vue=equipes&ecran=inviter']);
+    await missingContext.close();
+
+    const individualState = newState();
+    individualState.teamMissing = true;
+    const individualContext = await phone();
+    await mock(individualContext, individualState);
+    const individual = await open(individualContext, '/compte/?vue=agence', N);
+    await field(individual, 'Nom de l\'agence').waitFor({ timeout: 8000 }).catch(() => problems.push(`${N} : formulaire de la fiche absent sans les fonctions`));
+    await individualContext.close();
   }
 } finally {
   await browser.close();

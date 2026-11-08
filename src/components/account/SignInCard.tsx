@@ -26,9 +26,11 @@ type Props = {
   recovery?: boolean;
   /** Nouveau mot de passe enregistré. */
   onPasswordSaved?: () => void;
+  /** Mot sous le titre (une invitation d'équipe qui attend la connexion, par exemple). */
+  notice?: ReactNode;
 };
 
-export function SignInCard({ onClose, onSignedIn, linkError = null, recovery = false, onPasswordSaved }: Props) {
+export function SignInCard({ onClose, onSignedIn, linkError = null, recovery = false, onPasswordSaved, notice }: Props) {
   const [flow, setFlow] = useState<Flow>(recovery ? { kind: 'newPassword' } : { kind: 'form' });
   const [isSignUp, setSignUp] = useState(false);
   const [email, setEmail] = useState('');
@@ -253,6 +255,7 @@ export function SignInCard({ onClose, onSignedIn, linkError = null, recovery = f
             <p className="signin-subtitle">
               {isSignUp ? 'Créez votre compte en quelques secondes.' : 'Connectez-vous pour retrouver vos projets immobiliers.'}
             </p>
+            {notice}
             <div className="signin-fields">
               <AuthField icon="mail" error={fieldErrors.email}>
                 <input

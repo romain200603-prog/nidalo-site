@@ -18,7 +18,7 @@ export const PATHS = {
 export type AccountView =
   | 'informations' | 'annonces' | 'recherches' | 'confidentialite' | 'legal' | 'securite' | 'supprimer' | 'bientot'
   | 'notifications' | 'demande-visite' | 'agenda' | 'ajouter-visite' | 'projet' | 'consultes' | 'agence' | 'diffusion' | 'affiche'
-  | 'contacts' | 'statistiques' | 'ventes' | 'mandats' | 'opportunites';
+  | 'contacts' | 'statistiques' | 'ventes' | 'mandats' | 'opportunites' | 'equipes';
 
 /** « Publier une annonce » ; avec une annonce, reprend son brouillon ou la modifie (`etape=photos` : ses photos). */
 export function publishPath(listingId: string | null = null, step: 'photos' | null = null): string {
@@ -57,6 +57,10 @@ export const NEW_OPPORTUNITY_PATH = accountPath('opportunites', { ecran: 'ajoute
 export const opportunityPath = (id: string, edit = false): string => (
   accountPath('opportunites', edit ? { opportunite: id, ecran: 'modifier' } : { opportunite: id })
 );
+
+/** « Gestion des équipes » : l'équipe de l'agence, et « Inviter un collaborateur ». */
+export const TEAM_PATH = accountPath('equipes');
+export const TEAM_INVITE_PATH = accountPath('equipes', { ecran: 'inviter' });
 
 /**
  * Page d'une annonce. Comme dans l'app, la catégorie affichée dépend du mode de recherche : un appartement à vendre
