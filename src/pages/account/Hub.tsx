@@ -9,7 +9,7 @@ import { loadProject, PROJECT_KIND_LABELS, PROJECT_STEPS, projectStore, STEP_LAB
 import { loadSavedSearches, savedSearchesStore } from '../../lib/account/savedSearches';
 import { useStore } from '../../lib/account/session';
 import { useDesktop } from '../../lib/desktop';
-import { accountPath, PATHS } from '../../lib/paths';
+import { accountPath, AGENCY_FORM_PATH, AGENCY_PATH, PATHS } from '../../lib/paths';
 import { ActivityTile, RowGroup, SpaceProfileCard, SpaceSection, type RowItem } from './parts';
 import { soonPath } from './Screens';
 
@@ -18,7 +18,7 @@ import { soonPath } from './Screens';
 export function Hub({ account }: { account: Account }) {
   const listings = useStore(myListingsStore);
   const searches = useStore(savedSearchesStore);
-  const [dialog, setDialog] = useState<'logout' | 'type' | 'review' | 'proForm' | null>(null);
+  const [dialog, setDialog] = useState<'logout' | 'type' | 'review' | null>(null);
   const [typeError, setTypeError] = useState<string | null>(null);
   const isPro = account.profile.account_type === 'professional';
 
@@ -92,7 +92,7 @@ export function Hub({ account }: { account: Account }) {
       )}
       <SpaceSection icon="user" title="Compte et sécurité">
         <RowGroup rows={isPro
-          ? [{ icon: 'badgeCheck', title: 'Informations de l\'agence', subtitle: 'SIREN, carte professionnelle, justificatifs', href: soonPath('agence') }, securityRow, privacyRow, typeRow]
+          ? [{ icon: 'badgeCheck', title: 'Informations de l\'agence', subtitle: 'SIREN, carte professionnelle, justificatifs', href: AGENCY_FORM_PATH }, securityRow, privacyRow, typeRow]
           : [securityRow, privacyRow, typeRow]} />
         {typeError && <p className="field-error">{typeError}</p>}
       </SpaceSection>
@@ -130,21 +130,12 @@ export function Hub({ account }: { account: Account }) {
         title={isPro ? 'Passer en particulier ?' : 'Passer en professionnel ?'}
         message="Vous pourrez revenir en arrière à tout moment depuis Type de compte."
         actions={[
-          {
-            label: isPro ? 'Passer en particulier' : 'Passer en professionnel',
-            // Sans fiche agence, l'app ouvre d'abord le formulaire professionnel : il n'est pas encore sur le site.
-            onClick: () => (!isPro && !account.profile.professional_profile_id ? setDialog('proForm') : void switchType()),
-            tone: 'primary',
-          },
+          // Sans fiche agence, l'app ouvre d'abord le formulaire professionnel : le site aussi (Profil agence).
+          !isPro && !account.profile.professional_profile_id
+            ? { label: 'Passer en professionnel', href: AGENCY_FORM_PATH, tone: 'primary' }
+            : { label: isPro ? 'Passer en particulier' : 'Passer en professionnel', onClick: () => void switchType(), tone: 'primary' },
           { label: 'Annuler', onClick: () => setDialog(null) },
         ]}
-      />
-      <AlertDialog
-        open={dialog === 'proForm'}
-        onClose={() => setDialog(null)}
-        title="Compte professionnel"
-        message="Pour passer en professionnel, renseignez d’abord votre entreprise et votre agence dans l’app Nidalo (Mon compte › Type de compte). Ce formulaire arrive bientôt sur le site."
-        actions={[{ label: 'J\'ai compris', onClick: () => setDialog(null), tone: 'primary' }]}
       />
       <AlertDialog
         open={dialog === 'review'}
@@ -203,7 +194,7 @@ function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
   const line = agency?.email?.trim() || agency?.city?.trim() || 'Fiche agence à compléter';
   return (
     <>
-      <SpaceProfileCard name={name} line={line} badge="Professionnel" photo={agency?.logo_path ?? null} href={soonPath('agence')} />
+      <SpaceProfileCard name={name} line={line} badge="Professionnel" photo={agency?.logo_path ?? null} href={AGENCY_PATH} />
       <div className="pro-stats space-card">
         <div><strong>{onlineCount}</strong><span>Annonces</span></div>
         <div><strong>0</strong><span>Contacts</span></div>
@@ -224,7 +215,7 @@ function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
           { icon: 'chart', title: 'Statistiques', subtitle: 'Vues, contacts et performances', href: soonPath('statistiques') },
           { icon: 'users', title: 'Gestion des équipes', subtitle: 'Inviter des collaborateurs', href: soonPath('equipes') },
           { icon: 'share', title: 'Outils de diffusion', subtitle: 'Partager mes annonces', href: soonPath('diffusion') },
-          { icon: 'badgeCheck', title: 'Profil agence', subtitle: agency ? 'Fiche agence' : 'À compléter', href: soonPath('agence') },
+          { icon: 'badgeCheck', title: 'Profil agence', subtitle: agency ? 'Fiche agence' : 'À compléter', href: AGENCY_PATH },
           { icon: 'receipt', title: 'Abonnement NIDALO Pro', subtitle: 'Options, factures et paiement', href: soonPath('abonnement') },
         ]} />
       </SpaceSection>

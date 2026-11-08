@@ -7,6 +7,7 @@ import { accountStore, loadAccount } from '../lib/account/profile';
 import { recoveryStore, useSession, useStore } from '../lib/account/session';
 import { useDesktop } from '../lib/desktop';
 import { AddVisit } from './account/AddVisit';
+import { AgencyProfile } from './account/AgencyProfile';
 import { AgendaScreen } from './account/Agenda';
 import { DesktopSpace } from './account/DesktopSpace';
 import { Hub } from './account/Hub';
@@ -119,6 +120,8 @@ function AccountContent() {
     case 'consultes': return desktop ? <ViewedListings /> : <SoonScreen screen="consultes" />;
     case 'demande-visite': return <SoonScreen screen="demande-visite" />;
     case 'bientot': return <SoonScreen screen={params.get('ecran')} />;
+    // Profil agence : la page de l'agence et son formulaire, sur téléphone et sur ordinateur.
+    case 'agence': return <AgencyProfile account={current} editing={params.get('ecran') === 'modifier'} />;
     // Ordinateur : Mon espace de la maquette 5 pour un compte particulier ; l'espace professionnel garde son écran.
     default: return desktop && current.profile.account_type !== 'professional' ? <DesktopSpace account={current} /> : <Hub account={current} />;
   }

@@ -7,7 +7,7 @@ import {
   saveProfile, SITUATIONS, type Account, type PhotoChange, type ProfileField, type ProfileForm,
 } from '../../lib/account/profile';
 import { streetSuggestions, type PlaceSuggestion } from '../../lib/places';
-import { accountPath } from '../../lib/paths';
+import { accountPath, AGENCY_FORM_PATH } from '../../lib/paths';
 import { Avatar, ScreenHeader, Toast } from './parts';
 
 /** Point final, sans le doubler après une initiale (« Claire M. », pas « Claire M.. »). */
@@ -44,7 +44,9 @@ export function MyInfo({ account }: { account: Account }) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<'leave' | 'phone' | 'type' | 'proForm' | null>(null);
+  const [dialog, setDialog] = useState<'leave' | 'phone' | 'type' | null>(null);
+  // Où mène « Quitter sans enregistrer » : Mon compte, ou le formulaire de l'agence (« Passer en professionnel »).
+  const [leaveTo, setLeaveTo] = useState<string>(accountPath());
   const fileRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -101,9 +103,14 @@ export function MyInfo({ account }: { account: Account }) {
     return true;
   }
 
-  function back() {
+  function leave(path: string) {
+    setLeaveTo(path);
     if (dirty) setDialog('leave');
-    else window.location.assign(accountPath());
+    else window.location.assign(path);
+  }
+
+  function back() {
+    leave(accountPath());
   }
 
   async function switchType() {
@@ -260,8 +267,8 @@ export function MyInfo({ account }: { account: Account }) {
         title="Quitter sans enregistrer ?"
         message="Vos modifications ne sont pas encore enregistrées."
         actions={[
-          { label: 'Enregistrer les modifications', onClick: () => { setDialog(null); void save().then((ok) => { if (ok) window.location.assign(accountPath()); }); }, tone: 'primary' },
-          { label: 'Quitter sans enregistrer', href: accountPath() },
+          { label: 'Enregistrer les modifications', onClick: () => { setDialog(null); void save().then((ok) => { if (ok) window.location.assign(leaveTo); }); }, tone: 'primary' },
+          { label: 'Quitter sans enregistrer', href: leaveTo },
           { label: 'Continuer', onClick: () => setDialog(null), tone: 'quiet' },
         ]}
       />
@@ -277,24 +284,20 @@ export function MyInfo({ account }: { account: Account }) {
       />
       <AlertDialog
         open={dialog === 'type'}
-        onClose={() => setDialog(null)}
+        // Ne ferme qu'elle-même : « Passer en professionnel » peut ouvrir « Quitter sans enregistrer ? » à sa place, et
+        // la fermeture de cette fenêtre-ci arrive après.
+        onClose={() => setDialog((current) => (current === 'type' ? null : current))}
         title={isPro ? 'Passer en particulier ?' : 'Passer en professionnel ?'}
         message="Vous pourrez revenir en arrière à tout moment depuis Type de compte."
         actions={[
           {
             label: isPro ? 'Passer en particulier' : 'Passer en professionnel',
-            onClick: () => (!isPro && !account.profile.professional_profile_id ? setDialog('proForm') : void switchType()),
+            // Sans fiche agence, l'app ouvre d'abord le formulaire professionnel : le site aussi (Profil agence).
+            onClick: () => (!isPro && !account.profile.professional_profile_id ? leave(AGENCY_FORM_PATH) : void switchType()),
             tone: 'primary',
           },
           { label: 'Annuler', onClick: () => setDialog(null) },
         ]}
-      />
-      <AlertDialog
-        open={dialog === 'proForm'}
-        onClose={() => setDialog(null)}
-        title="Compte professionnel"
-        message="Pour passer en professionnel, renseignez d’abord votre entreprise et votre agence dans l’app Nidalo (Mon compte › Type de compte). Ce formulaire arrive bientôt sur le site."
-        actions={[{ label: 'J\'ai compris', onClick: () => setDialog(null), tone: 'primary' }]}
       />
     </div>
   );

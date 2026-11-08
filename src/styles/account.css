@@ -417,3 +417,48 @@
 .save-search-button[disabled]:not(.is-saved) { opacity: 0.6; cursor: default; }
 .alert-body .text-input { margin-top: 4px; text-align: left; }
 
+
+/* ——— Profil agence : la page de l'agence (PublisherViews.swift, AgencyProfileView) ——— */
+.agency-page { gap: 16px; }
+.agency-head { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px; text-align: center; }
+.agency-logo { display: inline-flex; align-items: center; justify-content: center; flex: none; overflow: hidden; border-radius: 26%; background: var(--ink); color: #FFFFFF; font-weight: 700; }
+.agency-logo img { width: 100%; height: 100%; object-fit: cover; }
+.agency-logo .icon { width: 46%; height: 46%; }
+.agency-name { font-size: 22px; font-weight: 800; overflow-wrap: anywhere; }
+.agency-badges { display: flex; align-items: center; gap: 6px; }
+.agency-pro-badge { display: inline-flex; align-items: center; padding: 2.5px 7px; border-radius: 999px; background: var(--blue); color: #FFFFFF; font-size: 11px; font-weight: 700; line-height: 1.2; }
+.agency-verified { display: inline-flex; align-items: center; gap: 4px; color: var(--blue); font-size: 12px; font-weight: 700; }
+.agency-verified .icon { width: 15px; height: 15px; }
+.agency-place { margin: 0; color: var(--text-secondary); font-size: 13px; }
+.agency-card { display: flex; flex-direction: column; gap: 14px; padding: 16px; }
+.agency-card-title { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 700; }
+.agency-card-title .icon { width: 19px; height: 19px; color: var(--blue); }
+.agency-about { margin: 0; color: var(--ink); font-size: 14px; opacity: 0.85; white-space: pre-line; overflow-wrap: anywhere; }
+.agency-rows { display: flex; flex-direction: column; gap: 14px; margin: 0; }
+.agency-rows > div { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 14px; }
+.agency-rows dt { flex: none; color: var(--text-secondary); font-weight: 500; }
+.agency-rows dd { min-width: 0; margin: 0; color: var(--ink); font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.agency-site { width: 100%; }
+.agency-site .icon { width: 17px; height: 17px; }
+.agency-note { margin: 0; color: var(--text-secondary); font-size: 13px; }
+.agency-caption { margin: 0; color: var(--text-muted); font-size: 12px; }
+.agency-listings { display: flex; flex-direction: column; gap: 10px; }
+.agency-listings-title { font-size: 17px; font-weight: 700; }
+
+/* Son formulaire (ProfessionalOnboardingView.swift) */
+.agency-status { display: flex; align-items: flex-start; gap: 12px; padding: 14px; }
+.agency-status-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 40px; height: 40px; border-radius: 12px; background: var(--blue-soft); color: var(--blue); }
+.agency-status-icon .icon { width: 21px; height: 21px; }
+.agency-status h2 { font-size: 15.5px; font-weight: 700; }
+.agency-status p { margin: 4px 0 0; color: var(--text-secondary); font-size: 13px; }
+.agency-logo-row { display: flex; align-items: center; gap: 12px; }
+.agency-logo-preview { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 56px; height: 56px; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--page); color: var(--text-muted); }
+.agency-logo-preview img { width: 100%; height: 100%; object-fit: cover; }
+.agency-logo-preview .icon { width: 22px; height: 22px; }
+.agency-logo-text { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; }
+.agency-logo-title { font-size: 14px; font-weight: 700; }
+.agency-about-input { height: auto; min-height: 120px; padding: 12px 14px; line-height: 1.45; resize: vertical; }
+.agency-app-hint { padding: 0 4px; }
+.agency-save { width: 100%; min-height: 52px; font-size: 15px; font-weight: 700; }
+/* « Modifier » de la page de l'agence : un lien qui a l'allure du bouton « Enregistrer ». */
+a.save-capsule { text-decoration: none; }

@@ -12,7 +12,7 @@ import {
 import { loadSavedSearches, savedSearchesStore } from '../../lib/account/savedSearches';
 import { currentUserId, useStore } from '../../lib/account/session';
 import { slotLabel } from '../../lib/listing/visits';
-import { accountPath, PATHS } from '../../lib/paths';
+import { accountPath, AGENCY_FORM_PATH, PATHS } from '../../lib/paths';
 import { recentlyViewedIds } from '../../lib/recentlyViewed';
 import { ChoiceDialog, DesktopRows, IPHONE_ONLY, IphoneOnlyDialog, ProgressRing } from './DesktopParts';
 import { Avatar } from './parts';
@@ -186,7 +186,7 @@ function ActivityTile({ title, detail, href }: { title: string; detail: string; 
   );
 }
 
-type Dialog = 'logout' | 'type' | 'proForm' | 'review' | null;
+type Dialog = 'logout' | 'type' | 'review' | null;
 
 export function DesktopSpace({ account }: { account: Account }) {
   const listings = useStore(myListingsStore);
@@ -329,17 +329,10 @@ export function DesktopSpace({ account }: { account: Account }) {
         title="Passer en professionnel ?"
         message="Vous pourrez revenir en arrière à tout moment depuis Type de compte."
         actions={[
-          // Sans fiche agence, l'app ouvre d'abord le parcours professionnel : il n'est pas encore sur le site (comme Hub).
-          { label: 'Passer en professionnel', onClick: () => (account.profile.professional_profile_id ? void switchType() : setDialog('proForm')), tone: 'primary' },
+          // Sans fiche agence, l'app ouvre d'abord le parcours professionnel : le site aussi (Profil agence, comme Hub).
+          { label: 'Passer en professionnel', onClick: () => (account.profile.professional_profile_id ? void switchType() : window.location.assign(AGENCY_FORM_PATH)), tone: 'primary' },
           { label: 'Annuler', onClick: () => setDialog(null) },
         ]}
-      />
-      <ChoiceDialog
-        open={dialog === 'proForm'}
-        onClose={() => setDialog(null)}
-        title="Compte professionnel"
-        message="Pour passer en professionnel, renseignez d’abord votre entreprise et votre agence dans l’app Nidalo (Mon compte › Type de compte). Ce formulaire arrive bientôt sur le site."
-        actions={[{ label: 'J\'ai compris', onClick: () => setDialog(null), tone: 'primary' }]}
       />
       <ChoiceDialog
         open={dialog === 'review'}
