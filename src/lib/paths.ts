@@ -18,7 +18,7 @@ export const PATHS = {
 export type AccountView =
   | 'informations' | 'annonces' | 'recherches' | 'confidentialite' | 'legal' | 'securite' | 'supprimer' | 'bientot'
   | 'notifications' | 'demande-visite' | 'agenda' | 'ajouter-visite' | 'projet' | 'consultes' | 'agence' | 'diffusion' | 'affiche'
-  | 'contacts' | 'statistiques';
+  | 'contacts' | 'statistiques' | 'ventes';
 
 /** « Publier une annonce » ; avec une annonce, reprend son brouillon ou la modifie (`etape=photos` : ses photos). */
 export function publishPath(listingId: string | null = null, step: 'photos' | null = null): string {
@@ -40,6 +40,11 @@ export const AGENCY_FORM_PATH = accountPath('agence', { ecran: 'modifier' });
 export const CONTACTS_PATH = accountPath('contacts');
 export const NEW_CONTACT_PATH = accountPath('contacts', { ecran: 'ajouter' });
 export const contactPath = (key: string, edit = false): string => accountPath('contacts', edit ? { contact: key, ecran: 'modifier' } : { contact: key });
+
+/** « Mes ventes » : la liste, une vente (`vente=<id>`), son formulaire (`ecran=modifier`) et l'ajout. */
+export const SALES_PATH = accountPath('ventes');
+export const NEW_SALE_PATH = accountPath('ventes', { ecran: 'ajouter' });
+export const salePath = (id: string, edit = false): string => accountPath('ventes', edit ? { vente: id, ecran: 'modifier' } : { vente: id });
 
 /**
  * Page d'une annonce. Comme dans l'app, la catégorie affichée dépend du mode de recherche : un appartement à vendre

@@ -19,6 +19,7 @@ import { NotificationsScreen } from './account/Notifications';
 import { Poster } from './account/Poster';
 import { ProfileChoice } from './account/ProfileChoice';
 import { ProjectEditor } from './account/ProjectEditor';
+import { Sales } from './account/Sales';
 import { SavedSearchesList } from './account/SavedSearchesList';
 import { ScreenHeader, Spinner } from './account/parts';
 import { DeleteAccountScreen, LegalScreen, PrivacyScreen, SecurityScreen, SoonScreen } from './account/Screens';
@@ -130,6 +131,8 @@ function AccountContent() {
     case 'diffusion': return <Diffusion />;
     case 'affiche': return <Poster listingId={params.get('annonce')} />;
     case 'contacts': return <Contacts contactKey={params.get('contact')} screen={params.get('ecran')} />;
+    // Mes ventes : de l'offre acceptée à l'acte signé, avec les offres acceptées à suivre.
+    case 'ventes': return <Sales saleId={params.get('vente')} screen={params.get('ecran')} />;
     // Statistiques : vues, favoris, messages, visites et offres de chaque annonce publiée, sur 7 ou 30 jours.
     case 'statistiques': return <Statistics />;
     // Ordinateur : Mon espace de la maquette 5 pour un compte particulier ; l'espace professionnel garde son écran.

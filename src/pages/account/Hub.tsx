@@ -7,10 +7,11 @@ import { contactsStore, contactsSubtitle, loadContacts } from '../../lib/account
 import { loadProfessional, professionalStore } from '../../lib/account/professional';
 import { saveAccountType, type Account } from '../../lib/account/profile';
 import { loadProject, PROJECT_KIND_LABELS, PROJECT_STEPS, projectStore, STEP_LABELS } from '../../lib/account/project';
+import { activeSalesCount, loadSales, salesStore, salesSubtitle } from '../../lib/account/sales';
 import { loadSavedSearches, savedSearchesStore } from '../../lib/account/savedSearches';
 import { useStore } from '../../lib/account/session';
 import { useDesktop } from '../../lib/desktop';
-import { accountPath, AGENCY_FORM_PATH, AGENCY_PATH, CONTACTS_PATH, PATHS } from '../../lib/paths';
+import { accountPath, AGENCY_FORM_PATH, AGENCY_PATH, CONTACTS_PATH, PATHS, SALES_PATH } from '../../lib/paths';
 import { ActivityTile, RowGroup, SpaceProfileCard, SpaceSection, type RowItem } from './parts';
 import { soonPath } from './Screens';
 
@@ -31,6 +32,7 @@ export function Hub({ account }: { account: Account }) {
     if (isPro) {
       void loadProfessional();
       void loadContacts();
+      void loadSales();
     }
   }, [isPro]);
 
@@ -192,6 +194,8 @@ function ProjectCard() {
 function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
   const pro = useStore(professionalStore);
   const contacts = useStore(contactsStore);
+  const sales = useStore(salesStore);
+  const saleRows = sales.status === 'ready' ? sales.rows : [];
   const contactItems = contacts.status === 'ready' ? contacts.items : [];
   const newContacts = contactItems.filter((contact) => contact.isNew).length;
   // Ordinateur : l'agenda des visites est sur le site (Mon agenda) ; sur téléphone, « bientôt » comme avant.
@@ -205,13 +209,13 @@ function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
       <div className="pro-stats space-card">
         <div><strong>{onlineCount}</strong><span>Annonces</span></div>
         <div><strong>{contactItems.length}</strong><span>Contacts</span></div>
-        <div><strong>0</strong><span>Ventes en cours</span></div>
+        <div><strong>{activeSalesCount(saleRows)}</strong><span>Ventes en cours</span></div>
       </div>
       <SpaceSection icon="briefcase" title="Mon activité professionnelle">
         <RowGroup rows={[
           { icon: 'house', title: 'Mes annonces', subtitle: listingsSubtitle(), href: accountPath('annonces') },
           { icon: 'fileText', title: 'Mes mandats', subtitle: '0 mandat actif, vente et location', href: soonPath('mandats') },
-          { icon: 'handshake', title: 'Mes ventes', subtitle: '0 en cours · 0 compromis signé', href: soonPath('ventes') },
+          { icon: 'handshake', title: 'Mes ventes', subtitle: salesSubtitle(saleRows), href: SALES_PATH },
           { icon: 'users', title: 'Mes contacts', subtitle: contactsSubtitle(contactItems), badge: newContacts, href: CONTACTS_PATH },
           { icon: 'calendarDays', title: 'Agenda des visites', subtitle: 'Visites et rendez-vous', href: desktop ? accountPath('agenda') : soonPath('agenda') },
           { icon: 'sparkles', title: 'Mes opportunités', subtitle: '0 opportunité active', href: soonPath('opportunites') },

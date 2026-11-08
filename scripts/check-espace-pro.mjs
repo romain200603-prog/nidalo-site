@@ -10,7 +10,10 @@
 // suppression, avec seulement les écritures attendues dans pro_contacts.
 // Statistiques : sur 30 puis 7 jours, le total et chaque annonce publiée (vues et favoris de my_listing_stats,
 // conversations, demandes de visite et offres de la période) ; un serveur sans la fonction, un compte sans annonce.
-// Captures pour Romain : agence-*.png, diffusion-*.png, diffusion-affiche.pdf, contacts-*.png, statistiques-*.png.
+// Mes ventes : l'offre acceptée à suivre, les filtres, la fiche et ses étapes, la modification (dates vérifiées),
+// l'ajout à la main, l'annulation, la reprise et la suppression, avec seulement les écritures attendues dans pro_sales.
+// Captures pour Romain : agence-*.png, diffusion-*.png, diffusion-affiche.pdf, contacts-*.png, statistiques-*.png,
+// ventes-*.png.
 // Lancer après la construction : node scripts/check-espace-pro.mjs [dossier construit, docs/ par défaut] [dossier des captures]
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
@@ -155,6 +158,31 @@ const startDay = (period) => {
   const [year, month, day] = parisDay(new Date()).split('-').map(Number);
   return new Date(Date.UTC(year, month - 1, day - (period - 1))).toISOString().slice(0, 10);
 };
+/** Mes ventes : jours de Paris avant ou après aujourd'hui, et leur écriture sur la page (« 8 novembre 2026 »). */
+const dayAgo = (days) => parisDay(new Date(Date.now() - days * DAY));
+const dayIn = (days) => parisDay(new Date(Date.now() + days * DAY));
+const dayText = (day) => new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${day}T00:00:00Z`));
+/** Offre de Sophie acceptée il y a 3 jours, pas encore suivie dans Mes ventes. */
+const ACCEPTED_OFFER = {
+  ...OFFERS[0], id: 'a1000000-0000-4000-8000-0000000000c2', amount: 228000, status: 'accepted', created_at: ago(5), responded_at: ago(3),
+  allowed_actions: [],
+};
+const MAISON_SALE = {
+  id: 'e2000000-0000-4000-8000-0000000000f1', listing_id: null, offer_id: null, title: 'Maison avec jardin', city: 'Écully',
+  buyer_name: 'M. et Mme Bernard', price: 480000, accepted_on: dayAgo(30), compromise_on: dayAgo(20), loan_deadline: dayIn(15),
+  conditions_on: null, deed_planned_on: null, deed_signed_on: null, cancelled_on: null, notary: 'Maître Roux, Lyon 6e',
+  note: 'Diagnostics à jour. Rappeler la banque des acquéreurs.', created_at: ago(30), updated_at: ago(20),
+};
+const STUDIO_SALE = {
+  ...MAISON_SALE, id: 'e2000000-0000-4000-8000-0000000000f2', title: 'Studio Croix-Rousse', city: 'Lyon 4e', buyer_name: 'Léa M.', price: 152000,
+  accepted_on: dayAgo(120), compromise_on: dayAgo(110), loan_deadline: null, conditions_on: dayAgo(60), deed_planned_on: dayAgo(12),
+  deed_signed_on: dayAgo(12), notary: null, note: null, created_at: ago(120), updated_at: ago(12),
+};
+const SALE_WRITABLE = [
+  'listing_id', 'offer_id', 'title', 'city', 'buyer_name', 'price', 'accepted_on', 'compromise_on', 'loan_deadline', 'conditions_on',
+  'deed_planned_on', 'deed_signed_on', 'cancelled_on', 'notary', 'note',
+];
+
 const STATS = {
   30: [{ listing_id: SALE.id, views: 128, favorites_total: 9, favorites_new: 3 }, { listing_id: RENT.id, views: 41, favorites_total: 1, favorites_new: 1 }],
   7: [{ listing_id: SALE.id, views: 30, favorites_total: 9, favorites_new: 1 }, { listing_id: RENT.id, views: 12, favorites_total: 1, favorites_new: 0 }],
@@ -185,7 +213,7 @@ function fakeSession() {
  * `pro` : un professionnel avec sa fiche agence, ses détails et (sauf `listings`) une annonce en ligne ; sinon un
  * particulier sans fiche.
  */
-function newState({ pro = false, listings = null, contacts = false } = {}) {
+function newState({ pro = false, listings = null, contacts = false, sales = false } = {}) {
   return {
     profile: pro ? { ...PROFILE, account_type: 'professional', professional_profile_id: AGENCY_ID } : { ...PROFILE },
     details: { ...DETAILS },
@@ -202,6 +230,9 @@ function newState({ pro = false, listings = null, contacts = false } = {}) {
     /** Statistiques : réponses de my_listing_stats par jour de début ; `statsMissing` : fonction absente du serveur. */
     stats: { [startDay(30)]: STATS[30], [startDay(7)]: STATS[7] },
     statsMissing: false,
+    /** Mes ventes : lignes de pro_sales ; `salesMissing` : table absente du serveur. */
+    saleRows: structuredClone(sales ? [MAISON_SALE, STUDIO_SALE] : []),
+    salesMissing: false,
     /** Le serveur refuse les détails (contrôle d'une colonne). */
     refuseDetails: false,
   };
@@ -313,6 +344,46 @@ function rest(state, route) {
         const before = state.contactRows.length;
         state.contactRows = state.contactRows.filter((row) => !match(row));
         if (before - state.contactRows.length !== 1) problems.push(`pro_contacts : suppression ${decodeURIComponent(url.search)}`);
+        return empty(route);
+      }
+      break;
+    }
+    case 'pro_sales': {
+      if (state.salesMissing) {
+        expectedServerErrors += 1;
+        return json(route, { code: 'PGRST205', message: 'Could not find the table \'public.pro_sales\' in the schema cache', details: null, hint: null }, 404);
+      }
+      const match = (row) => [...params].every(([column, value]) => (
+        !value.startsWith('eq.') || String(row[column]).toLowerCase() === value.slice(3).toLowerCase()
+      ));
+      if (method === 'GET') return json(route, [...state.saleRows].sort((a, b) => b.created_at.localeCompare(a.created_at)));
+      if (method === 'POST' || method === 'PATCH') {
+        const extra = Object.keys(body ?? {}).filter((key) => !SALE_WRITABLE.includes(key) || (method === 'PATCH' && ['listing_id', 'offer_id'].includes(key)));
+        if (extra.length) problems.push(`pro_sales : colonnes en trop ${extra}`);
+      }
+      if (method === 'POST') {
+        if (body.offer_id && state.saleRows.some((row) => row.offer_id === body.offer_id)) {
+          expectedServerErrors += 1;
+          return json(route, { code: '23505', message: 'duplicate key value violates unique constraint', details: null, hint: null }, 409);
+        }
+        const row = {
+          id: randomUUID(), listing_id: null, offer_id: null, city: null, buyer_name: null, price: null, accepted_on: null, compromise_on: null,
+          loan_deadline: null, conditions_on: null, deed_planned_on: null, deed_signed_on: null, cancelled_on: null, notary: null, note: null,
+          created_at: now, updated_at: now, ...body,
+        };
+        state.saleRows.push(row);
+        return single ? json(route, { id: row.id }, 201) : empty(route, 201);
+      }
+      if (method === 'PATCH') {
+        const rows = state.saleRows.filter(match);
+        if (rows.length !== 1) problems.push(`pro_sales : modification de ${rows.length} ligne(s) ${decodeURIComponent(url.search)}`);
+        for (const row of rows) Object.assign(row, body, { updated_at: now });
+        return single ? json(route, { id: rows[0]?.id }) : empty(route);
+      }
+      if (method === 'DELETE') {
+        const before = state.saleRows.length;
+        state.saleRows = state.saleRows.filter((row) => !match(row));
+        if (before - state.saleRows.length !== 1) problems.push(`pro_sales : suppression ${decodeURIComponent(url.search)}`);
         return empty(route);
       }
       break;
@@ -1170,6 +1241,271 @@ try {
     expectSame(N, 'sans annonce publiée', [tidy(await empty.locator('.account-empty h2').textContent()), await empty.locator('.stats-periods').count()],
       ['Aucune annonce publiée', 0]);
     await emptyContext.close();
+  }
+
+  // 12. Téléphone, Mes ventes : la ligne de Mon compte, la liste (l'offre acceptée à suivre, les filtres), suivre la
+  //     vente de l'offre (sa fiche s'ouvre), la modifier (dates vérifiées), l'annuler puis la reprendre, en ajouter une
+  //     à la main (prix espacé pendant la saisie) et supprimer son suivi ; seulement les écritures attendues.
+  const salesList = (page) => page.evaluate(() => {
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    return {
+      suggestions: [...document.querySelectorAll('.sales-suggestion')].map((el) => [
+        text(el.querySelector('.sales-suggestion-title')), text(el.querySelector('.sales-suggestion-line')), text(el.querySelector('.sales-follow')),
+      ]),
+      filters: [...document.querySelectorAll('.sales-filters .select-chip')].map((el) => `${text(el)}${el.getAttribute('aria-pressed') === 'true' ? ' (choisi)' : ''}`),
+      rows: [...document.querySelectorAll('.sale-row')].map((el) => [
+        text(el.querySelector('.sale-row-title')), text(el.querySelector('.sale-row-line')), text(el.querySelector('.sale-row-stage')),
+        el.querySelector('.sale-row-stage').className.replace('sale-row-stage ', ''), el.getAttribute('href'), Boolean(el.querySelector('.sale-thumb img')),
+      ]),
+      none: text(document.querySelector('.sales-none')),
+    };
+  });
+  const saleFiche = (page) => page.evaluate(() => {
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const all = (selector) => [...document.querySelectorAll(selector)];
+    return {
+      header: text(document.querySelector('.screen-header h1')),
+      title: text(document.querySelector('.sale-title')),
+      city: text(document.querySelector('.sale-city')),
+      state: text(document.querySelector('.sale-state')),
+      photo: Boolean(document.querySelector('.sale-head .sale-thumb img')),
+      cards: all('.sale-card-title').map(text),
+      rows: all('.sale-rows > div').map((el) => `${text(el.querySelector('dt'))} : ${text(el.querySelector('dd'))}`),
+      links: all('.sale-links a').map((el) => [text(el), el.getAttribute('href')]),
+      steps: all('.sale-step').map((el) => [
+        text(el.querySelector('.sale-step-title')), text(el.querySelector('.sale-step-detail')),
+        el.classList.contains('is-done') ? 'fait' : el.classList.contains('is-next') ? 'suivant' : 'à venir',
+      ]),
+      captions: all('.sale-caption').map(text),
+      note: text(document.querySelector('.sale-note')),
+      buttons: all('.sale-cancel, .sale-resume').map(text),
+    };
+  });
+  /** Attend que la page ait retiré `ok=` de son adresse (message lu). */
+  const toastRead = (page) => page.waitForFunction(() => !window.location.search.includes('ok='));
+  const STEPS_HINT = 'Ajoutez les dates au fil de la vente avec « Modifier ».';
+  {
+    const N = 'mes ventes (téléphone)';
+    const state = newState({ pro: true, listings: [SALE], contacts: true, sales: true });
+    state.offers.push(structuredClone(ACCEPTED_OFFER));
+    const context = await phone();
+    await mock(context, state);
+    const page = await open(context, '/compte/', N);
+    const row = page.locator('a.row', { hasText: 'Mes ventes' });
+    await page.waitForFunction(() => /1 en cours/.test(document.querySelector('a.row[href*="vue=ventes"]')?.textContent ?? ''), null, { timeout: 8000 })
+      .catch(() => problems.push(`${N} : ligne de Mon compte jamais mise à jour`));
+    expectSame(N, 'ligne de Mon compte', [
+      tidy(await row.locator('.row-subtitle').textContent()), await row.getAttribute('href'), tidy(await page.locator('.pro-stats > div').nth(2).textContent()),
+    ], ['1 en cours · 1 compromis signé', '/compte/?vue=ventes', '1Ventes en cours']);
+
+    await row.click();
+    await page.waitForURL('**/compte/?vue=ventes');
+    await page.locator('.sale-row').first().waitFor();
+    expectSame(N, 'liste', await salesList(page), {
+      suggestions: [[SALE.title, `Offre de 228 000 € de Sophie L., acceptée le ${dayText(dayAgo(3))}`, 'Suivre la vente']],
+      filters: ['En cours (choisi)', 'Signées', 'Annulées'],
+      rows: [['Maison avec jardin', '480 000 € · M. et Mme Bernard', `Prêt attendu avant le ${dayText(dayIn(15))}`, 'is-active', `/compte/?vue=ventes&vente=${MAISON_SALE.id}`, false]],
+      none: null,
+    });
+    const chip = (name) => page.locator('.sales-filters .select-chip', { hasText: name });
+    await chip('Signées').click();
+    expectSame(N, 'filtre Signées', (await salesList(page)).rows.map((item) => item.slice(0, 4)), [
+      ['Studio Croix-Rousse', '152 000 € · Léa M.', `Acte signé le ${dayText(dayAgo(12))}`, 'is-signed'],
+    ]);
+    await chip('Annulées').click();
+    expectSame(N, 'filtre Annulées', [(await salesList(page)).rows.length, (await salesList(page)).none], [0, 'Aucune vente annulée.']);
+    await chip('En cours').click();
+    await shot(page, 'ventes-telephone.png');
+
+    // Suivre la vente de l'offre de Sophie : le bien, l'acquéreur, le prix et le jour sont repris ; sa fiche s'ouvre.
+    let mark = state.calls.length;
+    await page.locator('.sales-follow').click();
+    await page.waitForURL(/vente=/);
+    await page.locator('.account-toast', { hasText: 'Vente suivie' }).waitFor();
+    await toastRead(page);
+    const followed = state.saleRows.find((item) => item.offer_id === ACCEPTED_OFFER.id);
+    expectSame(N, 'vente suivie', [writesSince(state, mark).map((call) => [call.method, call.table, call.body]), new URL(page.url()).search], [[
+      ['POST', 'pro_sales', { listing_id: SALE.id, offer_id: ACCEPTED_OFFER.id, title: SALE.title, city: SALE.city, buyer_name: 'Sophie L.', price: 228000, accepted_on: dayAgo(3) }],
+    ], `?vue=ventes&vente=${followed?.id}`]);
+    expectSame(N, 'fiche de la vente suivie', await saleFiche(page), {
+      header: 'Vente', title: SALE.title, city: SALE.city, state: 'En cours', photo: true, cards: ['La vente', 'Étapes'],
+      rows: ['Acquéreur : Sophie L.', 'Prix de vente : 228 000 €', 'Notaire : Non indiqué'],
+      links: [['Écrire à l\'acquéreur', `/messages/?c=${SOPHIE_CONVERSATION}`], ['Voir l\'annonce', `/annonce/?id=${SALE.id}`]],
+      steps: [
+        ['Offre acceptée', `Le ${dayText(dayAgo(3))}`, 'fait'], ['Compromis signé', 'À venir', 'suivant'],
+        ['Conditions suspensives levées', 'À venir', 'à venir'], ['Acte authentique signé', 'À venir', 'à venir'],
+      ],
+      captions: [STEPS_HINT], note: null, buttons: ['Annuler la vente'],
+    });
+
+    // Modification : un compromis daté de demain et un prêt avant le compromis sont refusés, sans rien écrire.
+    const date = (label) => page.getByLabel(label, { exact: true });
+    await page.getByRole('link', { name: 'Modifier', exact: true }).click();
+    await page.waitForURL(/ecran=modifier/);
+    await page.locator('.sale-save').waitFor();
+    expectSame(N, 'formulaire prérempli', [
+      tidy(await page.locator('.screen-header h1').textContent()), await field(page, 'Bien').inputValue(), await field(page, 'Ville (facultative)').inputValue(),
+      await field(page, 'Acquéreur (facultatif)').inputValue(), tidy(await field(page, 'Prix de vente (facultatif)').inputValue()),
+      await date('Offre acceptée le').inputValue(), await date('Compromis signé le').inputValue(), tidy(await page.locator('.sale-save').textContent()),
+    ], ['Modifier la vente', SALE.title, SALE.city, 'Sophie L.', '228 000', dayAgo(3), '', 'Enregistrer les modifications']);
+    await date('Compromis signé le').fill(dayIn(1));
+    await date('Date limite du prêt (facultative)').fill(dayAgo(1));
+    mark = state.calls.length;
+    await page.locator('.sale-save').click();
+    expectSame(N, 'dates à corriger', await texts(page, '.sale-form-screen .field-error'), [
+      'Cette date est après aujourd\'hui.', 'Cette date est avant le compromis.', 'Vérifiez les champs en rouge.',
+    ]);
+    expectSame(N, 'rien d\'écrit avec des dates fausses', writeNames(writesSince(state, mark)), []);
+    await date('Compromis signé le').fill(dayAgo(1));
+    await date('Date limite du prêt (facultative)').fill(dayIn(30));
+    await date('Acte prévu le').fill(dayIn(60));
+    await field(page, 'Notaire (facultatif)').fill('Maître Faure, Lyon 2e');
+    await field(page, 'Note (facultative)').fill('  Prêt de 180 000 € demandé à la banque. ');
+    await page.locator('.sale-save').click();
+    await page.waitForURL((url) => !url.search.includes('ecran=modifier'));
+    await page.locator('.account-toast', { hasText: 'Modifications enregistrées' }).waitFor();
+    expectSame(N, 'vente modifiée', writesSince(state, mark).map((call) => [call.method, call.table, call.search, call.body]), [
+      ['PATCH', 'pro_sales', `?id=eq.${followed?.id}&select=id`, {
+        title: SALE.title, city: SALE.city, buyer_name: 'Sophie L.', price: 228000, accepted_on: dayAgo(3), compromise_on: dayAgo(1),
+        loan_deadline: dayIn(30), conditions_on: null, deed_planned_on: dayIn(60), deed_signed_on: null, notary: 'Maître Faure, Lyon 2e',
+        note: 'Prêt de 180 000 € demandé à la banque.',
+      }],
+    ]);
+    const edited = await saleFiche(page);
+    expectSame(N, 'fiche modifiée', [edited.cards, edited.rows[2], edited.note, edited.captions, edited.steps], [
+      ['La vente', 'Étapes', 'Note privée'], 'Notaire : Maître Faure, Lyon 2e', 'Prêt de 180 000 € demandé à la banque.',
+      [STEPS_HINT, 'Seul vous voyez cette note.'],
+      [
+        ['Offre acceptée', `Le ${dayText(dayAgo(3))}`, 'fait'], ['Compromis signé', `Le ${dayText(dayAgo(1))}`, 'fait'],
+        ['Conditions suspensives levées', `Prêt attendu avant le ${dayText(dayIn(30))}`, 'suivant'],
+        ['Acte authentique signé', `Prévu le ${dayText(dayIn(60))}`, 'à venir'],
+      ],
+    ]);
+    await page.locator('.account-toast').waitFor({ state: 'detached', timeout: 5000 }).catch(() => problems.push(`${N} : le message reste affiché`));
+    await shot(page, 'ventes-fiche.png');
+
+    // Annuler (après confirmation) puis reprendre la vente : seule la date d'annulation change.
+    mark = state.calls.length;
+    await page.locator('.sale-cancel').click();
+    await dialog(page).getByRole('button', { name: 'Garder la vente' }).waitFor();
+    expectSame(N, 'confirmation d\'annulation', tidy(await dialog(page).locator('h2, .alert-title').first().textContent()), 'Annuler cette vente ?');
+    await dialog(page).getByRole('button', { name: 'Annuler la vente' }).click();
+    await page.locator('.account-toast', { hasText: 'Vente annulée' }).waitFor();
+    const cancelled = await saleFiche(page);
+    expectSame(N, 'vente annulée', [cancelled.state, cancelled.captions, cancelled.buttons, cancelled.steps.map((step) => step[2])], [
+      'Annulée', [`Annulée le ${dayText(dayAgo(0))}.`, 'Seul vous voyez cette note.'], ['Reprendre la vente'], ['fait', 'fait', 'à venir', 'à venir'],
+    ]);
+    await page.locator('.sale-resume').click();
+    await page.locator('.account-toast', { hasText: 'Vente reprise' }).waitFor();
+    expectSame(N, 'annulée puis reprise', [
+      writesSince(state, mark).map((call) => [call.method, call.table, call.search, call.body]), (await saleFiche(page)).state,
+    ], [[
+      ['PATCH', 'pro_sales', `?id=eq.${followed?.id}`, { cancelled_on: dayAgo(0) }],
+      ['PATCH', 'pro_sales', `?id=eq.${followed?.id}`, { cancelled_on: null }],
+    ], 'En cours']);
+
+    // Ajout à la main : vide, il signale le bien ; rempli (prix espacé pendant la saisie), quitter demande confirmation.
+    await page.goto(`${base}/compte/?vue=ventes`, { waitUntil: 'networkidle' });
+    await page.getByRole('link', { name: 'Ajouter', exact: true }).click();
+    await page.waitForURL('**/compte/?vue=ventes&ecran=ajouter');
+    await page.locator('.sale-save').waitFor();
+    mark = state.calls.length;
+    await page.locator('.sale-save').click();
+    expectSame(N, 'formulaire vide', [tidy(await page.locator('.screen-header h1').textContent()), await texts(page, '.sale-form-screen .field-error')],
+      ['Nouvelle vente', ['Indiquez le bien.', 'Vérifiez les champs en rouge.']]);
+    await field(page, 'Bien').fill('Appartement 3 pièces, quai Saint-Vincent');
+    await field(page, 'Ville (facultative)').fill('Lyon 1er');
+    await field(page, 'Acquéreur (facultatif)').fill('Hugo et Inès T.');
+    await field(page, 'Prix de vente (facultatif)').pressSequentially('199000');
+    expectSame(N, 'prix espacé pendant la saisie', tidy(await field(page, 'Prix de vente (facultatif)').inputValue()), '199 000');
+    await date('Offre acceptée le').fill(dayAgo(2));
+    await page.locator('.screen-header .round-back').click();
+    await dialog(page).getByRole('button', { name: 'Continuer' }).waitFor();
+    expectSame(N, 'quitter sans enregistrer', tidy(await dialog(page).locator('h2, .alert-title').first().textContent()), 'Quitter sans enregistrer ?');
+    await dialog(page).getByRole('button', { name: 'Continuer' }).click();
+    expectSame(N, 'rien d\'écrit avant un formulaire juste', writeNames(writesSince(state, mark)), []);
+    await shot(page, 'ventes-ajout.png');
+    await page.locator('.sale-save').click();
+    await page.locator('.account-toast', { hasText: 'Vente ajoutée' }).waitFor();
+    await toastRead(page);
+    const added = state.saleRows.find((item) => item.title === 'Appartement 3 pièces, quai Saint-Vincent');
+    expectSame(N, 'vente ajoutée', [writesSince(state, mark).map((call) => [call.method, call.table, call.body]), new URL(page.url()).search], [[
+      ['POST', 'pro_sales', {
+        title: 'Appartement 3 pièces, quai Saint-Vincent', city: 'Lyon 1er', buyer_name: 'Hugo et Inès T.', price: 199000, accepted_on: dayAgo(2),
+        compromise_on: null, loan_deadline: null, conditions_on: null, deed_planned_on: null, deed_signed_on: null, notary: null, note: null,
+      }],
+    ], `?vue=ventes&vente=${added?.id}`]);
+    const manual = await saleFiche(page);
+    expectSame(N, 'fiche de la vente ajoutée', [manual.photo, manual.links, manual.rows, manual.steps[1]], [
+      false, [], ['Acquéreur : Hugo et Inès T.', 'Prix de vente : 199 000 €', 'Notaire : Non indiqué'], ['Compromis signé', 'À venir', 'suivant'],
+    ]);
+
+    // Suppression du suivi, après confirmation : la liste revient avec « Suivi supprimé ».
+    await page.getByRole('link', { name: 'Modifier', exact: true }).click();
+    await page.waitForURL(/ecran=modifier/);
+    await page.locator('.sale-delete').click();
+    await dialog(page).getByRole('button', { name: 'Supprimer' }).waitFor();
+    expectSame(N, 'confirmation de suppression', tidy(await dialog(page).locator('h2, .alert-title').first().textContent()), 'Supprimer le suivi de cette vente ?');
+    mark = state.calls.length;
+    await dialog(page).getByRole('button', { name: 'Supprimer' }).click();
+    await page.locator('.account-toast', { hasText: 'Suivi supprimé' }).waitFor();
+    await page.locator('.sale-row').first().waitFor();
+    await toastRead(page);
+    expectSame(N, 'suivi supprimé', [
+      writesSince(state, mark).map((call) => [call.method, call.table, call.search]), new URL(page.url()).search,
+      (await salesList(page)).rows.map((item) => item[0]), (await salesList(page)).suggestions.length,
+    ], [[['DELETE', 'pro_sales', `?id=eq.${added?.id}`]], '?vue=ventes', ['Maison avec jardin', SALE.title], 0]);
+    await context.close();
+  }
+
+  // 13. Ordinateur : la liste et la fiche d'une vente ajoutée à la main (sans annonce ni offre : aucun lien), une vente
+  //     introuvable ; aucune écriture. Téléphone, serveur sans la table (avant sa mise en ligne) : un message et
+  //     « Réessayer », puis la page vide.
+  {
+    const N = 'mes ventes (ordinateur)';
+    const state = newState({ pro: true, listings: [SALE], sales: true });
+    const context = await desktop();
+    await mock(context, state);
+    const page = await open(context, '/compte/?vue=ventes', N);
+    await page.locator('.sale-row').first().waitFor();
+    expectSame(N, 'liste', (await salesList(page)).rows.map((item) => item.slice(0, 3)), [
+      ['Maison avec jardin', '480 000 € · M. et Mme Bernard', `Prêt attendu avant le ${dayText(dayIn(15))}`],
+    ]);
+    await shot(page, 'ventes-ordinateur.png');
+    await page.locator('.sale-row').first().click();
+    await page.waitForURL(`**/compte/?vue=ventes&vente=${MAISON_SALE.id}`);
+    await page.locator('.sale-head').waitFor();
+    expectSame(N, 'fiche', await saleFiche(page), {
+      header: 'Vente', title: 'Maison avec jardin', city: 'Écully', state: 'En cours', photo: false, cards: ['La vente', 'Étapes', 'Note privée'],
+      rows: ['Acquéreur : M. et Mme Bernard', 'Prix de vente : 480 000 €', 'Notaire : Maître Roux, Lyon 6e'],
+      links: [],
+      steps: [
+        ['Offre acceptée', `Le ${dayText(dayAgo(30))}`, 'fait'], ['Compromis signé', `Le ${dayText(dayAgo(20))}`, 'fait'],
+        ['Conditions suspensives levées', `Prêt attendu avant le ${dayText(dayIn(15))}`, 'suivant'], ['Acte authentique signé', 'À venir', 'à venir'],
+      ],
+      captions: [STEPS_HINT, 'Seul vous voyez cette note.'], note: 'Diagnostics à jour. Rappeler la banque des acquéreurs.', buttons: ['Annuler la vente'],
+    });
+    await shot(page, 'ventes-ordinateur-fiche.png');
+    await page.goto(`${base}/compte/?vue=ventes&vente=e2000000-0000-4000-8000-0000000000ff`, { waitUntil: 'networkidle' });
+    await page.locator('.account-empty').waitFor();
+    expectSame(N, 'vente introuvable', [tidy(await page.locator('.account-empty h2').textContent()), await page.locator('.account-empty a').getAttribute('href')],
+      ['Vente introuvable', '/compte/?vue=ventes']);
+    expectSame(N, 'écritures', writeNames(writesSince(state, 0)), []);
+    await context.close();
+
+    const missingState = newState({ pro: true, listings: [SALE] });
+    missingState.salesMissing = true;
+    const missingContext = await phone();
+    await mock(missingContext, missingState);
+    const missing = await open(missingContext, '/compte/?vue=ventes', N);
+    await missing.locator('.signin-error').waitFor();
+    expectSame(N, 'sans la table', tidy(await missing.locator('.signin-error').textContent()), 'L\'opération n\'a pas abouti. Réessayez dans un instant.');
+    missingState.salesMissing = false;
+    await missing.getByRole('button', { name: 'Réessayer' }).click();
+    await missing.locator('.account-empty').waitFor();
+    expectSame(N, 'sans vente suivie', [tidy(await missing.locator('.account-empty h2').textContent()), await missing.locator('.account-empty a').getAttribute('href')],
+      ['Aucune vente suivie', '/compte/?vue=ventes&ecran=ajouter']);
+    await missingContext.close();
   }
 } finally {
   await browser.close();
