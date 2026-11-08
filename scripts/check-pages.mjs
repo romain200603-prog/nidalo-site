@@ -276,6 +276,11 @@ function pagePath(request) {
  */
 async function mock(context, { signedIn = false, listingRows = listings, account = {} } = {}) {
   const tables = { ...ACCOUNT, ...account };
+  // Mon espace d'un compte professionnel, sur téléphone aussi : la ligne « Mes contacts » lit les conversations, les
+  // demandes de visite et les offres pour son nombre de contacts et sa pastille (scripts/check-espace-pro.mjs).
+  const pro = tables.profiles?.[0]?.account_type === 'professional';
+  const contactsRead = (request, table) => pro && pagePath(request) === '/compte/' && request.method() === 'POST'
+    && ['rpc/my_conversations', 'rpc/my_visit_requests', 'rpc/my_offers'].includes(table);
   const requests = [];
   const json = (route, status, body) =>
     route.fulfill({ status, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: body === undefined ? '' : JSON.stringify(body) });
@@ -291,7 +296,7 @@ async function mock(context, { signedIn = false, listingRows = listings, account
       try { body = request.postDataJSON(); } catch { body = request.postData(); }
       const width = pageWidth(request);
       badgeRequests.push({ table, method: request.method(), search: url.search, body, width, signedIn });
-      if (width !== null && width < 1024) problems.push(`téléphone : ${table} demandé (rien ne doit changer sous 1024 px)`);
+      if (width !== null && width < 1024 && !contactsRead(request, table)) problems.push(`téléphone : ${table} demandé (rien ne doit changer sous 1024 px)`);
       if (!signedIn) {
         problems.push(`sans compte : ${table} demandé`);
         return json(route, 200, []);
@@ -313,7 +318,7 @@ async function mock(context, { signedIn = false, listingRows = listings, account
       // Fiche d'une annonce sur ordinateur : offres, demandes de visite et agenda du compte (vides ici ; les actions
       // sont vérifiées par scripts/check-listing.mjs). Rien de cela sans compte, ni sous 1024 px.
       const width = pageWidth(request);
-      if (width !== null && width < 1024) problems.push(`téléphone : ${table} demandé (rien ne doit changer sous 1024 px)`);
+      if (width !== null && width < 1024 && !contactsRead(request, table)) problems.push(`téléphone : ${table} demandé (rien ne doit changer sous 1024 px)`);
       if (!signedIn) problems.push(`sans compte : ${table} demandé`);
       else if (!['rpc/my_offers', 'rpc/my_visit_requests', 'agenda_visits'].includes(table)) problems.push(`${table} appelé sans action de la personne`);
       return json(route, 200, []);
