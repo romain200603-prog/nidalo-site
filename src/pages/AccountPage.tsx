@@ -13,6 +13,7 @@ import { Contacts } from './account/Contacts';
 import { DesktopSpace } from './account/DesktopSpace';
 import { Diffusion } from './account/Diffusion';
 import { Hub } from './account/Hub';
+import { Mandates } from './account/Mandates';
 import { MyInfo } from './account/MyInfo';
 import { MyListings } from './account/MyListings';
 import { NotificationsScreen } from './account/Notifications';
@@ -133,6 +134,8 @@ function AccountContent() {
     case 'contacts': return <Contacts contactKey={params.get('contact')} screen={params.get('ecran')} />;
     // Mes ventes : de l'offre acceptée à l'acte signé, avec les offres acceptées à suivre.
     case 'ventes': return <Sales saleId={params.get('vente')} screen={params.get('ecran')} />;
+    // Mes mandats : le registre des mandats de vente et de location, avec le PDF signé de chacun.
+    case 'mandats': return <Mandates mandateId={params.get('mandat')} screen={params.get('ecran')} />;
     // Statistiques : vues, favoris, messages, visites et offres de chaque annonce publiée, sur 7 ou 30 jours.
     case 'statistiques': return <Statistics />;
     // Ordinateur : Mon espace de la maquette 5 pour un compte particulier ; l'espace professionnel garde son écran.

@@ -669,6 +669,19 @@ a.save-capsule { text-decoration: none; }
 .sale-price-input > span { position: absolute; top: 50%; right: 16px; color: var(--text-secondary); font-weight: 600; transform: translateY(-50%); pointer-events: none; }
 .sale-form-screen .field-hint { display: block; margin-top: 2px; }
 
+/* Mes mandats (le reste : styles de Mes ventes) */
+.mandate-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.mandate-select { position: relative; display: block; }
+.mandate-select select { width: 100%; padding-right: 44px; overflow: hidden; appearance: none; -webkit-appearance: none; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.mandate-select-chevron { position: absolute; top: 50%; right: 16px; width: 18px; height: 18px; color: var(--text-secondary); transform: translateY(-50%); pointer-events: none; }
+.mandate-file { display: flex; align-items: center; gap: 12px; }
+.mandate-file-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 44px; height: 44px; border-radius: 12px; background: var(--blue-soft); color: var(--blue); }
+.mandate-file-icon .icon { width: 22px; height: 22px; }
+.mandate-file-text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.mandate-file-name { overflow: hidden; font-size: 14.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.mandate-file-remove { align-self: flex-start; }
+.mandate-expired { text-align: center; }
+
 @media print {
   @page { size: A4 portrait; margin: 0; }
   html, body { margin: 0 !important; padding: 0 !important; background: #FFFFFF !important; }

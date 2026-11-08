@@ -12,8 +12,11 @@
 // conversations, demandes de visite et offres de la période) ; un serveur sans la fonction, un compte sans annonce.
 // Mes ventes : l'offre acceptée à suivre, les filtres, la fiche et ses étapes, la modification (dates vérifiées),
 // l'ajout à la main, l'annulation, la reprise et la suppression, avec seulement les écritures attendues dans pro_sales.
+// Mes mandats : le registre (en cours, terminés), la fiche et son PDF (ouvert par une adresse signée), la modification
+// (PDF remplacé : nouveau fichier envoyé, ligne écrite, ancien fichier effacé), terminer puis reprendre, l'ajout (numéro
+// déjà pris : le PDF envoyé est retiré) et la suppression (ligne puis PDF).
 // Captures pour Romain : agence-*.png, diffusion-*.png, diffusion-affiche.pdf, contacts-*.png, statistiques-*.png,
-// ventes-*.png.
+// ventes-*.png, mandats-*.png.
 // Lancer après la construction : node scripts/check-espace-pro.mjs [dossier construit, docs/ par défaut] [dossier des captures]
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
@@ -183,6 +186,30 @@ const SALE_WRITABLE = [
   'deed_planned_on', 'deed_signed_on', 'cancelled_on', 'notary', 'note',
 ];
 
+/** Mes mandats : un en cours avec son PDF, un échu (date de fin passée), un terminé à la main. */
+const PDF = Buffer.from('%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n');
+const DURAND_FILE = `${USER_ID}/0f8b4f9e-1c2d-4e5f-8a9b-0c1d2e3f4a5b.pdf`;
+const DURAND = {
+  id: 'e3000000-0000-4000-8000-000000000101', listing_id: SALE.id, kind: 'sale', exclusivity: 'exclusive', number: '2026-014',
+  client_name: 'M. et Mme Durand', title: SALE.title, city: SALE.city, price: 320000, fees: 12000, signed_on: dayAgo(40), ends_on: dayIn(50),
+  ended_on: null, document_path: DURAND_FILE, document_name: 'Mandat Durand signé.pdf', note: 'Clés à l\'agence. Visites le samedi.',
+  created_at: ago(40), updated_at: ago(40),
+};
+const ROUX = {
+  ...DURAND, id: 'e3000000-0000-4000-8000-000000000102', listing_id: null, kind: 'rental', exclusivity: 'simple', number: '2026-009',
+  client_name: 'Mme Roux', title: 'Studio meublé', city: 'Lyon 7e', price: 690, fees: 690, signed_on: dayAgo(200), ends_on: dayAgo(20),
+  document_path: null, document_name: null, note: null, created_at: ago(200), updated_at: ago(200),
+};
+const BLANC = {
+  ...ROUX, id: 'e3000000-0000-4000-8000-000000000103', kind: 'sale', number: '2026-003', client_name: 'M. Blanc', title: 'Maison de ville',
+  city: 'Villeurbanne', price: 415000, fees: 15000, signed_on: dayAgo(300), ends_on: null, ended_on: dayAgo(100), created_at: ago(300),
+};
+const MANDATE_WRITABLE = [
+  'listing_id', 'kind', 'exclusivity', 'number', 'client_name', 'title', 'city', 'price', 'fees', 'signed_on', 'ends_on', 'ended_on',
+  'document_path', 'document_name', 'note',
+];
+const MANDATE_FILE = /^a0000000-0000-4000-8000-0000000000c3\/[0-9a-f-]{36}\.pdf$/;
+
 const STATS = {
   30: [{ listing_id: SALE.id, views: 128, favorites_total: 9, favorites_new: 3 }, { listing_id: RENT.id, views: 41, favorites_total: 1, favorites_new: 1 }],
   7: [{ listing_id: SALE.id, views: 30, favorites_total: 9, favorites_new: 1 }, { listing_id: RENT.id, views: 12, favorites_total: 1, favorites_new: 0 }],
@@ -213,7 +240,7 @@ function fakeSession() {
  * `pro` : un professionnel avec sa fiche agence, ses détails et (sauf `listings`) une annonce en ligne ; sinon un
  * particulier sans fiche.
  */
-function newState({ pro = false, listings = null, contacts = false, sales = false } = {}) {
+function newState({ pro = false, listings = null, contacts = false, sales = false, mandates = false } = {}) {
   return {
     profile: pro ? { ...PROFILE, account_type: 'professional', professional_profile_id: AGENCY_ID } : { ...PROFILE },
     details: { ...DETAILS },
@@ -233,6 +260,10 @@ function newState({ pro = false, listings = null, contacts = false, sales = fals
     /** Mes ventes : lignes de pro_sales ; `salesMissing` : table absente du serveur. */
     saleRows: structuredClone(sales ? [MAISON_SALE, STUDIO_SALE] : []),
     salesMissing: false,
+    /** Mes mandats : lignes de pro_mandates et PDF du dossier privé ; `mandatesMissing` : table absente du serveur. */
+    mandateRows: structuredClone(mandates ? [DURAND, ROUX, BLANC] : []),
+    mandateFiles: new Map(mandates ? [[DURAND_FILE, PDF]] : []),
+    mandatesMissing: false,
     /** Le serveur refuse les détails (contrôle d'une colonne). */
     refuseDetails: false,
   };
@@ -348,6 +379,46 @@ function rest(state, route) {
       }
       break;
     }
+    case 'pro_mandates': {
+      if (state.mandatesMissing) {
+        expectedServerErrors += 1;
+        return json(route, { code: 'PGRST205', message: 'Could not find the table \'public.pro_mandates\' in the schema cache', details: null, hint: null }, 404);
+      }
+      const match = (row) => [...params].every(([column, value]) => (
+        !value.startsWith('eq.') || String(row[column]).toLowerCase() === value.slice(3).toLowerCase()
+      ));
+      if (method === 'GET') return json(route, [...state.mandateRows].sort((a, b) => b.signed_on.localeCompare(a.signed_on)));
+      if (method === 'POST' || method === 'PATCH') {
+        const extra = Object.keys(body ?? {}).filter((key) => !MANDATE_WRITABLE.includes(key));
+        if (extra.length) problems.push(`pro_mandates : colonnes en trop ${extra}`);
+        if (body?.document_path && !MANDATE_FILE.test(body.document_path)) problems.push(`pro_mandates : PDF hors du dossier « ${body.document_path} »`);
+      }
+      if (method === 'POST') {
+        if (state.mandateRows.some((row) => row.number === body.number)) {
+          expectedServerErrors += 1;
+          return json(route, { code: '23505', message: 'duplicate key value violates unique constraint "pro_mandates_one_number"', details: null, hint: null }, 409);
+        }
+        const row = {
+          id: randomUUID(), listing_id: null, city: null, price: null, fees: null, ends_on: null, ended_on: null, document_path: null,
+          document_name: null, note: null, created_at: now, updated_at: now, ...body,
+        };
+        state.mandateRows.push(row);
+        return single ? json(route, { id: row.id }, 201) : empty(route, 201);
+      }
+      if (method === 'PATCH') {
+        const rows = state.mandateRows.filter(match);
+        if (rows.length !== 1) problems.push(`pro_mandates : modification de ${rows.length} ligne(s) ${decodeURIComponent(url.search)}`);
+        for (const row of rows) Object.assign(row, body, { updated_at: now });
+        return single ? json(route, { id: rows[0]?.id }) : empty(route);
+      }
+      if (method === 'DELETE') {
+        const before = state.mandateRows.length;
+        state.mandateRows = state.mandateRows.filter((row) => !match(row));
+        if (before - state.mandateRows.length !== 1) problems.push(`pro_mandates : suppression ${decodeURIComponent(url.search)}`);
+        return empty(route);
+      }
+      break;
+    }
     case 'pro_sales': {
       if (state.salesMissing) {
         expectedServerErrors += 1;
@@ -440,7 +511,35 @@ async function storage(state, route) {
   const path = decodeURIComponent(new URL(request.url()).pathname);
   const PUBLIC = '/storage/v1/object/public/';
   const OBJECT = '/storage/v1/object/avatars';
+  const MANDATES = '/storage/v1/object/mandate-documents';
+  const SIGN = '/storage/v1/object/sign/mandate-documents/';
   if (method === 'OPTIONS') return empty(route, 200);
+  // Mes mandats : PDF envoyé, effacé, adresse signée puis le fichier lui-même.
+  if (method === 'POST' && path.startsWith(`${MANDATES}/`)) {
+    const name = path.slice(MANDATES.length + 1);
+    const file = multipartFile(request.postDataBuffer(), request.headers()['content-type']);
+    if (!MANDATE_FILE.test(name)) problems.push(`stockage : PDF de mandat « ${name} » hors du dossier`);
+    if (file.type !== 'application/pdf' || file.bytes.subarray(0, 5).toString('latin1') !== '%PDF-') problems.push(`stockage : PDF de mandat ${file.type}`);
+    state.mandateFiles.set(name, file.bytes);
+    state.calls.push({ table: 'storage', method, search: name, body: { type: file.type } });
+    return json(route, { Key: `mandate-documents/${name}`, Id: randomUUID() });
+  }
+  if (method === 'DELETE' && path === MANDATES) {
+    const prefixes = request.postDataJSON()?.prefixes ?? [];
+    for (const name of prefixes) state.mandateFiles.delete(name);
+    state.calls.push({ table: 'storage', method, search: '', body: { prefixes } });
+    return json(route, prefixes.map((name) => ({ name })));
+  }
+  if (method === 'POST' && path.startsWith(SIGN)) {
+    const name = path.slice(SIGN.length);
+    state.calls.push({ table: 'rpc/storage-sign', method, search: name, body: request.postDataJSON() });
+    if (!state.mandateFiles.has(name)) return json(route, { statusCode: '404', error: 'not_found', message: 'Object not found' }, 400);
+    return json(route, { signedURL: `/object/sign/mandate-documents/${name}?token=jeton-de-test` });
+  }
+  if (method === 'GET' && path.startsWith(SIGN)) {
+    const name = path.slice(SIGN.length);
+    return route.fulfill({ status: 200, contentType: 'application/pdf', headers: cors, body: state.mandateFiles.get(name) ?? PDF });
+  }
   if (method === 'GET' && path.startsWith(PUBLIC)) {
     const [bucket, ...rest] = path.slice(PUBLIC.length).split('/');
     const name = rest.join('/');
@@ -1505,6 +1604,262 @@ try {
     await missing.locator('.account-empty').waitFor();
     expectSame(N, 'sans vente suivie', [tidy(await missing.locator('.account-empty h2').textContent()), await missing.locator('.account-empty a').getAttribute('href')],
       ['Aucune vente suivie', '/compte/?vue=ventes&ecran=ajouter']);
+    await missingContext.close();
+  }
+
+  // 14. Téléphone, Mes mandats : la ligne de Mon compte, le registre (en cours, terminés), la fiche et son PDF (ouvert à
+  //     son adresse signée), la modification (fin avant la signature et mauvais fichier refusés, puis PDF remplacé),
+  //     terminer puis reprendre, l'ajout (numéro déjà pris : PDF retiré ; puis bon) et la suppression, dans l'ordre.
+  const mandateSummary = (page) => page.evaluate(() => {
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const all = (selector) => [...document.querySelectorAll(selector)];
+    return {
+      header: text(document.querySelector('.screen-header h1')),
+      title: text(document.querySelector('.sale-title')),
+      city: text(document.querySelector('.sale-city')),
+      state: text(document.querySelector('.sale-state')),
+      photo: Boolean(document.querySelector('.sale-head .sale-thumb img')),
+      cards: all('.sale-card-title').map(text),
+      rows: all('.sale-rows > div').map((el) => `${text(el.querySelector('dt'))} : ${text(el.querySelector('dd'))}`),
+      links: all('.sale-links a').map((el) => [text(el), el.getAttribute('href')]),
+      file: text(document.querySelector('.sale-page .mandate-file-name')),
+      captions: all('.sale-caption').map(text),
+      buttons: all('.sale-cancel, .sale-resume').map(text),
+    };
+  });
+  {
+    const N = 'mes mandats (téléphone)';
+    const state = newState({ pro: true, listings: [SALE, DRAFT], mandates: true });
+    const context = await phone();
+    await mock(context, state);
+    const page = await open(context, '/compte/', N);
+    const row = page.locator('a.row', { hasText: 'Mes mandats' });
+    await page.waitForFunction(() => /1 mandat actif/.test(document.querySelector('a.row[href*="vue=mandats"]')?.textContent ?? ''), null, { timeout: 8000 })
+      .catch(() => problems.push(`${N} : ligne de Mon compte jamais mise à jour`));
+    expectSame(N, 'ligne de Mon compte', [tidy(await row.locator('.row-subtitle').textContent()), await row.getAttribute('href')],
+      ['1 mandat actif, vente et location', '/compte/?vue=mandats']);
+
+    await row.click();
+    await page.waitForURL('**/compte/?vue=mandats');
+    await page.locator('.sale-row').first().waitFor();
+    expectSame(N, 'registre', await salesList(page), {
+      suggestions: [],
+      filters: ['En cours (choisi)', 'Terminés'],
+      rows: [[SALE.title, 'N° 2026-014 · Vente · Exclusif', `Jusqu'au ${dayText(dayIn(50))}`, 'is-active', `/compte/?vue=mandats&mandat=${DURAND.id}`, true]],
+      none: null,
+    });
+    await page.locator('.sales-filters .select-chip', { hasText: 'Terminés' }).click();
+    expectSame(N, 'terminés', (await salesList(page)).rows.map((item) => item.slice(0, 4)), [
+      ['Studio meublé', 'N° 2026-009 · Location · Simple', `Échu le ${dayText(dayAgo(20))}`, 'is-ended'],
+      ['Maison de ville', 'N° 2026-003 · Vente · Simple', `Terminé le ${dayText(dayAgo(100))}`, 'is-ended'],
+    ]);
+    await page.locator('.sales-filters .select-chip', { hasText: 'En cours' }).click();
+    await imagesLoaded(page, '.sale-thumb img', 1, N);
+    await shot(page, 'mandats-telephone.png');
+
+    // Fiche de M. et Mme Durand ; son PDF s'ouvre dans un nouvel onglet, à son adresse signée (10 minutes).
+    await page.locator('.sale-row').first().click();
+    await page.waitForURL(`**/compte/?vue=mandats&mandat=${DURAND.id}`);
+    await page.locator('.sale-head').waitFor();
+    expectSame(N, 'fiche', await mandateSummary(page), {
+      header: 'Mandat', title: SALE.title, city: SALE.city, state: 'En cours', photo: true, cards: ['Le mandat', 'Mandat signé', 'Note privée'],
+      rows: [
+        'N° au registre : 2026-014', 'Type : Vente', 'Exclusivité : Exclusif', 'Mandant : M. et Mme Durand', 'Prix de vente : 320 000 €',
+        'Honoraires : 12 000 €', `Signé le : ${dayText(dayAgo(40))}`, `Fin du mandat : ${dayText(dayIn(50))}`,
+      ],
+      links: [['Voir l\'annonce', `/annonce/?id=${SALE.id}`]],
+      file: 'Mandat Durand signé.pdf',
+      captions: ['Seul vous voyez cette note.'],
+      buttons: ['Terminer le mandat'],
+    });
+    const opened = context.waitForEvent('request', { predicate: (request) => request.method() === 'GET' && request.url().includes('/storage/v1/object/sign/mandate-documents/'), timeout: 8000 });
+    await page.locator('.mandate-file-open').click();
+    const pdfRequest = await opened.catch(() => null);
+    expectSame(N, 'PDF ouvert', [
+      pdfRequest ? decodeURIComponent(new URL(pdfRequest.url()).pathname) : null,
+      state.calls.filter((call) => call.table === 'rpc/storage-sign').map((call) => [call.search, call.body?.expiresIn]),
+    ], [`/storage/v1/object/sign/mandate-documents/${DURAND_FILE}`, [[DURAND_FILE, 600]]]);
+    for (const other of context.pages()) if (other !== page) await other.close();
+    // Le clic a fait défiler la page jusqu'au bouton : la capture repart du haut.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await shot(page, 'mandats-fiche.png');
+
+    // Modification : fin avant la signature et photo refusées sans rien écrire ; puis nouveau PDF : envoyé, ligne
+    // écrite, ancien PDF effacé, dans cet ordre.
+    const date = (label) => page.getByLabel(label, { exact: true });
+    const pdfInput = page.locator('input[type=file]');
+    await page.getByRole('link', { name: 'Modifier', exact: true }).click();
+    await page.waitForURL(/ecran=modifier/);
+    await page.locator('.sale-save').waitFor();
+    expectSame(N, 'formulaire prérempli', [
+      tidy(await page.locator('.screen-header h1').textContent()),
+      await page.$$eval('.mandate-choices [role=radio]', (els) => els.map((el) => `${el.textContent}${el.getAttribute('aria-checked') === 'true' ? ' (choisi)' : ''}`)),
+      await field(page, 'N° au registre des mandats').inputValue(), await date('Signé le').inputValue(), await date('Fin du mandat (facultative)').inputValue(),
+      await page.locator('.mandate-select select').inputValue(), await field(page, 'Bien').inputValue(), await field(page, 'Mandant (propriétaire)').inputValue(),
+      tidy(await field(page, 'Prix de vente (facultatif)').inputValue()), tidy(await field(page, 'Honoraires (facultatif)').inputValue()),
+      tidy(await page.locator('.mandate-file-name').textContent()),
+    ], [
+      'Modifier le mandat', ['Vente (choisi)', 'Location', 'Exclusif (choisi)', 'Simple'], '2026-014', dayAgo(40), dayIn(50), SALE.id, SALE.title,
+      'M. et Mme Durand', '320 000', '12 000', 'Mandat Durand signé.pdf',
+    ]);
+    await pdfInput.setInputFiles({ name: 'photo.jpg', mimeType: 'image/jpeg', buffer: PHOTO });
+    await date('Fin du mandat (facultative)').fill(dayAgo(41));
+    let mark = state.calls.length;
+    await page.locator('.sale-save').click();
+    expectSame(N, 'fin avant la signature, mauvais fichier', [await texts(page, '.sale-form-screen .field-error'), tidy(await page.locator('.mandate-file-name').textContent())], [
+      ['Cette date est avant la signature.', 'Choisissez un fichier PDF.', 'Vérifiez les champs en rouge.'], 'Mandat Durand signé.pdf',
+    ]);
+    expectSame(N, 'rien d\'écrit avec des erreurs', writeNames(writesSince(state, mark)), []);
+    await date('Fin du mandat (facultative)').fill(dayIn(80));
+    await pdfInput.setInputFiles({ name: 'Mandat Durand avenant.pdf', mimeType: 'application/pdf', buffer: PDF });
+    await field(page, 'Honoraires (facultatif)').fill('13500');
+    expectSame(N, 'nouveau PDF choisi', [tidy(await page.locator('.mandate-file-name').textContent()), tidy(await page.locator('.mandate-file .field-hint').textContent())],
+      ['Mandat Durand avenant.pdf', 'Envoyé à l’enregistrement']);
+    await page.locator('.sale-save').click();
+    await page.locator('.account-toast', { hasText: 'Modifications enregistrées' }).waitFor();
+    const replaced = writesSince(state, mark);
+    const newFile = replaced[0]?.search ?? '';
+    expectSame(N, 'PDF remplacé', [replaced.map((call) => [call.method, call.table]), MANDATE_FILE.test(newFile), newFile === DURAND_FILE, replaced[1]?.search, replaced[1]?.body, replaced[2]?.body], [
+      [['POST', 'storage'], ['PATCH', 'pro_mandates'], ['DELETE', 'storage']], true, false, `?id=eq.${DURAND.id}&select=id`, {
+        listing_id: SALE.id, kind: 'sale', exclusivity: 'exclusive', number: '2026-014', client_name: 'M. et Mme Durand', title: SALE.title, city: SALE.city,
+        price: 320000, fees: 13500, signed_on: dayAgo(40), ends_on: dayIn(80), note: 'Clés à l\'agence. Visites le samedi.', document_path: newFile,
+        document_name: 'Mandat Durand avenant.pdf',
+      }, { prefixes: [DURAND_FILE] },
+    ]);
+    expectSame(N, 'fiche modifiée', [(await mandateSummary(page)).file, (await mandateSummary(page)).rows[5], [...state.mandateFiles.keys()]],
+      ['Mandat Durand avenant.pdf', 'Honoraires : 13 500 €', [newFile]]);
+
+    // Terminer (après confirmation) puis reprendre : seule la date de fin anticipée change.
+    mark = state.calls.length;
+    await page.locator('.mandate-end').click();
+    await dialog(page).getByRole('button', { name: 'Garder le mandat' }).waitFor();
+    expectSame(N, 'confirmation', tidy(await dialog(page).locator('h2, .alert-title').first().textContent()), 'Terminer ce mandat ?');
+    await dialog(page).getByRole('button', { name: 'Terminer le mandat' }).click();
+    await page.locator('.account-toast', { hasText: 'Mandat terminé' }).waitFor();
+    const ended = await mandateSummary(page);
+    expectSame(N, 'mandat terminé', [ended.state, ended.rows.at(-1), ended.buttons], ['Terminé', `Terminé le : ${dayText(dayAgo(0))}`, ['Reprendre le mandat']]);
+    await page.locator('.sale-resume').click();
+    await page.locator('.account-toast', { hasText: 'Mandat repris' }).waitFor();
+    expectSame(N, 'terminé puis repris', [writesSince(state, mark).map((call) => [call.method, call.table, call.search, call.body]), (await mandateSummary(page)).state], [[
+      ['PATCH', 'pro_mandates', `?id=eq.${DURAND.id}`, { ended_on: dayAgo(0) }],
+      ['PATCH', 'pro_mandates', `?id=eq.${DURAND.id}`, { ended_on: null }],
+    ], 'En cours']);
+
+    // Ajout : vide, il signale les champs demandés ; l'annonce choisie donne le bien et la ville ; loyer espacé.
+    await page.goto(`${base}/compte/?vue=mandats`, { waitUntil: 'networkidle' });
+    await page.getByRole('link', { name: 'Ajouter', exact: true }).click();
+    await page.waitForURL('**/compte/?vue=mandats&ecran=ajouter');
+    await page.locator('.sale-save').waitFor();
+    mark = state.calls.length;
+    await page.locator('.sale-save').click();
+    expectSame(N, 'formulaire vide', [tidy(await page.locator('.screen-header h1').textContent()), await texts(page, '.sale-form-screen .field-error')], ['Nouveau mandat', [
+      'Indiquez le numéro du registre.', 'Indiquez la date de signature.', 'Indiquez le bien.', 'Indiquez le mandant.', 'Vérifiez les champs en rouge.',
+    ]]);
+    await page.getByRole('radio', { name: 'Location' }).click();
+    await page.getByRole('radio', { name: 'Simple' }).click();
+    await field(page, 'N° au registre des mandats').fill('2026-014');
+    await date('Signé le').fill(dayAgo(1));
+    expectSame(N, 'annonces proposées', await page.$$eval('.mandate-select option', (els) => els.map((el) => el.textContent)),
+      ['Aucune', SALE.title, `${DRAFT.title} (brouillon)`]);
+    await page.locator('.mandate-select select').selectOption(SALE.id);
+    expectSame(N, 'annonce liée : bien et ville repris', [await field(page, 'Bien').inputValue(), await field(page, 'Ville (facultative)').inputValue()], [SALE.title, SALE.city]);
+    await field(page, 'Mandant (propriétaire)').fill('SCI Les Tilleuls');
+    await field(page, 'Loyer mensuel (facultatif)').pressSequentially('1250');
+    expectSame(N, 'loyer espacé pendant la saisie', tidy(await field(page, 'Loyer mensuel (facultatif)').inputValue()), '1 250');
+    await pdfInput.setInputFiles({ name: 'Mandat Tilleuls.pdf', mimeType: 'application/pdf', buffer: PDF });
+    await page.locator('.screen-header .round-back').click();
+    await dialog(page).getByRole('button', { name: 'Continuer' }).waitFor();
+    await dialog(page).getByRole('button', { name: 'Continuer' }).click();
+    expectSame(N, 'rien d\'écrit avant un formulaire juste', writeNames(writesSince(state, mark)), []);
+    await shot(page, 'mandats-ajout.png');
+    // Numéro déjà au registre : le serveur refuse, le PDF envoyé est retiré, le message s'affiche.
+    await page.locator('.sale-save').click();
+    await page.locator('.sale-form-screen .signin-error').waitFor();
+    const refused = writesSince(state, mark);
+    expectSame(N, 'numéro déjà pris', [
+      tidy(await page.locator('.sale-form-screen .signin-error').textContent()), refused.map((call) => [call.method, call.table]),
+      refused[2]?.body?.prefixes?.[0] === refused[0]?.search, state.mandateFiles.has(refused[0]?.search),
+    ], ['Ce numéro est déjà dans votre registre.', [['POST', 'storage'], ['POST', 'pro_mandates'], ['DELETE', 'storage']], true, false]);
+    await field(page, 'N° au registre des mandats').fill('2026-015');
+    mark = state.calls.length;
+    await page.locator('.sale-save').click();
+    await page.locator('.account-toast', { hasText: 'Mandat ajouté' }).waitFor();
+    await toastRead(page);
+    const added = state.mandateRows.find((item) => item.number === '2026-015');
+    const addWrites = writesSince(state, mark);
+    expectSame(N, 'mandat ajouté', [addWrites.map((call) => [call.method, call.table]), addWrites[1]?.body, new URL(page.url()).search], [
+      [['POST', 'storage'], ['POST', 'pro_mandates']], {
+        listing_id: SALE.id, kind: 'rental', exclusivity: 'simple', number: '2026-015', client_name: 'SCI Les Tilleuls', title: SALE.title, city: SALE.city,
+        price: 1250, fees: null, signed_on: dayAgo(1), ends_on: null, note: null, document_path: addWrites[0]?.search, document_name: 'Mandat Tilleuls.pdf',
+      }, `?vue=mandats&mandat=${added?.id}`,
+    ]);
+
+    // Suppression, après confirmation : la ligne, puis son PDF ; le registre revient avec « Mandat supprimé ».
+    await page.getByRole('link', { name: 'Modifier', exact: true }).click();
+    await page.waitForURL(/ecran=modifier/);
+    await page.locator('.sale-delete').click();
+    await dialog(page).getByRole('button', { name: 'Supprimer' }).waitFor();
+    expectSame(N, 'confirmation de suppression', tidy(await dialog(page).locator('h2, .alert-title').first().textContent()), 'Supprimer ce mandat du registre ?');
+    mark = state.calls.length;
+    await dialog(page).getByRole('button', { name: 'Supprimer' }).click();
+    await page.locator('.account-toast', { hasText: 'Mandat supprimé' }).waitFor();
+    await page.locator('.sale-row').first().waitFor();
+    await toastRead(page);
+    expectSame(N, 'mandat supprimé', [
+      writesSince(state, mark).map((call) => [call.method, call.table, call.search, call.body]), new URL(page.url()).search,
+      (await salesList(page)).rows.map((item) => item[0]), state.mandateFiles.has(added?.document_path),
+    ], [[
+      ['DELETE', 'pro_mandates', `?id=eq.${added?.id}`, null],
+      ['DELETE', 'storage', '', { prefixes: [added?.document_path] }],
+    ], '?vue=mandats', [SALE.title], false]);
+    await context.close();
+  }
+
+  // 15. Ordinateur : le registre, la fiche d'un mandat échu (sans PDF ni lien ; pas de « Terminer »), un mandat
+  //     introuvable ; aucune écriture. Téléphone, serveur sans la table (avant sa mise en ligne) : un message et
+  //     « Réessayer », puis la page vide.
+  {
+    const N = 'mes mandats (ordinateur)';
+    const state = newState({ pro: true, listings: [SALE], mandates: true });
+    const context = await desktop();
+    await mock(context, state);
+    const page = await open(context, '/compte/?vue=mandats', N);
+    await page.locator('.sale-row').first().waitFor();
+    await imagesLoaded(page, '.sale-thumb img', 1, N);
+    await shot(page, 'mandats-ordinateur.png');
+    await page.goto(`${base}/compte/?vue=mandats&mandat=${ROUX.id}`, { waitUntil: 'networkidle' });
+    await page.locator('.sale-head').waitFor();
+    expectSame(N, 'fiche d\'un mandat échu', await mandateSummary(page), {
+      header: 'Mandat', title: 'Studio meublé', city: 'Lyon 7e', state: 'Échu', photo: false, cards: ['Le mandat', 'Mandat signé'],
+      rows: [
+        'N° au registre : 2026-009', 'Type : Location', 'Exclusivité : Simple', 'Mandant : Mme Roux', 'Loyer mensuel : 690 €', 'Honoraires : 690 €',
+        `Signé le : ${dayText(dayAgo(200))}`, `Fin du mandat : ${dayText(dayAgo(20))}`,
+      ],
+      links: [],
+      file: null,
+      captions: ['Aucun PDF pour ce mandat. Ajoutez-le avec « Modifier ».', 'Ce mandat est échu. Pour le prolonger, changez sa date de fin avec « Modifier ».'],
+      buttons: [],
+    });
+    await shot(page, 'mandats-ordinateur-fiche.png');
+    await page.goto(`${base}/compte/?vue=mandats&mandat=e3000000-0000-4000-8000-0000000001ff`, { waitUntil: 'networkidle' });
+    await page.locator('.account-empty').waitFor();
+    expectSame(N, 'mandat introuvable', [tidy(await page.locator('.account-empty h2').textContent()), await page.locator('.account-empty a').getAttribute('href')],
+      ['Mandat introuvable', '/compte/?vue=mandats']);
+    expectSame(N, 'écritures', writeNames(writesSince(state, 0)), []);
+    await context.close();
+
+    const missingState = newState({ pro: true, listings: [SALE] });
+    missingState.mandatesMissing = true;
+    const missingContext = await phone();
+    await mock(missingContext, missingState);
+    const missing = await open(missingContext, '/compte/?vue=mandats', N);
+    await missing.locator('.signin-error').waitFor();
+    expectSame(N, 'sans la table', tidy(await missing.locator('.signin-error').textContent()), 'L\'opération n\'a pas abouti. Réessayez dans un instant.');
+    missingState.mandatesMissing = false;
+    await missing.getByRole('button', { name: 'Réessayer' }).click();
+    await missing.locator('.account-empty').waitFor();
+    expectSame(N, 'sans mandat', [tidy(await missing.locator('.account-empty h2').textContent()), await missing.locator('.account-empty a').getAttribute('href')],
+      ['Aucun mandat', '/compte/?vue=mandats&ecran=ajouter']);
     await missingContext.close();
   }
 } finally {

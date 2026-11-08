@@ -4,6 +4,7 @@ import { AlertDialog } from '../listing/Dialogs';
 import { signOut } from '../../lib/account/auth';
 import { listingsCountText, loadMyListings, myListingsStore, ONLINE_STATUSES } from '../../lib/account/myListings';
 import { contactsStore, contactsSubtitle, loadContacts } from '../../lib/account/contacts';
+import { loadMandates, mandatesStore, mandatesSubtitle } from '../../lib/account/mandates';
 import { loadProfessional, professionalStore } from '../../lib/account/professional';
 import { saveAccountType, type Account } from '../../lib/account/profile';
 import { loadProject, PROJECT_KIND_LABELS, PROJECT_STEPS, projectStore, STEP_LABELS } from '../../lib/account/project';
@@ -11,7 +12,8 @@ import { activeSalesCount, loadSales, salesStore, salesSubtitle } from '../../li
 import { loadSavedSearches, savedSearchesStore } from '../../lib/account/savedSearches';
 import { useStore } from '../../lib/account/session';
 import { useDesktop } from '../../lib/desktop';
-import { accountPath, AGENCY_FORM_PATH, AGENCY_PATH, CONTACTS_PATH, PATHS, SALES_PATH } from '../../lib/paths';
+import { parisDay } from '../../lib/listing/views';
+import { accountPath, AGENCY_FORM_PATH, AGENCY_PATH, CONTACTS_PATH, MANDATES_PATH, PATHS, SALES_PATH } from '../../lib/paths';
 import { ActivityTile, RowGroup, SpaceProfileCard, SpaceSection, type RowItem } from './parts';
 import { soonPath } from './Screens';
 
@@ -33,6 +35,7 @@ export function Hub({ account }: { account: Account }) {
       void loadProfessional();
       void loadContacts();
       void loadSales();
+      void loadMandates();
     }
   }, [isPro]);
 
@@ -196,6 +199,8 @@ function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
   const contacts = useStore(contactsStore);
   const sales = useStore(salesStore);
   const saleRows = sales.status === 'ready' ? sales.rows : [];
+  const mandates = useStore(mandatesStore);
+  const mandateRows = mandates.status === 'ready' ? mandates.rows : [];
   const contactItems = contacts.status === 'ready' ? contacts.items : [];
   const newContacts = contactItems.filter((contact) => contact.isNew).length;
   // Ordinateur : l'agenda des visites est sur le site (Mon agenda) ; sur téléphone, « bientôt » comme avant.
@@ -214,7 +219,7 @@ function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
       <SpaceSection icon="briefcase" title="Mon activité professionnelle">
         <RowGroup rows={[
           { icon: 'house', title: 'Mes annonces', subtitle: listingsSubtitle(), href: accountPath('annonces') },
-          { icon: 'fileText', title: 'Mes mandats', subtitle: '0 mandat actif, vente et location', href: soonPath('mandats') },
+          { icon: 'fileText', title: 'Mes mandats', subtitle: mandatesSubtitle(mandateRows, parisDay(new Date())), href: MANDATES_PATH },
           { icon: 'handshake', title: 'Mes ventes', subtitle: salesSubtitle(saleRows), href: SALES_PATH },
           { icon: 'users', title: 'Mes contacts', subtitle: contactsSubtitle(contactItems), badge: newContacts, href: CONTACTS_PATH },
           { icon: 'calendarDays', title: 'Agenda des visites', subtitle: 'Visites et rendez-vous', href: desktop ? accountPath('agenda') : soonPath('agenda') },

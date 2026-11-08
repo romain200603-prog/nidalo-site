@@ -1,13 +1,14 @@
 import { PHOTO_BUCKET } from '../config';
 import { supabase } from '../supabase';
 import { isNetworkError, NETWORK_MESSAGE, setNewAccount, setPendingLink } from './auth';
+import { MANDATE_BUCKET } from './mandates';
 import { listFiles, removeFiles } from './myListings';
 import { currentUserId } from './session';
 
 // « Supprimer mon compte » (SupabaseAccountRepositories.swift 432–448) : les fichiers du compte, puis le compte
 // lui-même (fonction delete_my_account : tout le reste suit). Renvoie le message d'erreur, ou `null`.
 
-const USER_FOLDERS = [PHOTO_BUCKET, 'avatars', 'visit-reports', 'private-documents', 'shared-documents'];
+const USER_FOLDERS = [PHOTO_BUCKET, 'avatars', 'visit-reports', 'private-documents', 'shared-documents', MANDATE_BUCKET];
 
 export async function deleteMyAccount(): Promise<string | null> {
   const userId = currentUserId();
