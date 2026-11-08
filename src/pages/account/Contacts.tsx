@@ -104,7 +104,7 @@ function ContactList({ contacts }: { contacts: Contact[] }) {
               <input
                 type="search"
                 aria-label="Rechercher un contact"
-                placeholder="Rechercher un nom, un bien, un numéro…"
+                placeholder="Rechercher un nom, un bien…"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
