@@ -1,5 +1,5 @@
 import type {
-  HotelAmenity, HotelOperatingStatus, LeaseType, OfficeEquipment, ParkingType, PropertyCondition, PublishCategory,
+  ChargesMode, HotelAmenity, HotelOperatingStatus, LeaseType, OfficeEquipment, ParkingType, PropertyCondition, PublishCategory,
 } from './draft';
 
 // Libellés de Publier, comme l'app (PublishFlowView.swift, PublishFinanceStep.swift, DomainLabels.swift).
@@ -36,6 +36,11 @@ export const LEASE_LABELS: Record<LeaseType, string> = {
   commercial: 'Commercial 3-6-9',
   professional: 'Professionnel',
   shortTerm: 'Dérogatoire',
+};
+
+export const CHARGES_MODE_LABELS: Record<ChargesMode, string> = {
+  provision: 'Provisions',
+  flatRate: 'Forfait',
 };
 
 export const HOTEL_STATUS_LABELS: Record<HotelOperatingStatus, string> = {

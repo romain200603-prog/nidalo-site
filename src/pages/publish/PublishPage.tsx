@@ -367,7 +367,9 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
     case 'category': stepView = <CategoryStep draft={draft} update={update} showsErrors={showsErrors} />; break;
     case 'main': stepView = <MainStep draft={draft} update={update} showsErrors={showsErrors} addressError={addressError} />; break;
     case 'features': stepView = <FeaturesStep draft={draft} update={update} showsErrors={showsErrors} />; break;
-    case 'finance': stepView = <FinanceStep draft={draft} update={update} showsErrors={showsErrors} />; break;
+    case 'finance':
+      stepView = <FinanceStep draft={draft} update={update} showsErrors={showsErrors} isPro={account.profile.account_type === 'professional'} />;
+      break;
     case 'media': stepView = <MediaStep draft={draft} update={update} showsErrors={showsErrors} />; break;
     case 'description': stepView = <DescriptionStep draft={draft} update={update} showsErrors={showsErrors} ownerId={start.ownerId ?? account.profile.id} />; break;
     case 'review':

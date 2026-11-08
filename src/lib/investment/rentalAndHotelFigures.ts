@@ -24,10 +24,12 @@ export class RentalCost {
   /** Dépôt indiqué dans l'annonce ; sinon le maximum légal est retenu. */
   readonly declaredDeposit: Decimal | null;
   readonly agencyFees: Decimal | null;
+  /** Charges au forfait (montant fixe) plutôt qu'en provisions régularisées chaque année. */
+  readonly chargesAreFlatRate: boolean;
 
   constructor(fields: {
     rentExcludingCharges: DecimalLike; charges: DecimalLike | null; area: DecimalLike | null; isFurnished: boolean | null;
-    declaredDeposit: DecimalLike | null; agencyFees: DecimalLike | null;
+    declaredDeposit: DecimalLike | null; agencyFees: DecimalLike | null; chargesAreFlatRate?: boolean;
   }) {
     this.rentExcludingCharges = D(fields.rentExcludingCharges);
     this.charges = optional(fields.charges);
@@ -35,6 +37,7 @@ export class RentalCost {
     this.isFurnished = fields.isFurnished;
     this.declaredDeposit = optional(fields.declaredDeposit);
     this.agencyFees = optional(fields.agencyFees);
+    this.chargesAreFlatRate = fields.chargesAreFlatRate ?? false;
   }
 
   get rentIncludingCharges(): Decimal {

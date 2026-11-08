@@ -122,7 +122,7 @@ export function rentalRows(row: ListingRow, showsCosts: boolean, now = new Date(
   const rows: Row[] = showsCosts ? [['Loyer hors charges', perMonth(price)]] : [];
   const charges = n(row.monthly_charges);
   if (showsCosts && charges !== null) {
-    rows.push(['Provisions sur charges', perMonth(charges)]);
+    rows.push([rental?.chargesMode === 'flatRate' ? 'Forfait de charges' : 'Provisions sur charges', perMonth(charges)]);
     rows.push(['Loyer charges comprises', perMonth(price + charges)]);
   }
   if (rental?.availableFrom) rows.push(['Disponibilité', availability(rental.availableFrom, now)]);
@@ -232,6 +232,7 @@ export function featureRows(row: ListingRow): Row[] {
     case 'hotel': {
       const h = asset.hotel;
       if (h.operatingStatus) rows.push(['Exploitation', OPERATING_LABELS[h.operatingStatus]]);
+      if (h.scope === 'businessOnly' && h.wallsAnnualRent !== null) rows.push(['Loyer des murs', `${formatPrice(h.wallsAnnualRent)}/an`]);
       if (h.amenities?.length) {
         const label = ordered(h.amenities, AMENITY_LABELS);
         if (label) rows.push(['Équipements', label]);

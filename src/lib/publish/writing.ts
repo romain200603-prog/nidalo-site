@@ -67,7 +67,11 @@ export function proposedDescription(draft: PublishDraft): string {
   if (draft.transaction === 'rent') {
     if (draft.price !== null) {
       let text = `Loyer : ${formatPrice(draft.price)} hors charges par mois`;
-      if (draft.monthlyCharges !== null && draft.monthlyCharges > 0) text += `, plus ${formatPrice(draft.monthlyCharges)} de provisions sur charges`;
+      if (draft.monthlyCharges !== null && draft.monthlyCharges > 0) {
+        text += draft.rentalInfo?.chargesMode === 'flatRate'
+          ? `, plus un forfait de charges de ${formatPrice(draft.monthlyCharges)}`
+          : `, plus ${formatPrice(draft.monthlyCharges)} de provisions sur charges`;
+      }
       sentences.push(`${text}.`);
     }
     const furnished = draft.rentalInfo?.isFurnished ?? null;

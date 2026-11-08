@@ -13,6 +13,10 @@ export type HotelOperatingStatus = 'operating' | 'seasonal' | 'closed';
 export type HotelAmenity = 'restaurant' | 'bar' | 'meetingRooms' | 'spa' | 'pool' | 'parking';
 export type OfficeEquipment = 'airConditioning' | 'fiber' | 'accessControl';
 export type LeaseType = 'commercial' | 'professional' | 'shortTerm';
+/** Charges d'une location : provisions régularisées chaque année, ou forfait fixe. */
+export type ChargesMode = 'provision' | 'flatRate';
+/** Qui paie les honoraires : l'acquéreur ou le locataire (`buyer`), le vendeur ou le propriétaire (`seller`). */
+export type FeePayer = 'buyer' | 'seller';
 
 export const PUBLISH_CATEGORIES: PublishCategory[] = ['residential', 'investment', 'rental', 'hotel'];
 export const PARKING_TYPES: ParkingType[] = ['none', 'outdoorSpace', 'indoorSpace', 'garage'];
@@ -22,6 +26,8 @@ export const HOTEL_STATUSES: HotelOperatingStatus[] = ['operating', 'seasonal', 
 export const HOTEL_AMENITIES: HotelAmenity[] = ['restaurant', 'bar', 'meetingRooms', 'spa', 'pool', 'parking'];
 export const OFFICE_EQUIPMENT: OfficeEquipment[] = ['airConditioning', 'fiber', 'accessControl'];
 export const LEASE_TYPES: LeaseType[] = ['commercial', 'professional', 'shortTerm'];
+export const CHARGES_MODES: ChargesMode[] = ['provision', 'flatRate'];
+export const FEE_PAYERS: FeePayer[] = ['buyer', 'seller'];
 
 /** Jour choisi dans un calendrier : « 2026-12-01 ». */
 export type Day = string;
@@ -40,6 +46,8 @@ export type RentalDraft = {
   isFurnished: boolean | null;
   securityDeposit: number | null;
   leaseDurationMonths: number | null;
+  /** Location : charges en provisions ou au forfait ; null = non précisé (affiché « Provisions sur charges »). */
+  chargesMode: ChargesMode | null;
 };
 
 export type HotelDraft = {
@@ -55,6 +63,8 @@ export type HotelDraft = {
   averageDailyRate: Sourced | null;
   operatingStatus: HotelOperatingStatus | null;
   amenities: HotelAmenity[] | null;
+  /** Fonds seul : loyer annuel que l'exploitant paie au propriétaire des murs. */
+  wallsAnnualRent: number | null;
 };
 
 export type CommercialDraft = { frontageMeters: number | null; salesArea: number | null; leaseType: LeaseType | null; leaseEndDate: Day | null };
@@ -94,9 +104,10 @@ export type EnergyDraft = {
   energyClass: EnergyClass | null;
   climateClass: EnergyClass | null;
   primaryEnergyConsumption: number | null;
-  // Pas de champ dans Publier : gardés tels quels quand une annonce est modifiée.
+  /** Estimation des dépenses annuelles d'énergie du DPE, en euros par an (logement ou immeuble). */
   annualEnergyCostMin: number | null;
   annualEnergyCostMax: number | null;
+  // Pas de champ dans Publier : gardée telle quelle quand une annonce est modifiée.
   diagnosticDate: string | null;
 };
 
@@ -139,19 +150,22 @@ export type PublishDraft = {
   hasCellar: boolean | null;
   condition: PropertyCondition | null;
   acceptsVideoVisits: boolean | null;
+  /** Honoraires d'agence TTC (comptes professionnels) et qui les paie : le serveur les garde ensemble ou pas du tout. */
+  agencyFeesAmount: number | null;
+  agencyFeesPaidBy: FeePayer | null;
 };
 
 export function emptyRental(): RentalDraft {
   return {
     currentMonthlyRent: null, potentialMonthlyRent: null, isLeased: false, leaseEndDate: null, availableFrom: null,
-    recoverableMonthlyCharges: null, isFurnished: null, securityDeposit: null, leaseDurationMonths: null,
+    recoverableMonthlyCharges: null, isFurnished: null, securityDeposit: null, leaseDurationMonths: null, chargesMode: null,
   };
 }
 
 export function emptyHotel(): HotelDraft {
   return {
     rooms: null, stars: null, annualRevenue: null, ebitda: null, operatingIncome: null, scope: null, occupancyRate: null,
-    financialYear: null, averageDailyRate: null, operatingStatus: null, amenities: null,
+    financialYear: null, averageDailyRate: null, operatingStatus: null, amenities: null, wallsAnnualRent: null,
   };
 }
 
@@ -170,7 +184,7 @@ export function newDraft(id: string): PublishDraft {
     yearBuilt: null, isNewBuild: false,
     energy: { energyClass: null, climateClass: null, primaryEnergyConsumption: null, annualEnergyCostMin: null, annualEnergyCostMax: null, diagnosticDate: null },
     title: '', description: '', rentalInfo: null, assetDetails: null, worksAmount: null, hasCellar: null, condition: null,
-    acceptsVideoVisits: null,
+    acceptsVideoVisits: null, agencyFeesAmount: null, agencyFeesPaidBy: null,
   };
 }
 
@@ -179,6 +193,8 @@ export function newDraft(id: string): PublishDraft {
 export const isDwelling = (type: PropertyType | null): boolean => type === 'apartment' || type === 'house';
 export const requiresEnergyDiagnostic = (type: PropertyType | null): boolean => type !== null && type !== 'land' && type !== 'parking';
 export const hasRooms = (type: PropertyType | null): boolean => type !== null && type !== 'land' && type !== 'parking';
+/** Dépenses d'énergie du DPE demandées pour un logement ou un immeuble (mention obligatoire des annonces de logement). */
+export const showsEnergyCosts = (type: PropertyType | null): boolean => isDwelling(type) || type === 'building';
 
 export function categoryTransaction(category: PublishCategory): Transaction {
   return category === 'rental' ? 'rent' : 'sale';
@@ -255,7 +271,7 @@ export function selectSubtype(draft: PublishDraft, option: Subtype): PublishDraf
 
 export type RequiredField =
   | 'transaction' | 'propertyType' | 'photos' | 'address' | 'price' | 'livingArea' | 'rooms' | 'energyClass' | 'description'
-  | 'title' | 'landArea' | 'rentalEnergyClass';
+  | 'title' | 'landArea' | 'rentalEnergyClass' | 'agencyFeesPayer';
 
 export type PublishStep = 'category' | 'main' | 'features' | 'finance' | 'media' | 'description' | 'review';
 export const PUBLISH_STEPS: PublishStep[] = ['category', 'main', 'features', 'finance', 'media', 'description', 'review'];
@@ -309,6 +325,7 @@ export function missingRequiredFields(draft: PublishDraft, now = new Date()): Re
   if (isDwelling(type) && (draft.rooms ?? 0) <= 0) missing.push('rooms');
   if (requiresEnergyDiagnostic(type) && draft.energy.energyClass === null) missing.push('energyClass');
   if (rentalBanMessage(draft, now) !== null) missing.push('rentalEnergyClass');
+  if (feesNeedPayer(draft)) missing.push('agencyFeesPayer');
   if (blank(draft.description)) missing.push('description');
   // Le titre n'est exigé que dans le parcours par catégorie (il le propose à l'étape « Description »).
   if (draft.category !== null && blank(draft.title)) missing.push('title');
@@ -328,6 +345,7 @@ export const REQUIRED_FIELD_LABELS: Record<RequiredField, string> = {
   description: 'Description',
   title: 'Titre',
   landArea: 'Surface du terrain',
+  agencyFeesPayer: 'Qui paie les honoraires',
 };
 
 export function stepOf(field: RequiredField): PublishStep {
@@ -336,6 +354,7 @@ export function stepOf(field: RequiredField): PublishStep {
     // Le prix se saisit d'abord avec l'adresse : son erreur s'affiche à cette étape.
     case 'address': case 'price': return 'main';
     case 'livingArea': case 'rooms': case 'energyClass': case 'landArea': case 'rentalEnergyClass': return 'features';
+    case 'agencyFeesPayer': return 'finance';
     case 'photos': return 'media';
     case 'description': case 'title': return 'description';
   }
@@ -364,7 +383,7 @@ export function stepIsComplete(draft: PublishDraft, step: PublishStep, now = new
     case 'main':
       return postalCodeOf(draft) !== '' && cityOf(draft) !== '' && (draft.price ?? 0) > 0;
     case 'finance':
-      return (draft.price ?? 0) > 0;
+      return (draft.price ?? 0) > 0 && !feesNeedPayer(draft);
     case 'media':
       return draft.photos.length > 0;
     case 'description':
@@ -462,4 +481,47 @@ export function depositWarning(draft: PublishDraft, format: (value: number) => s
   const months = draft.rentalInfo?.isFurnished === true ? 2 : 1;
   if (deposit <= rent * months) return null;
   return `Le dépôt dépasse le plafond légal de ${months === 2 ? '2 mois' : '1 mois'} de loyer hors charges (${format(rent * months)}).`;
+}
+
+// MARK: - Charges, énergie et honoraires
+
+/** Charges d'une vente : un immeuble entier n'a pas de copropriété. */
+export function saleChargesLabel(type: PropertyType | null): string {
+  return type === 'building' ? "Charges de l'immeuble" : 'Charges de copropriété';
+}
+
+/** Charges d'une location, selon leur mode : provisions quand rien n'est précisé. */
+export function rentalChargesLabel(mode: ChargesMode | null): string {
+  return mode === 'flatRate' ? 'Forfait de charges' : 'Provisions sur charges';
+}
+
+/** Forfait de charges d'un logement loué vide : permis seulement en colocation. Avertissement non bloquant. */
+export function flatRateWarning(draft: PublishDraft): string | null {
+  const rental = draft.rentalInfo;
+  if (draft.transaction !== 'rent' || !isDwelling(draft.propertyType) || rental?.chargesMode !== 'flatRate' || rental.isFurnished !== false) return null;
+  return "En location vide, le forfait de charges n'est permis qu'en colocation.";
+}
+
+/** Part des charges payée par le locataire plus grande que les charges : avertissement non bloquant. */
+export function tenantShareWarning(draft: PublishDraft): string | null {
+  const share = draft.rentalInfo?.recoverableMonthlyCharges ?? null;
+  const charges = draft.monthlyCharges;
+  if (draft.transaction !== 'sale' || share === null || charges === null || share <= charges) return null;
+  return 'La part du locataire dépasse les charges : vérifiez les deux montants.';
+}
+
+/** Dépenses d'énergie dans l'ordre : le plus petit montant d'abord, quel que soit le champ où il a été saisi. */
+export function energyCostRange(energy: EnergyDraft): { min: number | null; max: number | null } {
+  const { annualEnergyCostMin: min, annualEnergyCostMax: max } = energy;
+  return min !== null && max !== null && min > max ? { min: max, max: min } : { min, max };
+}
+
+/** Un seul des deux montants du DPE : la fiche n'affiche l'estimation qu'avec les deux. */
+export function energyCostHint(energy: EnergyDraft): string | null {
+  return (energy.annualEnergyCostMin === null) !== (energy.annualEnergyCostMax === null) ? 'Indiquez les deux montants du DPE.' : null;
+}
+
+/** Honoraires saisis sans dire qui les paie : à compléter avant de continuer ou de publier. */
+export function feesNeedPayer(draft: PublishDraft): boolean {
+  return draft.agencyFeesAmount !== null && draft.agencyFeesPaidBy === null;
 }

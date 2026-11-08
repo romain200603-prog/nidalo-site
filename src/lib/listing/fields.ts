@@ -57,6 +57,8 @@ export type RentalDetails = {
   isFurnished: boolean | null;
   securityDeposit: number | null;
   leaseDurationMonths: number | null;
+  /** Location : charges au forfait ou en provisions ; null = non précisé. */
+  chargesMode: 'provision' | 'flatRate' | null;
 };
 
 export function rentalDetails(row: Pick<ListingRow, 'rental_info'>): RentalDetails | null {
@@ -72,6 +74,7 @@ export function rentalDetails(row: Pick<ListingRow, 'rental_info'>): RentalDetai
     isFurnished: bool(r.isFurnished),
     securityDeposit: num(r.securityDeposit),
     leaseDurationMonths: int(r.leaseDurationMonths),
+    chargesMode: oneOf(r.chargesMode, ['provision', 'flatRate'] as const),
   };
 }
 
@@ -94,6 +97,8 @@ export type HotelDetails = {
   averageDailyRate: Sourced | null;
   operatingStatus: 'operating' | 'seasonal' | 'closed' | null;
   amenities: string[] | null;
+  /** Fonds seul : loyer annuel des murs payé par l'exploitant. */
+  wallsAnnualRent: number | null;
 };
 
 export type CommercialDetails = {
@@ -166,6 +171,7 @@ export function readAsset(row: Pick<ListingRow, 'asset_details'>): Asset | null 
         averageDailyRate: sourced(d.averageDailyRate),
         operatingStatus: oneOf(d.operatingStatus, ['operating', 'seasonal', 'closed'] as const),
         amenities: strings(d.amenities),
+        wallsAnnualRent: num(d.wallsAnnualRent),
       },
     };
   }

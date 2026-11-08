@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  missingRequiredFields, newDraft, rentalBanMessage, selectCategory, selectSubtype, stepIsComplete, subtypes, type PublishDraft,
+  emptyHotel, emptyRental, energyCostHint, flatRateWarning, hotelOfDraft, missingRequiredFields, newDraft, rentalBanMessage,
+  rentalChargesLabel, saleChargesLabel, selectCategory, selectSubtype, showsEnergyCosts, stepIsComplete, subtypes, tenantShareWarning,
+  type PropertyType, type PublishDraft,
 } from './draft';
 import { canSaveDraft, hasChanges, initialStep, previewRow, recapRows, sameDraft } from './flow';
 import { appDecodingProblems, assetJson, dayToDate, draftFromRow, listingWrite } from './serialize';
@@ -123,5 +125,85 @@ describe('assistant : brouillon, changements, aperçu, récapitulatif', () => {
       'Catégorie: Résidentiel · Appartement', 'Adresse: 12 rue Mercière, 69002 Lyon', 'Prix: 320 000 €', 'Surface: 62 m²', 'DPE: C', 'Photos: 1',
     ]);
     expect(recapRows({ ...flat(), address: { ...flat().address!, street: ' ' } })[1].value).toBe('69002 Lyon');
+  });
+});
+
+describe('charges, énergie, honoraires et loyer des murs', () => {
+  /** Brouillon relu depuis la ligne écrite, comme après un enregistrement. */
+  const reread = (draft: PublishDraft) => {
+    const write = listingWrite(draft, { insert: false });
+    const row = {
+      ...write, owner_id: 'u', status: 'active', previous_price: null, public_latitude: null, public_longitude: null, public_street: null,
+      published_at: null, created_at: null, updated_at: null, listing_photos: [],
+    };
+    return draftFromRow(row as unknown as Parameters<typeof draftFromRow>[0], { street: '12 rue Mercière', latitude: 45.7616, longitude: 4.8321 });
+  };
+  const hotelDraft = (scope: 'wallsAndBusiness' | 'wallsOnly' | 'businessOnly'): PublishDraft => ({
+    ...selectCategory(flat(), 'hotel'),
+    assetDetails: { kind: 'hotel', hotel: { ...emptyHotel(), rooms: 14, scope, wallsAnnualRent: 72_000 } },
+    rentalInfo: { ...emptyRental(), isLeased: true, currentMonthlyRent: 6_400 },
+  });
+
+  it('dépenses d’énergie : dans l’ordre, demandées pour un logement ou un immeuble', () => {
+    const energy = { ...flat().energy, annualEnergyCostMin: 1_500, annualEnergyCostMax: 1_080 };
+    expect(listingWrite({ ...flat(), energy }, { insert: false })).toMatchObject({ annual_energy_cost_min: 1080, annual_energy_cost_max: 1500 });
+    expect(energyCostHint(energy)).toBeNull();
+    expect(energyCostHint({ ...energy, annualEnergyCostMax: null })).toBe('Indiquez les deux montants du DPE.');
+    const types: PropertyType[] = ['apartment', 'house', 'building', 'commercial', 'office', 'hotel'];
+    expect(types.map(showsEnergyCosts)).toEqual([true, true, true, false, false, false]);
+  });
+
+  it('honoraires : écrits avec qui les paie, sinon à compléter à l’étape Prix et finances', () => {
+    const fees: PublishDraft = { ...flat(), agencyFeesAmount: 13_200 };
+    expect(missingRequiredFields(fees, NOW)).toEqual(['agencyFeesPayer']);
+    expect(stepIsComplete(fees, 'finance', NOW)).toBe(false);
+    expect(listingWrite(fees, { insert: false })).toMatchObject({ agency_fees_amount: null, agency_fees_paid_by: null });
+    const paid: PublishDraft = { ...fees, agencyFeesPaidBy: 'buyer' };
+    expect(missingRequiredFields(paid, NOW)).toEqual([]);
+    expect(stepIsComplete(paid, 'finance', NOW)).toBe(true);
+    expect(listingWrite(paid, { insert: false })).toMatchObject({ agency_fees_amount: 13200, agency_fees_paid_by: 'buyer' });
+    expect(reread(paid)).toMatchObject({ agencyFeesAmount: 13200, agencyFeesPaidBy: 'buyer' });
+  });
+
+  it('investir : part des charges payée par le locataire ; un immeuble a des charges d’immeuble', () => {
+    const invest = selectSubtype(selectCategory(flat(), 'investment'), subtypes('investment')[0]);
+    const leased: PublishDraft = {
+      ...invest, monthlyCharges: 180, rentalInfo: { ...emptyRental(), isLeased: true, currentMonthlyRent: 950, recoverableMonthlyCharges: 120 },
+    };
+    const write = listingWrite(leased, { insert: false });
+    expect(write.rental_info).toEqual({ currentMonthlyRent: 950, isLeased: true, recoverableMonthlyCharges: 120 });
+    expect(appDecodingProblems(write)).toEqual([]);
+    expect(tenantShareWarning(leased)).toBeNull();
+    expect(tenantShareWarning({ ...leased, monthlyCharges: 100 })).toBe('La part du locataire dépasse les charges : vérifiez les deux montants.');
+    expect([saleChargesLabel('building'), saleChargesLabel('apartment')]).toEqual(["Charges de l'immeuble", 'Charges de copropriété']);
+  });
+
+  it('location : charges au forfait ou en provisions, gardées et relues', () => {
+    const rent = selectCategory(flat(), 'rental');
+    const draft: PublishDraft = { ...rent, price: 950, monthlyCharges: 80, rentalInfo: { ...emptyRental(), isFurnished: true, chargesMode: 'flatRate' } };
+    const write = listingWrite(draft, { insert: false });
+    expect(write.rental_info).toEqual({ isLeased: false, isFurnished: true, chargesMode: 'flatRate' });
+    expect(appDecodingProblems(write)).toEqual([]);
+    expect(appDecodingProblems({ ...write, rental_info: { isLeased: false, chargesMode: 'mensuel' } })).toEqual(['rental_info.chargesMode']);
+    expect(reread(draft).rentalInfo?.chargesMode).toBe('flatRate');
+    expect(plain(proposedDescription(draft))).toContain('Loyer : 950 € hors charges par mois, plus un forfait de charges de 80 €.');
+    expect([rentalChargesLabel('flatRate'), rentalChargesLabel('provision'), rentalChargesLabel(null)])
+      .toEqual(['Forfait de charges', 'Provisions sur charges', 'Provisions sur charges']);
+    expect(flatRateWarning(draft)).toBeNull();
+    expect(flatRateWarning({ ...draft, rentalInfo: { ...draft.rentalInfo!, isFurnished: false } }))
+      .toBe("En location vide, le forfait de charges n'est permis qu'en colocation.");
+  });
+
+  it('hôtel : le loyer des murs suit ce qui est vendu', () => {
+    const walls = listingWrite(hotelDraft('wallsOnly'), { insert: false });
+    expect(walls.rental_info).toEqual({ currentMonthlyRent: 6400, isLeased: true });
+    expect(walls.asset_details).toEqual({ hotel: { _0: { rooms: 14, scope: 'wallsOnly' } } });
+    const business = listingWrite(hotelDraft('businessOnly'), { insert: false });
+    expect(business.rental_info).toBeNull();
+    expect(business.asset_details).toEqual({ hotel: { _0: { rooms: 14, scope: 'businessOnly', wallsAnnualRent: 72000 } } });
+    expect(appDecodingProblems(business)).toEqual([]);
+    const both = listingWrite(hotelDraft('wallsAndBusiness'), { insert: false });
+    expect([both.rental_info, both.asset_details]).toEqual([null, { hotel: { _0: { rooms: 14, scope: 'wallsAndBusiness' } } }]);
+    expect(hotelOfDraft(reread(hotelDraft('businessOnly')))?.wallsAnnualRent).toBe(72000);
   });
 });

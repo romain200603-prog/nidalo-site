@@ -52,7 +52,8 @@ export function RentalCostCard({ cost }: { cost: RentalCost }) {
         <SpecBarRow label="Loyer hors charges" badge={BADGES.listing} amount={cardEuros(cost.rentExcludingCharges)}
           ratio={ratio(cost.rentExcludingCharges, cc)} color={blue} />
         {cost.charges !== null && (
-          <SpecBarRow label="Provisions sur charges" detail="régularisées chaque année" amount={cardEuros(cost.charges)}
+          <SpecBarRow label={cost.chargesAreFlatRate ? 'Forfait de charges' : 'Provisions sur charges'}
+            detail={cost.chargesAreFlatRate ? 'montant fixe' : 'régularisées chaque année'} amount={cardEuros(cost.charges)}
             ratio={ratio(cost.charges, cc)} color={orange} />
         )}
       </div>

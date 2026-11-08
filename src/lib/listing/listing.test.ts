@@ -184,6 +184,17 @@ describe('Textes de la fiche', () => {
     ]);
   });
 
+  it('charges au forfait et loyer des murs d’un fonds de commerce', () => {
+    const row = testRow({ transaction: 'rent', price: 650, monthly_charges: 40, rental_info: { isFurnished: true, chargesMode: 'flatRate' } });
+    expect(rentalRows(row, true, new Date('2026-11-05T12:00:00Z'))[1]).toEqual(['Forfait de charges', `40${nb}€/mois`]);
+    const business = testRow({ property_type: 'hotel', asset_details: { hotel: { _0: { scope: 'businessOnly', wallsAnnualRent: 72_000 } } } });
+    expect(Object.fromEntries(featureRows(business))).toMatchObject({ 'Loyer des murs': `72${s}000${nb}€/an` });
+    const walls = testRow({ property_type: 'hotel', asset_details: { hotel: { _0: { scope: 'wallsOnly', wallsAnnualRent: 72_000 } } } });
+    expect(featureRows(walls).map(([t]) => t)).not.toContain('Loyer des murs');
+    const cost = new RentalCost({ rentExcludingCharges: 650, charges: 40, area: null, isFurnished: true, declaredDeposit: null, agencyFees: null });
+    expect([cost.chargesAreFlatRate, new RentalCost({ ...cost, chargesAreFlatRate: true }).chargesAreFlatRate]).toEqual([false, true]);
+  });
+
   it('activité d’un hôtel et lecture des détails', () => {
     const row = testRow({
       property_type: 'hotel',

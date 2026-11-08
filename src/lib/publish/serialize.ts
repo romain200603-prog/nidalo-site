@@ -2,10 +2,10 @@ import { date, hotelScope, num, int, bool, sourced, type Json, type Sourced } fr
 import { sortedPhotos, type ListingRow } from '../listings';
 import { ENERGY_CLASSES, OUTDOOR_SPACES, type EnergyClass, type OutdoorSpace } from '../search';
 import {
-  CONDITIONS, HOTEL_AMENITIES, HOTEL_STATUSES, LEASE_TYPES, OFFICE_EQUIPMENT, PARKING_TYPES, categoryTransaction, categoryTypes,
-  emptyRental, hasRooms, newDraft, syncBuildingRent, isDwelling,
-  type AssetDraft, type Day, type DraftPhoto, type HotelAmenity, type HotelOperatingStatus, type LeaseType, type OfficeEquipment,
-  type ParkingType, type PropertyCondition, type PropertyType, type PublishCategory, type PublishDraft, type RentalDraft,
+  CHARGES_MODES, CONDITIONS, FEE_PAYERS, HOTEL_AMENITIES, HOTEL_STATUSES, LEASE_TYPES, OFFICE_EQUIPMENT, PARKING_TYPES, categoryTransaction,
+  categoryTypes, emptyRental, energyCostRange, hasRooms, newDraft, showsEnergyCosts, syncBuildingRent, isDwelling,
+  type AssetDraft, type ChargesMode, type Day, type DraftPhoto, type FeePayer, type HotelAmenity, type HotelOperatingStatus, type LeaseType,
+  type OfficeEquipment, type ParkingType, type PropertyCondition, type PropertyType, type PublishCategory, type PublishDraft, type RentalDraft,
 } from './draft';
 
 // Brouillon ↔ ligne de la table listings, exactement comme l'app les écrit (SupabaseListingRepository.ListingWrite,
@@ -25,8 +25,8 @@ export type ListingWrite = {
   monthly_charges: number | null;
   annual_property_tax: number | null;
   works_amount: number | null;
-  agency_fees_amount: null;
-  agency_fees_paid_by: null;
+  agency_fees_amount: number | null;
+  agency_fees_paid_by: FeePayer | null;
   country_code: 'FR';
   postal_code: string;
   city: string;
@@ -101,6 +101,7 @@ export function rentalJson(info: RentalDraft): Json {
   put(json, 'isFurnished', info.isFurnished);
   put(json, 'securityDeposit', info.securityDeposit);
   put(json, 'leaseDurationMonths', info.leaseDurationMonths);
+  put(json, 'chargesMode', info.chargesMode);
   return json;
 }
 
@@ -125,6 +126,7 @@ export function assetJson(asset: AssetDraft): Json {
       put(inner, 'averageDailyRate', sourcedJson(h.averageDailyRate));
       put(inner, 'operatingStatus', h.operatingStatus);
       put(inner, 'amenities', sortedBy(h.amenities, HOTEL_AMENITIES));
+      put(inner, 'wallsAnnualRent', h.wallsAnnualRent);
       break;
     }
     case 'commercial': {
@@ -183,7 +185,7 @@ export function listingWrite(source: PublishDraft, { insert }: { insert: boolean
   const address = draft.address;
   if (type === null || transaction === null || address === null) throw new Error('Brouillon incomplet : type, transaction ou adresse manquants.');
   let rental: RentalDraft | null = draft.rentalInfo;
-  // Location : seuls l'ameublement (logement), la disponibilité, le dépôt et la durée du bail ont un sens.
+  // Location : seuls l'ameublement (logement), la disponibilité, le dépôt, la durée du bail et le mode des charges ont un sens.
   if (transaction === 'rent' && rental) {
     rental = {
       ...emptyRental(),
@@ -191,8 +193,22 @@ export function listingWrite(source: PublishDraft, { insert }: { insert: boolean
       availableFrom: rental.availableFrom,
       securityDeposit: rental.securityDeposit,
       leaseDurationMonths: rental.leaseDurationMonths,
+      chargesMode: rental.chargesMode,
     };
   }
+  // Hôtel : le loyer des murs est un revenu pour « Murs seuls » (informations locatives, comme un local loué) et une
+  // charge pour « Fonds seul » (détails de l'hôtel) ; ni l'un ni l'autre pour « Murs et fonds ».
+  const hotel = draft.assetDetails?.kind === 'hotel' ? draft.assetDetails.hotel : null;
+  if (hotel && hotel.scope !== 'wallsOnly') rental = null;
+  const assetDetails: AssetDraft | null = hotel && hotel.scope !== 'businessOnly'
+    ? { kind: 'hotel', hotel: { ...hotel, wallsAnnualRent: null } }
+    : draft.assetDetails;
+  // Dépenses d'énergie : saisies pour un logement ou un immeuble ; ailleurs, gardées telles quelles.
+  const energyCosts = showsEnergyCosts(type)
+    ? energyCostRange(draft.energy)
+    : { min: draft.energy.annualEnergyCostMin, max: draft.energy.annualEnergyCostMax };
+  // Honoraires : le montant et qui les paie, ensemble ou pas du tout (règle du serveur).
+  const fees = draft.agencyFeesAmount !== null && draft.agencyFeesPaidBy !== null;
   const insee = address.inseeCode?.trim() ?? '';
   const write: ListingWrite = {
     id: draft.id,
@@ -205,8 +221,8 @@ export function listingWrite(source: PublishDraft, { insert }: { insert: boolean
     monthly_charges: draft.monthlyCharges,
     annual_property_tax: draft.annualPropertyTax,
     works_amount: draft.worksAmount,
-    agency_fees_amount: null,
-    agency_fees_paid_by: null,
+    agency_fees_amount: fees ? draft.agencyFeesAmount : null,
+    agency_fees_paid_by: fees ? draft.agencyFeesPaidBy : null,
     country_code: 'FR',
     postal_code: trimmed(address.postalCode),
     city: trimmed(address.city),
@@ -229,11 +245,11 @@ export function listingWrite(source: PublishDraft, { insert }: { insert: boolean
     energy_class: draft.energy.energyClass,
     climate_class: draft.energy.climateClass,
     primary_energy_consumption: draft.energy.primaryEnergyConsumption,
-    annual_energy_cost_min: draft.energy.annualEnergyCostMin,
-    annual_energy_cost_max: draft.energy.annualEnergyCostMax,
+    annual_energy_cost_min: energyCosts.min,
+    annual_energy_cost_max: energyCosts.max,
     diagnostic_date: draft.energy.diagnosticDate,
     rental_info: rental ? rentalJson(rental) : null,
-    asset_details: draft.assetDetails ? assetJson(draft.assetDetails) : null,
+    asset_details: assetDetails ? assetJson(assetDetails) : null,
   };
   return insert ? { ...write, status: 'draft' } : write;
 }
@@ -249,13 +265,14 @@ type FieldRule = 'decimal' | 'int' | 'bool' | 'date' | 'string' | 'sourced' | { 
 const RENTAL_RULES: Record<string, FieldRule> = {
   currentMonthlyRent: 'decimal', potentialMonthlyRent: 'decimal', isLeased: 'bool', leaseEndDate: 'date', availableFrom: 'date',
   recoverableMonthlyCharges: 'decimal', isFurnished: 'bool', securityDeposit: 'decimal', leaseDurationMonths: 'int',
+  chargesMode: { oneOf: CHARGES_MODES },
 };
 
 const ASSET_RULES: Record<string, Record<string, FieldRule>> = {
   hotel: {
     rooms: 'int', stars: 'int', annualRevenue: 'sourced', ebitda: 'sourced', operatingIncome: 'sourced', scope: { oneOf: SCOPES },
     occupancyRate: 'sourced', financialYear: 'int', averageDailyRate: 'sourced', operatingStatus: { oneOf: HOTEL_STATUSES },
-    amenities: { setOf: HOTEL_AMENITIES },
+    amenities: { setOf: HOTEL_AMENITIES }, wallsAnnualRent: 'decimal',
   },
   commercial: { frontageMeters: 'decimal', salesArea: 'decimal', leaseType: { oneOf: LEASE_TYPES }, leaseEndDate: 'date' },
   office: {
@@ -354,6 +371,7 @@ function rentalFromJson(raw: unknown): RentalDraft | null {
     isFurnished: bool(r.isFurnished),
     securityDeposit: num(r.securityDeposit),
     leaseDurationMonths: int(r.leaseDurationMonths),
+    chargesMode: oneOf<ChargesMode>(r.chargesMode, CHARGES_MODES),
   };
 }
 
@@ -373,6 +391,7 @@ function assetFromJson(raw: unknown): AssetDraft | null {
         financialYear: int(v.financialYear), averageDailyRate: sourced(v.averageDailyRate),
         operatingStatus: oneOf<HotelOperatingStatus>(v.operatingStatus, HOTEL_STATUSES),
         amenities: setOf<HotelAmenity>(v.amenities, HOTEL_AMENITIES),
+        wallsAnnualRent: num(v.wallsAnnualRent),
       },
     };
     case 'commercial': return {
@@ -434,6 +453,9 @@ export function draftFromRow(row: ListingRow, location: ExactLocation | null): P
   const building = assetDetails?.kind === 'building' ? assetDetails.building : null;
   const price = num(row.price);
   const livingArea = num(row.living_area);
+  // Honoraires : gardés par le serveur avec qui les paie, ou pas du tout.
+  const fees = num(row.agency_fees_amount);
+  const payer = oneOf<FeePayer>(row.agency_fees_paid_by, FEE_PAYERS);
   const photos: DraftPhoto[] = sortedPhotos(row).map((photo) => ({
     kind: 'stored', id: photo.id, storagePath: photo.storage_path, width: photo.width, height: photo.height,
   }));
@@ -478,5 +500,7 @@ export function draftFromRow(row: ListingRow, location: ExactLocation | null): P
     hasCellar: bool(row.has_cellar),
     condition: oneOf<PropertyCondition>(row.condition, CONDITIONS),
     acceptsVideoVisits: bool(row.accepts_video_visits),
+    agencyFeesAmount: fees !== null && payer !== null ? fees : null,
+    agencyFeesPaidBy: fees !== null && payer !== null ? payer : null,
   };
 }

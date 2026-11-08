@@ -2,12 +2,13 @@ import { ChoiceChip, DateChoice, InfoLine, PERCENT_ISSUE } from '../../component
 import { formatFraction, formatPrice } from '../../lib/format';
 import { scopeLabel } from '../../lib/listingJson';
 import {
-  buildingOfDraft, currentAnnualRent, depositWarning, emptyBuilding, emptyHotel, emptyRental, grossYield, hotelOfDraft, HOTEL_AMENITIES,
-  HOTEL_STATUSES, isDwelling, LEASE_TYPES, potentialGrossYield, pricePerSquareMeter, rentIncludingCharges, syncBuildingRent,
-  type BuildingDraft, type HotelDraft, type LeaseType, type PublishDraft, type RentalDraft,
+  buildingOfDraft, CHARGES_MODES, currentAnnualRent, depositWarning, emptyBuilding, emptyHotel, emptyRental, FEE_PAYERS, feesNeedPayer,
+  flatRateWarning, grossYield, hotelOfDraft, HOTEL_AMENITIES, HOTEL_STATUSES, isDwelling, LEASE_TYPES, potentialGrossYield,
+  pricePerSquareMeter, rentalChargesLabel, rentIncludingCharges, saleChargesLabel, syncBuildingRent, tenantShareWarning,
+  type BuildingDraft, type FeePayer, type HotelDraft, type LeaseType, type PublishDraft, type RentalDraft,
 } from '../../lib/publish/draft';
-import { HOTEL_AMENITY_LABELS, HOTEL_STATUS_LABELS, LEASE_LABELS } from '../../lib/publish/labels';
-import { Amount, BoolChoices, Card, Choices, IndicatorsCard, type StepProps, type Update } from './controls';
+import { CHARGES_MODE_LABELS, HOTEL_AMENITY_LABELS, HOTEL_STATUS_LABELS, LEASE_LABELS } from '../../lib/publish/labels';
+import { Amount, BoolChoices, Card, Choices, ErrorLine, IndicatorsCard, type StepProps, type Update } from './controls';
 
 // Étape « Prix et finances » (PublishFinanceStep.swift) : champs propres à la catégorie et indicateurs calculés
 // seulement quand les données le permettent (jamais de rendement net ni de cash-flow saisis par le vendeur).
@@ -52,13 +53,46 @@ function LeaseTypeChoice({ value, onChange }: { value: LeaseType | null; onChang
   );
 }
 
-export function FinanceStep(props: StepProps) {
+/** `isPro` : compte professionnel, qui indique ses honoraires (mention obligatoire de ses annonces). */
+export function FinanceStep({ isPro, ...props }: StepProps & { isPro: boolean }) {
+  return (
+    <>
+      {categoryCards(props)}
+      {isPro && <FeesCard {...props} />}
+    </>
+  );
+}
+
+function categoryCards(props: StepProps) {
   switch (props.draft.category) {
     case 'rental': return <RentalCards {...props} />;
     case 'investment': return <InvestmentCards {...props} />;
     case 'hotel': return <HotelCards {...props} />;
     default: return <SaleCards {...props} />;
   }
+}
+
+// MARK: - Honoraires (professionnels)
+
+function FeesCard({ draft, update, showsErrors }: StepProps) {
+  const { set } = setters(update);
+  const rent = draft.transaction === 'rent';
+  const payerLabel = (payer: FeePayer) => (payer === 'buyer' ? (rent ? 'Locataire' : 'Acquéreur') : (rent ? 'Propriétaire' : 'Vendeur'));
+  return (
+    <Card title="Honoraires d'agence">
+      <Amount label="Honoraires TTC" value={draft.agencyFeesAmount} unit="€" onChange={(value) => set('agencyFeesAmount', value)} />
+      <Choices label="À la charge de">
+        {FEE_PAYERS.map((payer) => (
+          <ChoiceChip key={payer} title={payerLabel(payer)} selected={draft.agencyFeesPaidBy === payer} expands
+            onClick={() => set('agencyFeesPaidBy', draft.agencyFeesPaidBy === payer ? null : payer)} />
+        ))}
+      </Choices>
+      {showsErrors && feesNeedPayer(draft) && <ErrorLine>Indiquez qui paie les honoraires.</ErrorLine>}
+      <InfoLine>
+        {rent ? 'Montant TTC. Pour le locataire, indiquez sa part, état des lieux compris.' : "Montant TTC. Si l'acquéreur les paie, le prix affiché les inclut."}
+      </InfoLine>
+    </Card>
+  );
 }
 
 // MARK: - Vente résidentielle
@@ -91,6 +125,7 @@ function RentalCards({ draft, update }: StepProps) {
   const rental = draft.rentalInfo ?? emptyRental();
   const total = rentIncludingCharges(draft);
   const warning = depositWarning(draft, formatPrice);
+  const flatRate = flatRateWarning(draft);
   // Ameublement, plafond du dépôt et liste légale des pièces : règles de la location d'un logement seulement.
   const dwelling = isDwelling(draft.propertyType);
   const business = draft.propertyType === 'commercial' || draft.propertyType === 'office';
@@ -98,7 +133,15 @@ function RentalCards({ draft, update }: StepProps) {
     <>
       <Card title="Loyer et charges">
         <Amount label="Loyer mensuel hors charges" value={draft.price} unit="€/mois" onChange={(value) => set('price', value)} />
-        <Amount label="Provisions sur charges" value={draft.monthlyCharges} unit="€/mois" onChange={(value) => set('monthlyCharges', value)} />
+        <Choices label="Charges">
+          {CHARGES_MODES.map((mode) => (
+            <ChoiceChip key={mode} title={CHARGES_MODE_LABELS[mode]} selected={rental.chargesMode === mode} expands
+              onClick={() => setRental({ chargesMode: rental.chargesMode === mode ? null : mode })} />
+          ))}
+        </Choices>
+        <Amount label={rentalChargesLabel(rental.chargesMode)} value={draft.monthlyCharges} unit="€/mois" onChange={(value) => set('monthlyCharges', value)} />
+        <InfoLine>Provisions : régularisées chaque année selon les dépenses réelles. Forfait : montant fixe, sans régularisation.</InfoLine>
+        {flatRate && <InfoLine>{flatRate}</InfoLine>}
         {total !== null && <InfoLine>{`Loyer charges comprises : ${formatPrice(total)}/mois.`}</InfoLine>}
         <Amount label="Dépôt de garantie" value={rental.securityDeposit} unit="€" onChange={(securityDeposit) => setRental({ securityDeposit })} />
         {warning && <InfoLine>{warning}</InfoLine>}
@@ -132,21 +175,32 @@ function InvestmentCards({ draft, update }: StepProps) {
   const annualRent = currentAnnualRent(draft);
   const gross = grossYield(draft);
   const potential = potentialGrossYield(draft);
+  const shareWarning = tenantShareWarning(draft);
 
   const setLeased = (isLeased: boolean) => update((current) => {
     const info = { ...(current.rentalInfo ?? emptyRental()), isLeased };
     if (!isLeased) {
       info.currentMonthlyRent = null;
       info.leaseEndDate = null;
+      info.recoverableMonthlyCharges = null;
     }
     return { ...current, rentalInfo: info };
   });
+
+  /** Charges récupérables : la part des charges remboursée par le ou les locataires, comptée dans la rentabilité. */
+  const tenantShare = (label: string) => (
+    <>
+      <Amount label={label} value={rental.recoverableMonthlyCharges} unit="€/mois"
+        onChange={(recoverableMonthlyCharges) => setRental({ recoverableMonthlyCharges })} />
+      <InfoLine>{shareWarning ?? 'Charges récupérables, remboursées chaque mois par le locataire. Elles comptent dans la rentabilité.'}</InfoLine>
+    </>
+  );
 
   return (
     <>
       <Card title="Prix et charges">
         <Amount label="Prix de vente" value={draft.price} unit="€" onChange={(value) => set('price', value)} />
-        <Amount label="Charges de copropriété" value={draft.monthlyCharges} unit="€/mois" onChange={(value) => set('monthlyCharges', value)} />
+        <Amount label={saleChargesLabel(type)} value={draft.monthlyCharges} unit="€/mois" onChange={(value) => set('monthlyCharges', value)} />
         <Amount label="Taxe foncière" value={draft.annualPropertyTax} unit="€/an" onChange={(value) => set('annualPropertyTax', value)} />
       </Card>
       {type === 'building' ? (
@@ -160,6 +214,7 @@ function InvestmentCards({ draft, update }: StepProps) {
           <Amount label="Loyers annuels actuels des commerces (HC)" value={building.commercialAnnualRent} unit="€/an"
             onChange={(commercialAnnualRent) => setBuilding({ commercialAnnualRent })} />
           <InfoLine>Loyers effectivement perçus aujourd'hui, hors charges récupérables. Les loyers espérés se saisissent à part, comme hypothèse.</InfoLine>
+          {tenantShare('Part des charges payée par les locataires')}
         </Card>
       ) : (
         <Card title="Situation locative">
@@ -172,6 +227,7 @@ function InvestmentCards({ draft, update }: StepProps) {
               {/* Loyer annuel saisi pour un local ou des bureaux, enregistré en mensuel (comme les autres annonces). */}
               <Amount label="Loyer annuel actuel hors charges" value={rental.currentMonthlyRent === null ? null : rental.currentMonthlyRent * 12} unit="€/an"
                 onChange={(annual) => setRental({ currentMonthlyRent: annual === null ? null : round2(annual / 12) })} />
+              {tenantShare('Part des charges payée par le locataire')}
               <LeaseTypeChoice value={leaseOf(draft).leaseType} onChange={(leaseType) => setLease({ leaseType })} />
               <DateChoice title="Échéance du bail" value={leaseOf(draft).leaseEndDate} onChange={(leaseEndDate) => setLease({ leaseEndDate })} />
             </>
@@ -179,6 +235,7 @@ function InvestmentCards({ draft, update }: StepProps) {
             <>
               <Amount label="Loyer mensuel actuel hors charges" value={rental.currentMonthlyRent} unit="€/mois"
                 onChange={(currentMonthlyRent) => setRental({ currentMonthlyRent })} />
+              {tenantShare('Part des charges payée par le locataire')}
               <DateChoice title="Fin du bail en cours" value={rental.leaseEndDate} onChange={(leaseEndDate) => setRental({ leaseEndDate })} />
             </>
           ))}
@@ -211,8 +268,9 @@ function InvestmentCards({ draft, update }: StepProps) {
 // MARK: - Hôtel
 
 function HotelCards({ draft, update }: StepProps) {
-  const { set, hotel: setHotel } = setters(update);
+  const { set, hotel: setHotel, rental: setRental } = setters(update);
   const hotel = hotelOfDraft(draft) ?? emptyHotel();
+  const rental = draft.rentalInfo ?? emptyRental();
   /** Valeur déclarée par le vendeur (provenance « Vendeur »). */
   const sourced = (value: number | null) => (value === null ? null : { value, origin: 'seller' as const });
   const occupancy = hotel.occupancyRate?.value ?? null;
@@ -225,6 +283,20 @@ function HotelCards({ draft, update }: StepProps) {
           <InfoLine>{`Le prix comprend : ${scopeLabel(hotel.scope).toLowerCase()}. Murs et fonds ne sont jamais additionnés.`}</InfoLine>
         )}
         <Amount label="Taxe foncière" value={draft.annualPropertyTax} unit="€/an" onChange={(value) => set('annualPropertyTax', value)} />
+        {hotel.scope === 'wallsOnly' && (
+          <>
+            {/* Loyer saisi à l'année, enregistré en mensuel comme le bail d'un local loué : il sert au calcul de rentabilité. */}
+            <Amount label="Loyer annuel payé par l'exploitant" value={rental.currentMonthlyRent === null ? null : rental.currentMonthlyRent * 12} unit="€/an"
+              onChange={(annual) => setRental({ currentMonthlyRent: annual === null ? null : round2(annual / 12), isLeased: annual !== null })} />
+            <InfoLine>Loyer hors charges du bail en cours. Il sert au calcul de la rentabilité, comme pour un investissement.</InfoLine>
+          </>
+        )}
+        {hotel.scope === 'businessOnly' && (
+          <>
+            <Amount label="Loyer annuel des murs" value={hotel.wallsAnnualRent} unit="€/an" onChange={(wallsAnnualRent) => setHotel({ wallsAnnualRent })} />
+            <InfoLine>Loyer que l'exploitant paie au propriétaire des murs.</InfoLine>
+          </>
+        )}
       </Card>
       <Card title="Exploitation">
         <Choices label="Situation">

@@ -32,6 +32,7 @@ export function rentalCostOf(row: ListingRow): RentalCost | null {
     isFurnished: rental?.isFurnished ?? null,
     declaredDeposit: rental?.securityDeposit ?? null,
     agencyFees: row.agency_fees_paid_by === 'buyer' && fees !== null && fees > 0 ? fees : null,
+    chargesAreFlatRate: rental?.chargesMode === 'flatRate',
   });
 }
 
