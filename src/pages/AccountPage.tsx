@@ -14,6 +14,7 @@ import { DesktopSpace } from './account/DesktopSpace';
 import { Diffusion } from './account/Diffusion';
 import { Hub } from './account/Hub';
 import { Mandates } from './account/Mandates';
+import { Opportunities } from './account/Opportunities';
 import { MyInfo } from './account/MyInfo';
 import { MyListings } from './account/MyListings';
 import { NotificationsScreen } from './account/Notifications';
@@ -136,6 +137,8 @@ function AccountContent() {
     case 'ventes': return <Sales saleId={params.get('vente')} screen={params.get('ecran')} />;
     // Mes mandats : le registre des mandats de vente et de location, avec le PDF signé de chacun.
     case 'mandats': return <Mandates mandateId={params.get('mandat')} screen={params.get('ecran')} />;
+    // Mes opportunités : les acheteurs, vendeurs et locataires à suivre, avec leur étape et le jour où les relancer.
+    case 'opportunites': return <Opportunities opportunityId={params.get('opportunite')} screen={params.get('ecran')} />;
     // Statistiques : vues, favoris, messages, visites et offres de chaque annonce publiée, sur 7 ou 30 jours.
     case 'statistiques': return <Statistics />;
     // Ordinateur : Mon espace de la maquette 5 pour un compte particulier ; l'espace professionnel garde son écran.

@@ -682,6 +682,10 @@ a.save-capsule { text-decoration: none; }
 .mandate-file-remove { align-self: flex-start; }
 .mandate-expired { text-align: center; }
 
+/* Mes opportunités (le reste : styles de Mes ventes et Mes mandats) : les quatre étapes en grille, deux par ligne sur téléphone */
+.opportunity-stages { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.opportunity-stages .select-chip { justify-content: center; }
+
 @media print {
   @page { size: A4 portrait; margin: 0; }
   html, body { margin: 0 !important; padding: 0 !important; background: #FFFFFF !important; }

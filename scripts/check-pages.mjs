@@ -110,10 +110,11 @@ const ACCOUNT = {
   real_estate_projects: [{ id: 'c0000000-0000-4000-8000-000000000001', user_id: USER_ID, kind: 'buy', city: 'Lyon', purpose: 'Résidence principale', completed_steps: ['search', 'visits'] }],
   professional_profiles: [],
   professional_profile_details: [],
-  // Espace pro : contacts ajoutés, ventes suivies et mandats (vides ici ; vérifiés par scripts/check-espace-pro.mjs).
+  // Espace pro : contacts ajoutés, ventes suivies, mandats et opportunités (vides ici ; vérifiés par scripts/check-espace-pro.mjs).
   pro_contacts: [],
   pro_sales: [],
   pro_mandates: [],
+  pro_opportunities: [],
 };
 
 /** Jeton de session factice (le serveur est simulé : la signature n'est jamais vérifiée). */

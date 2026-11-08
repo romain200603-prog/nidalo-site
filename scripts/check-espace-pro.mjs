@@ -15,8 +15,11 @@
 // Mes mandats : le registre (en cours, terminés), la fiche et son PDF (ouvert par une adresse signée), la modification
 // (PDF remplacé : nouveau fichier envoyé, ligne écrite, ancien fichier effacé), terminer puis reprendre, l'ajout (numéro
 // déjà pris : le PDF envoyé est retiré) et la suppression (ligne puis PDF).
+// Mes opportunités : la liste (à suivre, la relance en retard d'abord ; gagnées ; perdues), la fiche, l'étape changée
+// d'un geste (gagnée datée du jour, puis reprise), la modification (téléphone et e-mail vérifiés), l'ajout (plafond du
+// serveur atteint, puis bon) et la suppression, avec seulement les écritures attendues dans pro_opportunities.
 // Captures pour Romain : agence-*.png, diffusion-*.png, diffusion-affiche.pdf, contacts-*.png, statistiques-*.png,
-// ventes-*.png, mandats-*.png.
+// ventes-*.png, mandats-*.png, opportunites-*.png.
 // Lancer après la construction : node scripts/check-espace-pro.mjs [dossier construit, docs/ par défaut] [dossier des captures]
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
@@ -165,6 +168,10 @@ const startDay = (period) => {
 const dayAgo = (days) => parisDay(new Date(Date.now() - days * DAY));
 const dayIn = (days) => parisDay(new Date(Date.now() + days * DAY));
 const dayText = (day) => new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${day}T00:00:00Z`));
+/** Jour court de Mes opportunités : sans l'année quand c'est celle d'aujourd'hui (Paris). */
+const listDayText = (day) => (day.slice(0, 4) === dayAgo(0).slice(0, 4)
+  ? new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(`${day}T00:00:00Z`))
+  : dayText(day));
 /** Offre de Sophie acceptée il y a 3 jours, pas encore suivie dans Mes ventes. */
 const ACCEPTED_OFFER = {
   ...OFFERS[0], id: 'a1000000-0000-4000-8000-0000000000c2', amount: 228000, status: 'accepted', created_at: ago(5), responded_at: ago(3),
@@ -210,6 +217,26 @@ const MANDATE_WRITABLE = [
 ];
 const MANDATE_FILE = /^a0000000-0000-4000-8000-0000000000c3\/[0-9a-f-]{36}\.pdf$/;
 
+/** Mes opportunités : deux à suivre (une relance en retard, liée à l'annonce ; une nouvelle sans relance), une gagnée, une perdue. */
+const MOREL = {
+  id: 'e4000000-0000-4000-8000-000000000201', listing_id: SALE.id, kind: 'buyer', stage: 'active', name: 'Julie Morel', phone: '0612345678',
+  email: 'julie.morel@exemple.fr', budget: 330000, project: 'T3 avec balcon, Lyon 3e', follow_up_on: dayAgo(2), note: 'Prêt accordé. Libre le samedi.',
+  closed_on: null, created_at: ago(12), updated_at: ago(2),
+};
+const HUGO = {
+  id: 'e4000000-0000-4000-8000-000000000202', listing_id: null, kind: 'tenant', stage: 'new', name: 'Hugo T.', phone: null, email: null, budget: 900,
+  project: 'Studio meublé près du métro', follow_up_on: null, note: null, closed_on: null, created_at: ago(1), updated_at: ago(1),
+};
+const FAURE = {
+  ...HUGO, id: 'e4000000-0000-4000-8000-000000000203', kind: 'seller', stage: 'won', name: 'Mme Faure', budget: 415000, project: 'Maison 5 pièces',
+  closed_on: dayAgo(6), created_at: ago(60), updated_at: ago(6),
+};
+const LEROY = {
+  ...HUGO, id: 'e4000000-0000-4000-8000-000000000204', kind: 'buyer', stage: 'lost', name: 'M. Leroy', budget: null, project: null,
+  closed_on: dayAgo(15), created_at: ago(40), updated_at: ago(15),
+};
+const OPPORTUNITY_WRITABLE = ['listing_id', 'kind', 'stage', 'name', 'phone', 'email', 'budget', 'project', 'follow_up_on', 'note', 'closed_on'];
+
 const STATS = {
   30: [{ listing_id: SALE.id, views: 128, favorites_total: 9, favorites_new: 3 }, { listing_id: RENT.id, views: 41, favorites_total: 1, favorites_new: 1 }],
   7: [{ listing_id: SALE.id, views: 30, favorites_total: 9, favorites_new: 1 }, { listing_id: RENT.id, views: 12, favorites_total: 1, favorites_new: 0 }],
@@ -240,7 +267,7 @@ function fakeSession() {
  * `pro` : un professionnel avec sa fiche agence, ses détails et (sauf `listings`) une annonce en ligne ; sinon un
  * particulier sans fiche.
  */
-function newState({ pro = false, listings = null, contacts = false, sales = false, mandates = false } = {}) {
+function newState({ pro = false, listings = null, contacts = false, sales = false, mandates = false, opportunities = false } = {}) {
   return {
     profile: pro ? { ...PROFILE, account_type: 'professional', professional_profile_id: AGENCY_ID } : { ...PROFILE },
     details: { ...DETAILS },
@@ -264,6 +291,13 @@ function newState({ pro = false, listings = null, contacts = false, sales = fals
     mandateRows: structuredClone(mandates ? [DURAND, ROUX, BLANC] : []),
     mandateFiles: new Map(mandates ? [[DURAND_FILE, PDF]] : []),
     mandatesMissing: false,
+    /**
+     * Mes opportunités : lignes de pro_opportunities ; `opportunitiesMissing` : table absente du serveur ;
+     * `opportunitiesFull` : le prochain ajout est refusé (plafond de 5 000).
+     */
+    opportunityRows: structuredClone(opportunities ? [MOREL, HUGO, FAURE, LEROY] : []),
+    opportunitiesMissing: false,
+    opportunitiesFull: false,
     /** Le serveur refuse les détails (contrôle d'une colonne). */
     refuseDetails: false,
   };
@@ -415,6 +449,50 @@ function rest(state, route) {
         const before = state.mandateRows.length;
         state.mandateRows = state.mandateRows.filter((row) => !match(row));
         if (before - state.mandateRows.length !== 1) problems.push(`pro_mandates : suppression ${decodeURIComponent(url.search)}`);
+        return empty(route);
+      }
+      break;
+    }
+    case 'pro_opportunities': {
+      if (state.opportunitiesMissing) {
+        expectedServerErrors += 1;
+        return json(route, { code: 'PGRST205', message: 'Could not find the table \'public.pro_opportunities\' in the schema cache', details: null, hint: null }, 404);
+      }
+      const match = (row) => [...params].every(([column, value]) => (
+        !value.startsWith('eq.') || String(row[column]).toLowerCase() === value.slice(3).toLowerCase()
+      ));
+      if (method === 'GET') return json(route, [...state.opportunityRows].sort((a, b) => b.created_at.localeCompare(a.created_at)));
+      if (method === 'POST' || method === 'PATCH') {
+        const extra = Object.keys(body ?? {}).filter((key) => !OPPORTUNITY_WRITABLE.includes(key));
+        if (extra.length) problems.push(`pro_opportunities : colonnes en trop ${extra}`);
+        // Contrôle du serveur : un jour de fin pour une opportunité gagnée ou perdue, aucun tant qu'elle est à suivre.
+        if ('stage' in (body ?? {}) && (body.closed_on == null) !== ['new', 'active'].includes(body.stage)) {
+          problems.push(`pro_opportunities : étape ${body.stage} et fin ${body.closed_on}`);
+        }
+      }
+      if (method === 'POST') {
+        if (state.opportunitiesFull) {
+          state.opportunitiesFull = false;
+          expectedServerErrors += 1;
+          return json(route, { code: 'P0001', message: 'Vous suivez déjà 5 000 opportunités. Supprimez-en pour en ajouter.', details: null, hint: 'opportunities_full' }, 400);
+        }
+        const row = {
+          id: randomUUID(), listing_id: null, stage: 'new', phone: null, email: null, budget: null, project: null, follow_up_on: null, note: null,
+          closed_on: null, created_at: now, updated_at: now, ...body,
+        };
+        state.opportunityRows.push(row);
+        return single ? json(route, { id: row.id }, 201) : empty(route, 201);
+      }
+      if (method === 'PATCH') {
+        const rows = state.opportunityRows.filter(match);
+        if (rows.length !== 1) problems.push(`pro_opportunities : modification de ${rows.length} ligne(s) ${decodeURIComponent(url.search)}`);
+        for (const row of rows) Object.assign(row, body, { updated_at: now });
+        return single ? json(route, { id: rows[0]?.id }) : empty(route);
+      }
+      if (method === 'DELETE') {
+        const before = state.opportunityRows.length;
+        state.opportunityRows = state.opportunityRows.filter((row) => !match(row));
+        if (before - state.opportunityRows.length !== 1) problems.push(`pro_opportunities : suppression ${decodeURIComponent(url.search)}`);
         return empty(route);
       }
       break;
@@ -1860,6 +1938,246 @@ try {
     await missing.locator('.account-empty').waitFor();
     expectSame(N, 'sans mandat', [tidy(await missing.locator('.account-empty h2').textContent()), await missing.locator('.account-empty a').getAttribute('href')],
       ['Aucun mandat', '/compte/?vue=mandats&ecran=ajouter']);
+    await missingContext.close();
+  }
+
+  // 16. Téléphone, Mes opportunités : la ligne de Mon compte, la liste (à suivre : la relance en retard d'abord ;
+  //     gagnées ; perdues), la fiche, l'étape changée d'un geste (gagnée, datée du jour, puis reprise), la modification
+  //     (téléphone et e-mail vérifiés), l'ajout (plafond du serveur atteint : message ; puis bon) et la suppression.
+  const opportunitySummary = (page) => page.evaluate(() => {
+    const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
+    const all = (selector) => [...document.querySelectorAll(selector)];
+    return {
+      header: text(document.querySelector('.screen-header h1')),
+      title: text(document.querySelector('.sale-title')),
+      line: text(document.querySelector('.sale-city')),
+      state: text(document.querySelector('.sale-state')),
+      photo: Boolean(document.querySelector('.sale-head .sale-thumb img')),
+      actions: all('.opportunity-actions a').map((el) => [text(el), el.getAttribute('href')]),
+      stages: all('.sale-page [role=radio]').map((el) => `${text(el)}${el.getAttribute('aria-checked') === 'true' ? ' (choisi)' : ''}`),
+      cards: all('.sale-card-title').map(text),
+      rows: all('.sale-rows > div').map((el) => `${text(el.querySelector('dt'))} : ${text(el.querySelector('dd'))}`),
+      links: all('.sale-links a').map((el) => [text(el), el.getAttribute('href')]),
+      captions: all('.sale-caption').map(text),
+    };
+  });
+  {
+    const N = 'mes opportunités (téléphone)';
+    const state = newState({ pro: true, listings: [SALE, DRAFT], opportunities: true });
+    const context = await phone();
+    await mock(context, state);
+    const page = await open(context, '/compte/', N);
+    const row = page.locator('a.row', { hasText: 'Mes opportunités' });
+    await page.waitForFunction(() => /2 opportunités actives/.test(document.querySelector('a.row[href*="vue=opportunites"]')?.textContent ?? ''), null, { timeout: 8000 })
+      .catch(() => problems.push(`${N} : ligne de Mon compte jamais mise à jour`));
+    expectSame(N, 'ligne de Mon compte', [tidy(await row.locator('.row-subtitle').textContent()), await row.getAttribute('href')],
+      ['2 opportunités actives', '/compte/?vue=opportunites']);
+
+    await row.click();
+    await page.waitForURL('**/compte/?vue=opportunites');
+    await page.locator('.sale-row').first().waitFor();
+    expectSame(N, 'à suivre', await salesList(page), {
+      suggestions: [],
+      filters: ['À suivre (choisi)', 'Gagnées', 'Perdues'],
+      rows: [
+        ['Julie Morel', 'Acheteur · En cours · 330 000 €', `À relancer depuis le ${listDayText(dayAgo(2))}`, 'is-active', `/compte/?vue=opportunites&opportunite=${MOREL.id}`, true],
+        ['Hugo T.', 'Locataire · Nouvelle · 900 €/mois', 'Aucune relance prévue', 'is-open', `/compte/?vue=opportunites&opportunite=${HUGO.id}`, false],
+      ],
+      none: null,
+    });
+    await page.locator('.sales-filters .select-chip', { hasText: 'Gagnées' }).click();
+    expectSame(N, 'gagnées', (await salesList(page)).rows.map((item) => item.slice(0, 4)), [
+      ['Mme Faure', 'Vendeur · 415 000 €', `Gagnée le ${listDayText(dayAgo(6))}`, 'is-ended'],
+    ]);
+    await page.locator('.sales-filters .select-chip', { hasText: 'Perdues' }).click();
+    expectSame(N, 'perdues', (await salesList(page)).rows.map((item) => item.slice(0, 4)), [
+      ['M. Leroy', 'Acheteur', `Perdue le ${listDayText(dayAgo(15))}`, 'is-ended'],
+    ]);
+    await page.locator('.sales-filters .select-chip', { hasText: 'À suivre' }).click();
+    await imagesLoaded(page, '.sale-thumb img', 1, N);
+    await shot(page, 'opportunites-telephone.png');
+
+    // Fiche de Julie Morel : appeler, écrire, l'étape, le projet, la relance en retard, l'annonce et la note.
+    await page.locator('.sale-row').first().click();
+    await page.waitForURL(`**/compte/?vue=opportunites&opportunite=${MOREL.id}`);
+    await page.locator('.sale-head').waitFor();
+    expectSame(N, 'fiche', await opportunitySummary(page), {
+      header: 'Opportunité', title: 'Julie Morel', line: 'Acheteur · 330 000 €', state: 'En cours', photo: true,
+      actions: [['Appeler', 'tel:0612345678'], ['E-mail', 'mailto:julie.morel@exemple.fr']],
+      stages: ['Nouvelle', 'En cours (choisi)', 'Gagnée', 'Perdue'],
+      cards: ['Étape', 'L\'opportunité', 'Note privée'],
+      rows: [
+        'Type : Acheteur', 'Budget : 330 000 €', 'Projet : T3 avec balcon, Lyon 3e', 'Téléphone : 06 12 34 56 78', 'E-mail : julie.morel@exemple.fr',
+        `À relancer : ${dayText(dayAgo(2))} (en retard)`, `Ajoutée le : ${dayText(dayAgo(12))}`,
+      ],
+      links: [['Voir l\'annonce', `/annonce/?id=${SALE.id}`]],
+      captions: ['Seul vous voyez cette note.'],
+    });
+    await imagesLoaded(page, '.sale-thumb img', 1, N);
+    await shot(page, 'opportunites-fiche.png');
+
+    // L'étape d'un geste : « Gagnée » (datée du jour ; plus de relance), puis « En cours » de nouveau.
+    let mark = state.calls.length;
+    await page.getByRole('radio', { name: 'Gagnée' }).click();
+    await page.locator('.account-toast', { hasText: 'Étape enregistrée' }).waitFor();
+    await toastRead(page);
+    const won = await opportunitySummary(page);
+    expectSame(N, 'gagnée', [won.state, won.stages, won.rows.slice(5)], [
+      'Gagnée', ['Nouvelle', 'En cours', 'Gagnée (choisi)', 'Perdue'], [`Ajoutée le : ${dayText(dayAgo(12))}`, `Gagnée le : ${dayText(dayAgo(0))}`],
+    ]);
+    await page.getByRole('radio', { name: 'En cours' }).click();
+    await page.waitForFunction(() => document.querySelector('.sale-state')?.textContent === 'En cours' && !window.location.search.includes('ok='), null, { timeout: 8000 })
+      .catch(() => problems.push(`${N} : l'étape « En cours » ne revient pas`));
+    expectSame(N, 'gagnée puis reprise', [writesSince(state, mark).map((call) => [call.method, call.table, call.search, call.body]), (await opportunitySummary(page)).rows.slice(5)], [[
+      ['PATCH', 'pro_opportunities', `?id=eq.${MOREL.id}`, { stage: 'won', closed_on: dayAgo(0) }],
+      ['PATCH', 'pro_opportunities', `?id=eq.${MOREL.id}`, { stage: 'active', closed_on: null }],
+    ], [`À relancer : ${dayText(dayAgo(2))} (en retard)`, `Ajoutée le : ${dayText(dayAgo(12))}`]]);
+
+    // Modification : téléphone et e-mail refusés sans rien écrire ; puis corrigés, montant espacé, relance dans 3 jours.
+    const date = (label) => page.getByLabel(label, { exact: true });
+    await page.getByRole('link', { name: 'Modifier', exact: true }).click();
+    await page.waitForURL(/ecran=modifier/);
+    await page.locator('.sale-save').waitFor();
+    expectSame(N, 'formulaire prérempli', [
+      tidy(await page.locator('.screen-header h1').textContent()),
+      await page.$$eval('.mandate-choices [role=radio]', (els) => els.map((el) => `${el.textContent}${el.getAttribute('aria-checked') === 'true' ? ' (choisi)' : ''}`)),
+      await field(page, 'Nom').inputValue(), await field(page, 'Téléphone (facultatif)').inputValue(), await field(page, 'E-mail (facultatif)').inputValue(),
+      tidy(await field(page, 'Budget (facultatif)').inputValue()), await field(page, 'Projet (facultatif)').inputValue(),
+      await page.locator('.mandate-select select').inputValue(), await date('À relancer le (facultatif)').inputValue(),
+    ], [
+      'Modifier l\'opportunité', ['Acheteur (choisi)', 'Vendeur', 'Locataire', 'Nouvelle', 'En cours (choisi)', 'Gagnée', 'Perdue'], 'Julie Morel',
+      '06 12 34 56 78', 'julie.morel@exemple.fr', '330 000', 'T3 avec balcon, Lyon 3e', SALE.id, dayAgo(2),
+    ]);
+    await field(page, 'Téléphone (facultatif)').fill('06 12 34');
+    await field(page, 'E-mail (facultatif)').fill('julie.morel@exemple');
+    mark = state.calls.length;
+    await page.locator('.sale-save').click();
+    expectSame(N, 'téléphone et e-mail refusés', await texts(page, '.sale-form-screen .field-error'), [
+      'Numéro de téléphone invalide.', 'Adresse e-mail invalide.', 'Vérifiez les champs en rouge.',
+    ]);
+    expectSame(N, 'rien d\'écrit avec des erreurs', writeNames(writesSince(state, mark)), []);
+    await field(page, 'Téléphone (facultatif)').fill('07 98 76 54 32');
+    await field(page, 'E-mail (facultatif)').fill('julie.morel@exemple.fr');
+    await field(page, 'Budget (facultatif)').fill('345000');
+    await date('À relancer le (facultatif)').fill(dayIn(3));
+    await page.locator('.sale-save').click();
+    await page.locator('.account-toast', { hasText: 'Modifications enregistrées' }).waitFor();
+    await toastRead(page);
+    expectSame(N, 'opportunité modifiée', [writesSince(state, mark).map((call) => [call.method, call.table, call.search, call.body]), (await opportunitySummary(page)).rows], [[
+      ['PATCH', 'pro_opportunities', `?id=eq.${MOREL.id}&select=id`, {
+        listing_id: SALE.id, kind: 'buyer', stage: 'active', name: 'Julie Morel', phone: '0798765432', email: 'julie.morel@exemple.fr', budget: 345000,
+        project: 'T3 avec balcon, Lyon 3e', follow_up_on: dayIn(3), note: 'Prêt accordé. Libre le samedi.', closed_on: null,
+      }],
+    ], [
+      'Type : Acheteur', 'Budget : 345 000 €', 'Projet : T3 avec balcon, Lyon 3e', 'Téléphone : 07 98 76 54 32', 'E-mail : julie.morel@exemple.fr',
+      `À relancer : ${dayText(dayIn(3))}`, `Ajoutée le : ${dayText(dayAgo(12))}`,
+    ]]);
+
+    // Ajout : vide, il demande le nom ; un vendeur, prix espacé pendant la saisie ; le serveur plein refuse (message),
+    // puis l'ajout passe.
+    await page.goto(`${base}/compte/?vue=opportunites`, { waitUntil: 'networkidle' });
+    await page.getByRole('link', { name: 'Ajouter', exact: true }).click();
+    await page.waitForURL('**/compte/?vue=opportunites&ecran=ajouter');
+    await page.locator('.sale-save').waitFor();
+    mark = state.calls.length;
+    await page.locator('.sale-save').click();
+    expectSame(N, 'formulaire vide', [tidy(await page.locator('.screen-header h1').textContent()), await texts(page, '.sale-form-screen .field-error')],
+      ['Nouvelle opportunité', ['Indiquez le nom de la personne.', 'Vérifiez les champs en rouge.']]);
+    await page.getByRole('radio', { name: 'Vendeur' }).click();
+    await field(page, 'Nom').fill('M. et Mme Petit');
+    await field(page, 'E-mail (facultatif)').fill('petit@exemple.fr');
+    await field(page, 'Prix souhaité (facultatif)').pressSequentially('520000');
+    expectSame(N, 'prix espacé pendant la saisie', tidy(await field(page, 'Prix souhaité (facultatif)').inputValue()), '520 000');
+    await field(page, 'Projet (facultatif)').fill('Appartement 4 pièces à estimer');
+    expectSame(N, 'annonces proposées', await page.$$eval('.mandate-select option', (els) => els.map((el) => el.textContent)),
+      ['Aucune', SALE.title, `${DRAFT.title} (brouillon)`]);
+    await date('À relancer le (facultatif)').fill(dayIn(1));
+    await page.locator('.sale-note-input').fill('Rappeler après 18 h.');
+    await page.locator('.screen-header .round-back').click();
+    await dialog(page).getByRole('button', { name: 'Continuer' }).waitFor();
+    await dialog(page).getByRole('button', { name: 'Continuer' }).click();
+    expectSame(N, 'rien d\'écrit avant un formulaire juste', writeNames(writesSince(state, mark)), []);
+    await shot(page, 'opportunites-ajout.png');
+    state.opportunitiesFull = true;
+    await page.locator('.sale-save').click();
+    await page.locator('.sale-form-screen .signin-error').waitFor();
+    expectSame(N, 'plafond atteint', [tidy(await page.locator('.sale-form-screen .signin-error').textContent()), writeNames(writesSince(state, mark))],
+      ['Vous suivez déjà 5 000 opportunités. Supprimez-en pour en ajouter.', ['POST pro_opportunities']]);
+    mark = state.calls.length;
+    await page.locator('.sale-save').click();
+    await page.locator('.account-toast', { hasText: 'Opportunité ajoutée' }).waitFor();
+    await toastRead(page);
+    const added = state.opportunityRows.find((item) => item.name === 'M. et Mme Petit');
+    expectSame(N, 'opportunité ajoutée', [writesSince(state, mark).map((call) => [call.method, call.table, call.body]), new URL(page.url()).search], [[
+      ['POST', 'pro_opportunities', {
+        listing_id: null, kind: 'seller', stage: 'new', name: 'M. et Mme Petit', phone: null, email: 'petit@exemple.fr', budget: 520000,
+        project: 'Appartement 4 pièces à estimer', follow_up_on: dayIn(1), note: 'Rappeler après 18 h.', closed_on: null,
+      }],
+    ], `?vue=opportunites&opportunite=${added?.id}`]);
+
+    // Suppression, après confirmation ; la liste revient avec « Opportunité supprimée ».
+    await page.getByRole('link', { name: 'Modifier', exact: true }).click();
+    await page.waitForURL(/ecran=modifier/);
+    await page.locator('.sale-delete').click();
+    await dialog(page).getByRole('button', { name: 'Supprimer' }).waitFor();
+    expectSame(N, 'confirmation de suppression', tidy(await dialog(page).locator('h2, .alert-title').first().textContent()), 'Supprimer cette opportunité ?');
+    mark = state.calls.length;
+    await dialog(page).getByRole('button', { name: 'Supprimer' }).click();
+    await page.locator('.account-toast', { hasText: 'Opportunité supprimée' }).waitFor();
+    await page.locator('.sale-row').first().waitFor();
+    await toastRead(page);
+    expectSame(N, 'opportunité supprimée', [
+      writesSince(state, mark).map((call) => [call.method, call.table, call.search]), new URL(page.url()).search,
+      (await salesList(page)).rows.map((item) => item[0]),
+    ], [[['DELETE', 'pro_opportunities', `?id=eq.${added?.id}`]], '?vue=opportunites', ['Julie Morel', 'Hugo T.']]);
+    await context.close();
+  }
+
+  // 17. Ordinateur : la liste, la fiche d'une opportunité gagnée (sans coordonnées ni annonce) et celle d'un locataire
+  //     (loyer par mois, pas de relance), une opportunité introuvable ; aucune écriture. Téléphone, serveur sans la
+  //     table (avant sa mise en ligne) : un message et « Réessayer », puis la page vide.
+  {
+    const N = 'mes opportunités (ordinateur)';
+    const state = newState({ pro: true, listings: [SALE], opportunities: true });
+    const context = await desktop();
+    await mock(context, state);
+    const page = await open(context, '/compte/?vue=opportunites', N);
+    await page.locator('.sale-row').first().waitFor();
+    await imagesLoaded(page, '.sale-thumb img', 1, N);
+    await shot(page, 'opportunites-ordinateur.png');
+    await page.goto(`${base}/compte/?vue=opportunites&opportunite=${FAURE.id}`, { waitUntil: 'networkidle' });
+    await page.locator('.sale-head').waitFor();
+    expectSame(N, 'fiche d\'une opportunité gagnée', await opportunitySummary(page), {
+      header: 'Opportunité', title: 'Mme Faure', line: 'Vendeur · 415 000 €', state: 'Gagnée', photo: false, actions: [],
+      stages: ['Nouvelle', 'En cours', 'Gagnée (choisi)', 'Perdue'], cards: ['Étape', 'L\'opportunité'],
+      rows: ['Type : Vendeur', 'Prix souhaité : 415 000 €', 'Projet : Maison 5 pièces', `Ajoutée le : ${dayText(dayAgo(60))}`, `Gagnée le : ${dayText(dayAgo(6))}`],
+      links: [], captions: [],
+    });
+    await shot(page, 'opportunites-ordinateur-fiche.png');
+    await page.goto(`${base}/compte/?vue=opportunites&opportunite=${HUGO.id}`, { waitUntil: 'networkidle' });
+    await page.locator('.sale-head').waitFor();
+    expectSame(N, 'fiche d\'un locataire', (await opportunitySummary(page)).rows, [
+      'Type : Locataire', 'Loyer maximum : 900 €/mois', 'Projet : Studio meublé près du métro', 'À relancer : Non prévue', `Ajoutée le : ${dayText(dayAgo(1))}`,
+    ]);
+    await page.goto(`${base}/compte/?vue=opportunites&opportunite=e4000000-0000-4000-8000-0000000002ff`, { waitUntil: 'networkidle' });
+    await page.locator('.account-empty').waitFor();
+    expectSame(N, 'opportunité introuvable', [tidy(await page.locator('.account-empty h2').textContent()), await page.locator('.account-empty a').getAttribute('href')],
+      ['Opportunité introuvable', '/compte/?vue=opportunites']);
+    expectSame(N, 'écritures', writeNames(writesSince(state, 0)), []);
+    await context.close();
+
+    const missingState = newState({ pro: true, listings: [SALE] });
+    missingState.opportunitiesMissing = true;
+    const missingContext = await phone();
+    await mock(missingContext, missingState);
+    const missing = await open(missingContext, '/compte/?vue=opportunites', N);
+    await missing.locator('.signin-error').waitFor();
+    expectSame(N, 'sans la table', tidy(await missing.locator('.signin-error').textContent()), 'L\'opération n\'a pas abouti. Réessayez dans un instant.');
+    missingState.opportunitiesMissing = false;
+    await missing.getByRole('button', { name: 'Réessayer' }).click();
+    await missing.locator('.account-empty').waitFor();
+    expectSame(N, 'sans opportunité', [tidy(await missing.locator('.account-empty h2').textContent()), await missing.locator('.account-empty a').getAttribute('href')],
+      ['Aucune opportunité', '/compte/?vue=opportunites&ecran=ajouter']);
     await missingContext.close();
   }
 } finally {

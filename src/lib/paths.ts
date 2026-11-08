@@ -18,7 +18,7 @@ export const PATHS = {
 export type AccountView =
   | 'informations' | 'annonces' | 'recherches' | 'confidentialite' | 'legal' | 'securite' | 'supprimer' | 'bientot'
   | 'notifications' | 'demande-visite' | 'agenda' | 'ajouter-visite' | 'projet' | 'consultes' | 'agence' | 'diffusion' | 'affiche'
-  | 'contacts' | 'statistiques' | 'ventes' | 'mandats';
+  | 'contacts' | 'statistiques' | 'ventes' | 'mandats' | 'opportunites';
 
 /** « Publier une annonce » ; avec une annonce, reprend son brouillon ou la modifie (`etape=photos` : ses photos). */
 export function publishPath(listingId: string | null = null, step: 'photos' | null = null): string {
@@ -50,6 +50,13 @@ export const salePath = (id: string, edit = false): string => accountPath('vente
 export const MANDATES_PATH = accountPath('mandats');
 export const NEW_MANDATE_PATH = accountPath('mandats', { ecran: 'ajouter' });
 export const mandatePath = (id: string, edit = false): string => accountPath('mandats', edit ? { mandat: id, ecran: 'modifier' } : { mandat: id });
+
+/** « Mes opportunités » : la liste, une opportunité (`opportunite=<id>`), son formulaire (`ecran=modifier`) et l'ajout. */
+export const OPPORTUNITIES_PATH = accountPath('opportunites');
+export const NEW_OPPORTUNITY_PATH = accountPath('opportunites', { ecran: 'ajouter' });
+export const opportunityPath = (id: string, edit = false): string => (
+  accountPath('opportunites', edit ? { opportunite: id, ecran: 'modifier' } : { opportunite: id })
+);
 
 /**
  * Page d'une annonce. Comme dans l'app, la catégorie affichée dépend du mode de recherche : un appartement à vendre
