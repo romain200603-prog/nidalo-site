@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  emptyHotel, emptyRental, energyCostHint, flatRateWarning, hotelOfDraft, missingRequiredFields, newDraft, rentalBanMessage,
-  rentalChargesLabel, saleChargesLabel, selectCategory, selectSubtype, showsEnergyCosts, stepIsComplete, subtypes, tenantShareWarning,
+  coOwnershipLotsIssue, coOwnershipNeedsProcedure, emptyHotel, emptyRental, energyCostHint, flatRateWarning, hotelOfDraft, missingRequiredFields, newDraft, rentalBanMessage,
+  rentalChargesLabel, saleChargesLabel, selectCategory, selectSubtype, showsCoOwnership, showsEnergyCosts, stepIsComplete, subtypes, tenantShareWarning,
   type PropertyType, type PublishDraft,
 } from './draft';
 import { canSaveDraft, hasChanges, initialStep, previewRow, recapRows, sameDraft } from './flow';
@@ -205,5 +205,54 @@ describe('charges, énergie, honoraires et loyer des murs', () => {
     const both = listingWrite(hotelDraft('wallsAndBusiness'), { insert: false });
     expect([both.rental_info, both.asset_details]).toEqual([null, { hotel: { _0: { rooms: 14, scope: 'wallsAndBusiness' } } }]);
     expect(hotelOfDraft(reread(hotelDraft('businessOnly')))?.wallsAnnualRent).toBe(72000);
+  });
+});
+
+describe('copropriété : nombre de lots et procédure en cours', () => {
+  /** Brouillon relu depuis la ligne écrite, comme après un enregistrement. */
+  const reread = (draft: PublishDraft) => {
+    const write = listingWrite(draft, { insert: false });
+    const row = {
+      ...write, owner_id: 'u', status: 'active', previous_price: null, public_latitude: null, public_longitude: null, public_street: null,
+      published_at: null, created_at: null, updated_at: null, listing_photos: [],
+    };
+    return draftFromRow(row as unknown as Parameters<typeof draftFromRow>[0], { street: '12 rue Mercière', latitude: 45.7616, longitude: 4.8321 });
+  };
+  const ISSUE = 'Saisissez un nombre de lots entre 1 et 100 000.';
+
+  it('demandés pour un appartement à vendre et en investissement, sauf l’immeuble entier', () => {
+    const invest = (index: number) => selectSubtype(selectCategory(flat(), 'investment'), subtypes('investment')[index]);
+    expect(showsCoOwnership(flat())).toBe(true);
+    expect(showsCoOwnership(selectSubtype(flat(), subtypes('residential')[1]))).toBe(false);
+    expect([0, 1, 2, 3, 4, 5].map((index) => showsCoOwnership(invest(index)))).toEqual([true, true, false, false, true, true]);
+    expect(showsCoOwnership(selectCategory(flat(), 'rental'))).toBe(false);
+    expect(showsCoOwnership(selectCategory(flat(), 'hotel'))).toBe(false);
+  });
+
+  it('des lots sans réponse sur la procédure bloquent l’étape Prix et finances', () => {
+    const lots: PublishDraft = { ...flat(), coOwnershipLots: 24 };
+    expect(coOwnershipNeedsProcedure(lots)).toBe(true);
+    expect(missingRequiredFields(lots, NOW)).toEqual(['coOwnershipProcedure']);
+    expect(stepIsComplete(lots, 'finance', NOW)).toBe(false);
+    const answered: PublishDraft = { ...lots, coOwnershipHasProcedure: false };
+    expect(missingRequiredFields(answered, NOW)).toEqual([]);
+    expect(stepIsComplete(answered, 'finance', NOW)).toBe(true);
+    const write = listingWrite(answered, { insert: false });
+    expect(write).toMatchObject({ co_ownership_lots: 24, co_ownership_has_procedure: false });
+    expect(appDecodingProblems(write)).toEqual([]);
+    expect(reread(answered)).toMatchObject({ coOwnershipLots: 24, coOwnershipHasProcedure: false });
+    expect(plain(proposedDescription(answered))).toContain('Copropriété de 24 lots, sans procédure en cours.');
+    expect(plain(proposedDescription({ ...answered, coOwnershipHasProcedure: true }))).toContain('Copropriété de 24 lots, procédure en cours.');
+  });
+
+  it('un nombre de lots hors limites ou une location ne sont pas enregistrés', () => {
+    expect([coOwnershipLotsIssue(null), coOwnershipLotsIssue(24), coOwnershipLotsIssue(0), coOwnershipLotsIssue(100_001)])
+      .toEqual([null, null, ISSUE, ISSUE]);
+    const zero: PublishDraft = { ...flat(), coOwnershipLots: 0 };
+    expect(missingRequiredFields(zero, NOW)).toEqual([]);
+    expect(listingWrite(zero, { insert: false })).toMatchObject({ co_ownership_lots: null });
+    const rent: PublishDraft = { ...selectCategory(flat(), 'rental'), coOwnershipLots: 24, coOwnershipHasProcedure: false };
+    expect(listingWrite(rent, { insert: false })).toMatchObject({ co_ownership_lots: null, co_ownership_has_procedure: null });
+    expect(missingRequiredFields({ ...rent, coOwnershipHasProcedure: null }, NOW)).not.toContain('coOwnershipProcedure');
   });
 });

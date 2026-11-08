@@ -2,9 +2,9 @@ import { ChoiceChip, DateChoice, InfoLine, PERCENT_ISSUE } from '../../component
 import { formatFraction, formatPrice } from '../../lib/format';
 import { scopeLabel } from '../../lib/listingJson';
 import {
-  buildingOfDraft, CHARGES_MODES, currentAnnualRent, depositWarning, emptyBuilding, emptyHotel, emptyRental, FEE_PAYERS, feesNeedPayer,
+  buildingOfDraft, CHARGES_MODES, coOwnershipLotsIssue, coOwnershipNeedsProcedure, currentAnnualRent, depositWarning, emptyBuilding, emptyHotel, emptyRental, FEE_PAYERS, feesNeedPayer,
   flatRateWarning, grossYield, hotelOfDraft, HOTEL_AMENITIES, HOTEL_STATUSES, isDwelling, LEASE_TYPES, potentialGrossYield,
-  pricePerSquareMeter, rentalChargesLabel, rentIncludingCharges, saleChargesLabel, syncBuildingRent, tenantShareWarning,
+  pricePerSquareMeter, rentalChargesLabel, rentIncludingCharges, saleChargesLabel, showsCoOwnership, syncBuildingRent, tenantShareWarning,
   type BuildingDraft, type FeePayer, type HotelDraft, type LeaseType, type PublishDraft, type RentalDraft,
 } from '../../lib/publish/draft';
 import { CHARGES_MODE_LABELS, HOTEL_AMENITY_LABELS, HOTEL_STATUS_LABELS, LEASE_LABELS } from '../../lib/publish/labels';
@@ -95,9 +95,26 @@ function FeesCard({ draft, update, showsErrors }: StepProps) {
   );
 }
 
+// MARK: - Copropriété (vente)
+
+/** Nombre de lots et procédure en cours : mentions obligatoires d'une vente en copropriété. */
+function CoOwnershipCard({ draft, update, showsErrors }: StepProps) {
+  const { set } = setters(update);
+  return (
+    <Card title="Copropriété">
+      <Amount label="Nombre de lots" value={draft.coOwnershipLots} unit="lots" integer issue={coOwnershipLotsIssue(draft.coOwnershipLots)}
+        onChange={(value) => set('coOwnershipLots', value)} />
+      <BoolChoices title="Procédure en cours" value={draft.coOwnershipHasProcedure} onChange={(value) => set('coOwnershipHasProcedure', value)} />
+      {showsErrors && coOwnershipNeedsProcedure(draft) && <ErrorLine>Indiquez si une procédure est en cours.</ErrorLine>}
+      <InfoLine>Obligatoires dans l'annonce si le bien est en copropriété. Une procédure en cours signale une copropriété en difficulté : mandataire ad hoc, administrateur provisoire ou état de carence.</InfoLine>
+    </Card>
+  );
+}
+
 // MARK: - Vente résidentielle
 
-function SaleCards({ draft, update }: StepProps) {
+function SaleCards(props: StepProps) {
+  const { draft, update } = props;
   const { set } = setters(update);
   const land = draft.propertyType === 'land';
   return (
@@ -109,6 +126,7 @@ function SaleCards({ draft, update }: StepProps) {
         )}
         {!land && <Amount label="Taxe foncière" value={draft.annualPropertyTax} unit="€/an" onChange={(value) => set('annualPropertyTax', value)} />}
       </Card>
+      {showsCoOwnership(draft) && <CoOwnershipCard {...props} />}
       <IndicatorsCard rows={[{
         title: land ? 'Prix au m² de terrain' : 'Prix au m²',
         value: perSquareMeter(pricePerSquareMeter(draft)),
@@ -165,7 +183,8 @@ function RentalCards({ draft, update }: StepProps) {
 
 // MARK: - Investissement
 
-function InvestmentCards({ draft, update }: StepProps) {
+function InvestmentCards(props: StepProps) {
+  const { draft, update } = props;
   const { set, rental: setRental, building: setBuilding, lease: setLease } = setters(update);
   const type = draft.propertyType;
   const rental = draft.rentalInfo ?? emptyRental();
@@ -203,6 +222,7 @@ function InvestmentCards({ draft, update }: StepProps) {
         <Amount label={saleChargesLabel(type)} value={draft.monthlyCharges} unit="€/mois" onChange={(value) => set('monthlyCharges', value)} />
         <Amount label="Taxe foncière" value={draft.annualPropertyTax} unit="€/an" onChange={(value) => set('annualPropertyTax', value)} />
       </Card>
+      {showsCoOwnership(draft) && <CoOwnershipCard {...props} />}
       {type === 'building' ? (
         <Card title="Loyers de l'immeuble">
           <div className="dsc-pair">

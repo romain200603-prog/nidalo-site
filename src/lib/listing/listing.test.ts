@@ -167,6 +167,16 @@ describe('Textes de la fiche', () => {
     });
   });
 
+  it('copropriété d’une vente : nombre de lots et procédure en cours', () => {
+    const row = testRow({ co_ownership_lots: 24, co_ownership_has_procedure: false });
+    const titles = featureRows(row).map(([t]) => t);
+    expect(titles.slice(titles.indexOf('Charges'))).toEqual(['Charges', 'Copropriété', 'Procédure en cours', 'Taxe foncière']);
+    expect(Object.fromEntries(featureRows(row))).toMatchObject({ 'Copropriété': '24 lots', 'Procédure en cours': 'Non' });
+    expect(Object.fromEntries(featureRows(testRow({ co_ownership_lots: 1, co_ownership_has_procedure: true }))))
+      .toMatchObject({ 'Copropriété': '1 lot', 'Procédure en cours': 'Oui' });
+    expect(featureRows(testRow({ transaction: 'rent', co_ownership_lots: 24 })).map(([t]) => t)).not.toContain('Copropriété');
+  });
+
   it('informations pratiques d’une location', () => {
     const row = testRow({
       transaction: 'rent', price: 650, monthly_charges: 40, agency_fees_amount: 300, agency_fees_paid_by: 'buyer',

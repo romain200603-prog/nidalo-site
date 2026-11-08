@@ -18,6 +18,8 @@ export function testRow(overrides: Partial<ListingRow> = {}): ListingRow {
     agency_fees_amount: null,
     agency_fees_paid_by: null,
     previous_price: null,
+    co_ownership_lots: null,
+    co_ownership_has_procedure: null,
     country_code: 'FR',
     postal_code: '69003',
     city: 'Lyon',

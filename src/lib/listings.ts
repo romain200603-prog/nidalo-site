@@ -6,6 +6,7 @@ import { supabase } from './supabase';
 export const LISTING_COLUMNS = [
   'id', 'owner_id', 'status', 'transaction', 'property_type', 'publish_category', 'title', 'description', 'price',
   'monthly_charges', 'annual_property_tax', 'works_amount', 'agency_fees_amount', 'agency_fees_paid_by', 'previous_price',
+  'co_ownership_lots', 'co_ownership_has_procedure',
   'country_code', 'postal_code', 'city', 'insee_code', 'location_precision', 'public_latitude', 'public_longitude',
   'public_street', 'living_area', 'land_area', 'rooms', 'bedrooms', 'floor', 'total_floors', 'has_elevator',
   'outdoor_spaces', 'parking', 'year_built', 'is_new_build', 'has_cellar', 'condition', 'accepts_video_visits',
@@ -43,6 +44,9 @@ export type ListingRow = {
   agency_fees_amount: number | null;
   agency_fees_paid_by: string | null;
   previous_price: number | null;
+  /** Copropriété (vente) : nombre de lots et procédure en cours, mentions obligatoires de l'annonce. */
+  co_ownership_lots: number | null;
+  co_ownership_has_procedure: boolean | null;
   country_code: string;
   postal_code: string;
   city: string;

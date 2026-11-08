@@ -153,6 +153,9 @@ export type PublishDraft = {
   /** Honoraires d'agence TTC (comptes professionnels) et qui les paie : le serveur les garde ensemble ou pas du tout. */
   agencyFeesAmount: number | null;
   agencyFeesPaidBy: FeePayer | null;
+  /** Copropriété (vente) : nombre de lots et procédure en cours, mentions obligatoires de l'annonce. */
+  coOwnershipLots: number | null;
+  coOwnershipHasProcedure: boolean | null;
 };
 
 export function emptyRental(): RentalDraft {
@@ -184,7 +187,7 @@ export function newDraft(id: string): PublishDraft {
     yearBuilt: null, isNewBuild: false,
     energy: { energyClass: null, climateClass: null, primaryEnergyConsumption: null, annualEnergyCostMin: null, annualEnergyCostMax: null, diagnosticDate: null },
     title: '', description: '', rentalInfo: null, assetDetails: null, worksAmount: null, hasCellar: null, condition: null,
-    acceptsVideoVisits: null, agencyFeesAmount: null, agencyFeesPaidBy: null,
+    acceptsVideoVisits: null, agencyFeesAmount: null, agencyFeesPaidBy: null, coOwnershipLots: null, coOwnershipHasProcedure: null,
   };
 }
 
@@ -271,7 +274,7 @@ export function selectSubtype(draft: PublishDraft, option: Subtype): PublishDraf
 
 export type RequiredField =
   | 'transaction' | 'propertyType' | 'photos' | 'address' | 'price' | 'livingArea' | 'rooms' | 'energyClass' | 'description'
-  | 'title' | 'landArea' | 'rentalEnergyClass' | 'agencyFeesPayer';
+  | 'title' | 'landArea' | 'rentalEnergyClass' | 'agencyFeesPayer' | 'coOwnershipProcedure';
 
 export type PublishStep = 'category' | 'main' | 'features' | 'finance' | 'media' | 'description' | 'review';
 export const PUBLISH_STEPS: PublishStep[] = ['category', 'main', 'features', 'finance', 'media', 'description', 'review'];
@@ -326,6 +329,7 @@ export function missingRequiredFields(draft: PublishDraft, now = new Date()): Re
   if (requiresEnergyDiagnostic(type) && draft.energy.energyClass === null) missing.push('energyClass');
   if (rentalBanMessage(draft, now) !== null) missing.push('rentalEnergyClass');
   if (feesNeedPayer(draft)) missing.push('agencyFeesPayer');
+  if (coOwnershipNeedsProcedure(draft)) missing.push('coOwnershipProcedure');
   if (blank(draft.description)) missing.push('description');
   // Le titre n'est exigé que dans le parcours par catégorie (il le propose à l'étape « Description »).
   if (draft.category !== null && blank(draft.title)) missing.push('title');
@@ -346,6 +350,7 @@ export const REQUIRED_FIELD_LABELS: Record<RequiredField, string> = {
   title: 'Titre',
   landArea: 'Surface du terrain',
   agencyFeesPayer: 'Qui paie les honoraires',
+  coOwnershipProcedure: 'Procédure de copropriété',
 };
 
 export function stepOf(field: RequiredField): PublishStep {
@@ -354,7 +359,7 @@ export function stepOf(field: RequiredField): PublishStep {
     // Le prix se saisit d'abord avec l'adresse : son erreur s'affiche à cette étape.
     case 'address': case 'price': return 'main';
     case 'livingArea': case 'rooms': case 'energyClass': case 'landArea': case 'rentalEnergyClass': return 'features';
-    case 'agencyFeesPayer': return 'finance';
+    case 'agencyFeesPayer': case 'coOwnershipProcedure': return 'finance';
     case 'photos': return 'media';
     case 'description': case 'title': return 'description';
   }
@@ -383,7 +388,7 @@ export function stepIsComplete(draft: PublishDraft, step: PublishStep, now = new
     case 'main':
       return postalCodeOf(draft) !== '' && cityOf(draft) !== '' && (draft.price ?? 0) > 0;
     case 'finance':
-      return (draft.price ?? 0) > 0 && !feesNeedPayer(draft);
+      return (draft.price ?? 0) > 0 && !feesNeedPayer(draft) && !coOwnershipNeedsProcedure(draft);
     case 'media':
       return draft.photos.length > 0;
     case 'description':
@@ -519,6 +524,36 @@ export function energyCostRange(energy: EnergyDraft): { min: number | null; max:
 /** Un seul des deux montants du DPE : la fiche n'affiche l'estimation qu'avec les deux. */
 export function energyCostHint(energy: EnergyDraft): string | null {
   return (energy.annualEnergyCostMin === null) !== (energy.annualEnergyCostMax === null) ? 'Indiquez les deux montants du DPE.' : null;
+}
+
+// MARK: - Copropriété (vente)
+
+/** Lots et procédure demandés là où une vente montre les charges de copropriété : appartement à vendre, et
+ *  investissement sauf l'immeuble entier (il n'est pas en copropriété). */
+export function showsCoOwnership(draft: PublishDraft): boolean {
+  if (draft.transaction !== 'sale' || draft.propertyType === null) return false;
+  if (draft.category === 'investment') return draft.propertyType !== 'building';
+  return draft.category !== 'hotel' && draft.propertyType === 'apartment';
+}
+
+/** Nombre de lots accepté par le serveur. */
+export const CO_OWNERSHIP_LOTS_RANGE = { min: 1, max: 100_000 } as const;
+
+/** Message sous le nombre de lots quand il sort des limites du serveur ; `null` s'il est vide ou correct. */
+export function coOwnershipLotsIssue(lots: number | null): string | null {
+  if (lots === null || (Number.isInteger(lots) && lots >= CO_OWNERSHIP_LOTS_RANGE.min && lots <= CO_OWNERSHIP_LOTS_RANGE.max)) return null;
+  return 'Saisissez un nombre de lots entre 1 et 100 000.';
+}
+
+/** Nombre de lots enregistré : pour une vente qui le demande, et seulement s'il est correct. */
+export function coOwnershipLots(draft: PublishDraft): number | null {
+  const lots = draft.coOwnershipLots;
+  return showsCoOwnership(draft) && lots !== null && coOwnershipLotsIssue(lots) === null ? lots : null;
+}
+
+/** Lots indiqués sans dire si une procédure est en cours : à compléter avant de continuer ou de publier. */
+export function coOwnershipNeedsProcedure(draft: PublishDraft): boolean {
+  return coOwnershipLots(draft) !== null && draft.coOwnershipHasProcedure === null;
 }
 
 /** Honoraires saisis sans dire qui les paie : à compléter avant de continuer ou de publier. */

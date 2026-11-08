@@ -2,7 +2,7 @@ import { formatArea, formatPrice } from '../format';
 import { PROPERTY_TYPE_LABELS } from '../labels';
 import { scopeLabel } from '../listingJson';
 import { OUTDOOR_LABELS, type OutdoorSpace } from '../search';
-import { HOTEL_AMENITIES, isDwelling, currentAnnualRent, hotelOfDraft, type PublishDraft } from './draft';
+import { HOTEL_AMENITIES, isDwelling, coOwnershipLots, currentAnnualRent, hotelOfDraft, type PublishDraft } from './draft';
 import { CONDITION_LABELS, HOTEL_AMENITY_LABELS, PARKING_LABELS } from './labels';
 
 // Titre et description proposés à partir des seuls champs remplis : rien n'est inventé (PublishWriting de l'app).
@@ -59,6 +59,12 @@ export function proposedDescription(draft: PublishDraft): string {
       const amenities = HOTEL_AMENITIES.filter((amenity) => hotel.amenities?.includes(amenity));
       sentences.push(`Équipements : ${amenities.map((amenity) => HOTEL_AMENITY_LABELS[amenity].toLowerCase()).join(', ')}.`);
     }
+  }
+  const lots = coOwnershipLots(draft);
+  if (lots !== null) {
+    const procedure = draft.coOwnershipHasProcedure;
+    const detail = procedure === false ? ', sans procédure en cours' : procedure === true ? ', procédure en cours' : '';
+    sentences.push(`Copropriété de ${plural(lots, 'lot')}${detail}.`);
   }
   const annualRent = currentAnnualRent(draft);
   if (draft.transaction === 'sale' && draft.rentalInfo?.isLeased === true && annualRent !== null) {

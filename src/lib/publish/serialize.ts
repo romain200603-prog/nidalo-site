@@ -3,7 +3,8 @@ import { sortedPhotos, type ListingRow } from '../listings';
 import { ENERGY_CLASSES, OUTDOOR_SPACES, type EnergyClass, type OutdoorSpace } from '../search';
 import {
   CHARGES_MODES, CONDITIONS, FEE_PAYERS, HOTEL_AMENITIES, HOTEL_STATUSES, LEASE_TYPES, OFFICE_EQUIPMENT, PARKING_TYPES, categoryTransaction,
-  categoryTypes, emptyRental, energyCostRange, hasRooms, newDraft, showsEnergyCosts, syncBuildingRent, isDwelling,
+  categoryTypes, coOwnershipLots, emptyRental, energyCostRange, hasRooms, newDraft, showsCoOwnership, showsEnergyCosts, syncBuildingRent,
+  isDwelling,
   type AssetDraft, type ChargesMode, type Day, type DraftPhoto, type FeePayer, type HotelAmenity, type HotelOperatingStatus, type LeaseType,
   type OfficeEquipment, type ParkingType, type PropertyCondition, type PropertyType, type PublishCategory, type PublishDraft, type RentalDraft,
 } from './draft';
@@ -27,6 +28,8 @@ export type ListingWrite = {
   works_amount: number | null;
   agency_fees_amount: number | null;
   agency_fees_paid_by: FeePayer | null;
+  co_ownership_lots: number | null;
+  co_ownership_has_procedure: boolean | null;
   country_code: 'FR';
   postal_code: string;
   city: string;
@@ -209,6 +212,8 @@ export function listingWrite(source: PublishDraft, { insert }: { insert: boolean
     : { min: draft.energy.annualEnergyCostMin, max: draft.energy.annualEnergyCostMax };
   // Honoraires : le montant et qui les paie, ensemble ou pas du tout (règle du serveur).
   const fees = draft.agencyFeesAmount !== null && draft.agencyFeesPaidBy !== null;
+  // Copropriété : seulement pour une vente qui la demande (appartement, investissement sauf immeuble entier).
+  const coOwnership = showsCoOwnership(draft);
   const insee = address.inseeCode?.trim() ?? '';
   const write: ListingWrite = {
     id: draft.id,
@@ -223,6 +228,8 @@ export function listingWrite(source: PublishDraft, { insert }: { insert: boolean
     works_amount: draft.worksAmount,
     agency_fees_amount: fees ? draft.agencyFeesAmount : null,
     agency_fees_paid_by: fees ? draft.agencyFeesPaidBy : null,
+    co_ownership_lots: coOwnershipLots(draft),
+    co_ownership_has_procedure: coOwnership ? draft.coOwnershipHasProcedure : null,
     country_code: 'FR',
     postal_code: trimmed(address.postalCode),
     city: trimmed(address.city),
@@ -333,7 +340,7 @@ export function appDecodingProblems(write: ListingWrite): string[] {
       problems.push(...objectProblems(inner, ASSET_RULES[kind], `asset_details.${kind}`));
     }
   }
-  for (const key of ['rooms', 'bedrooms', 'floor', 'total_floors', 'year_built', 'primary_energy_consumption'] as const) {
+  for (const key of ['rooms', 'bedrooms', 'floor', 'total_floors', 'year_built', 'primary_energy_consumption', 'co_ownership_lots'] as const) {
     const value = write[key];
     if (value !== null && !Number.isInteger(value)) problems.push(key);
   }
@@ -502,5 +509,7 @@ export function draftFromRow(row: ListingRow, location: ExactLocation | null): P
     acceptsVideoVisits: bool(row.accepts_video_visits),
     agencyFeesAmount: fees !== null && payer !== null ? fees : null,
     agencyFeesPaidBy: fees !== null && payer !== null ? payer : null,
+    coOwnershipLots: int(row.co_ownership_lots),
+    coOwnershipHasProcedure: bool(row.co_ownership_has_procedure),
   };
 }

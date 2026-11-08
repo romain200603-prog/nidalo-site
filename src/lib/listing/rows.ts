@@ -1,5 +1,5 @@
 import { availability, type CardKind } from '../cardContent';
-import { formatAmount, formatArea, formatFraction, formatPrice } from '../format';
+import { formatAmount, formatArea, formatFraction, formatNumber, formatPrice } from '../format';
 import { propertyTypeLabel } from '../labels';
 import type { ListingRow } from '../listings';
 import { hotelOf, readAsset, rentalDetails, type Origin, type Sourced } from './fields';
@@ -258,6 +258,10 @@ export function featureRows(row: ListingRow): Row[] {
     const tax = n(row.annual_property_tax);
     const works = n(row.works_amount);
     if (charges !== null) rows.push(['Charges', perMonth(charges)]);
+    // Copropriété : mentions obligatoires d'une vente en copropriété (nombre de lots, procédure en cours).
+    const lots = n(row.co_ownership_lots);
+    if (lots !== null) rows.push(['Copropriété', `${formatNumber(lots)} lot${lots > 1 ? 's' : ''}`]);
+    if (typeof row.co_ownership_has_procedure === 'boolean') rows.push(['Procédure en cours', row.co_ownership_has_procedure ? 'Oui' : 'Non']);
     if (tax !== null) rows.push(['Taxe foncière', `${formatPrice(tax)}/an`]);
     if (works !== null) rows.push(['Travaux', formatPrice(works)]);
   }
