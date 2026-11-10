@@ -1,13 +1,15 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { useStore } from '../../lib/account/session';
 import { formatPerMonth, formatPrice } from '../../lib/format';
 import { answerOffer, canMakeOffer, offerErrorMessage, offersIn, type OfferAction, type OfferRow } from '../../lib/listing/offers';
+import { profitabilityFor } from '../../lib/listing/profitability';
 import { upcomingVisits, type ConversationVisit, type Message } from '../../lib/messages/api';
 import { groupSummary, sameId, type Conversation, type ListingSnapshot } from '../../lib/messages/inbox';
 import { loadOffers, refreshAfterOffer, unblock, type Loadable, type ThreadState } from '../../lib/messages/store';
 import { bannerLocation, callState, canOpenDetails, visibleMessages } from '../../lib/messages/thread';
 import { listingPath } from '../../lib/paths';
+import { hotelPerformanceOf } from '../listing/data';
 import { OfferScreen } from '../listing/OfferScreen';
 import { BlockDialog, CallDialog, DELETED_ACCOUNT, directMenuItems, groupMenuItems, ReportSheet } from './actions';
 import { Composer } from './Composer';
@@ -43,6 +45,14 @@ export function ConversationPane({ conversation, thread, offers, visits, blocked
   const other = conversation.otherUserId;
   const isBlocked = !conversation.isGroup && !!other && blocked.has(other.toLowerCase());
   const listing = conversation.listing;
+  // Fiche du bien lue pour le bandeau : la feuille d'offre en tire la carte « Rentabilité » de la fiche (vente avec un
+  // loyer, hors hôtel avec ses chiffres), pour la rentabilité au montant proposé.
+  const rows = useStore(listingStore);
+  const listingRow = listing ? rows.get(listing.listingId.toLowerCase()) : undefined;
+  const profitability = useMemo(
+    () => (listingRow?.status === 'ready' && !hotelPerformanceOf(listingRow.row) ? profitabilityFor(listingRow.row) : null),
+    [listingRow],
+  );
   const offerPossible = !!listing && canMakeOffer({
     id: conversation.id, isGroup: conversation.isGroup, listingId: listing.listingId, transaction: listing.transaction,
     isSellerSide: conversation.isSellerSide, title: listing.title, price: listing.price,
@@ -63,6 +73,7 @@ export function ConversationPane({ conversation, thread, offers, visits, blocked
             title={listing.title}
             price={listing.price}
             parent={screen.parent ? { id: screen.parent.id, amount: Number(screen.parent.amount) } : null}
+            profitability={profitability}
             onClose={() => setScreen(null)}
             onSent={async () => {
               // Comme OfferStore.make : offres puis conversations relues, et la feuille se referme.
