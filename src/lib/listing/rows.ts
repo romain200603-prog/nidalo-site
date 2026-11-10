@@ -60,14 +60,48 @@ export function leaseDuration(months: number): string {
   return years > 1 ? `${years} ans` : '1 an';
 }
 
-/** « 13 200 € à la charge du vendeur » ; pour une location, le « buyer » est le locataire. */
-export function feesLabel(row: Pick<ListingRow, 'agency_fees_amount' | 'agency_fees_paid_by' | 'transaction'>): string | null {
+/** Pourcentage au centième près : « 5,26 % », « 5 % ». */
+const feePercent = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 });
+/** Montant au mètre carré, toujours avec les centimes : « 25,30 € ». */
+const perSquareMeterEuros = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+type FeesRow = Pick<ListingRow, 'agency_fees_amount' | 'agency_fees_paid_by' | 'transaction' | 'price' | 'rental_info'>;
+
+/**
+ * Vente d'un professionnel dont l'acquéreur paie les honoraires (arrêté du 10 janvier 2017) : le prix affiché les
+ * inclut ; prix hors honoraires et honoraires en pourcentage de ce prix. `null` ailleurs ou si les montants sont incohérents.
+ */
+export function buyerFees(row: Omit<FeesRow, 'rental_info'>): { excluded: number; percent: number } | null {
+  if (row.transaction !== 'sale' || row.agency_fees_paid_by !== 'buyer') return null;
+  const amount = n(row.agency_fees_amount);
+  const price = n(row.price);
+  if (amount === null || price === null || !(amount > 0) || !(price > amount)) return null;
+  const excluded = price - amount;
+  return { excluded, percent: (amount / excluded) * 100 };
+}
+
+/** Sous le prix d'une vente dont l'acquéreur paie les honoraires : « Honoraires inclus · 285 714 € hors honoraires ». */
+export function priceFeesNote(row: Omit<FeesRow, 'rental_info'>): string | null {
+  const fees = buyerFees(row);
+  return fees ? `Honoraires inclus · ${formatPrice(fees.excluded)} hors honoraires` : null;
+}
+
+/**
+ * « 13 200 € à la charge du vendeur » ; pour une location, le « buyer » est le locataire, avec la part de l'état des
+ * lieux si elle est connue. Vente payée par l'acquéreur : « 5,26 % TTC du prix hors honoraires, soit 15 000 €, à la
+ * charge de l'acquéreur ».
+ */
+export function feesLabel(row: FeesRow): string | null {
   const amount = row.agency_fees_amount === null ? null : Number(row.agency_fees_amount);
   const paidBy = row.agency_fees_paid_by;
   if (amount === null || !Number.isFinite(amount) || (paidBy !== 'seller' && paidBy !== 'buyer')) return null;
   const sale = row.transaction === 'sale';
+  const buyer = buyerFees(row);
+  if (buyer) return `${feePercent.format(buyer.percent)}\u00a0% TTC du prix hors honoraires, soit ${formatPrice(amount)}, à la charge de l'acquéreur`;
   const payer = paidBy === 'seller' ? (sale ? 'du vendeur' : 'du propriétaire') : (sale ? 'de l\'acquéreur' : 'du locataire');
-  return `${formatPrice(amount)} à la charge ${payer}`;
+  const inventory = !sale && paidBy === 'buyer' ? rentalDetails(row)?.inventoryFee ?? null : null;
+  const detail = inventory !== null && inventory <= amount ? `, dont ${formatPrice(inventory)} pour l'état des lieux` : '';
+  return `${formatPrice(amount)} à la charge ${payer}${detail}`;
 }
 
 const perMonth = (value: number): string => `${formatPrice(value)}/mois`;
@@ -124,6 +158,12 @@ export function rentalRows(row: ListingRow, showsCosts: boolean, now = new Date(
   if (showsCosts && charges !== null) {
     rows.push([rental?.chargesMode === 'flatRate' ? 'Forfait de charges' : 'Provisions sur charges', perMonth(charges)]);
     rows.push(['Loyer charges comprises', perMonth(price + charges)]);
+  }
+  // Loyers encadrés (Paris, Lille, Lyon…) : montants que l'annonce doit donner.
+  if (showsCosts && rental?.isRentControlled === true) {
+    if (rental.referenceRent !== null) rows.push(['Loyer de référence', `${perSquareMeterEuros.format(rental.referenceRent)}/m²/mois`]);
+    if (rental.maxReferenceRent !== null) rows.push(['Loyer de référence majoré', `${perSquareMeterEuros.format(rental.maxReferenceRent)}/m²/mois`]);
+    if (rental.rentSupplement !== null) rows.push(['Complément de loyer', rental.rentSupplement > 0 ? perMonth(rental.rentSupplement) : 'Aucun']);
   }
   if (rental?.availableFrom) rows.push(['Disponibilité', availability(rental.availableFrom, now)]);
   if (rental?.isFurnished !== null && rental?.isFurnished !== undefined) rows.push(['Ameublement', rental.isFurnished ? 'Meublé' : 'Non meublé']);
@@ -257,7 +297,8 @@ export function featureRows(row: ListingRow): Row[] {
     const charges = n(row.monthly_charges);
     const tax = n(row.annual_property_tax);
     const works = n(row.works_amount);
-    if (charges !== null) rows.push(['Charges', perMonth(charges)]);
+    // Aussi par an : une annonce de copropriété doit donner la quote-part moyenne annuelle des charges.
+    if (charges !== null) rows.push(['Charges', `${perMonth(charges)}, soit ${formatPrice(charges * 12)}/an`]);
     // Copropriété : mentions obligatoires d'une vente en copropriété (nombre de lots, procédure en cours).
     const lots = n(row.co_ownership_lots);
     if (lots !== null) rows.push(['Copropriété', `${formatNumber(lots)} lot${lots > 1 ? 's' : ''}`]);
@@ -282,11 +323,24 @@ export const energyInk = (letter: string): string => (letter === 'D' || letter =
 export function energyLines(row: ListingRow): string[] {
   const lines: string[] = [];
   if (row.primary_energy_consumption !== null) lines.push(`Consommation : ${Math.trunc(Number(row.primary_energy_consumption))} kWh/m²/an`);
+  // Mention obligatoire d'un logement classé F ou G.
+  const letter = energyLetter(row.energy_class);
+  const home = row.property_type === 'apartment' || row.property_type === 'house';
+  if (home && (letter === 'F' || letter === 'G')) lines.push(`Logement à consommation énergétique excessive : classe ${letter}`);
   const min = n(row.annual_energy_cost_min);
   const max = n(row.annual_energy_cost_max);
-  if (min !== null && max !== null) lines.push(`Dépenses d'énergie estimées entre ${formatPrice(min)} et ${formatPrice(max)} par an.`);
+  if (min !== null && max !== null) {
+    lines.push(`Montant estimé des dépenses annuelles d'énergie pour un usage standard : entre ${formatPrice(min)} et ${formatPrice(max)} par an.`);
+  }
   return lines;
 }
+
+/** Mention de chaque annonce : où trouver les risques auxquels le bien est exposé. */
+export const GEORISQUES = {
+  text: 'Les informations sur les risques auxquels ce bien est exposé sont disponibles sur le site Géorisques :',
+  url: 'https://www.georisques.gouv.fr',
+  label: 'www.georisques.gouv.fr',
+} as const;
 
 // MARK: - Bas de fiche
 

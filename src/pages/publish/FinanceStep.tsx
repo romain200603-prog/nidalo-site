@@ -3,8 +3,9 @@ import { formatFraction, formatPrice } from '../../lib/format';
 import { scopeLabel } from '../../lib/listingJson';
 import {
   buildingOfDraft, CHARGES_MODES, coOwnershipLotsIssue, coOwnershipNeedsProcedure, currentAnnualRent, depositWarning, emptyBuilding, emptyHotel, emptyRental, FEE_PAYERS, feesNeedPayer,
-  flatRateWarning, grossYield, hotelOfDraft, HOTEL_AMENITIES, HOTEL_STATUSES, isDwelling, LEASE_TYPES, potentialGrossYield,
-  pricePerSquareMeter, rentalChargesLabel, rentIncludingCharges, saleChargesLabel, showsCoOwnership, syncBuildingRent, tenantShareWarning,
+  flatRateWarning, grossYield, hotelOfDraft, HOTEL_AMENITIES, HOTEL_STATUSES, inventoryFeeIssue, isDwelling, LEASE_TYPES, potentialGrossYield,
+  pricePerSquareMeter, rentalChargesLabel, rentIncludingCharges, saleChargesLabel, showsCoOwnership, showsInventoryFee, showsRentControl,
+  syncBuildingRent, tenantShareWarning,
   type BuildingDraft, type FeePayer, type HotelDraft, type LeaseType, type PublishDraft, type RentalDraft,
 } from '../../lib/publish/draft';
 import { CHARGES_MODE_LABELS, HOTEL_AMENITY_LABELS, HOTEL_STATUS_LABELS, LEASE_LABELS } from '../../lib/publish/labels';
@@ -75,7 +76,7 @@ function categoryCards(props: StepProps) {
 // MARK: - Honoraires (professionnels)
 
 function FeesCard({ draft, update, showsErrors }: StepProps) {
-  const { set } = setters(update);
+  const { set, rental: setRental } = setters(update);
   const rent = draft.transaction === 'rent';
   const payerLabel = (payer: FeePayer) => (payer === 'buyer' ? (rent ? 'Locataire' : 'Acquéreur') : (rent ? 'Propriétaire' : 'Vendeur'));
   return (
@@ -88,6 +89,10 @@ function FeesCard({ draft, update, showsErrors }: StepProps) {
         ))}
       </Choices>
       {showsErrors && feesNeedPayer(draft) && <ErrorLine>Indiquez qui paie les honoraires.</ErrorLine>}
+      {showsInventoryFee(draft) && (
+        <Amount label="Dont état des lieux (TTC)" value={draft.rentalInfo?.inventoryFee ?? null} unit="€" issue={inventoryFeeIssue(draft)}
+          onChange={(inventoryFee) => setRental({ inventoryFee })} />
+      )}
       <InfoLine>
         {rent ? 'Montant TTC. Pour le locataire, indiquez sa part, état des lieux compris.' : "Montant TTC. Si l'acquéreur les paie, le prix affiché les inclut."}
       </InfoLine>
@@ -164,6 +169,20 @@ function RentalCards({ draft, update }: StepProps) {
         <Amount label="Dépôt de garantie" value={rental.securityDeposit} unit="€" onChange={(securityDeposit) => setRental({ securityDeposit })} />
         {warning && <InfoLine>{warning}</InfoLine>}
       </Card>
+      {showsRentControl(draft) && (
+        <Card title="Encadrement des loyers">
+          <BoolChoices title="Loyer encadré" value={rental.isRentControlled} onChange={(isRentControlled) => setRental({ isRentControlled })} />
+          {rental.isRentControlled === true && (
+            <>
+              <Amount label="Loyer de référence" value={rental.referenceRent} unit="€/m²/mois" onChange={(referenceRent) => setRental({ referenceRent })} />
+              <Amount label="Loyer de référence majoré" value={rental.maxReferenceRent} unit="€/m²/mois"
+                onChange={(maxReferenceRent) => setRental({ maxReferenceRent })} />
+              <Amount label="Complément de loyer" value={rental.rentSupplement} unit="€/mois" onChange={(rentSupplement) => setRental({ rentSupplement })} />
+            </>
+          )}
+          <InfoLine>Paris, Lille, Lyon, Bordeaux, Montpellier et d'autres villes encadrent les loyers. L'annonce donne alors les loyers de référence fixés par le préfet et le complément de loyer, déjà compris dans le loyer saisi plus haut.</InfoLine>
+        </Card>
+      )}
       <Card title="Conditions de location">
         {dwelling && (
           <BoolChoices title="Ameublement" value={rental.isFurnished} trueLabel="Meublé" falseLabel="Non meublé"

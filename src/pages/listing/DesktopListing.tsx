@@ -14,7 +14,7 @@ import { canMakeOffer, offerStateLabel } from '../../lib/listing/offers';
 import { FINANCING_OPTIONS, profitabilityFor, profitabilityView, STANDARD_CHOICE } from '../../lib/listing/profitability';
 import { fetchActiveCount, fetchPublisher, type Publisher } from '../../lib/listing/publisher';
 import {
-  CATEGORY_LABELS, energyLetter, energyLines, featureRows, feesLabel, footnote, headerFacts, hotelActivity, priceSecondary,
+  CATEGORY_LABELS, energyLetter, energyLines, featureRows, feesLabel, footnote, headerFacts, hotelActivity, priceFeesNote, priceSecondary,
   rentalRows, saleCondition,
 } from '../../lib/listing/rows';
 import { shareListing } from '../../lib/listing/share';
@@ -35,7 +35,7 @@ import { Gallery } from './Gallery';
 import { ExtraIcon } from './icons';
 import { LocationSection } from './Location';
 import { OfferScreen } from './OfferScreen';
-import { Avatar, Description, Energy, Features, Footnote, HotelActivity, PracticalInfo, PublisherCard } from './Sections';
+import { Avatar, Description, Energy, Features, Footnote, HotelActivity, PracticalInfo, PublisherCard, RiskNote } from './Sections';
 import { useListingAccount } from './useListingAccount';
 import { VisitRequestScreen } from './VisitRequestScreen';
 
@@ -84,6 +84,7 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
   const livingArea = Number(row.living_area);
   const facts = headerFacts(row, kind);
   const secondary = priceSecondary(row);
+  const priceNote = priceFeesNote(row);
   const condition = saleCondition(row);
 
   // ——— Écrans « Demander une visite » et « Faire une offre » (adresse de la fiche avec &vue=…) ———
@@ -362,6 +363,7 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
                 <span className="dl-price-value">{formatPrice(price)}</span>
                 {secondary && <span className="dl-price-secondary">{secondary}</span>}
               </p>
+              {priceNote && <p className="dl-price-note">{priceNote}</p>}
               {condition && <p className="dl-condition">{condition}</p>}
             </div>
             {facts.length > 0 && (
@@ -395,6 +397,7 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
                 subtitle: [row.city, livingArea > 0 ? formatArea(livingArea) : null].filter(Boolean).join(' · '),
               }}
             />
+            <RiskNote />
             <Footnote text={footnote(row)} />
           </div>
 

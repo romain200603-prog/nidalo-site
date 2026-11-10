@@ -55,6 +55,7 @@
   .dl-price-value { color: var(--d-text); font-size: 40px; font-weight: 800; letter-spacing: -0.02em; line-height: 48px; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .dl-price-secondary { color: var(--d-grey); font-size: 16px; font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .dl-condition { margin: 4px 0 0; color: var(--d-grey); font-size: 14px; font-weight: 500; }
+  .dl-price-note { margin: 4px 0 0; color: var(--d-grey); font-size: 14px; font-weight: 500; }
 
   /* Chiffres clés : une carte, une case par chiffre. */
   .dl-facts { margin: 0; display: grid; overflow: hidden; border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; }

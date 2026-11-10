@@ -10,7 +10,7 @@ import { hotelOf } from '../lib/listing/fields';
 import { FINANCING_OPTIONS, profitabilityFor, profitabilityView, STANDARD_CHOICE } from '../lib/listing/profitability';
 import { fetchActiveCount, fetchPublisher, type Publisher } from '../lib/listing/publisher';
 import {
-  CATEGORY_LABELS, energyLetter, energyLines, featureRows, feesLabel, footnote, headerFacts, hotelActivity, priceSecondary,
+  CATEGORY_LABELS, energyLetter, energyLines, featureRows, feesLabel, footnote, headerFacts, hotelActivity, priceFeesNote, priceSecondary,
   rentalRows, saleCondition,
 } from '../lib/listing/rows';
 import { shareListing } from '../lib/listing/share';
@@ -25,7 +25,7 @@ import { DesktopListing } from './listing/DesktopListing';
 import { ACCOUNT_SOON_MESSAGE, AccountDialog, AlertDialog, NoPhoneDialog, type AccountAction } from './listing/Dialogs';
 import { Gallery } from './listing/Gallery';
 import { LocationSection } from './listing/Location';
-import { Description, Energy, Features, Footnote, HotelActivity, PracticalInfo, PublisherCard } from './listing/Sections';
+import { Description, Energy, Features, Footnote, HotelActivity, PracticalInfo, PublisherCard, RiskNote } from './listing/Sections';
 import { HeaderCard, VisitCard } from './listing/TopCards';
 
 // Fiche d'une annonce (ListingDetailView.swift). Téléphone : mêmes sections, dans le même ordre ; ce qui demande un
@@ -120,6 +120,7 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
               category={CATEGORY_LABELS[kind]}
               price={formatPrice(price)}
               priceSecondary={priceSecondary(row)}
+              priceNote={priceFeesNote(row)}
               condition={saleCondition(row)}
               title={row.title}
               location={place}
@@ -155,6 +156,7 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
               subtitle: [row.city, livingArea > 0 ? formatArea(livingArea) : null].filter(Boolean).join(' · '),
             }}
           />
+          <RiskNote />
           <Footnote text={footnote(row)} />
         </div>
       </div>

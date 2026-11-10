@@ -5,8 +5,10 @@ import { readAsset, rentalDetails } from './fields';
 import { capacity, cardEuros, cardEuros1, cardPercent, signedCents } from './money';
 import { initials, memberSince, publicName, publisherFrom } from './publisher';
 import {
-  feesLabel, featureRows, floorLabel, footnote, headerFacts, hotelActivity, leaseDuration, priceSecondary, rentalRows, saleCondition,
+  buyerFees, energyLines, feesLabel, featureRows, floorLabel, footnote, headerFacts, hotelActivity, leaseDuration, priceFeesNote, priceSecondary,
+  rentalRows, saleCondition,
 } from './rows';
+import { arrondissement, placeLine } from '../listings';
 import { shareText } from './share';
 
 // Mêmes cas que les tests de l'app (ImmoKit/Tests) quand ils existent ; données inventées.
@@ -222,5 +224,70 @@ describe('Textes de la fiche', () => {
 
   it('date de publication', () => {
     expect(footnote(testRow({ published_at: '2026-11-03 10:02:35.451121+00' }))).toBe('Publiée le 3 novembre 2026');
+  });
+});
+
+describe('Mentions obligatoires des annonces', () => {
+  it('DPE : logement classé F ou G et phrase officielle des dépenses d’énergie', () => {
+    const lines = energyLines(testRow({ energy_class: 'G', primary_energy_consumption: 455, annual_energy_cost_min: 1_910, annual_energy_cost_max: 2_630 }));
+    expect(lines).toEqual([
+      'Consommation : 455 kWh/m²/an',
+      'Logement à consommation énergétique excessive : classe G',
+      `Montant estimé des dépenses annuelles d'énergie pour un usage standard : entre 1${s}910${nb}€ et 2${s}630${nb}€ par an.`,
+    ]);
+    const letterOnly = (over: Parameters<typeof testRow>[0]) =>
+      energyLines(testRow({ primary_energy_consumption: null, annual_energy_cost_min: null, annual_energy_cost_max: null, ...over }));
+    expect(letterOnly({ property_type: 'house', energy_class: 'F' })).toEqual(['Logement à consommation énergétique excessive : classe F']);
+    expect(letterOnly({ energy_class: 'E' })).toEqual([]);
+    expect(letterOnly({ property_type: 'office', energy_class: 'G' })).toEqual([]);
+  });
+
+  it('vente payée par l’acquéreur : prix hors honoraires et honoraires en pourcentage', () => {
+    const row = testRow({ price: 315_000, agency_fees_amount: 15_000, agency_fees_paid_by: 'buyer' });
+    expect(buyerFees(row)).toEqual({ excluded: 300_000, percent: 5 });
+    expect(priceFeesNote(row)).toBe(`Honoraires inclus · 300${s}000${nb}€ hors honoraires`);
+    expect(feesLabel(row)).toBe(`5${nb}% TTC du prix hors honoraires, soit 15${s}000${nb}€, à la charge de l'acquéreur`);
+    expect(feesLabel(testRow({ price: 238_000, agency_fees_amount: 12_000, agency_fees_paid_by: 'buyer' })))
+      .toBe(`5,31${nb}% TTC du prix hors honoraires, soit 12${s}000${nb}€, à la charge de l'acquéreur`);
+    expect(priceFeesNote(testRow({ price: 315_000, agency_fees_amount: 15_000, agency_fees_paid_by: 'seller' }))).toBeNull();
+    expect(priceFeesNote(testRow({ transaction: 'rent', price: 900, agency_fees_amount: 600, agency_fees_paid_by: 'buyer' }))).toBeNull();
+    // Honoraires plus grands que le prix : rien de calculé, le montant seul.
+    const odd = testRow({ price: 10_000, agency_fees_amount: 12_000, agency_fees_paid_by: 'buyer' });
+    expect([priceFeesNote(odd), feesLabel(odd)]).toEqual([null, `12${s}000${nb}€ à la charge de l'acquéreur`]);
+  });
+
+  it('charges d’une vente aussi par an', () => {
+    expect(Object.fromEntries(featureRows(testRow({ monthly_charges: 150 })))['Charges']).toBe(`150${nb}€/mois, soit 1${s}800${nb}€/an`);
+  });
+
+  it('arrondissement de Paris, Lyon et Marseille', () => {
+    const place = (city: string, postal_code: string) => placeLine({ city, postal_code });
+    expect(place('Paris', '75011')).toBe('Paris 11e (75011)');
+    expect(place('Paris', '75001')).toBe('Paris 1er (75001)');
+    expect(place('Paris', '75116')).toBe('Paris 16e (75116)');
+    expect(place('Lyon', '69003')).toBe('Lyon 3e (69003)');
+    expect(place('Marseille', '13008')).toBe('Marseille 8e (13008)');
+    expect(place('Annecy', '74000')).toBe('Annecy (74000)');
+    expect(place('Paris', '75000')).toBe('Paris (75000)');
+    expect(place('Lyon', '')).toBe('Lyon');
+    expect([arrondissement('Marseille', '13017'), arrondissement('Villeurbanne', '69100')]).toEqual([null, null]);
+  });
+
+  it('location : part de l’état des lieux et loyers encadrés', () => {
+    const row = testRow({
+      transaction: 'rent', price: 1_150, monthly_charges: 80, agency_fees_amount: 840, agency_fees_paid_by: 'buyer',
+      rental_info: { isRentControlled: true, referenceRent: 25.3, maxReferenceRent: 30.36, rentSupplement: 0, inventoryFee: 111 },
+    });
+    const rows = rentalRows(row, true, new Date('2026-11-05T12:00:00Z'));
+    expect(rows.slice(3, 6)).toEqual([
+      ['Loyer de référence', `25,30${nb}€/m²/mois`],
+      ['Loyer de référence majoré', `30,36${nb}€/m²/mois`],
+      ['Complément de loyer', 'Aucun'],
+    ]);
+    expect(rows.at(-1)).toEqual(['Honoraires', `840${nb}€ à la charge du locataire, dont 111${nb}€ pour l'état des lieux`]);
+    const supplement = testRow({ transaction: 'rent', price: 1_150, rental_info: { isRentControlled: true, rentSupplement: 150 } });
+    expect(rentalRows(supplement, true)).toContainEqual(['Complément de loyer', `150${nb}€/mois`]);
+    const free = testRow({ transaction: 'rent', price: 1_150, rental_info: { isRentControlled: false, referenceRent: 25.3 } });
+    expect(rentalRows(free, true).map(([t]) => t)).not.toContain('Loyer de référence');
   });
 });

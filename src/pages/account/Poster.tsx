@@ -7,8 +7,8 @@ import { avatarUrl, initials, phonePairs } from '../../lib/account/profile';
 import { useStore } from '../../lib/account/session';
 import { DPE_COLORS } from '../../lib/labels';
 import { shareFacts } from '../../lib/listing/share';
-import { energyInk, energyLetter, energyLines, feesLabel } from '../../lib/listing/rows';
-import { photoUrl, sortedPhotos, type ListingRow } from '../../lib/listings';
+import { energyInk, energyLetter, energyLines, feesLabel, GEORISQUES, priceFeesNote } from '../../lib/listing/rows';
+import { photoUrl, placeLine, sortedPhotos, type ListingRow } from '../../lib/listings';
 import { accountPath } from '../../lib/paths';
 import { QrCode } from './Diffusion';
 import { EmptyState, Spinner } from './parts';
@@ -70,7 +70,8 @@ function PosterSheet({ row, agency }: { row: ListingRow; agency: AgencyRecord | 
   const ges = energyLetter(row.climate_class);
   const energy = energyLines(row);
   const fees = feesLabel(row);
-  const place = [row.city.trim(), row.postal_code.trim() ? `(${row.postal_code.trim()})` : null].filter(Boolean).join(' ');
+  const place = placeLine(row);
+  const priceNote = priceFeesNote(row);
   const url = publicListingUrl(row.id);
   return (
     <article className="poster" aria-label={`Affiche : ${row.title}`}>
@@ -82,6 +83,7 @@ function PosterSheet({ row, agency }: { row: ListingRow; agency: AgencyRecord | 
         <h2 className="poster-title">{row.title}</h2>
         <p className="poster-place">{place}</p>
         <p className="poster-price">{posterPrice(row)}</p>
+        {priceNote && <p className="poster-small">{priceNote}</p>}
         {facts.length > 0 && <p className="poster-facts">{facts.join(' · ')}</p>}
         {(dpe || ges) && (
           <div className="poster-energy">
@@ -91,6 +93,7 @@ function PosterSheet({ row, agency }: { row: ListingRow; agency: AgencyRecord | 
         )}
         {energy.map((line) => <p key={line} className="poster-small">{line}</p>)}
         {fees && <p className="poster-small">Honoraires : {fees}</p>}
+        <p className="poster-small">{GEORISQUES.text} {GEORISQUES.label}</p>
       </div>
       <div className="poster-foot">
         <div className="poster-qr">

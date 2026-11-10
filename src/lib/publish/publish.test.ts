@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  coOwnershipLotsIssue, coOwnershipNeedsProcedure, emptyHotel, emptyRental, energyCostHint, flatRateWarning, hotelOfDraft, missingRequiredFields, newDraft, rentalBanMessage,
-  rentalChargesLabel, saleChargesLabel, selectCategory, selectSubtype, showsCoOwnership, showsEnergyCosts, stepIsComplete, subtypes, tenantShareWarning,
+  coOwnershipLotsIssue, coOwnershipNeedsProcedure, emptyHotel, emptyRental, energyCostHint, flatRateWarning, hotelOfDraft, inventoryFeeIssue, missingRequiredFields,
+  newDraft, rentalBanMessage, rentalChargesLabel, saleChargesLabel, selectCategory, selectSubtype, showsCoOwnership, showsEnergyCosts, showsInventoryFee,
+  showsRentControl, stepIsComplete, subtypes, tenantShareWarning,
   type PropertyType, type PublishDraft,
 } from './draft';
 import { canSaveDraft, hasChanges, initialStep, previewRow, recapRows, sameDraft } from './flow';
@@ -254,5 +255,55 @@ describe('copropriété : nombre de lots et procédure en cours', () => {
     const rent: PublishDraft = { ...selectCategory(flat(), 'rental'), coOwnershipLots: 24, coOwnershipHasProcedure: false };
     expect(listingWrite(rent, { insert: false })).toMatchObject({ co_ownership_lots: null, co_ownership_has_procedure: null });
     expect(missingRequiredFields({ ...rent, coOwnershipHasProcedure: null }, NOW)).not.toContain('coOwnershipProcedure');
+  });
+});
+
+describe('mentions obligatoires d’une location : état des lieux et loyers encadrés', () => {
+  const reread = (draft: PublishDraft) => {
+    const write = listingWrite(draft, { insert: false });
+    const row = {
+      ...write, owner_id: 'u', status: 'active', previous_price: null, public_latitude: null, public_longitude: null, public_street: null,
+      published_at: null, created_at: null, updated_at: null, listing_photos: [],
+    };
+    return draftFromRow(row as unknown as Parameters<typeof draftFromRow>[0], { street: '12 rue Mercière', latitude: 45.7616, longitude: 4.8321 });
+  };
+  const rent = (): PublishDraft => ({ ...selectCategory(flat(), 'rental'), price: 1_150, monthlyCharges: 80 });
+  const info = (draft: PublishDraft) => draft.rentalInfo ?? emptyRental();
+
+  it('part de l’état des lieux : demandée si le locataire paie des honoraires, jamais plus grande qu’eux', () => {
+    const fees: PublishDraft = { ...rent(), agencyFeesAmount: 840, agencyFeesPaidBy: 'buyer' };
+    expect([showsInventoryFee(rent()), showsInventoryFee(fees), showsInventoryFee({ ...fees, agencyFeesPaidBy: 'seller' })]).toEqual([false, true, false]);
+    expect(showsInventoryFee({ ...flat(), agencyFeesAmount: 9_000, agencyFeesPaidBy: 'buyer' })).toBe(false);
+    const withFee: PublishDraft = { ...fees, rentalInfo: { ...info(fees), inventoryFee: 111 } };
+    const write = listingWrite(withFee, { insert: false });
+    expect(write.rental_info).toMatchObject({ inventoryFee: 111 });
+    expect(appDecodingProblems(write)).toEqual([]);
+    expect(reread(withFee).rentalInfo?.inventoryFee).toBe(111);
+    const tooMuch: PublishDraft = { ...fees, rentalInfo: { ...info(fees), inventoryFee: 900 } };
+    expect(inventoryFeeIssue(tooMuch)).toBe("La part de l'état des lieux ne peut pas dépasser les honoraires.");
+    expect(listingWrite(tooMuch, { insert: false }).rental_info).not.toHaveProperty('inventoryFee');
+    const owner: PublishDraft = { ...withFee, agencyFeesPaidBy: 'seller' };
+    expect(listingWrite(owner, { insert: false }).rental_info).not.toHaveProperty('inventoryFee');
+  });
+
+  it('loyers encadrés : pour un logement, montants écrits seulement si le loyer est encadré', () => {
+    const office = selectSubtype(selectCategory(flat(), 'rental'), subtypes('rental')[5]);
+    expect([showsRentControl(rent()), showsRentControl(office), showsRentControl(flat())]).toEqual([true, false, false]);
+    const controlled: PublishDraft = {
+      ...rent(), rentalInfo: { ...info(rent()), isRentControlled: true, referenceRent: 25.3, maxReferenceRent: 30.36, rentSupplement: 150 },
+    };
+    const write = listingWrite(controlled, { insert: false });
+    expect(write.rental_info).toMatchObject({ isRentControlled: true, referenceRent: 25.3, maxReferenceRent: 30.36, rentSupplement: 150 });
+    expect(appDecodingProblems(write)).toEqual([]);
+    expect(reread(controlled).rentalInfo).toMatchObject({ isRentControlled: true, referenceRent: 25.3, maxReferenceRent: 30.36, rentSupplement: 150 });
+    const free: PublishDraft = { ...controlled, rentalInfo: { ...info(controlled), isRentControlled: false } };
+    const freeInfo = listingWrite(free, { insert: false }).rental_info;
+    expect(freeInfo).toMatchObject({ isRentControlled: false });
+    expect(freeInfo).not.toHaveProperty('referenceRent');
+    const unknown = listingWrite({ ...controlled, rentalInfo: { ...info(controlled), isRentControlled: null } }, { insert: false }).rental_info;
+    expect(unknown).not.toHaveProperty('isRentControlled');
+    expect(unknown).not.toHaveProperty('rentSupplement');
+    const officeWrite = listingWrite({ ...office, price: 2_000, rentalInfo: { ...info(controlled) } }, { insert: false }).rental_info;
+    expect(officeWrite).not.toHaveProperty('isRentControlled');
   });
 });

@@ -3,7 +3,7 @@ import { Icon } from '../../components/Icon';
 import { DPE_COLORS } from '../../lib/labels';
 import type { Origin } from '../../lib/listing/fields';
 import { activeCountLine, initials, type Publisher } from '../../lib/listing/publisher';
-import { energyInk, ORIGIN_LABELS, type OriginRow, type Row } from '../../lib/listing/rows';
+import { energyInk, GEORISQUES, ORIGIN_LABELS, type OriginRow, type Row } from '../../lib/listing/rows';
 
 // Sections de la fiche sous les cartes du haut (ListingDetailView.swift, PublisherViews.swift).
 
@@ -194,4 +194,14 @@ export function PublisherCard({ publisher, fees, activeCount, onContact }: {
 
 export function Footnote({ text }: { text: string | null }) {
   return text ? <p className="listing-footnote">{text}</p> : null;
+}
+
+/** Mention Géorisques, obligatoire dans les annonces : sur chaque fiche. */
+export function RiskNote() {
+  return (
+    <p className="listing-footnote listing-risks">
+      {GEORISQUES.text}{' '}
+      <a href={GEORISQUES.url} target="_blank" rel="noopener noreferrer">{GEORISQUES.label}</a>
+    </p>
+  );
 }

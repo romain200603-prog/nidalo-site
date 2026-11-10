@@ -97,10 +97,24 @@ export function sortedPhotos(row: Pick<ListingRow, 'listing_photos'>): PhotoRow[
 }
 
 /** Ville et code postal ; la rue seulement si l'auteur a choisi de montrer l'adresse exacte (comme l'app). */
+/** Arrondissement de Paris, Lyon ou Marseille d'après le code postal : « 1er », « 11e » ; `null` ailleurs. */
+export function arrondissement(city: string, postalCode: string): string | null {
+  const name = city.trim().toLowerCase();
+  const code = postalCode.trim();
+  let number: number | null = null;
+  if (name === 'paris') number = code === '75116' ? 16 : /^750(0[1-9]|1[0-9]|20)$/.test(code) ? Number(code.slice(3)) : null;
+  else if (name === 'lyon') number = /^6900[1-9]$/.test(code) ? Number(code.slice(4)) : null;
+  else if (name === 'marseille') number = /^130(0[1-9]|1[0-6])$/.test(code) ? Number(code.slice(3)) : null;
+  return number === null ? null : number === 1 ? '1er' : `${number}e`;
+}
+
+/** « Paris 11e (75011) », « Annecy (74000) » : la commune et, s'il y a lieu, l'arrondissement (mention obligatoire). */
 export function placeLine(row: Pick<ListingRow, 'city' | 'postal_code'>): string {
   const city = row.city.trim();
   const postal = row.postal_code.trim();
-  return postal ? `${city} (${postal})` : city;
+  const district = arrondissement(city, postal);
+  const name = district ? `${city} ${district}` : city;
+  return postal ? `${name} (${postal})` : name;
 }
 
 export class ListingNotFound extends Error {}

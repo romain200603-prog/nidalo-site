@@ -8,10 +8,12 @@ import { ExtraIcon } from './icons';
 /** Espaces fines comme la maquette (le prix et le prix au m² de l'app). */
 const narrow = (text: string) => text.replace(/[  ]/g, ' ');
 
-export function HeaderCard({ category, price, priceSecondary, condition, title, location, facts, onOffer }: {
+export function HeaderCard({ category, price, priceSecondary, priceNote, condition, title, location, facts, onOffer }: {
   category: string;
   price: string;
   priceSecondary: string | null;
+  /** Vente dont l'acquéreur paie les honoraires : « Honoraires inclus · 285 714 € hors honoraires ». */
+  priceNote: string | null;
   condition: string | null;
   title: string;
   location: string;
@@ -27,6 +29,7 @@ export function HeaderCard({ category, price, priceSecondary, condition, title, 
         <span className="hc-price-value">{narrow(price)}</span>
         {priceSecondary && <span className="hc-price-secondary">{priceSecondary.replace(/ /g, ' ')}</span>}
       </p>
+      {priceNote && <p className="hc-price-note">{priceNote}</p>}
       {onOffer && (
         <button type="button" className="hc-offer" onClick={onOffer}>
           <Icon name="handshake" />

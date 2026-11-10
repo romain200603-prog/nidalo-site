@@ -1323,7 +1323,12 @@ try {
     }, {
       band: 'À vendre', title: SALE.title, place: 'Lyon 3e (69003)', price: '238 000 €', facts: '62 m² · 3 pièces',
       energy: ['DPEC', 'GESC'],
-      small: ['Consommation : 160 kWh/m²/an', 'Dépenses d\'énergie estimées entre 820 € et 1 150 € par an.', 'Honoraires : 9 500 € à la charge de l\'acquéreur'],
+      small: [
+        'Honoraires inclus · 228 500 € hors honoraires', 'Consommation : 160 kWh/m²/an',
+        'Montant estimé des dépenses annuelles d\'énergie pour un usage standard : entre 820 € et 1 150 € par an.',
+        'Honoraires : 4,16 % TTC du prix hors honoraires, soit 9 500 €, à la charge de l\'acquéreur',
+        'Les informations sur les risques auxquels ce bien est exposé sont disponibles sur le site Géorisques : www.georisques.gouv.fr',
+      ],
       agency: ['Rhône Immobilier', 'Lyon (69006)', '04 78 12 34 56', 'contact@rhone-immobilier.fr'], qr: 'QR code de l\'annonce',
     });
     await shot(tab, 'diffusion-affiche-ecran.png');

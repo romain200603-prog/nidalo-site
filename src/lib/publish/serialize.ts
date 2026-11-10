@@ -3,7 +3,8 @@ import { sortedPhotos, type ListingRow } from '../listings';
 import { ENERGY_CLASSES, OUTDOOR_SPACES, type EnergyClass, type OutdoorSpace } from '../search';
 import {
   CHARGES_MODES, CONDITIONS, FEE_PAYERS, HOTEL_AMENITIES, HOTEL_STATUSES, LEASE_TYPES, OFFICE_EQUIPMENT, PARKING_TYPES, categoryTransaction,
-  categoryTypes, coOwnershipLots, emptyRental, energyCostRange, hasRooms, newDraft, showsCoOwnership, showsEnergyCosts, syncBuildingRent,
+  categoryTypes, coOwnershipLots, emptyRental, energyCostRange, hasRooms, inventoryFee, newDraft, rentControl, showsCoOwnership, showsEnergyCosts,
+  syncBuildingRent,
   isDwelling,
   type AssetDraft, type ChargesMode, type Day, type DraftPhoto, type FeePayer, type HotelAmenity, type HotelOperatingStatus, type LeaseType,
   type OfficeEquipment, type ParkingType, type PropertyCondition, type PropertyType, type PublishCategory, type PublishDraft, type RentalDraft,
@@ -105,6 +106,11 @@ export function rentalJson(info: RentalDraft): Json {
   put(json, 'securityDeposit', info.securityDeposit);
   put(json, 'leaseDurationMonths', info.leaseDurationMonths);
   put(json, 'chargesMode', info.chargesMode);
+  put(json, 'inventoryFee', info.inventoryFee);
+  put(json, 'isRentControlled', info.isRentControlled);
+  put(json, 'referenceRent', info.referenceRent);
+  put(json, 'maxReferenceRent', info.maxReferenceRent);
+  put(json, 'rentSupplement', info.rentSupplement);
   return json;
 }
 
@@ -188,7 +194,8 @@ export function listingWrite(source: PublishDraft, { insert }: { insert: boolean
   const address = draft.address;
   if (type === null || transaction === null || address === null) throw new Error('Brouillon incomplet : type, transaction ou adresse manquants.');
   let rental: RentalDraft | null = draft.rentalInfo;
-  // Location : seuls l'ameublement (logement), la disponibilité, le dépôt, la durée du bail et le mode des charges ont un sens.
+  // Location : seuls l'ameublement (logement), la disponibilité, le dépôt, la durée du bail, le mode des charges, la part
+  // de l'état des lieux (honoraires du locataire) et l'encadrement des loyers (logement) ont un sens.
   if (transaction === 'rent' && rental) {
     rental = {
       ...emptyRental(),
@@ -197,6 +204,8 @@ export function listingWrite(source: PublishDraft, { insert }: { insert: boolean
       securityDeposit: rental.securityDeposit,
       leaseDurationMonths: rental.leaseDurationMonths,
       chargesMode: rental.chargesMode,
+      inventoryFee: inventoryFee(draft),
+      ...rentControl(draft),
     };
   }
   // Hôtel : le loyer des murs est un revenu pour « Murs seuls » (informations locatives, comme un local loué) et une
@@ -272,7 +281,8 @@ type FieldRule = 'decimal' | 'int' | 'bool' | 'date' | 'string' | 'sourced' | { 
 const RENTAL_RULES: Record<string, FieldRule> = {
   currentMonthlyRent: 'decimal', potentialMonthlyRent: 'decimal', isLeased: 'bool', leaseEndDate: 'date', availableFrom: 'date',
   recoverableMonthlyCharges: 'decimal', isFurnished: 'bool', securityDeposit: 'decimal', leaseDurationMonths: 'int',
-  chargesMode: { oneOf: CHARGES_MODES },
+  chargesMode: { oneOf: CHARGES_MODES }, inventoryFee: 'decimal', isRentControlled: 'bool', referenceRent: 'decimal',
+  maxReferenceRent: 'decimal', rentSupplement: 'decimal',
 };
 
 const ASSET_RULES: Record<string, Record<string, FieldRule>> = {
@@ -379,6 +389,11 @@ function rentalFromJson(raw: unknown): RentalDraft | null {
     securityDeposit: num(r.securityDeposit),
     leaseDurationMonths: int(r.leaseDurationMonths),
     chargesMode: oneOf<ChargesMode>(r.chargesMode, CHARGES_MODES),
+    inventoryFee: num(r.inventoryFee),
+    isRentControlled: bool(r.isRentControlled),
+    referenceRent: num(r.referenceRent),
+    maxReferenceRent: num(r.maxReferenceRent),
+    rentSupplement: num(r.rentSupplement),
   };
 }
 

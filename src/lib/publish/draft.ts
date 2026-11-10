@@ -48,6 +48,15 @@ export type RentalDraft = {
   leaseDurationMonths: number | null;
   /** Location : charges en provisions ou au forfait ; null = non précisé (affiché « Provisions sur charges »). */
   chargesMode: ChargesMode | null;
+  /** Location d'un professionnel : part des honoraires du locataire pour l'état des lieux (TTC), mention obligatoire. */
+  inventoryFee: number | null;
+  /** Logement dans une commune où les loyers sont encadrés ; null = non précisé. */
+  isRentControlled: boolean | null;
+  /** Loyer de référence et loyer de référence majoré de l'arrêté du préfet, en €/m²/mois. */
+  referenceRent: number | null;
+  maxReferenceRent: number | null;
+  /** Complément de loyer en €/mois, compris dans le loyer hors charges saisi. */
+  rentSupplement: number | null;
 };
 
 export type HotelDraft = {
@@ -162,6 +171,7 @@ export function emptyRental(): RentalDraft {
   return {
     currentMonthlyRent: null, potentialMonthlyRent: null, isLeased: false, leaseEndDate: null, availableFrom: null,
     recoverableMonthlyCharges: null, isFurnished: null, securityDeposit: null, leaseDurationMonths: null, chargesMode: null,
+    inventoryFee: null, isRentControlled: null, referenceRent: null, maxReferenceRent: null, rentSupplement: null,
   };
 }
 
@@ -559,4 +569,38 @@ export function coOwnershipNeedsProcedure(draft: PublishDraft): boolean {
 /** Honoraires saisis sans dire qui les paie : à compléter avant de continuer ou de publier. */
 export function feesNeedPayer(draft: PublishDraft): boolean {
   return draft.agencyFeesAmount !== null && draft.agencyFeesPaidBy === null;
+}
+
+/** Location dont le locataire paie des honoraires : on demande la part de l'état des lieux (mention obligatoire). */
+export function showsInventoryFee(draft: PublishDraft): boolean {
+  return draft.transaction === 'rent' && draft.agencyFeesAmount !== null && draft.agencyFeesPaidBy === 'buyer';
+}
+
+/** Part de l'état des lieux plus grande que les honoraires du locataire. */
+export function inventoryFeeIssue(draft: PublishDraft): string | null {
+  const fee = draft.rentalInfo?.inventoryFee ?? null;
+  const total = draft.agencyFeesAmount;
+  return fee !== null && total !== null && fee > total ? "La part de l'état des lieux ne peut pas dépasser les honoraires." : null;
+}
+
+/** Part de l'état des lieux à écrire : seulement quand elle est demandée et cohérente. */
+export function inventoryFee(draft: PublishDraft): number | null {
+  const fee = draft.rentalInfo?.inventoryFee ?? null;
+  return showsInventoryFee(draft) && fee !== null && inventoryFeeIssue(draft) === null ? fee : null;
+}
+
+/** Encadrement des loyers : pour la location d'un logement. */
+export function showsRentControl(draft: PublishDraft): boolean {
+  return draft.transaction === 'rent' && isDwelling(draft.propertyType);
+}
+
+type RentControl = Pick<RentalDraft, 'isRentControlled' | 'referenceRent' | 'maxReferenceRent' | 'rentSupplement'>;
+
+/** Ce qu'on écrit de l'encadrement : les montants seulement pour un loyer encadré. */
+export function rentControl(draft: PublishDraft): RentControl {
+  const info = draft.rentalInfo;
+  const none: RentControl = { isRentControlled: null, referenceRent: null, maxReferenceRent: null, rentSupplement: null };
+  if (!showsRentControl(draft) || !info || info.isRentControlled === null) return none;
+  if (!info.isRentControlled) return { ...none, isRentControlled: false };
+  return { isRentControlled: true, referenceRent: info.referenceRent, maxReferenceRent: info.maxReferenceRent, rentSupplement: info.rentSupplement };
 }

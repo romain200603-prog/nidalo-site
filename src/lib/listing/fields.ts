@@ -59,6 +59,15 @@ export type RentalDetails = {
   leaseDurationMonths: number | null;
   /** Location : charges au forfait ou en provisions ; null = non précisé. */
   chargesMode: 'provision' | 'flatRate' | null;
+  /** Location d'un professionnel : part des honoraires du locataire pour l'état des lieux (TTC). */
+  inventoryFee: number | null;
+  /** Logement dans une commune où les loyers sont encadrés ; null = non précisé. */
+  isRentControlled: boolean | null;
+  /** Loyer de référence et loyer de référence majoré, en €/m²/mois (arrêté du préfet). */
+  referenceRent: number | null;
+  maxReferenceRent: number | null;
+  /** Complément de loyer, en €/mois, compris dans le loyer hors charges. */
+  rentSupplement: number | null;
 };
 
 export function rentalDetails(row: Pick<ListingRow, 'rental_info'>): RentalDetails | null {
@@ -75,6 +84,11 @@ export function rentalDetails(row: Pick<ListingRow, 'rental_info'>): RentalDetai
     securityDeposit: num(r.securityDeposit),
     leaseDurationMonths: int(r.leaseDurationMonths),
     chargesMode: oneOf(r.chargesMode, ['provision', 'flatRate'] as const),
+    inventoryFee: num(r.inventoryFee),
+    isRentControlled: bool(r.isRentControlled),
+    referenceRent: num(r.referenceRent),
+    maxReferenceRent: num(r.maxReferenceRent),
+    rentSupplement: num(r.rentSupplement),
   };
 }
 
