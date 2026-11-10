@@ -1,7 +1,9 @@
 import {
-  D, FinancingSimulation, formatPercent, inputsFromRow, listingFromRow, listingInvestment, MonthlyBreakdown, STANDARD_ASSUMPTIONS,
-  type Decimal, type InvestmentInputs, type InvestmentResult, type InvestmentWarning, type MonthlyBreakdownKind,
+  D, FinancingSimulation, formatPercent, inputsFromRow, InvestmentCalculator, listingFromRow, listingInvestment, MonthlyBreakdown,
+  sourced, STANDARD_ASSUMPTIONS, type Decimal, type InvestmentInputs, type InvestmentResult, type InvestmentWarning,
+  type MonthlyBreakdownKind, type ValueOrigin,
 } from '../investment';
+import { formatPrice } from '../format';
 import type { ListingRow } from '../listings';
 import { cardEuros, euros, signedCents, thin } from './money';
 
@@ -158,5 +160,46 @@ export function profitabilityView({ inputs, isRentCurrent }: Profitability, choi
     largestAmount: rows.reduce((max, row) => (row.amount.abs().gt(max) ? row.amount.abs() : max), D(0)),
     notes: notes(result),
     monthlyPayment: breakdown.monthlyPayment,
+  };
+}
+
+// MARK: « Faire une offre »
+
+/** Rentabilité sous « Montant proposé » : le rendement brut et le rendement net de la carte « Rentabilité ». */
+export type OfferYields = {
+  /** « Rentabilité à 192 000 € », ou « Rentabilité au prix affiché ». */
+  title: string;
+  /** `listed` : la même valeur au prix affiché, pour comparer (« 8,0 % au prix affiché ») ; null au prix affiché. */
+  rows: { label: 'Rendement brut' | 'Rendement net'; value: string; listed: string | null }[];
+};
+
+const offerCalculator = new InvestmentCalculator();
+
+/**
+ * Rentabilité au montant proposé : le montant remplace le prix d'achat dans le moteur de la carte, avec les hypothèses
+ * standard (le brut et le net ne dépendent pas du financement ; les frais de notaire suivent le prix). Le montant compte
+ * dès la moitié du prix affiché : en dessous, pendant la frappe par exemple, la rentabilité reste celle du prix affiché.
+ * `null` si le moteur refuse le calcul (pas de bloc).
+ */
+export function offerYields({ inputs }: Profitability, listedPrice: number, amount: number | null): OfferYields | null {
+  const at = (price: number, origin: ValueOrigin) =>
+    offerCalculator.calculate({ ...inputs, purchasePrice: sourced(D(price), origin) }, STANDARD_ASSUMPTIONS);
+  const offered = amount !== null && amount !== listedPrice && amount * 2 >= listedPrice ? amount : null;
+  let listed: InvestmentResult;
+  let result: InvestmentResult;
+  try {
+    listed = at(listedPrice, inputs.purchasePrice.origin);
+    result = offered === null ? listed : at(offered, 'user');
+  } catch {
+    return null;
+  }
+  const row = (label: 'Rendement brut' | 'Rendement net', value: (r: InvestmentResult) => Decimal) => ({
+    label,
+    value: formatPercent(value(result)),
+    listed: offered === null ? null : `${formatPercent(value(listed))} au prix affiché`,
+  });
+  return {
+    title: offered === null ? 'Rentabilité au prix affiché' : `Rentabilité à ${formatPrice(offered)}`,
+    rows: [row('Rendement brut', (r) => r.grossYield), row('Rendement net', (r) => r.netYield)],
   };
 }

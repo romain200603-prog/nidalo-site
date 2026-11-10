@@ -1,23 +1,27 @@
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Icon } from '../../components/Icon';
 import { formatPrice } from '../../lib/format';
 import {
   amountDigits, counterOfferParams, DEFAULT_OFFER_VALIDITY, groupedAmount, LOAN_CONDITION, lowercasedFirst, makeOfferParams,
   OFFER_VALIDITY_OPTIONS, offerErrorMessage, offerGapLabel, sendCounterOffer, sendOffer,
 } from '../../lib/listing/offers';
+import { offerYields, type Profitability } from '../../lib/listing/profitability';
 
 // « Faire une offre » sur ordinateur, dans une colonne de 640 px (/annonce/?id=…&vue=offre) : la feuille de l'app
 // (OfferComposerSheet, Features/Messages/OfferViews.swift) avec ses textes, son ordre et ses règles. L'offre part avec
 // make_offer et les mêmes arguments que l'app ; le serveur écrit lui-même la bulle d'offre dans la conversation.
 // Dans Messages, la même feuille répond à une offre (contre-offre, counter_offer), comme l'app.
+// Pour une vente avec un loyer (carte « Rentabilité » de la fiche), la rentabilité suit le montant tapé (offerYields).
 
-export function OfferScreen({ conversationId, title, price, parent = null, onClose, onSent }: {
+export function OfferScreen({ conversationId, title, price, parent = null, profitability = null, onClose, onSent }: {
   conversationId: string;
   /** Titre et prix du bien enregistrés avec la conversation (ListingSnapshot). */
   title: string;
   price: number;
   /** Offre à laquelle on répond (contre-offre) : son montant est repris. */
   parent?: { id: string; amount: number } | null;
+  /** Entrées de la carte « Rentabilité » de la fiche : la rentabilité au montant proposé s'affiche sous le montant. */
+  profitability?: Profitability | null;
   onClose: () => void;
   /** Offre enregistrée : la fiche relit les offres et revient. */
   onSent: () => Promise<void>;
@@ -72,6 +76,8 @@ export function OfferScreen({ conversationId, title, price, parent = null, onClo
   };
 
   const gap = amount !== null && price > 0 ? amount / price - 1 : null;
+  const yields = useMemo(() => (profitability ? offerYields(profitability, price, amount) : null), [profitability, price, amount]);
+  const described = [gap !== null ? 'offre-ecart' : null, yields ? 'offre-rentabilite' : null].filter(Boolean).join(' ');
 
   return (
     <div className="wrap wrap-narrow dl-screen dl-offer-screen">
@@ -105,7 +111,7 @@ export function OfferScreen({ conversationId, title, price, parent = null, onClo
               value={amountText}
               onChange={onAmount}
               autoFocus
-              aria-describedby={gap !== null ? 'offre-ecart' : undefined}
+              aria-describedby={described || undefined}
             />
             <span aria-hidden="true">€</span>
           </div>
@@ -113,6 +119,18 @@ export function OfferScreen({ conversationId, title, price, parent = null, onClo
             <p id="offre-ecart" className={`dl-gap${gap < 0 ? ' is-below' : ''}`}>
               {formatPrice(amount)} · {lowercasedFirst(offerGapLabel(amount, price))}
             </p>
+          )}
+          {yields && (
+            <div id="offre-rentabilite" className="dl-yield">
+              <p className="dl-yield-title">{yields.title}</p>
+              {yields.rows.map((row) => (
+                <p key={row.label} className="dl-yield-row">
+                  <span className="dl-yield-label">{row.label}</span>
+                  <span className="dl-yield-value">{row.value}</span>
+                  {row.listed && <span className="dl-yield-listed">{row.listed}</span>}
+                </p>
+              ))}
+            </div>
           )}
         </div>
 

@@ -201,6 +201,13 @@
   .dl-amount span { color: var(--d-grey); font-size: 20px; font-weight: 700; }
   .dl-gap { margin: 0; color: var(--d-text); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .dl-gap.is-below { color: var(--d-grey); }
+  /* Rentabilité au montant proposé, sous « Montant proposé » (vente avec un loyer). */
+  .dl-yield { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; padding: 14px 16px; border: 1px solid var(--d-card-border); border-radius: 14px; background: var(--d-bg); }
+  .dl-yield-title { margin: 0; color: var(--d-text); font-size: 14px; font-weight: 700; line-height: 20px; font-variant-numeric: tabular-nums; }
+  .dl-yield-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; column-gap: 12px; row-gap: 2px; margin: 0; }
+  .dl-yield-label { color: var(--d-grey); font-size: 14px; font-weight: 600; line-height: 20px; }
+  .dl-yield-value { color: var(--d-text); font-size: 18px; font-weight: 800; line-height: 24px; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  .dl-yield-listed { grid-column: 2; color: var(--d-grey); font-size: 13px; line-height: 18px; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
   .dl-textarea { width: 100%; min-height: 84px; padding: 12px 14px; border: 1px solid var(--d-field-border); border-radius: 14px; background: #FFFFFF; color: var(--d-text); font: inherit; font-size: 15px; line-height: 22px; resize: vertical; }
   .dl-textarea:focus { border-color: var(--d-blue); outline: 0; box-shadow: 0 0 0 3px rgba(60, 92, 176, 0.16); }
   .dl-textarea::placeholder { color: var(--d-help); }

@@ -318,6 +318,7 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
           conversationId={offerConversation.id}
           title={offerConversation.title ?? row.title}
           price={offerConversation.price ?? price}
+          profitability={profitability}
           onClose={close}
           onSent={async () => {
             // Comme l'app (ListingDetailView.swift:165-176) : offres et conversations relues, puis la conversation de

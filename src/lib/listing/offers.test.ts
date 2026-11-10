@@ -4,6 +4,8 @@ import {
   amountDigits, canMakeOffer, effectiveStatus, groupedAmount, isoSeconds, makeOfferParams, offerErrorMessage, offerGapLabel,
   offerStateLabel, type OfferRow,
 } from './offers';
+import { offerYields, profitabilityFor, type OfferYields } from './profitability';
+import { testRow } from '../testRows';
 
 const now = new Date('2026-11-06T10:00:00Z');
 const conversation: ListingConversation = { id: 'c1', isGroup: false, listingId: 'l1', transaction: 'sale', isSellerSide: false, title: null, price: null };
@@ -66,5 +68,58 @@ describe('Offres (OfferStore, OfferServerRow)', () => {
     expect(offerErrorMessage({ code: 'P0001', message: '', hint: 'offer_pending_exists' })).toBe('Une offre attend déjà une réponse dans cette conversation.');
     expect(offerErrorMessage({ code: '23514' })).toBe('Certaines informations n\'ont pas été acceptées. Vérifiez-les, puis réessayez.');
     expect(offerErrorMessage(new TypeError('Failed to fetch'))).toBe('L\'offre n\'a pas pu être enregistrée. Vérifiez votre connexion et réessayez.');
+  });
+});
+
+describe('Rentabilité au montant proposé (offerYields)', () => {
+  // 1 600 €/mois de loyer : 19 200 €/an, soit 8 % brut à 240 000 €.
+  const profitability = profitabilityFor(testRow({ price: 240000, rental_info: { isLeased: true, currentMonthlyRent: 1600 } }));
+  const plain = (text: string) => text.replace(/[\u00a0\u202f]/g, ' ');
+  const shown = (yields: OfferYields | null) => yields && {
+    title: plain(yields.title),
+    rows: yields.rows.map((row) => [row.label, plain(row.value), row.listed && plain(row.listed)]),
+  };
+
+  it('sans montant, la rentabilité du prix affiché', () => {
+    expect(profitability).not.toBeNull();
+    expect(shown(offerYields(profitability!, 240000, null))).toEqual({
+      title: 'Rentabilité au prix affiché',
+      rows: [['Rendement brut', '8,0 %', null], ['Rendement net', '6,2 %', null]],
+    });
+  });
+
+  it('192 000 € au lieu de 240 000 € : le brut passe de 8 % à 10 %, le net suit (frais de notaire compris)', () => {
+    expect(shown(offerYields(profitability!, 240000, 192000))).toEqual({
+      title: 'Rentabilité à 192 000 €',
+      rows: [['Rendement brut', '10,0 %', '8,0 % au prix affiché'], ['Rendement net', '7,7 %', '6,2 % au prix affiché']],
+    });
+  });
+
+  it('au-dessus du prix affiché, la rentabilité baisse', () => {
+    expect(shown(offerYields(profitability!, 240000, 300000))?.rows).toEqual([
+      ['Rendement brut', '6,4 %', '8,0 % au prix affiché'], ['Rendement net', '4,9 %', '6,2 % au prix affiché'],
+    ]);
+  });
+
+  it('le montant compte dès la moitié du prix affiché ; au prix affiché, rien à comparer', () => {
+    expect(shown(offerYields(profitability!, 240000, 119999))?.title).toBe('Rentabilité au prix affiché');
+    expect(shown(offerYields(profitability!, 240000, 24))?.rows[0]).toEqual(['Rendement brut', '8,0 %', null]);
+    expect(shown(offerYields(profitability!, 240000, 120000))).toEqual({
+      title: 'Rentabilité à 120 000 €',
+      rows: [['Rendement brut', '16,0 %', '8,0 % au prix affiché'], ['Rendement net', '12,4 %', '6,2 % au prix affiché']],
+    });
+    expect(shown(offerYields(profitability!, 240000, 240000))).toEqual({
+      title: 'Rentabilité au prix affiché',
+      rows: [['Rendement brut', '8,0 %', null], ['Rendement net', '6,2 %', null]],
+    });
+  });
+
+  it('le prix affiché est celui de la conversation (prix du bien au premier contact)', () => {
+    expect(shown(offerYields(profitability!, 250000, null))?.rows).toEqual([['Rendement brut', '7,7 %', null], ['Rendement net', '5,9 %', null]]);
+  });
+
+  it('sans loyer, pas de rentabilité', () => {
+    expect(profitabilityFor(testRow())).toBeNull();
+    expect(offerYields(profitability!, 0, 192000)).toBeNull();
   });
 });
