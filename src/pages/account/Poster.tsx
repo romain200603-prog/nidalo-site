@@ -91,9 +91,12 @@ function PosterSheet({ row, agency }: { row: ListingRow; agency: AgencyRecord | 
             {ges && <span className="poster-chip"><span>GES</span><b style={{ background: DPE_COLORS[ges], color: energyInk(ges) }}>{ges}</b></span>}
           </div>
         )}
-        {energy.map((line) => <p key={line} className="poster-small">{line}</p>)}
-        {fees && <p className="poster-small">Honoraires : {fees}</p>}
-        <p className="poster-small">{GEORISQUES.text} {GEORISQUES.label}</p>
+        {/* Mentions obligatoires, serrées pour garder la photo et le pied de l'affiche sur la page. */}
+        <div className="poster-legal">
+          {energy.map((line) => <p key={line} className="poster-small">{line}</p>)}
+          {fees && <p className="poster-small">Honoraires : {fees}</p>}
+          <p className="poster-small">{GEORISQUES.text} {GEORISQUES.label}</p>
+        </div>
       </div>
       <div className="poster-foot">
         <div className="poster-qr">

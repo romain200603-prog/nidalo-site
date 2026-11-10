@@ -492,10 +492,10 @@ a.save-capsule { text-decoration: none; }
 .poster { container-type: inline-size; display: flex; flex-direction: column; width: 100%; aspect-ratio: 210 / 297; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; background: #FFFFFF; color: var(--ink); box-shadow: 0 8px 24px rgba(10, 26, 68, 0.08); }
 .poster-band { flex: none; padding: 3cqw 6cqw; background: var(--blue); color: #FFFFFF; font-size: 6.4cqw; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
 /* La photo prend la place qui reste : un titre long la réduit, rien ne déborde de la feuille. */
-.poster-photo { display: flex; align-items: center; justify-content: center; flex: 1 1 0; min-height: 16%; overflow: hidden; background: var(--chip); color: var(--placeholder); }
+.poster-photo { display: flex; align-items: center; justify-content: center; flex: 1 1 0; min-height: 13%; overflow: hidden; background: var(--chip); color: var(--placeholder); }
 .poster-photo img { width: 100%; height: 100%; object-fit: cover; }
 .poster-photo .icon { width: 12cqw; height: 12cqw; }
-.poster-body { display: flex; flex: none; flex-direction: column; gap: 1cqw; padding: 4cqw 6cqw 0; }
+.poster-body { display: flex; flex: none; flex-direction: column; gap: 0.8cqw; padding: 3.4cqw 6cqw 0; }
 .poster-title { font-size: 5cqw; font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; }
 .poster-place { margin: 0; color: var(--text-secondary); font-size: 3.3cqw; font-weight: 600; }
 .poster-price { margin: 0.6cqw 0 0; color: var(--blue); font-size: 7.4cqw; font-weight: 800; line-height: 1.1; }
@@ -504,7 +504,9 @@ a.save-capsule { text-decoration: none; }
 .poster-chip { display: inline-flex; align-items: center; gap: 1.6cqw; color: var(--text-secondary); font-size: 2.8cqw; font-weight: 700; }
 .poster-chip b { display: inline-flex; align-items: center; justify-content: center; width: 6cqw; height: 5.4cqw; border-radius: 1.2cqw; font-size: 3.4cqw; font-weight: 800; }
 .poster-small { margin: 0; color: var(--text-secondary); font-size: 2.4cqw; }
-.poster-foot { display: flex; flex: none; align-items: flex-end; justify-content: space-between; gap: 5cqw; padding: 4cqw 6cqw 5cqw; }
+.poster-legal { display: flex; flex-direction: column; gap: 0.5cqw; margin-top: 0.4cqw; }
+.poster-legal .poster-small { font-size: 2.2cqw; line-height: 1.3; }
+.poster-foot { display: flex; flex: none; align-items: flex-end; justify-content: space-between; gap: 5cqw; padding: 3cqw 6cqw 4cqw; }
 .poster-qr { display: flex; flex: 0 1 auto; align-items: center; gap: 3cqw; max-width: 50%; }
 .poster-qr-code { flex: none; width: 24cqw; height: 24cqw; }
 .poster-qr p { margin: 0; font-size: 2.9cqw; font-weight: 600; line-height: 1.3; }
