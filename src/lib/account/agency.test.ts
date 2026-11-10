@@ -56,7 +56,7 @@ import { NETWORK_MESSAGE } from './auth';
 
 const filled: AgencyForm = {
   agencyName: '  Agence du Parc ', postalCode: '69006', city: ' Lyon ', phone: '06 12 34 56 78', email: 'contact@agenceduparc.fr',
-  website: 'www.agenceduparc.fr', about: '  Vente et gestion à Lyon 6e.  ', siren: '443 061 841', siret: '443 061 841 00005',
+  website: 'www.agenceduparc.fr', feeSchedule: 'agenceduparc.fr/honoraires', about: '  Vente et gestion à Lyon 6e.  ', siren: '443 061 841', siret: '443 061 841 00005',
   cardNumber: ' CPI 6901 2026 000 000 001 ', cardIssuer: 'CCI Lyon Métropole', financialGuarantor: 'Galian',
   liabilityInsurer: 'MMA', liabilityPolicy: 'RCP-2026-118',
 };
@@ -123,7 +123,13 @@ describe('Profil agence : règles du formulaire, comme l\'app', () => {
       financial_guarantee: 'Galian', rcp_insurer: 'MMA', rcp_policy_number: 'RCP-2026-118',
     });
     expect([...(rows.details.about ?? '')].length).toBe(2000);
-    expect(agencyRows(agencyFormFor(null)).details).toMatchObject({ siren: null, phone: null, website: null, about: null });
+    expect(agencyRows(agencyFormFor(null)).details).toMatchObject({ siren: null, phone: null, website: null, fee_schedule_url: null, about: null });
+  });
+
+  it('barème d\'honoraires : un lien complété comme le site, refusé s\'il n\'en est pas un', () => {
+    expect(agencyRows(filled).details.fee_schedule_url).toBe('https://agenceduparc.fr/honoraires');
+    expect(agencyErrors({ ...filled, feeSchedule: 'mon barème' }).feeSchedule).toBe('Adresse du barème invalide (https://…).');
+    expect(agencyErrors(filled).feeSchedule).toBeUndefined();
   });
 
   it('propose l\'adresse du compte pour une première fiche, et montre le numéro par paires', () => {

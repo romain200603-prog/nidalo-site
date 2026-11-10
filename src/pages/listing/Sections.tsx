@@ -182,6 +182,9 @@ export function PublisherCard({ publisher, fees, activeCount, onContact }: {
             <FeatureRow title="Honoraires" value={fees} />
           </dl>
         )}
+        {publisher.feeScheduleUrl && (
+          <a className="publisher-fees-link" href={publisher.feeScheduleUrl} target="_blank" rel="noopener noreferrer">Barème des honoraires</a>
+        )}
         {onContact && (
           <button type="button" className="btn btn-primary btn-block" onClick={onContact}>
             {publisher.isProfessional ? 'Contacter l\'agence' : 'Contacter le vendeur'}

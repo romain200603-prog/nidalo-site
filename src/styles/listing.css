@@ -329,6 +329,7 @@ body.page-listing-ready .tabbar { display: none; }
 .location-caption { margin: 0; color: var(--text-secondary); font-size: 13px; }
 .listing-footnote { margin: 0; color: var(--text-secondary); font-size: 12px; }
 .listing-risks a { color: inherit; text-decoration: underline; }
+.publisher-fees-link { align-self: flex-start; color: var(--text-secondary); font-size: 13px; font-weight: 500; text-decoration: underline; }
 
 /* ——— Cartes de localisation ——— */
 .location-map { position: relative; width: 100%; height: 100%; overflow: hidden; background: #E8EEF5; }

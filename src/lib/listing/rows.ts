@@ -331,6 +331,8 @@ export function energyLines(row: ListingRow): string[] {
   const max = n(row.annual_energy_cost_max);
   if (min !== null && max !== null) {
     lines.push(`Montant estimé des dépenses annuelles d'énergie pour un usage standard : entre ${formatPrice(min)} et ${formatPrice(max)} par an.`);
+    const year = n(row.energy_price_year);
+    if (year !== null && Number.isInteger(year)) lines.push(`Prix moyens des énergies indexés au 1er janvier ${year} (abonnement compris).`);
   }
   return lines;
 }

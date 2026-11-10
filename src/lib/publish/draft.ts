@@ -116,6 +116,8 @@ export type EnergyDraft = {
   /** Estimation des dépenses annuelles d'énergie du DPE, en euros par an (logement ou immeuble). */
   annualEnergyCostMin: number | null;
   annualEnergyCostMax: number | null;
+  /** Année des prix de l'énergie écrite sur le DPE, qui accompagne obligatoirement l'estimation des dépenses. */
+  energyPriceYear: number | null;
   // Pas de champ dans Publier : gardée telle quelle quand une annonce est modifiée.
   diagnosticDate: string | null;
 };
@@ -195,7 +197,7 @@ export function newDraft(id: string): PublishDraft {
     locationPrecision: 'approximate', price: null, monthlyCharges: null, annualPropertyTax: null, livingArea: null, landArea: null,
     rooms: null, bedrooms: null, floor: null, totalFloors: null, hasElevator: null, outdoorSpaces: [], parking: 'none',
     yearBuilt: null, isNewBuild: false,
-    energy: { energyClass: null, climateClass: null, primaryEnergyConsumption: null, annualEnergyCostMin: null, annualEnergyCostMax: null, diagnosticDate: null },
+    energy: { energyClass: null, climateClass: null, primaryEnergyConsumption: null, annualEnergyCostMin: null, annualEnergyCostMax: null, energyPriceYear: null, diagnosticDate: null },
     title: '', description: '', rentalInfo: null, assetDetails: null, worksAmount: null, hasCellar: null, condition: null,
     acceptsVideoVisits: null, agencyFeesAmount: null, agencyFeesPaidBy: null, coOwnershipLots: null, coOwnershipHasProcedure: null,
   };
@@ -526,6 +528,14 @@ export function tenantShareWarning(draft: PublishDraft): string | null {
 }
 
 /** Dépenses d'énergie dans l'ordre : le plus petit montant d'abord, quel que soit le champ où il a été saisi. */
+export const ENERGY_PRICE_YEARS = { min: 2000, max: 2100 } as const;
+
+/** Année des prix de l'énergie hors limites (règle du serveur). */
+export function energyPriceYearIssue(year: number | null): string | null {
+  if (year === null || (Number.isInteger(year) && year >= ENERGY_PRICE_YEARS.min && year <= ENERGY_PRICE_YEARS.max)) return null;
+  return 'Saisissez une année entre 2000 et 2100.';
+}
+
 export function energyCostRange(energy: EnergyDraft): { min: number | null; max: number | null } {
   const { annualEnergyCostMin: min, annualEnergyCostMax: max } = energy;
   return min !== null && max !== null && min > max ? { min: max, max: min } : { min, max };

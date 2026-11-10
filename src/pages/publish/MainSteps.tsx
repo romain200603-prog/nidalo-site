@@ -5,7 +5,7 @@ import { PlaceField } from '../../components/PlaceField';
 import { scopeLabel } from '../../lib/listingJson';
 import { placeSuggestions, streetSuggestions, type PlaceSuggestion } from '../../lib/places';
 import {
-  buildingOfDraft, CONDITIONS, emptyBuilding, emptyHotel, energyCostHint, hotelOfDraft, HOTEL_SCOPES, isDwelling, isSubtypeSelected,
+  buildingOfDraft, CONDITIONS, emptyBuilding, emptyHotel, energyCostHint, energyPriceYearIssue, hotelOfDraft, HOTEL_SCOPES, isDwelling, isSubtypeSelected,
   mixedBuildingIncomplete, OFFICE_EQUIPMENT, PARKING_TYPES, postalCodeOf, cityOf, PUBLISH_CATEGORIES, rentalBanMessage, rentalBanYear,
   requiresEnergyDiagnostic, selectCategory, selectSubtype, showsEnergyCosts, subtypes, totalUnits,
   type Address, type BuildingDraft, type CommercialDraft, type EnergyDraft, type HotelDraft, type LandDraft, type OfficeDraft,
@@ -294,6 +294,9 @@ export function FeaturesStep({ draft, update, showsErrors }: StepProps) {
               <InfoLine>
                 {energyCostHint(draft.energy) ?? "Estimation des dépenses annuelles d'énergie indiquée sur le DPE, obligatoire dans l'annonce d'un logement."}
               </InfoLine>
+              <Amount label="Année des prix de l'énergie" value={draft.energy.energyPriceYear} unit="" integer groups={false}
+                issue={energyPriceYearIssue(draft.energy.energyPriceYear)} onChange={(value) => setEnergy({ energyPriceYear: value })} />
+              <InfoLine>Écrite sur le DPE, par exemple « Prix moyens des énergies indexés au 1er janvier 2021 ». Elle accompagne les dépenses dans l'annonce.</InfoLine>
             </>
           )}
           {/* Décence énergétique : une classe interdite bloque la publication d'une location de logement. */}

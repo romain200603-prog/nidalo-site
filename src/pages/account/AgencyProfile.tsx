@@ -116,6 +116,7 @@ function AgencyView({ agency, toast, member = false }: { agency: AgencyRecord; t
     ...(details?.email?.trim() ? [{ label: 'E-mail', value: details.email.trim() }] : []),
   ];
   const website = details?.website?.trim() || null;
+  const feeSchedule = details?.fee_schedule_url?.trim() || null;
   const professional = professionalRows(details);
 
   return (
@@ -150,6 +151,13 @@ function AgencyView({ agency, toast, member = false }: { agency: AgencyRecord; t
               <Icon name="link" />{websiteLabel(website)}
             </a>
           )}
+        </AgencyCard>
+      )}
+      {feeSchedule && (
+        <AgencyCard icon="fileText" title="Barème d'honoraires">
+          <a className="btn btn-light agency-site" href={feeSchedule} target="_blank" rel="noopener noreferrer">
+            <Icon name="link" />{websiteLabel(feeSchedule)}
+          </a>
         </AgencyCard>
       )}
       <AgencyCard icon="badgeCheck" title="Informations professionnelles">
@@ -305,6 +313,8 @@ function AgencyEditor({ account, agency, onSaved }: { account: Account; agency: 
           {field('Téléphone (facultatif)', 'phone', { inputMode: 'tel', autoComplete: 'tel' })}
           {field('E-mail de l\'agence (facultatif)', 'email', { inputMode: 'email', autoComplete: 'email' })}
           {field('Site internet (facultatif)', 'website', { inputMode: 'url', autoComplete: 'url' })}
+          {field('Barème d\'honoraires, lien (facultatif)', 'feeSchedule', { inputMode: 'url' })}
+          <p className="agency-caption">Obligatoire pour une agence : il s&apos;affiche sur chacune de vos annonces.</p>
           <label className="form-field">
             <span className="field-label">Présentation (facultative)</span>
             <textarea

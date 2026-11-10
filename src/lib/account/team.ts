@@ -407,6 +407,8 @@ export async function loadMemberAgency(): Promise<{ agency: AgencyRecord; role: 
         phone: row.agency_phone,
         email: row.agency_email,
         website: row.agency_website,
+        // Le barème n'est pas dans le profil public : la fiche de l'équipe ne le montre pas.
+        fee_schedule_url: null,
         about: row.agency_about,
       } : null,
     },

@@ -3,7 +3,7 @@ import { sortedPhotos, type ListingRow } from '../listings';
 import { ENERGY_CLASSES, OUTDOOR_SPACES, type EnergyClass, type OutdoorSpace } from '../search';
 import {
   CHARGES_MODES, CONDITIONS, FEE_PAYERS, HOTEL_AMENITIES, HOTEL_STATUSES, LEASE_TYPES, OFFICE_EQUIPMENT, PARKING_TYPES, categoryTransaction,
-  categoryTypes, coOwnershipLots, emptyRental, energyCostRange, hasRooms, inventoryFee, newDraft, rentControl, showsCoOwnership, showsEnergyCosts,
+  categoryTypes, coOwnershipLots, emptyRental, energyCostRange, energyPriceYearIssue, hasRooms, inventoryFee, newDraft, rentControl, showsCoOwnership, showsEnergyCosts,
   syncBuildingRent,
   isDwelling,
   type AssetDraft, type ChargesMode, type Day, type DraftPhoto, type FeePayer, type HotelAmenity, type HotelOperatingStatus, type LeaseType,
@@ -55,6 +55,7 @@ export type ListingWrite = {
   primary_energy_consumption: number | null;
   annual_energy_cost_min: number | null;
   annual_energy_cost_max: number | null;
+  energy_price_year: number | null;
   diagnostic_date: string | null;
   rental_info: Json | null;
   asset_details: Json | null;
@@ -263,6 +264,9 @@ export function listingWrite(source: PublishDraft, { insert }: { insert: boolean
     primary_energy_consumption: draft.energy.primaryEnergyConsumption,
     annual_energy_cost_min: energyCosts.min,
     annual_energy_cost_max: energyCosts.max,
+    // L'année accompagne l'estimation : écrite seulement avec les deux montants, et si elle est valable.
+    energy_price_year: energyCosts.min !== null && energyCosts.max !== null && energyPriceYearIssue(draft.energy.energyPriceYear) === null
+      ? draft.energy.energyPriceYear : null,
     diagnostic_date: draft.energy.diagnosticDate,
     rental_info: rental ? rentalJson(rental) : null,
     asset_details: assetDetails ? assetJson(assetDetails) : null,
@@ -350,7 +354,7 @@ export function appDecodingProblems(write: ListingWrite): string[] {
       problems.push(...objectProblems(inner, ASSET_RULES[kind], `asset_details.${kind}`));
     }
   }
-  for (const key of ['rooms', 'bedrooms', 'floor', 'total_floors', 'year_built', 'primary_energy_consumption', 'co_ownership_lots'] as const) {
+  for (const key of ['rooms', 'bedrooms', 'floor', 'total_floors', 'year_built', 'primary_energy_consumption', 'co_ownership_lots', 'energy_price_year'] as const) {
     const value = write[key];
     if (value !== null && !Number.isInteger(value)) problems.push(key);
   }
@@ -512,6 +516,7 @@ export function draftFromRow(row: ListingRow, location: ExactLocation | null): P
       primaryEnergyConsumption: int(row.primary_energy_consumption),
       annualEnergyCostMin: num(row.annual_energy_cost_min),
       annualEnergyCostMax: num(row.annual_energy_cost_max),
+      energyPriceYear: int(row.energy_price_year),
       diagnosticDate: row.diagnostic_date,
     },
     title: row.title ?? '',

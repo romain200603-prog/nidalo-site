@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   coOwnershipLotsIssue, coOwnershipNeedsProcedure, emptyHotel, emptyRental, energyCostHint, flatRateWarning, hotelOfDraft, inventoryFeeIssue, missingRequiredFields,
-  newDraft, rentalBanMessage, rentalChargesLabel, saleChargesLabel, selectCategory, selectSubtype, showsCoOwnership, showsEnergyCosts, showsInventoryFee,
+  energyPriceYearIssue, newDraft, rentalBanMessage, rentalChargesLabel, saleChargesLabel, selectCategory, selectSubtype, showsCoOwnership, showsEnergyCosts, showsInventoryFee,
   showsRentControl, stepIsComplete, subtypes, tenantShareWarning,
   type PropertyType, type PublishDraft,
 } from './draft';
@@ -305,5 +305,29 @@ describe('mentions obligatoires d’une location : état des lieux et loyers enc
     expect(unknown).not.toHaveProperty('rentSupplement');
     const officeWrite = listingWrite({ ...office, price: 2_000, rentalInfo: { ...info(controlled) } }, { insert: false }).rental_info;
     expect(officeWrite).not.toHaveProperty('isRentControlled');
+  });
+});
+
+describe('année des prix de l’énergie du DPE', () => {
+  const costs = (year: number | null, min: number | null = 1_200) =>
+    ({ ...flat(), energy: { ...flat().energy, annualEnergyCostMin: min, annualEnergyCostMax: 1_700, energyPriceYear: year } });
+
+  it('écrite avec les deux montants des dépenses, relue d’une annonce', () => {
+    const write = listingWrite(costs(2021), { insert: false });
+    expect(write).toMatchObject({ annual_energy_cost_min: 1_200, annual_energy_cost_max: 1_700, energy_price_year: 2021 });
+    expect(appDecodingProblems(write)).toEqual([]);
+    const row = {
+      ...write, owner_id: 'u', status: 'active', previous_price: null, public_latitude: null, public_longitude: null, public_street: null,
+      published_at: null, created_at: null, updated_at: null, listing_photos: [],
+    };
+    expect(draftFromRow(row as unknown as Parameters<typeof draftFromRow>[0], { street: '12 rue Mercière', latitude: 45.7616, longitude: 4.8321 })
+      .energy.energyPriceYear).toBe(2021);
+  });
+
+  it('pas sans les montants, pas hors limites', () => {
+    expect(listingWrite(costs(2021, null), { insert: false }).energy_price_year).toBeNull();
+    expect([energyPriceYearIssue(null), energyPriceYearIssue(2024), energyPriceYearIssue(1999), energyPriceYearIssue(20210)])
+      .toEqual([null, null, 'Saisissez une année entre 2000 et 2100.', 'Saisissez une année entre 2000 et 2100.']);
+    expect(listingWrite(costs(1999), { insert: false }).energy_price_year).toBeNull();
   });
 });

@@ -291,3 +291,22 @@ describe('Mentions obligatoires des annonces', () => {
     expect(rentalRows(free, true).map(([t]) => t)).not.toContain('Loyer de référence');
   });
 });
+
+describe('Mentions qui demandent un champ du serveur', () => {
+  it('année des prix de l’énergie après l’estimation des dépenses', () => {
+    const lines = energyLines(testRow({ energy_price_year: 2021 }));
+    expect(lines.at(-1)).toBe('Prix moyens des énergies indexés au 1er janvier 2021 (abonnement compris).');
+    expect(energyLines(testRow({ energy_price_year: 2021, annual_energy_cost_min: null })).join(' ')).not.toContain('indexés');
+  });
+
+  it('barème d’honoraires : seulement pour une agence, seulement un lien web', () => {
+    const pro = {
+      user_id: 'u1', public_name: 'Paul Démo', avatar_path: null, account_type: 'professional', member_since: '2025-03-01', agency_id: 'a1',
+      agency_name: 'Agence Démo', agency_logo_path: null, agency_postal_code: '69002', agency_city: 'Lyon', agency_phone: null,
+    };
+    expect(publisherFrom(pro, '2026-11-01T09:00:00Z', 'https://agence-demo.fr/honoraires').feeScheduleUrl).toBe('https://agence-demo.fr/honoraires');
+    expect(publisherFrom(pro, '2026-11-01T09:00:00Z', 'javascript:alert(1)').feeScheduleUrl).toBeNull();
+    expect(publisherFrom(pro, '2026-11-01T09:00:00Z').feeScheduleUrl).toBeNull();
+    expect(publisherFrom({ ...pro, account_type: 'individual', agency_id: null }, '2026-11-01T09:00:00Z', 'https://x.fr').feeScheduleUrl).toBeNull();
+  });
+});

@@ -29,6 +29,8 @@ export type Publisher = {
   avatarUrl: string | null;
   /** Numéro publié (jamais pour un visiteur sans compte). */
   phone: string | null;
+  /** Agence : lien vers son barème d'honoraires, obligatoire depuis chaque annonce (fonction `agency_fee_schedule_url`). */
+  feeScheduleUrl: string | null;
 };
 
 const monthYear = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
@@ -63,7 +65,7 @@ function avatarUrl(path: string | null): string | null {
 }
 
 /** Interlocuteur tel que l'app le montre, à partir du profil public (ou sans profil : « Particulier »). */
-export function publisherFrom(profile: PublicProfileRow | null, listingCreatedAt: string): Publisher {
+export function publisherFrom(profile: PublicProfileRow | null, listingCreatedAt: string, feeScheduleUrl: string | null = null): Publisher {
   const isPro = profile?.account_type === 'professional' && !!profile.agency_id;
   const displayName = profile?.public_name ?? (isPro ? (profile?.agency_name ?? 'Agence') : 'Particulier');
   if (isPro && profile) {
@@ -75,12 +77,13 @@ export function publisherFrom(profile: PublicProfileRow | null, listingCreatedAt
     return {
       isProfessional: true, name: profile.agency_name ?? 'Agence', lines,
       avatarUrl: avatarUrl(profile.agency_logo_path), phone: profile.agency_phone ?? null,
+      feeScheduleUrl: feeScheduleUrl !== null && /^https?:\/\//i.test(feeScheduleUrl) ? feeScheduleUrl : null,
     };
   }
   const since = memberSince(profile?.member_since ?? listingCreatedAt);
   return {
     isProfessional: false, name: publicName(displayName), lines: since ? [since] : [],
-    avatarUrl: avatarUrl(profile?.avatar_path ?? null), phone: null,
+    avatarUrl: avatarUrl(profile?.avatar_path ?? null), phone: null, feeScheduleUrl: null,
   };
 }
 
@@ -88,7 +91,14 @@ export async function fetchPublisher(ownerId: string, listingCreatedAt: string):
   const { data, error } = await supabase.rpc('public_profiles', { user_ids: [ownerId] });
   if (error) throw error;
   const rows = (data as PublicProfileRow[] | null) ?? [];
-  return publisherFrom(rows.find((r) => r.user_id === ownerId) ?? null, listingCreatedAt);
+  const profile = rows.find((r) => r.user_id === ownerId) ?? null;
+  // Barème d'une agence : à part, et sans bloquer la fiche si le serveur ne répond pas.
+  let feeSchedule: string | null = null;
+  if (profile?.account_type === 'professional' && profile.agency_id) {
+    const result = await supabase.rpc('agency_fee_schedule_url', { p_user_id: ownerId });
+    feeSchedule = !result.error && typeof result.data === 'string' ? result.data : null;
+  }
+  return publisherFrom(profile, listingCreatedAt, feeSchedule);
 }
 
 /** Nombre d'annonces en ligne du même vendeur (« 3 annonces en ligne »). */

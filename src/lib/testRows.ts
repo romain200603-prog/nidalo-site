@@ -47,6 +47,7 @@ export function testRow(overrides: Partial<ListingRow> = {}): ListingRow {
     primary_energy_consumption: 210,
     annual_energy_cost_min: 900,
     annual_energy_cost_max: 1300,
+    energy_price_year: null,
     diagnostic_date: '2026-01-10',
     rental_info: null,
     asset_details: null,

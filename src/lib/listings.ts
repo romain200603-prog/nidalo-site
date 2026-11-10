@@ -11,6 +11,7 @@ export const LISTING_COLUMNS = [
   'public_street', 'living_area', 'land_area', 'rooms', 'bedrooms', 'floor', 'total_floors', 'has_elevator',
   'outdoor_spaces', 'parking', 'year_built', 'is_new_build', 'has_cellar', 'condition', 'accepts_video_visits',
   'energy_class', 'climate_class', 'primary_energy_consumption', 'annual_energy_cost_min', 'annual_energy_cost_max',
+  'energy_price_year',
   'diagnostic_date', 'rental_info', 'asset_details', 'published_at', 'created_at', 'updated_at',
   'listing_photos(id,storage_path,position,width,height)',
 ].join(',');
@@ -74,6 +75,8 @@ export type ListingRow = {
   primary_energy_consumption: number | null;
   annual_energy_cost_min: number | null;
   annual_energy_cost_max: number | null;
+  /** Année des prix de l'énergie écrite sur le DPE (« indexés au 1er janvier 2021 ») ; facultative. */
+  energy_price_year: number | null;
   diagnostic_date: string | null;
   rental_info: RentalInfo | null;
   asset_details: Record<string, unknown> | null;

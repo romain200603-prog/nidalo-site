@@ -11,7 +11,7 @@ import { currentUserId } from './session';
 // (Data/ProfessionalStore.swift, ProfessionalRemote). La raison sociale, le secteur couvert et les justificatifs
 // restent sur l'iPhone dans l'app : le serveur n'a pas de place pour eux, le site ne les demande donc pas.
 
-export type AgencyField = 'agencyName' | 'postalCode' | 'city' | 'phone' | 'email' | 'website' | 'siren' | 'siret' | 'cardNumber';
+export type AgencyField = 'agencyName' | 'postalCode' | 'city' | 'phone' | 'email' | 'website' | 'feeSchedule' | 'siren' | 'siret' | 'cardNumber';
 
 export type AgencyForm = {
   agencyName: string;
@@ -20,6 +20,8 @@ export type AgencyForm = {
   phone: string;
   email: string;
   website: string;
+  /** Lien vers le barème d'honoraires, visible depuis chaque annonce de l'agence. */
+  feeSchedule: string;
   about: string;
   siren: string;
   siret: string;
@@ -44,6 +46,7 @@ export type AgencyDetails = {
   phone: string | null;
   email: string | null;
   website: string | null;
+  fee_schedule_url: string | null;
   about: string | null;
 };
 
@@ -59,7 +62,7 @@ export type AgencyRecord = {
 
 const PROFILE_COLUMNS = 'id, agency_name, logo_path, postal_code, city, is_verified';
 const DETAIL_COLUMNS = 'siren, siret, professional_card_number, professional_card_cci, financial_guarantee, rcp_insurer, '
-  + 'rcp_policy_number, phone, email, website, about';
+  + 'rcp_policy_number, phone, email, website, fee_schedule_url, about';
 const LOGO_BUCKET = 'avatars';
 
 export const AGENCY_SAVE_MESSAGE = 'La fiche agence n\'a pas pu être enregistrée. Réessayez dans un instant.';
@@ -134,6 +137,7 @@ export function agencyErrors(form: AgencyForm): Partial<Record<AgencyField, stri
   const mail = form.email.trim();
   if (mail && !isValidProfileEmail(mail)) errors.email = 'Adresse e-mail invalide.';
   if (form.website.trim() && websiteUrl(form.website) === null) errors.website = 'Adresse du site invalide (https://…).';
+  if (form.feeSchedule.trim() && websiteUrl(form.feeSchedule) === null) errors.feeSchedule = 'Adresse du barème invalide (https://…).';
   if (form.phone.trim() && normalizedPhone(form.phone) === null) errors.phone = 'Numéro de téléphone invalide.';
   return errors;
 }
@@ -148,6 +152,7 @@ export function agencyFormFor(record: AgencyRecord | null, accountEmail = ''): A
     // Première fiche : l'adresse du compte est proposée, comme dans l'app.
     email: record ? (details?.email ?? '') : accountEmail,
     website: details?.website ?? '',
+    feeSchedule: details?.fee_schedule_url ?? '',
     about: details?.about ?? '',
     siren: details?.siren ?? '',
     siret: details?.siret ?? '',
@@ -178,6 +183,7 @@ export function agencyRows(form: AgencyForm): { profile: { agency_name: string; 
       phone: clean(form.phone)?.replace(/[^\d+]/g, '') || null,
       email: clean(form.email),
       website: form.website.trim() ? websiteUrl(form.website) : null,
+      fee_schedule_url: form.feeSchedule.trim() ? websiteUrl(form.feeSchedule) : null,
       about: cut(clean(form.about), 2000),
       professional_card_cci: cut(clean(form.cardIssuer), 80),
       financial_guarantee: cut(clean(form.financialGuarantor), 200),
