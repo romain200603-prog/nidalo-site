@@ -1053,7 +1053,8 @@ try {
     expectSame(N, 'fiche créée', writes[0]?.body, { agency_name: 'Agence du Parc', postal_code: '69006', city: 'Lyon' });
     expectSame(N, 'détails', writes[1]?.body, {
       professional_profile_id: AGENCY_ID, siren: '443061841', siret: '44306184100005', professional_card_number: 'CPI 6901 2026 000 000 001',
-      phone: '0478123456', email: USER_EMAIL, website: 'https://www.agenceduparc.fr', about: 'Vente et gestion à Lyon 6e.\nÉquipe de trois conseillers.',
+      phone: '0478123456', email: USER_EMAIL, website: 'https://www.agenceduparc.fr', fee_schedule_url: null,
+      about: 'Vente et gestion à Lyon 6e.\nÉquipe de trois conseillers.',
       professional_card_cci: null, financial_guarantee: 'Galian', rcp_insurer: null, rcp_policy_number: null,
     });
     expectSame(N, 'compte', [writes[2]?.body, writes[2]?.search], [{ professional_profile_id: AGENCY_ID, account_type: 'professional' }, `?id=eq.${USER_ID}`]);
