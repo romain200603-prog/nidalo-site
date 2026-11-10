@@ -1129,9 +1129,17 @@ try {
   expect('offre', 'titre de la page', await page.title(), 'Faire une offre · Appartement 3 pièces · Nidalo');
   expect('offre', 'champ du montant actif', await page.evaluate(() => document.activeElement?.id), 'offre-montant');
   expect('offre', 'durées', await page.$$eval('.dl-option', (els) => els.map((el) => `${el.textContent}${el.getAttribute('aria-pressed') === 'true' ? '*' : ''}`).join(' | ')), '3 jours | 7 jours* | 14 jours | 30 jours');
+  // Vente avec un loyer : la rentabilité suit le montant tapé (offerYields), d'abord celle du prix affiché.
+  const offerYieldsText = () => page.$eval('#offre-rentabilite', (el) => [el.querySelector('.dl-yield-title')?.textContent,
+    ...[...el.querySelectorAll('.dl-yield-row')].map((row) => [...row.children].map((span) => span.textContent).join(' '))].join(' | '))
+    .catch(() => null);
+  expect('offre', 'rentabilité au prix affiché', await offerYieldsText(), 'Rentabilité au prix affiché | Rendement brut 7,8 % | Rendement net 5,8 %');
   await page.locator('#offre-montant').pressSequentially('228000');
   expect('offre', 'montant saisi', await page.inputValue('#offre-montant'), '228 000');
   expect('offre', 'écart au prix', await page.textContent('#offre-ecart'), '228 000 € · 4,2 % sous le prix affiché');
+  expect('offre', 'rentabilité au montant', await offerYieldsText(),
+    'Rentabilité à 228 000 € | Rendement brut 8,1 % 7,8 % au prix affiché | Rendement net 6,1 % 5,8 % au prix affiché');
+  expect('offre', 'champ décrit par l\'écart et la rentabilité', await page.getAttribute('#offre-montant', 'aria-describedby'), 'offre-ecart offre-rentabilite');
   await page.click('.dl-offer-screen .dl-chip');
   expect('offre', 'condition du prêt', await page.inputValue('#offre-conditions'), 'Sous réserve d\'obtention du prêt');
   if (await page.$('.dl-offer-screen .dl-chip')) problems.push('offre: la condition du prêt est encore proposée');
@@ -1261,6 +1269,10 @@ try {
   await page.waitForSelector('.dl-offer-screen h1');
   expect('adresse-offre', 'adresse', page.url(), `${base}/annonce/?id=${SALE}&vue=offre`);
   expect('adresse-offre', 'bien et prix', await page.textContent('.dl-offer-screen .dl-screen-head p'), 'Appartement lumineux avec balcon · prix affiché 238 000 €');
+  // Vente sans loyer : pas de carte « Rentabilité » sur la fiche, donc pas de rentabilité sous le montant.
+  await page.locator('#offre-montant').pressSequentially('200000');
+  if (await page.$('#offre-rentabilite')) problems.push('adresse-offre: rentabilité affichée pour une vente sans loyer');
+  await page.locator('#offre-montant').fill('');
   // Sans montant, rien ne part : le message de l'app.
   mark = calls.length;
   await page.click('.dl-offer-screen .dl-submit');
