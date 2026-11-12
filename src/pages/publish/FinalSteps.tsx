@@ -4,7 +4,7 @@ import { Icon } from '../../components/Icon';
 import { ListingCard } from '../../components/ListingCard';
 import { cardContent } from '../../lib/cardContent';
 import { accountPath, listingPath } from '../../lib/paths';
-import { missingRequiredFields, stepOf, type PublishStep } from '../../lib/publish/draft';
+import { missingRequiredFields, type PublishStep, type RequiredField } from '../../lib/publish/draft';
 import { missingLabel, previewRow, recapRows } from '../../lib/publish/flow';
 import { proposedDescription, proposedTitle } from '../../lib/publish/writing';
 import { ChoiceDialog } from '../account/DesktopParts';
@@ -24,7 +24,7 @@ export function DescriptionStep({ draft, update, showsErrors, ownerId }: StepPro
   return (
     <>
       <Card title="Titre">
-        <TextInput label="Titre de l'annonce" value={draft.title} maxLength={150}
+        <TextInput label="Titre de l'annonce" value={draft.title} maxLength={150} guide="title"
           error={showsErrors && titleMissing ? 'Le titre est obligatoire.' : null}
           onChange={(title) => update((current) => ({ ...current, title }))} />
         {titleMissing && (
@@ -34,7 +34,7 @@ export function DescriptionStep({ draft, update, showsErrors, ownerId }: StepPro
         )}
       </Card>
       <Card title="Description">
-        <div className={`dsc-field${descriptionMissing ? ' has-error' : ''}`}>
+        <div className={`dsc-field${descriptionMissing ? ' has-error' : ''}`} data-guide="description">
           <textarea id={id} className="dsc-input dpub-textarea" value={draft.description} maxLength={10_000} rows={9}
             aria-label="Description de l'annonce" aria-invalid={descriptionMissing ? true : undefined}
             aria-describedby={descriptionMissing ? `${id}-erreur` : undefined}
@@ -75,8 +75,15 @@ export function DescriptionStep({ draft, update, showsErrors, ownerId }: StepPro
   );
 }
 
-/** Récapitulatif, champs manquants (avec un lien vers l'étape à corriger) et avertissement avant publication. */
-export function ReviewStep({ draft, onEdit, errorMessage }: { draft: StepProps['draft']; onEdit: (step: PublishStep) => void; errorMessage: string | null }) {
+/**
+ * Récapitulatif, champs manquants (« Corriger » mène au champ, dans son étape) et avertissement avant publication.
+ */
+export function ReviewStep({ draft, onEdit, onFix, errorMessage }: {
+  draft: StepProps['draft'];
+  onEdit: (step: PublishStep) => void;
+  onFix: (field: RequiredField) => void;
+  errorMessage: string | null;
+}) {
   const missing = missingRequiredFields(draft);
   return (
     <>
@@ -90,7 +97,7 @@ export function ReviewStep({ draft, onEdit, errorMessage }: { draft: StepProps['
             {missing.map((field) => (
               <li key={field}>
                 <span>{missingLabel(draft, field)}</span>
-                <button type="button" className="dpub-link" onClick={() => onEdit(stepOf(field))}>Corriger</button>
+                <button type="button" className="dpub-link" onClick={() => onFix(field)}>Corriger</button>
               </li>
             ))}
           </ul>

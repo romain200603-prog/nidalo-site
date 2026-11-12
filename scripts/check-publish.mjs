@@ -561,7 +561,7 @@ try {
     const page = await open(context, '/publier/', N);
     await page.waitForSelector('.dpub .dsc-kinds');
     expectSame(N, 'en-tête', await head(page), ['Publier une annonce', 'Étape 1 sur 7 · Catégorie']);
-    expectSame(N, 'avant le choix', [await page.locator('.dsc-head-action button').count(), await page.locator(CONTINUE).isDisabled(),
+    expectSame(N, 'avant le choix', [await page.locator('.dsc-head-action button:not(.dpub-close)').count(), await page.locator(CONTINUE).isDisabled(),
       await page.$$eval('.dsc-kind .dsc-kind-title', (els) => els.map((el) => el.textContent))], [0, true, ['Résidentiel', 'Investissement', 'Location', 'Hôtels']]);
     const layout = await page.evaluate(() => {
       const wrap = document.querySelector('.account-wrap');
@@ -773,21 +773,21 @@ try {
     expectSame(N, 'ligne du brouillon', Object.fromEntries(['status', 'property_type', 'transaction', 'price', 'postal_code', 'city', 'insee_code'].map((key) => [key, saved[0]?.body?.[key]])),
       { status: 'draft', property_type: 'house', transaction: 'sale', price: 0, postal_code: '69002', city: 'Lyon', insee_code: '69123' });
     expectSame(N, 'position de la commune', saved[1]?.body, { listing_id: draftId, street: null, latitude: 45.758, longitude: 4.8351 });
-    // Saisie non enregistrée : fermer l'onglet demande confirmation ; « Retour » propose d'enregistrer.
+    // Saisie non enregistrée : fermer l'onglet demande confirmation ; « Fermer » propose d'enregistrer.
     await amount(page, 'Prix de vente').fill('450000');
     unloadAnswers.set(page, 'rester');
     await page.close({ runBeforeUnload: true });
     await waitFor(() => unloadPrompts.includes(N), `${N} : « Quitter la page ? » à la fermeture`);
     if (page.isClosed()) problems.push(`${N} : la page s'est fermée malgré « Rester »`);
     unloadAnswers.delete(page);
-    await page.click('.dsc-back');
+    await page.click('.dpub-close');
     await page.waitForSelector('dialog.alert-dialog[open]');
     expectSame(N, 'quitter ?', [await textOf(page, 'dialog[open] h2'), await page.$$eval('dialog[open] .alert-actions button', (els) => els.map((el) => el.textContent.trim()))],
       ['Quitter la publication ?', ['Enregistrer le brouillon', 'Quitter sans enregistrer', 'Continuer']]);
     await shot(page, 'publier-brouillon-quitter.png');
     await page.click('dialog[open] button:text("Continuer")');
     await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached' }).catch(() => undefined);
-    await page.click('.dsc-back');
+    await page.click('.dpub-close');
     mark = state.calls.length;
     await page.click('dialog[open] button:text("Enregistrer le brouillon")');
     await page.waitForURL(`${base}/`, { timeout: 8000 }).catch(() => problems.push(`${N} : « Enregistrer le brouillon » ne quitte pas la page (${page.url()})`));
@@ -814,7 +814,7 @@ try {
     await mock(context, state);
     let page = await open(context, `/publier/?annonce=${ONLINE_ID}`, N);
     await page.waitForSelector('.dpub .dsc-card');
-    expectSame(N, 'ouverture', [...await head(page), await page.locator('.dsc-head-action button').getAttribute('aria-label'),
+    expectSame(N, 'ouverture', [...await head(page), await page.locator('.dsc-head-action button:not(.dpub-close)').getAttribute('aria-label'),
       await page.getByRole('combobox', { name: 'Rue et numéro (facultatif)' }).inputValue(), await amount(page, 'Prix de vente').inputValue()],
     ['Modifier l\'annonce', 'Étape 2 sur 7 · Informations principales', 'Enregistrer les modifications', '8 rue Paul Bert', '238 000']);
     expectSame(N, 'largeur', await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), 0);
@@ -824,7 +824,7 @@ try {
     await page.keyboard.press('Escape');
     await shot(page, 'publier-modifier.png');
     let mark = state.calls.length;
-    await page.click('.dsc-head-action button');
+    await page.click('.dsc-head-action button[aria-label="Enregistrer les modifications"]');
     await page.waitForSelector('.dpub-success', { timeout: 15000 }).catch(() => problems.push(`${N} : confirmation absente`));
     const edited = writesSince(state, mark);
     expectSame(N, 'écritures', writeNames(edited), ['PATCH listings', 'POST listing_locations']);
@@ -841,7 +841,7 @@ try {
     await page.getByRole('button', { name: 'Options de la photo 2' }).click();
     await page.getByRole('menuitem', { name: 'Supprimer' }).click();
     mark = state.calls.length;
-    await page.click('.dsc-head-action button');
+    await page.click('.dsc-head-action button[aria-label="Enregistrer les modifications"]');
     await page.waitForSelector('.dpub-success', { timeout: 15000 }).catch(() => problems.push(`${N} photos : confirmation absente`));
     const removed = writesSince(state, mark);
     expectSame(N, 'photo retirée', [writeNames(removed), removed.find((call) => call.table === 'storage')?.body, state.photos.map((photo) => photo.id)],
@@ -877,7 +877,7 @@ try {
     await page.setInputFiles('.dpub input[type="file"]', [{ name: 'IMG_0003.jpg', mimeType: 'image/jpeg', buffer: PHOTO }]);
     await imagesLoaded(page, '.dpub-photo img', 2, `${N} : photo ajoutée`);
     const mark = state.calls.length;
-    await page.click('.dsc-head-action button');
+    await page.click('.dsc-head-action button[aria-label="Enregistrer les modifications"]');
     await page.waitForSelector('.dpub-success', { timeout: 15000 }).catch(() => problems.push(`${N} : confirmation absente`));
     const saved = writesSince(state, mark);
     const upload = saved.find((call) => call.table === 'storage');
@@ -887,6 +887,195 @@ try {
       saved[1]?.body?.owner_id, upload?.search.startsWith(`${COLLEAGUE}/${COLLEAGUE_ID}/`), photo?.body?.owner_id, photo?.body?.storage_path === upload?.search,
       'owner_id' in (saved[0]?.body ?? {}),
     ], [COLLEAGUE, true, COLLEAGUE, true, false]);
+    await context.close();
+  }
+
+  // 7. Étapes : revenir librement et être guidé vers ce qui manque, sur ordinateur et sur tablette (iPad en paysage, et
+  //    iPad Pro 12,9" en portrait : 1024 px). La flèche, « Retour », la barre d'étapes et le retour du navigateur
+  //    ramènent en arrière sans rien demander ; « Continuer » et « Publier » mènent au premier champ à compléter, même
+  //    dans une étape précédente, et le prénom n'est demandé qu'une fois l'annonce complète.
+  const tablet = (width, height) => browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,
+    userAgent: devices['iPad Pro 11'].userAgent, locale: 'fr-FR', timezoneId: 'Europe/Paris' });
+  for (const [N, makeContext, touch, file] of [
+    ['étapes ordinateur', () => desktop(), false, 'etapes-ordinateur'],
+    ['étapes tablette paysage', () => tablet(1194, 834), true, 'etapes-tablette-paysage'],
+    ['étapes tablette portrait', () => tablet(1024, 1366), true, 'etapes-tablette-portrait'],
+  ]) {
+    const state = newState({ firstName: '' });
+    const context = await makeContext();
+    await mock(context, state);
+    const page = await open(context, '/publier/', N);
+    await page.waitForSelector('.dpub .dsc-kinds');
+    const subtitle = async () => (await head(page))[1];
+    const bar = (n) => page.locator(`.dpub-progress button[aria-label^="Étape ${n} sur 7,"]`);
+    const barState = () => page.$$eval('.dpub-progress > *', (els) => els.map((el) => (el.tagName !== 'BUTTON' ? 'à venir' : el.classList.contains('is-current') ? 'en cours' : 'atteinte')));
+    const dialogs = () => page.locator('dialog.alert-dialog[open]').count();
+    const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    const historyBack = async () => { await page.evaluate(() => history.back()); await page.waitForTimeout(400); };
+    /** Fin du défilement (doux, sauf mouvements réduits) : la position ne bouge plus. */
+    const settle = async () => {
+      let last = -1;
+      for (let i = 0; i < 40; i += 1) {
+        const y = await page.evaluate(() => Math.round(window.scrollY));
+        if (y === last) return;
+        last = y;
+        await page.waitForTimeout(150);
+      }
+    };
+    /** Champ guidé : entièrement visible entre le haut de l'écran et la barre d'actions ; le curseur dedans seulement avec une souris. */
+    const guidedTo = async (field, what, { focus = true } = {}) => {
+      await settle();
+      const seen = await page.evaluate((guide) => {
+        const anchor = document.querySelector(`.dpub [data-guide="${guide}"]`);
+        if (!anchor) return { found: false };
+        const rect = anchor.getBoundingClientRect();
+        const barTop = document.querySelector('.dpub .dsc-action-bar')?.getBoundingClientRect().top ?? innerHeight;
+        const active = document.activeElement;
+        return { found: true, visible: rect.top >= 0 && rect.bottom <= barTop + 0.5, focused: active !== anchor && anchor.contains(active) };
+      }, field);
+      expectSame(N, what, focus ? seen : { found: seen.found, visible: seen.visible }, focus ? { found: true, visible: true, focused: !touch } : { found: true, visible: true });
+    };
+    const prompts = unloadPrompts.length;
+
+    // Étapes 1 et 2 remplies, étape 3 ouverte.
+    await page.getByRole('button', { name: /^Résidentiel,/ }).click();
+    await page.getByRole('button', { name: 'Appartement', exact: true }).click();
+    await page.click(CONTINUE);
+    await waitStep(page, 2, 'Informations principales', N);
+    expectSame(N, 'barre à l\'étape 2', await barState(), ['atteinte', 'en cours', 'à venir', 'à venir', 'à venir', 'à venir', 'à venir']);
+    await page.getByRole('combobox', { name: 'Rue et numéro (facultatif)' }).fill('12 rue Mercière');
+    await page.getByRole('option', { name: /12 Rue Mercière/ }).click();
+    await page.waitForTimeout(700);
+    await amount(page, 'Prix de vente').fill('320000');
+    await page.click(CONTINUE);
+    await waitStep(page, 3, 'Caractéristiques', N);
+    expectSame(N, 'barre : zones de 44 px', await page.$$eval('.dpub-progress > *', (els) => els.map((el) => Math.round(el.getBoundingClientRect().height))), [44, 44, 44, 44, 44, 44, 44]);
+
+    // La flèche du haut : l'étape d'avant, sans question, saisie gardée.
+    await page.locator('.dsc-back:not(.dpub-close)').first().click();
+    await waitStep(page, 2, 'Informations principales', N);
+    expectSame(N, 'flèche : étape 2', [await dialogs(), await amount(page, 'Prix de vente').inputValue(), await page.getByRole('combobox', { name: 'Ville' }).inputValue()], [0, '320 000', 'Lyon']);
+    // La barre : toute étape déjà atteinte s'ouvre d'un clic, avant ou après celle en cours.
+    await bar(3).click();
+    await waitStep(page, 3, 'Caractéristiques', N);
+    await bar(1).click();
+    await waitStep(page, 1, 'Catégorie', N);
+    expectSame(N, 'barre : étape 1', [await barState(), await textOf(page, '.dsc-kind[aria-pressed="true"] .dsc-kind-title'), await dialogs()],
+      [['en cours', 'atteinte', 'atteinte', 'à venir', 'à venir', 'à venir', 'à venir'], 'Résidentiel', 0]);
+    await bar(3).click();
+    await waitStep(page, 3, 'Caractéristiques', N);
+    // « Retour » dans la barre d'actions : l'étape d'avant.
+    await page.click('.dpub .dsc-action-buttons .dsc-button-light');
+    await waitStep(page, 2, 'Informations principales', N);
+    await bar(3).click();
+    await waitStep(page, 3, 'Caractéristiques', N);
+
+    // Le retour du navigateur : l'étape d'avant, sans « Quitter la page ? » ; à l'étape 1 avec une saisie, la question
+    // de l'app, qu'un nouveau retour referme.
+    await historyBack();
+    await waitStep(page, 2, 'Informations principales', N);
+    await historyBack();
+    await waitStep(page, 1, 'Catégorie', N);
+    expectSame(N, 'retour du navigateur', [await dialogs(), new URL(page.url()).pathname], [0, '/publier/']);
+    await historyBack();
+    await page.waitForSelector('dialog.alert-dialog[open]', { timeout: 5000 }).catch(() => problems.push(`${N} : pas de question au retour depuis l'étape 1`));
+    expectSame(N, 'retour à l\'étape 1', [await textOf(page, 'dialog[open] h2'), new URL(page.url()).pathname], ['Quitter la publication ?', '/publier/']);
+    await historyBack();
+    await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached', timeout: 5000 }).catch(() => problems.push(`${N} : la question reste ouverte après un retour`));
+    expectSame(N, 'question refermée', [await subtitle(), new URL(page.url()).pathname], ['Étape 1 sur 7 · Catégorie', '/publier/']);
+    if (unloadPrompts.length !== prompts) problems.push(`${N} : « Quitter la page ? » du navigateur pendant les retours`);
+
+    // « Continuer » sur une étape incomplète : ses champs signalés, l'écran amené sur le premier.
+    await page.click(CONTINUE);
+    await waitStep(page, 2, 'Informations principales', N);
+    await page.click(CONTINUE);
+    await waitStep(page, 3, 'Caractéristiques', N);
+    await page.click(CONTINUE);
+    await page.waitForSelector('.dpub .field-error');
+    expectSame(N, 'étape 3 signalée', [await subtitle(), await errorsOf(page)],
+      ['Étape 3 sur 7 · Caractéristiques', ['Indiquez la surface.', 'Indiquez le nombre de pièces.', 'Le DPE est obligatoire pour ce type de bien.']]);
+    await guidedTo('livingArea', 'guidé vers la surface');
+    await page.screenshot({ path: join(out, `${file}-guidage.png`) });
+    // Chaque message disparaît dès que son champ est rempli.
+    await amount(page, 'Surface habitable').fill('62');
+    expectSame(N, 'surface remplie', await errorsOf(page), ['Indiquez le nombre de pièces.', 'Le DPE est obligatoire pour ce type de bien.']);
+    await chip(page, 'Pièces', '3').click();
+    await page.getByRole('button', { name: 'DPE (classe énergie) C', exact: true }).click();
+    expectSame(N, 'étape 3 complète', await errorsOf(page), []);
+
+    // Un champ vidé dans une étape précédente : « Continuer » y ramène.
+    await bar(2).click();
+    await waitStep(page, 2, 'Informations principales', N);
+    await amount(page, 'Prix de vente').fill('');
+    await bar(3).click();
+    await waitStep(page, 3, 'Caractéristiques', N);
+    await page.click(CONTINUE);
+    await waitStep(page, 2, 'Informations principales', N);
+    expectSame(N, 'ramené au prix', await errorsOf(page), ['Indiquez le prix.']);
+    await guidedTo('price', 'guidé vers le prix');
+    await amount(page, 'Prix de vente').fill('320000');
+    expectSame(N, 'prix rempli', await errorsOf(page), []);
+    await page.click(CONTINUE);
+    await waitStep(page, 3, 'Caractéristiques', N);
+    await page.click(CONTINUE);
+    await waitStep(page, 4, 'Prix et finances', N);
+    await page.click(CONTINUE);
+    await waitStep(page, 5, 'Photos', N);
+    await page.click(CONTINUE);
+    expectSame(N, 'photos signalées', await errorsOf(page), ['Ajoutez au moins une photo.']);
+    await guidedTo('photos', 'guidé vers les photos', { focus: false });
+    await page.setInputFiles('.dpub input[type="file"]', [{ name: 'IMG_0002.jpg', mimeType: 'image/jpeg', buffer: PHOTO }]);
+    await imagesLoaded(page, '.dpub-photo img', 1, `${N} : photo choisie`);
+    expectSame(N, 'photo ajoutée', await errorsOf(page), []);
+    await page.click(CONTINUE);
+    await waitStep(page, 6, 'Description et aperçu', N);
+    await page.click(CONTINUE);
+    await page.waitForSelector('.dpub .field-error');
+    expectSame(N, 'étape 6 signalée', [await subtitle(), (await errorsOf(page)).length], ['Étape 6 sur 7 · Description et aperçu', 2]);
+    await guidedTo('title', 'guidé vers le titre');
+    await page.getByRole('button', { name: 'Proposer : « Appartement 3 pièces – Lyon »' }).click();
+    await page.getByRole('button', { name: 'Rédiger à partir de mes informations' }).click();
+    expectSame(N, 'étape 6 complète', await errorsOf(page), []);
+    await page.click(CONTINUE);
+    await waitStep(page, 7, 'Vérification', N);
+    const publishButton = page.locator(CONTINUE);
+    const dimmed = async () => [await publishButton.evaluate((el) => el.classList.contains('is-dimmed')), await publishButton.isDisabled()];
+    expectSame(N, 'Publier prêt', [await barState(), await dimmed(), await overflow()],
+      [['atteinte', 'atteinte', 'atteinte', 'atteinte', 'atteinte', 'atteinte', 'en cours'], [false, false], 0]);
+
+    // Un champ vidé puis « Publier » atténué : un clic mène au champ, sans demander le prénom ni rien envoyer.
+    await bar(3).click();
+    await waitStep(page, 3, 'Caractéristiques', N);
+    await amount(page, 'Surface habitable').fill('');
+    await bar(7).click();
+    await waitStep(page, 7, 'Vérification', N);
+    expectSame(N, 'Publier atténué', await dimmed(), [true, false]);
+    await page.screenshot({ path: join(out, `${file}-publier-attenue.png`) });
+    let mark = state.calls.length;
+    await publishButton.click();
+    await waitStep(page, 3, 'Caractéristiques', N);
+    expectSame(N, 'Publier mène à la surface', [await errorsOf(page), await dialogs(), writeNames(writesSince(state, mark))], [['Indiquez la surface.'], 0, []]);
+    await guidedTo('livingArea', 'guidé vers la surface depuis Publier');
+    await amount(page, 'Surface habitable').fill('62');
+    await bar(7).click();
+    await waitStep(page, 7, 'Vérification', N);
+    expectSame(N, 'Publier à nouveau prêt', await dimmed(), [false, false]);
+    // Annonce complète : maintenant seulement, le prénom est demandé (compte sans prénom) ; « Annuler » n'envoie rien.
+    mark = state.calls.length;
+    await publishButton.click();
+    await page.waitForSelector('dialog.alert-dialog[open] input[aria-label="Prénom"]', { timeout: 5000 }).catch(() => problems.push(`${N} : prénom non demandé`));
+    await page.click('dialog[open] button:text("Annuler")');
+    await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached' }).catch(() => undefined);
+    expectSame(N, 'prénom annulé', [await subtitle(), writeNames(writesSince(state, mark)), await overflow()], ['Étape 7 sur 7 · Vérification', [], 0]);
+
+    // « Fermer » : la question, puisque la saisie n'est pas enregistrée ; « Continuer » reste sur la page.
+    await page.click('.dpub-close');
+    await page.waitForSelector('dialog.alert-dialog[open]');
+    expectSame(N, 'fermer', await textOf(page, 'dialog[open] h2'), 'Quitter la publication ?');
+    await page.click('dialog[open] button:text("Continuer")');
+    await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached' }).catch(() => undefined);
+    expectSame(N, 'rien envoyé', writeNames(writesSince(state, 0)), []);
+    if (unloadPrompts.length !== prompts) problems.push(`${N} : « Quitter la page ? » du navigateur inattendu`);
     await context.close();
   }
 } finally {

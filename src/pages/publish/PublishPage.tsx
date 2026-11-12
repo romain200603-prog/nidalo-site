@@ -7,15 +7,17 @@ import { SOON_PAGES } from '../../components/soonPages';
 import { isNewAccount } from '../../lib/account/auth';
 import { accountStore, formFor, loadAccount, publicName, saveProfile, type Account } from '../../lib/account/profile';
 import { useSession, useStore } from '../../lib/account/session';
-import { useDesktop } from '../../lib/desktop';
+import { DESKTOP_QUERY, useDesktop } from '../../lib/desktop';
 import { UUID_PATTERN } from '../../lib/listings';
 import { accountPath, PATHS, publishPath } from '../../lib/paths';
 import { locateAddress } from '../../lib/places';
 import {
-  missingRequiredFields, newDraft, PUBLISH_STEPS, stepIsComplete, stepOf, STEP_TITLES, syncBuildingRent,
+  missingRequiredFields, newDraft, PUBLISH_STEPS, STEP_TITLES, syncBuildingRent,
   type Address, type Coordinate, type PublishDraft, type PublishStep,
 } from '../../lib/publish/draft';
-import { canSaveDraft, DRAFT_NEEDS, hasChanges, initialStep, sameDraft } from '../../lib/publish/flow';
+import {
+  canSaveDraft, DRAFT_NEEDS, firstIssue, furthestAtStart, guideForRequired, hasChanges, initialStep, sameDraft, type Guide, type GuideField,
+} from '../../lib/publish/flow';
 import { loadListingForEdit, saveListing, type Loaded } from '../../lib/publish/save';
 import { knownCityCenter } from '../../lib/search';
 import { Modal } from '../listing/Dialogs';
@@ -145,14 +147,71 @@ async function locate(address: Address): Promise<Coordinate | null> {
   return found ?? knownCityCenter(address.city);
 }
 
+const MAIN = PUBLISH_STEPS.indexOf('main');
+const LAST = PUBLISH_STEPS.length - 1;
+
+/** Étape d'ouverture : les photos pour « Mettre à jour les photos », sinon la catégorie ou les informations principales. */
+function openingStep(start: Start, editing: boolean, photosFirst: boolean): PublishStep {
+  return photosFirst && start.listingStatus !== null ? 'media' : initialStep(start.draft, editing);
+}
+
+/** Entrée d'historique de la publication : le retour du navigateur revient d'une étape au lieu de quitter la page. */
+const HISTORY_MARK = 'nidaloPublication';
+
+function markedEntry(state: unknown): boolean {
+  return state !== null && typeof state === 'object' && HISTORY_MARK in state;
+}
+
+function pushPublishEntry(url: string) {
+  const state: unknown = window.history.state;
+  window.history.pushState({ ...(state !== null && typeof state === 'object' ? state : {}), [HISTORY_MARK]: true }, '', url);
+}
+
+/** Défilement doux, sauf quand la personne a demandé de réduire les animations. */
+function scrollBehavior(): ScrollBehavior {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+}
+
+/**
+ * Montre un champ à compléter (son repère `data-guide`, avec le message qui le suit) au centre de la partie visible :
+ * entre le haut de l'écran, ou du clavier d'une tablette, et la barre d'actions collée en bas. Un bloc plus haut que
+ * cette partie est montré par son début. Avec une souris, le champ reçoit aussi le focus pour taper tout de suite ;
+ * pas sur un écran tactile, où le clavier s'ouvrirait par-dessus, ni dans une liste de suggestions d'adresse.
+ */
+function showField(anchor: HTMLElement) {
+  const parts = [anchor];
+  const next = anchor.nextElementSibling;
+  if (next instanceof HTMLElement && next.classList.contains('field-error')) parts.push(next);
+  const rects = parts.map((part) => part.getBoundingClientRect());
+  const top = Math.min(...rects.map((rect) => rect.top));
+  const bottom = Math.max(...rects.map((rect) => rect.bottom));
+  const viewport = window.visualViewport;
+  const viewTop = viewport?.offsetTop ?? 0;
+  let viewBottom = viewTop + (viewport?.height ?? window.innerHeight);
+  const bar = document.querySelector('.dpub .dsc-action-bar');
+  if (bar) viewBottom = Math.min(viewBottom, window.innerHeight - bar.getBoundingClientRect().height);
+  const offset = bottom - top > viewBottom - viewTop - 32 ? top - viewTop - 16 : (top + bottom) / 2 - (viewTop + viewBottom) / 2;
+  window.scrollTo({ top: Math.max(0, window.scrollY + offset), behavior: scrollBehavior() });
+  if (!window.matchMedia('(pointer: fine)').matches || anchor.querySelector('[role="combobox"]')) return;
+  const control = anchor.querySelector<HTMLElement>('input:not([disabled]), textarea, button:not([disabled])');
+  control?.focus({ preventScroll: true });
+}
+
 function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: Start; account: Account; fromMyListings: boolean; photosFirst: boolean }) {
   const editing = start.listingStatus !== null && start.listingStatus !== 'draft';
   const [draft, setDraft] = useState(start.draft);
   const [saved, setSaved] = useState<PublishDraft | null>(start.listingStatus !== null ? start.draft : null);
-  const [step, setStep] = useState<PublishStep>(() => (photosFirst && start.listingStatus !== null ? 'media' : initialStep(start.draft, editing)));
-  /** Champs signalés après une tentative de passage à l'étape suivante. */
-  const [showsErrors, setShowsErrors] = useState(false);
+  const [step, setStep] = useState<PublishStep>(() => openingStep(start, editing, photosFirst));
+  /** Étape la plus loin atteinte : la barre d'étapes reste bleue jusqu'à elle, et chacune de ces étapes s'ouvre d'un clic. */
+  const [furthest, setFurthest] = useState(() => furthestAtStart(start.draft, start.listingStatus, openingStep(start, editing, photosFirst)));
+  /**
+   * Dernière étape vérifiée sans succès (« Continuer », « Publier », « Corriger ») : jusqu'à elle, les champs à compléter
+   * restent signalés, et chacun perd son message dès qu'il est rempli.
+   */
+  const [checkedThrough, setCheckedThrough] = useState(-1);
   const [attempt, setAttempt] = useState(0);
+  /** Champ à montrer après une vérification : un seul défilement par clic. */
+  const guided = useRef<GuideField | null>(null);
   const [resolving, setResolving] = useState(false);
   /** Adresse introuvable à la dernière tentative : le message reste affiché tant qu'elle n'a pas été modifiée. */
   const [unfoundAddress, setUnfoundAddress] = useState<Address | null>(null);
@@ -169,17 +228,25 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
   const [published, setPublished] = useState<{ id: string; title: string } | null>(null);
   const back = useMemo(() => backPath(fromMyListings), [fromMyListings]);
   const leavingNow = useRef(false);
-  /** Saisie à jour, lue après une attente (recherche de l'adresse). */
+  /** Saisie et étape à jour, lues après une attente (recherche de l'adresse). */
   const latest = useRef(draft);
   latest.current = draft;
+  const currentStep = useRef(step);
+  currentStep.current = step;
   const noticeTimer = useRef<number | undefined>(undefined);
+  /** Adresse de la page pour l'entrée d'historique remise après un retour (l'enregistrement d'un brouillon la change). */
+  const pageUrl = useRef(`${window.location.pathname}${window.location.search}`);
+  const onBrowserBack = useRef<() => void>(() => undefined);
 
   const update: Update = useCallback((change) => setDraft((current) => change(current)), []);
   const changed = hasChanges(draft, saved);
   const index = PUBLISH_STEPS.indexOf(step);
-  const ready = missingRequiredFields(draft).length === 0;
+  const showsErrors = index <= checkedThrough;
+  const ready = firstIssue(draft, 'review') === null && missingRequiredFields(draft).length === 0;
   const addressError = unfoundAddress !== null && unfoundAddress === draft.address ? ADDRESS_NOT_FOUND : null;
   const title = editing ? 'Modifier l\'annonce' : start.listingStatus === 'draft' ? 'Reprendre le brouillon' : 'Publier une annonce';
+  const busy = publishing || savingDraft;
+  const dialogOpen = leaving || askName || refusal !== null;
 
   // Fermer l'onglet ou suivre un lien avec une saisie non enregistrée : le navigateur demande confirmation.
   useEffect(() => {
@@ -193,70 +260,118 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
     return () => window.removeEventListener('beforeunload', warn);
   }, [changed, published]);
 
+  // Retour du navigateur : comme la flèche de la page, il revient à l'étape précédente, sans question. La publication
+  // a sa propre entrée d'historique, remise après chaque retour ; à la première étape, il quitte la page (la question
+  // seulement s'il y a des changements).
+  useEffect(() => {
+    if (!markedEntry(window.history.state)) pushPublishEntry(pageUrl.current);
+    const onPop = () => {
+      // Arrivée sur l'entrée de la publication (bouton « Suivant » du navigateur) : rien à faire.
+      if (markedEntry(window.history.state)) return;
+      onBrowserBack.current();
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
   // Chaque étape s'ouvre en haut de page.
   useEffect(() => { window.scrollTo({ top: 0 }); }, [step, published]);
 
-  // Champs signalés : le premier est montré.
+  // Après une vérification, l'écran défile une fois jusqu'au premier champ à compléter.
   useEffect(() => {
     if (attempt === 0) return;
     const frame = window.requestAnimationFrame(() => {
-      document.querySelector('.dpub .field-error')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      const root = document.querySelector('.dpub');
+      const field = guided.current;
+      const anchor = (field ? root?.querySelector<HTMLElement>(`[data-guide="${field}"]`) : null) ?? root?.querySelector<HTMLElement>('.field-error');
+      if (anchor) showField(anchor);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [attempt]);
 
   useEffect(() => () => window.clearTimeout(noticeTimer.current), []);
 
-  const showErrors = () => {
-    setShowsErrors(true);
-    setAttempt((count) => count + 1);
-  };
-
   function leaveNow() {
     leavingNow.current = true;
     window.location.assign(back);
   }
 
+  /** Fermer la publication : la question seulement s'il y a des changements. */
   function leave() {
     if (changed) setLeaving(true);
     else leaveNow();
   }
 
-  function goTo(target: PublishStep) {
+  /** Ouvre une étape sans rien vérifier (« Retour », flèche, barre d'étapes) : la saisie reste telle quelle. */
+  function open(target: PublishStep) {
+    setUnfoundAddress(null);
     setStep(target);
   }
 
-  /** Passe à l'étape suivante si les champs obligatoires de l'étape sont remplis ; la position est trouvée en quittant l'adresse. */
+  function goBack() {
+    open(PUBLISH_STEPS[Math.max(index - 1, 0)]);
+  }
+
+  /**
+   * Mène au champ à compléter : son étape s'ouvre, les champs à compléter des étapes vérifiées sont signalés, puis
+   * l'écran défile jusqu'à lui.
+   */
+  function guide(target: Guide, checked: number) {
+    guided.current = target.field;
+    setCheckedThrough((current) => Math.max(current, checked, PUBLISH_STEPS.indexOf(target.step)));
+    setStep(target.step);
+    setAttempt((count) => count + 1);
+  }
+
+  /**
+   * « Continuer » : les étapes jusqu'à celle-ci doivent être complètes, sinon la première erreur est montrée. La position
+   * du bien est cherchée en quittant l'adresse, ou plus loin si l'adresse a été changée puis laissée par la barre d'étapes.
+   */
   async function goForward() {
-    if (!stepIsComplete(draft, step)) {
-      showErrors();
+    const issue = firstIssue(draft, step);
+    if (issue) {
+      guide(issue, index);
       return;
     }
-    if (step === 'main' && draft.coordinate === null && draft.address) {
+    if (index >= MAIN && draft.coordinate === null && draft.address) {
       const address = draft.address;
       setResolving(true);
       const coordinate = await locate(address);
       setResolving(false);
+      // Adresse ou étape changées pendant la recherche : le résultat ne leur correspond plus.
+      if (latest.current.address !== address || currentStep.current !== step) return;
       if (!coordinate) {
         setUnfoundAddress(address);
-        showErrors();
+        guide({ step: 'main', field: 'address' }, index);
         return;
       }
-      // Adresse modifiée pendant la recherche : la position trouvée ne lui correspond plus.
-      if (latest.current.address !== address) return;
       setDraft((current) => ({ ...current, coordinate }));
     }
-    setShowsErrors(false);
     setUnfoundAddress(null);
     setMessage(null);
-    goTo(PUBLISH_STEPS[Math.min(index + 1, PUBLISH_STEPS.length - 1)]);
+    const next = Math.min(index + 1, LAST);
+    setFurthest((current) => Math.max(current, next));
+    setStep(PUBLISH_STEPS[next]);
   }
 
-  function goBack() {
-    setShowsErrors(false);
-    setUnfoundAddress(null);
-    goTo(PUBLISH_STEPS[Math.max(index - 1, 0)]);
-  }
+  onBrowserBack.current = () => {
+    if (published || !window.matchMedia(DESKTOP_QUERY).matches || (index === 0 && !changed && !dialogOpen && !busy)) {
+      // Plus rien à garder ici : le retour du navigateur quitte la page (avec sa question si la saisie n'est pas enregistrée).
+      window.history.back();
+      return;
+    }
+    pushPublishEntry(pageUrl.current);
+    if (dialogOpen) {
+      // Une fenêtre ouverte : le retour la referme.
+      setLeaving(false);
+      setAskName(false);
+      setRefusal(null);
+      return;
+    }
+    if (busy) return;
+    if (index > 0) goBack();
+    else setLeaving(true);
+  };
 
   function showNotice(text: string) {
     setNotice(text);
@@ -283,39 +398,49 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
     // Saisie inchangée pendant l'envoi : les photos deviennent celles du serveur.
     setDraft((current) => (sameDraft(current, sent) ? result.draft : current));
     setSaved(result.draft);
-    window.history.replaceState(null, '', publishPath(sent.id));
+    pageUrl.current = publishPath(sent.id);
+    window.history.replaceState(window.history.state, '', pageUrl.current);
     showNotice('Brouillon enregistré');
     return true;
   }
 
   /**
    * Publie l'annonce, ou enregistre ses modifications ; la confirmation n'apparaît qu'une fois l'enregistrement
-   * confirmé. Un champ obligatoire vide ouvre son étape avec l'erreur.
+   * confirmé. Rien ne part tant qu'un champ obligatoire manque : son étape s'ouvre sur lui. Le prénom n'est demandé
+   * qu'une fois l'annonce complète.
    */
   async function publish({ firstNameSaved = false } = {}) {
     if (publishing || savingDraft) return;
+    const issue = firstIssue(draft, 'review');
+    if (issue) {
+      guide(issue, LAST);
+      return;
+    }
     setPublishing(true);
     setMessage(null);
     try {
       let current = draft;
       // Adresse modifiée : sa position est recalculée avant d'enregistrer.
       if (current.coordinate === null && current.address) {
-        const coordinate = await locate(current.address);
-        if (coordinate) {
-          current = { ...current, coordinate };
-          setDraft(current);
+        const address = current.address;
+        const coordinate = await locate(address);
+        if (!coordinate) {
+          setUnfoundAddress(address);
+          guide({ step: 'main', field: 'address' }, LAST);
+          return;
         }
+        current = { ...current, coordinate };
+        setDraft(current);
       }
       const final = syncBuildingRent(current);
+      const missing = missingRequiredFields(final);
+      if (missing.length > 0) {
+        guide(guideForRequired(missing[0]), LAST);
+        return;
+      }
       // Annonce réelle : un prénom est montré aux visiteurs (jamais l'e-mail).
       if (!editing && !firstNameSaved && (account.details?.first_name ?? '').trim() === '') {
         setAskName(true);
-        return;
-      }
-      const missing = missingRequiredFields(final);
-      if (missing.length > 0) {
-        goTo(stepOf(missing[0]));
-        showErrors();
         return;
       }
       const result = await saveListing(final, editing ? 'edit' : 'publish', {
@@ -325,7 +450,7 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
       if (!result.ok) {
         if (result.refusal) setRefusal(result.message);
         setPublishError(result.message);
-        goTo('review');
+        open('review');
         return;
       }
       setDraft(result.draft);
@@ -361,7 +486,6 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
     );
   }
 
-  const busy = publishing || savingDraft;
   let stepView;
   switch (step) {
     case 'category': stepView = <CategoryStep draft={draft} update={update} showsErrors={showsErrors} />; break;
@@ -373,7 +497,17 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
     case 'media': stepView = <MediaStep draft={draft} update={update} showsErrors={showsErrors} />; break;
     case 'description': stepView = <DescriptionStep draft={draft} update={update} showsErrors={showsErrors} ownerId={start.ownerId ?? account.profile.id} />; break;
     case 'review':
-      stepView = <ReviewStep draft={draft} errorMessage={publishError} onEdit={(target) => { setShowsErrors(true); goTo(target); }} />;
+      stepView = (
+        <ReviewStep
+          draft={draft}
+          errorMessage={publishError}
+          onEdit={(target) => {
+            setCheckedThrough((current) => Math.max(current, PUBLISH_STEPS.indexOf(target)));
+            open(target);
+          }}
+          onFix={(field) => guide(guideForRequired(field), LAST)}
+        />
+      );
       break;
   }
 
@@ -382,21 +516,46 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
       <ScreenHead
         title={title}
         subtitle={`Étape ${index + 1} sur ${PUBLISH_STEPS.length} · ${STEP_TITLES[step]}`}
-        onBack={leave}
-        action={editing ? (
-          // Modification : on enregistre l'annonce elle-même, jamais un brouillon.
-          <button type="button" className="dsc-button dsc-button-light" onClick={() => void publish()} disabled={busy} aria-label="Enregistrer les modifications">
-            Enregistrer
-          </button>
-        ) : draft.category !== null ? (
-          <button type="button" className="dsc-button dsc-button-light" onClick={() => void saveDraft()} disabled={busy} aria-label="Enregistrer en brouillon">
-            {savingDraft ? <span className="spinner dpub-spinner" role="status" aria-label="Enregistrement" /> : 'Brouillon'}
-          </button>
-        ) : undefined}
+        // La flèche revient à l'étape précédente, comme « Retour » ; à la première étape, elle ferme.
+        onBack={() => {
+          if (index === 0) leave();
+          else if (!busy) goBack();
+        }}
+        action={(
+          <div className="dpub-head-actions">
+            {editing ? (
+              // Modification : on enregistre l'annonce elle-même, jamais un brouillon.
+              <button type="button" className="dsc-button dsc-button-light" onClick={() => void publish()} disabled={busy} aria-label="Enregistrer les modifications">
+                Enregistrer
+              </button>
+            ) : draft.category !== null ? (
+              <button type="button" className="dsc-button dsc-button-light" onClick={() => void saveDraft()} disabled={busy} aria-label="Enregistrer en brouillon">
+                {savingDraft ? <span className="spinner dpub-spinner" role="status" aria-label="Enregistrement" /> : 'Brouillon'}
+              </button>
+            ) : null}
+            {/* Fermer depuis n'importe quelle étape : le même rond que la flèche. */}
+            <button type="button" className="dsc-back dpub-close" onClick={leave} aria-label={editing ? 'Fermer la modification' : 'Fermer la publication'}>
+              <Icon name="x" />
+            </button>
+          </div>
+        )}
       />
-      <div className="dpub-progress" aria-hidden="true">
-        {PUBLISH_STEPS.map((item, position) => <span key={item} className={position <= index ? 'is-done' : undefined} />)}
-      </div>
+      <nav className="dpub-progress" aria-label="Étapes">
+        {PUBLISH_STEPS.map((item, position) => {
+          const current = position === index;
+          const className = [position <= furthest ? 'is-done' : '', current ? 'is-current' : ''].filter(Boolean).join(' ') || undefined;
+          // Une étape déjà atteinte, avant ou après celle en cours, s'ouvre d'un clic, sans question ni vérification.
+          return position <= furthest ? (
+            <button key={item} type="button" className={className} aria-current={current ? 'step' : undefined}
+              aria-label={`Étape ${position + 1} sur ${PUBLISH_STEPS.length}, ${STEP_TITLES[item]}, ${current ? 'en cours' : 'terminée'}`}
+              onClick={() => { if (!current && !busy) open(item); }}>
+              <span />
+            </button>
+          ) : (
+            <span key={item} className={className} aria-hidden="true"><span /></span>
+          );
+        })}
+      </nav>
       {notice && <div className="dsc-saved" role="status"><Icon name="check" />{notice}</div>}
 
       {stepView}
@@ -409,7 +568,8 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
             <button type="button" className="dsc-button dsc-button-light" onClick={goBack} disabled={busy}><Icon name="chevronLeft" />Retour</button>
           )}
           {step === 'review' ? (
-            <button type="button" className="dsc-button dsc-button-primary" onClick={() => void publish()} disabled={!ready || busy}>
+            // Atténué tant qu'il manque quelque chose, mais un clic mène au premier champ à compléter.
+            <button type="button" className={`dsc-button dsc-button-primary${ready ? '' : ' is-dimmed'}`} onClick={() => void publish()} disabled={busy}>
               {publishing ? (
                 <span className="spinner dsc-button-spinner" role="status" aria-label={editing ? 'Enregistrement' : 'Publication'} />
               ) : editing ? 'Enregistrer les modifications' : <><Icon name="send" />Publier mon annonce</>}

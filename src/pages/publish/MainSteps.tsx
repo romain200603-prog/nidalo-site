@@ -52,7 +52,7 @@ export function CategoryStep({ draft, update, showsErrors }: StepProps) {
       </Card>
       {category !== null && category !== 'hotel' && (
         <Card title={category === 'investment' ? 'Type d\'actif' : 'Type de bien'}>
-          <div className="dsc-choices-stack" role="group" aria-label={category === 'investment' ? 'Type d\'actif' : 'Type de bien'}>
+          <div className="dsc-choices-stack" role="group" aria-label={category === 'investment' ? 'Type d\'actif' : 'Type de bien'} data-guide="propertyType">
             {subtypes(category).map((option) => (
               <ChoiceChip key={option.title} title={option.title} selected={isSubtypeSelected(draft, option)} expands
                 onClick={() => update((current) => selectSubtype(current, option))} />
@@ -128,14 +128,14 @@ export function MainStep({ draft, update, showsErrors, addressError }: StepProps
           <PlaceField value={draft.address?.street ?? ''} label="Rue et numéro (facultatif)" placeholder="Non renseigné"
             className="dsc-place dsc-place-plain" fetcher={streetFetcher} onChange={setStreet} onChoose={(place) => fill(place, false)} />
         </div>
-        <div className="dpub-postal-row">
-          <div className={`dsc-field-block dpub-place${postalMissing ? ' has-error' : ''}`}>
+        <div className="dpub-postal-row" data-guide="address">
+          <div className={`dsc-field-block dpub-place${postalMissing ? ' has-error' : ''}`} data-guide="postalCode">
             <span className="dsc-label" aria-hidden="true">Code postal</span>
             <PlaceField value={draft.address?.postalCode ?? ''} label="Code postal" placeholder="Non renseigné" className="dsc-place dsc-place-plain"
               fetcher={communeSuggestions} onChange={(text) => setCommuneField('postalCode', text)} onChoose={(place) => fill(place, true)} />
             {postalMissing && <ErrorLine>Obligatoire</ErrorLine>}
           </div>
-          <div className={`dsc-field-block dpub-place${cityMissing ? ' has-error' : ''}`}>
+          <div className={`dsc-field-block dpub-place${cityMissing ? ' has-error' : ''}`} data-guide="city">
             <span className="dsc-label" aria-hidden="true">Ville</span>
             <PlaceField value={draft.address?.city ?? ''} label="Ville" placeholder="Non renseigné" className="dsc-place dsc-place-plain"
               fetcher={communeSuggestions} onChange={(text) => setCommuneField('city', text)} onChoose={(place) => fill(place, true)} />
@@ -152,9 +152,10 @@ export function MainStep({ draft, update, showsErrors, addressError }: StepProps
         </InfoLine>
       </Card>
       <Card title={rent ? 'Loyer' : 'Prix'}>
-        <Amount label={rent ? 'Loyer mensuel hors charges' : 'Prix de vente'} value={draft.price} unit={rent ? '€/mois' : '€'}
+        {/* Le message sous le champ, avec son contour rouge. */}
+        <Amount label={rent ? 'Loyer mensuel hors charges' : 'Prix de vente'} value={draft.price} unit={rent ? '€/mois' : '€'} guide="price"
+          issue={showsErrors && (draft.price ?? 0) <= 0 ? (rent ? 'Indiquez le loyer.' : 'Indiquez le prix.') : null}
           onChange={(price) => update((current) => ({ ...current, price }))} />
-        {showsErrors && (draft.price ?? 0) <= 0 && <ErrorLine>{rent ? 'Indiquez le loyer.' : 'Indiquez le prix.'}</ErrorLine>}
         {draft.transaction === 'sale' && (
           <InfoLine>Prix affiché frais d'agence inclus le cas échéant. Charges, taxe foncière et revenus se renseignent à l'étape « Prix et finances ».</InfoLine>
         )}
@@ -207,21 +208,22 @@ export function FeaturesStep({ draft, update, showsErrors }: StepProps) {
         {type !== 'land' && (
           <>
             <Amount label={type === 'apartment' || type === 'house' ? 'Surface habitable' : 'Surface totale'} value={draft.livingArea} unit="m²"
+              guide="livingArea" issue={showsErrors && (draft.livingArea ?? 0) <= 0 ? 'Indiquez la surface.' : null}
               onChange={(value) => set('livingArea', value)} />
-            {showsErrors && (draft.livingArea ?? 0) <= 0 && <ErrorLine>Indiquez la surface.</ErrorLine>}
           </>
         )}
         {(type === 'house' || type === 'land' || type === 'building' || type === 'hotel') && (
           <>
             <Amount label={type === 'land' ? 'Surface du terrain' : 'Surface du terrain (facultatif)'} value={draft.landArea} unit="m²"
+              guide={type === 'land' ? 'landArea' : undefined}
+              issue={showsErrors && type === 'land' && (draft.landArea ?? 0) <= 0 ? 'Indiquez la surface du terrain.' : null}
               onChange={(value) => set('landArea', value)} />
-            {showsErrors && type === 'land' && (draft.landArea ?? 0) <= 0 && <ErrorLine>Indiquez la surface du terrain.</ErrorLine>}
           </>
         )}
       </Card>
       {(type === 'apartment' || type === 'house') && (
         <Card title="Pièces">
-          <RoomsChoice title="Pièces" value={draft.rooms} onChange={(value) => set('rooms', value)} />
+          <RoomsChoice title="Pièces" value={draft.rooms} onChange={(value) => set('rooms', value)} guide="rooms" />
           {showsErrors && (draft.rooms ?? 0) <= 0 && <ErrorLine>Indiquez le nombre de pièces.</ErrorLine>}
           <RoomsChoice title="Chambres" value={draft.bedrooms} onChange={(value) => set('bedrooms', value)} startsAtOne />
         </Card>
@@ -278,7 +280,7 @@ export function FeaturesStep({ draft, update, showsErrors }: StepProps) {
       )}
       {requiresEnergyDiagnostic(type) && (
         <Card title="Performance énergétique">
-          <EnergyClassChoice title="DPE (classe énergie)" value={energy} onChange={(value) => setEnergy({ energyClass: value })} />
+          <EnergyClassChoice title="DPE (classe énergie)" value={energy} onChange={(value) => setEnergy({ energyClass: value })} guide="energyClass" />
           {showsErrors && energy === null && <ErrorLine>Le DPE est obligatoire pour ce type de bien.</ErrorLine>}
           <EnergyClassChoice title="GES (classe climat)" value={draft.energy.climateClass} onChange={(value) => setEnergy({ climateClass: value })} />
           <Amount label="Consommation (facultatif)" value={draft.energy.primaryEnergyConsumption} unit="kWh/m²/an" integer
@@ -301,7 +303,7 @@ export function FeaturesStep({ draft, update, showsErrors }: StepProps) {
           )}
           {/* Décence énergétique : une classe interdite bloque la publication d'une location de logement. */}
           {ban !== null ? (
-            <ErrorLine>{`${ban} Vous pouvez la proposer à la vente.`}</ErrorLine>
+            <ErrorLine guide="rentalEnergyClass">{`${ban} Vous pouvez la proposer à la vente.`}</ErrorLine>
           ) : draft.transaction === 'rent' && isDwelling(type) && energy !== null && banYear !== null ? (
             <InfoLine>{`DPE ${energy} : location interdite à partir de ${banYear}, et loyer gelé.`}</InfoLine>
           ) : null}
@@ -322,8 +324,8 @@ function HotelFeatures({ hotel, setHotel, showsErrors }: { hotel: HotelDraft; se
         </Choices>
         <InfoLine>Murs et fonds ne sont jamais supposés vendus ensemble : choisissez ce que comprend le prix.</InfoLine>
       </div>
-      <Amount label="Nombre de chambres" value={hotel.rooms} unit="chambres" integer onChange={(rooms) => setHotel({ rooms })} />
-      {showsErrors && (hotel.rooms ?? 0) <= 0 && <ErrorLine>Indiquez le nombre de chambres.</ErrorLine>}
+      <Amount label="Nombre de chambres" value={hotel.rooms} unit="chambres" integer guide="hotelRooms"
+        issue={showsErrors && (hotel.rooms ?? 0) <= 0 ? 'Indiquez le nombre de chambres.' : null} onChange={(rooms) => setHotel({ rooms })} />
       <Choices label="Classement">
         {[1, 2, 3, 4, 5].map((stars) => (
           <ChoiceChip key={stars} title={`${stars} ★`} selected={hotel.stars === stars} expands
@@ -407,7 +409,7 @@ function BuildingFeatures({ draft, setBuilding, showsErrors }: {
   const building = buildingOfDraft(draft) ?? emptyBuilding();
   const total = totalUnits(building);
   return (
-    <Card title={draft.isMixedBuilding ? 'Lots de l\'immeuble mixte' : 'Lots de l\'immeuble'}>
+    <Card title={draft.isMixedBuilding ? 'Lots de l\'immeuble mixte' : 'Lots de l\'immeuble'} guide="mixedBuilding">
       <div className="dsc-pair">
         <Amount label="Logements" value={building.residentialUnits} unit="lots" integer onChange={(residentialUnits) => setBuilding({ residentialUnits })} />
         <Amount label="Commerces" value={building.commercialUnits} unit="lots" integer onChange={(commercialUnits) => setBuilding({ commercialUnits })} />

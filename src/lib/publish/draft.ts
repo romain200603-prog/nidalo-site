@@ -419,6 +419,58 @@ export function stepIsComplete(draft: PublishDraft, step: PublishStep, now = new
   }
 }
 
+/** Champ à compléter d'une étape, repéré dans l'écran pour y mener la personne. */
+export type StepIssue =
+  | 'propertyType' | 'postalCode' | 'city' | 'price' | 'livingArea' | 'landArea' | 'rooms' | 'hotelRooms' | 'mixedBuilding'
+  | 'energyClass' | 'rentalEnergyClass' | 'coOwnershipProcedure' | 'agencyFeesPayer' | 'photos' | 'title' | 'description';
+
+/**
+ * Champs qui empêchent de quitter l'étape, dans l'ordre de l'écran : les mêmes règles que stepIsComplete (la liste est
+ * vide exactement quand l'étape est complète), un champ caché ou sans objet n'y figure jamais.
+ */
+export function stepIssues(draft: PublishDraft, step: PublishStep, now = new Date()): StepIssue[] {
+  const type = draft.propertyType;
+  const issues: StepIssue[] = [];
+  switch (step) {
+    case 'category':
+      if (type === null) issues.push('propertyType');
+      break;
+    case 'main':
+      if (postalCodeOf(draft) === '') issues.push('postalCode');
+      if (cityOf(draft) === '') issues.push('city');
+      if ((draft.price ?? 0) <= 0) issues.push('price');
+      break;
+    case 'features':
+      if (type === 'land') {
+        if ((draft.landArea ?? 0) <= 0) issues.push('landArea');
+        break;
+      }
+      if ((draft.livingArea ?? 0) <= 0) issues.push('livingArea');
+      if (isDwelling(type) && (draft.rooms ?? 0) <= 0) issues.push('rooms');
+      if (type === 'hotel' && (hotelOfDraft(draft)?.rooms ?? 0) <= 0) issues.push('hotelRooms');
+      if (mixedBuildingIncomplete(draft)) issues.push('mixedBuilding');
+      if (requiresEnergyDiagnostic(type) && draft.energy.energyClass === null) issues.push('energyClass');
+      if (rentalBanMessage(draft, now) !== null) issues.push('rentalEnergyClass');
+      break;
+    case 'finance':
+      // Le prix se saisit à l'étape « Informations principales » ; la copropriété vient avant les honoraires.
+      if ((draft.price ?? 0) <= 0) issues.push('price');
+      if (coOwnershipNeedsProcedure(draft)) issues.push('coOwnershipProcedure');
+      if (feesNeedPayer(draft)) issues.push('agencyFeesPayer');
+      break;
+    case 'media':
+      if (draft.photos.length === 0) issues.push('photos');
+      break;
+    case 'description':
+      if (blank(draft.title)) issues.push('title');
+      if (blank(draft.description)) issues.push('description');
+      break;
+    default:
+      break;
+  }
+  return issues;
+}
+
 export function postalCodeOf(draft: PublishDraft): string {
   return draft.address?.postalCode.trim() ?? '';
 }

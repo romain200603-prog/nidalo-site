@@ -82,7 +82,7 @@ function FeesCard({ draft, update, showsErrors }: StepProps) {
   return (
     <Card title="Honoraires d'agence">
       <Amount label="Honoraires TTC" value={draft.agencyFeesAmount} unit="€" onChange={(value) => set('agencyFeesAmount', value)} />
-      <Choices label="À la charge de">
+      <Choices label="À la charge de" guide="agencyFeesPayer">
         {FEE_PAYERS.map((payer) => (
           <ChoiceChip key={payer} title={payerLabel(payer)} selected={draft.agencyFeesPaidBy === payer} expands
             onClick={() => set('agencyFeesPaidBy', draft.agencyFeesPaidBy === payer ? null : payer)} />
@@ -109,7 +109,8 @@ function CoOwnershipCard({ draft, update, showsErrors }: StepProps) {
     <Card title="Copropriété">
       <Amount label="Nombre de lots" value={draft.coOwnershipLots} unit="lots" integer issue={coOwnershipLotsIssue(draft.coOwnershipLots)}
         onChange={(value) => set('coOwnershipLots', value)} />
-      <BoolChoices title="Procédure en cours" value={draft.coOwnershipHasProcedure} onChange={(value) => set('coOwnershipHasProcedure', value)} />
+      <BoolChoices title="Procédure en cours" value={draft.coOwnershipHasProcedure} onChange={(value) => set('coOwnershipHasProcedure', value)}
+        guide="coOwnershipProcedure" />
       {showsErrors && coOwnershipNeedsProcedure(draft) && <ErrorLine>Indiquez si une procédure est en cours.</ErrorLine>}
       <InfoLine>Obligatoires dans l'annonce si le bien est en copropriété. Une procédure en cours signale une copropriété en difficulté : mandataire ad hoc, administrateur provisoire ou état de carence.</InfoLine>
     </Card>

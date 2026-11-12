@@ -2,8 +2,8 @@ import { formatArea, formatPrice } from '../format';
 import { PROPERTY_TYPE_LABELS } from '../labels';
 import type { ListingRow, RentalInfo } from '../listings';
 import {
-  cityOf, missingRequiredFields, newDraft, postalCodeOf, rentalBanMessage, REQUIRED_FIELD_LABELS, syncBuildingRent,
-  type PublishDraft, type PublishStep, type RequiredField,
+  cityOf, missingRequiredFields, newDraft, postalCodeOf, PUBLISH_STEPS, rentalBanMessage, REQUIRED_FIELD_LABELS, stepIsComplete, stepIssues,
+  syncBuildingRent, type PublishDraft, type PublishStep, type RequiredField, type StepIssue,
 } from './draft';
 import { CATEGORY_TITLES } from './labels';
 import { listingWrite } from './serialize';
@@ -115,4 +115,53 @@ export function recapRows(draft: PublishDraft): RecapRow[] {
   if (draft.energy.energyClass !== null) rows.push({ title: 'DPE', value: draft.energy.energyClass, step: 'features' });
   rows.push({ title: 'Photos', value: String(draft.photos.length), step: 'media' });
   return rows;
+}
+
+// MARK: - Naviguer entre les étapes et mener aux champs à compléter
+
+/** Champ vers lequel mener la personne : un champ d'une étape, ou l'adresse introuvable. */
+export type GuideField = StepIssue | 'address';
+export type Guide = { step: PublishStep; field: GuideField };
+
+/** Étape où se corrige un champ (le prix se saisit avec l'adresse, à l'étape « Informations principales »). */
+export function stepOfIssue(field: GuideField): PublishStep {
+  switch (field) {
+    case 'propertyType': return 'category';
+    case 'postalCode': case 'city': case 'price': case 'address': return 'main';
+    case 'livingArea': case 'landArea': case 'rooms': case 'hotelRooms': case 'mixedBuilding': case 'energyClass': case 'rentalEnergyClass': return 'features';
+    case 'coOwnershipProcedure': case 'agencyFeesPayer': return 'finance';
+    case 'photos': return 'media';
+    case 'title': case 'description': return 'description';
+  }
+}
+
+/**
+ * Premier champ à compléter dans les étapes 1 à `through` incluse : l'étape la plus proche du début, puis l'ordre de
+ * l'écran. « Continuer » vérifie les étapes jusqu'à la sienne ; « Publier » et « Enregistrer », toutes.
+ */
+export function firstIssue(draft: PublishDraft, through: PublishStep, now = new Date()): Guide | null {
+  for (const step of PUBLISH_STEPS.slice(0, PUBLISH_STEPS.indexOf(through) + 1)) {
+    const [field] = stepIssues(draft, step, now);
+    if (field) return { step: stepOfIssue(field), field };
+  }
+  return null;
+}
+
+/** Champ de l'écran d'une information exigée pour publier (missingRequiredFields) : la catégorie se choisit avec le type. */
+export function guideForRequired(field: RequiredField): Guide {
+  const target: GuideField = field === 'transaction' ? 'propertyType' : field;
+  return { step: stepOfIssue(target), field: target };
+}
+
+/**
+ * Étape la plus loin atteinte à l'ouverture, pour la barre d'étapes : l'étape d'ouverture pour une nouvelle annonce,
+ * la première étape incomplète d'un brouillon repris, toutes pour une annonce en ligne qu'on modifie.
+ */
+export function furthestAtStart(draft: PublishDraft, listingStatus: string | null, start: PublishStep, now = new Date()): number {
+  const startIndex = PUBLISH_STEPS.indexOf(start);
+  const last = PUBLISH_STEPS.length - 1;
+  if (listingStatus === null) return startIndex;
+  if (listingStatus !== 'draft') return last;
+  const incomplete = PUBLISH_STEPS.findIndex((step) => !stepIsComplete(draft, step, now));
+  return Math.max(startIndex, incomplete === -1 ? last : incomplete);
 }

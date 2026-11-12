@@ -14,11 +14,17 @@ const EMPTY = 'Non renseigné';
 export type Update = (change: (draft: PublishDraft) => PublishDraft) => void;
 export type StepProps = { draft: PublishDraft; update: Update; showsErrors: boolean };
 
+/**
+ * `guide` : repère d'un champ à compléter (`data-guide`, un nom de StepIssue), vers lequel l'écran défile quand
+ * « Continuer », « Publier » ou « Enregistrer » trouve qu'il manque.
+ */
+type Guided = { guide?: string };
+
 /** Carte titrée (SectionCard). */
-export function Card({ title, children }: { title: string; children: ReactNode }) {
+export function Card({ title, guide, children }: { title: string; children: ReactNode } & Guided) {
   const id = useId();
   return (
-    <section className="dsc-card" aria-labelledby={id}>
+    <section className="dsc-card" aria-labelledby={id} data-guide={guide}>
       <h2 id={id} className="dsc-card-title">{title}</h2>
       {children}
     </section>
@@ -30,8 +36,8 @@ export function FieldLabel({ children, id }: { children: ReactNode; id?: string 
 }
 
 /** Message d'erreur sous un champ (ErrorLine). */
-export function ErrorLine({ children }: { children: ReactNode }) {
-  return <p className="field-error dpub-error">{children}</p>;
+export function ErrorLine({ children, guide }: { children: ReactNode } & Guided) {
+  return <p className="field-error dpub-error" data-guide={guide}>{children}</p>;
 }
 
 /** Caractères qui comptent pour replacer le curseur (GroupedNumberInput.isSignificant). */
@@ -57,7 +63,7 @@ function offsetAfterSignificant(formatted: string, count: number): number {
  * curseur à sa place, saisie en % pour une fraction (`percent`), nombre entier (`integer`), sans espaces pour une
  * année (`groups` à false).
  */
-export function Amount({ label, value, onChange, unit, percent = false, integer = false, groups = true, issue = null }: {
+export function Amount({ label, value, onChange, unit, percent = false, integer = false, groups = true, issue = null, guide }: {
   label: string;
   value: number | null;
   onChange: (value: number | null) => void;
@@ -66,7 +72,7 @@ export function Amount({ label, value, onChange, unit, percent = false, integer 
   integer?: boolean;
   groups?: boolean;
   issue?: string | null;
-}) {
+} & Guided) {
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
   const caret = useRef<number | null>(null);
@@ -101,7 +107,7 @@ export function Amount({ label, value, onChange, unit, percent = false, integer 
   const invalid = text.trim() !== '' && inputAmount(text) === null;
   const message = invalid ? AMOUNT_INVALID : issue;
   return (
-    <div className={`number-field dsc-amount${message ? ' has-error' : ''}`}>
+    <div className={`number-field dsc-amount${message ? ' has-error' : ''}`} data-guide={guide}>
       <label htmlFor={id}>{label}</label>
       <div className="number-input">
         <input ref={input} id={id} type="text" inputMode={integer ? 'numeric' : 'decimal'} autoComplete="off" placeholder={EMPTY}
@@ -115,7 +121,7 @@ export function Amount({ label, value, onChange, unit, percent = false, integer 
 }
 
 /** Champ texte (TextInput) : libellé, « Non renseigné », erreur sous le champ. */
-export function TextInput({ label, value, onChange, error = null, maxLength = 150, autoComplete, list, disabled = false }: {
+export function TextInput({ label, value, onChange, error = null, maxLength = 150, autoComplete, list, disabled = false, guide }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
@@ -125,10 +131,10 @@ export function TextInput({ label, value, onChange, error = null, maxLength = 15
   /** Suggestions sous le champ (`<datalist>`). */
   list?: string;
   disabled?: boolean;
-}) {
+} & Guided) {
   const id = useId();
   return (
-    <div className={`dsc-field${error ? ' has-error' : ''}`}>
+    <div className={`dsc-field${error ? ' has-error' : ''}`} data-guide={guide}>
       <label htmlFor={id}>{label}</label>
       <input id={id} className="dsc-input" type="text" placeholder={EMPTY} value={value} maxLength={maxLength} autoComplete={autoComplete ?? 'off'}
         list={list} disabled={disabled} aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-erreur` : undefined}
@@ -139,11 +145,15 @@ export function TextInput({ label, value, onChange, error = null, maxLength = 15
 }
 
 /** Libellé suivi de pastilles. */
-export function Choices({ label, layout = 'row', children }: { label: string; layout?: 'row' | 'wide' | 'outdoor' | 'stack' | 'two'; children: ReactNode }) {
+export function Choices({ label, layout = 'row', guide, children }: {
+  label: string;
+  layout?: 'row' | 'wide' | 'outdoor' | 'stack' | 'two';
+  children: ReactNode;
+} & Guided) {
   const id = useId();
   const grid = layout === 'wide' ? 'dpub-choices-wide' : layout === 'two' ? 'dpub-choices-two' : `dsc-choices-${layout}`;
   return (
-    <div className="dsc-choices" role="group" aria-labelledby={id}>
+    <div className="dsc-choices" role="group" aria-labelledby={id} data-guide={guide}>
       <FieldLabel id={id}>{label}</FieldLabel>
       <div className={grid}>{children}</div>
     </div>
@@ -151,15 +161,15 @@ export function Choices({ label, layout = 'row', children }: { label: string; la
 }
 
 /** Oui, non ou « À préciser » (OptionalBoolPicker avec unsetLabel « À préciser »). */
-export function BoolChoices({ title, value, onChange, trueLabel = 'Oui', falseLabel = 'Non' }: {
+export function BoolChoices({ title, value, onChange, trueLabel = 'Oui', falseLabel = 'Non', guide }: {
   title: string;
   value: boolean | null;
   onChange: (value: boolean | null) => void;
   trueLabel?: string;
   falseLabel?: string;
-}) {
+} & Guided) {
   return (
-    <Choices label={title}>
+    <Choices label={title} guide={guide}>
       <ChoiceChip title="À préciser" selected={value === null} onClick={() => onChange(null)} expands />
       <ChoiceChip title={trueLabel} selected={value === true} onClick={() => onChange(true)} expands />
       <ChoiceChip title={falseLabel} selected={value === false} onClick={() => onChange(false)} expands />
@@ -168,14 +178,14 @@ export function BoolChoices({ title, value, onChange, trueLabel = 'Oui', falseLa
 }
 
 /** Nombre exact de pièces (Studio, 2, 3, 4, 5+) ou de chambres (1 à 5+) ; retoucher le choix l'enlève (RoomsPicker). */
-export function RoomsChoice({ title, value, onChange, startsAtOne = false }: {
+export function RoomsChoice({ title, value, onChange, startsAtOne = false, guide }: {
   title: string;
   value: number | null;
   onChange: (value: number | null) => void;
   startsAtOne?: boolean;
-}) {
+} & Guided) {
   return (
-    <Choices label={title}>
+    <Choices label={title} guide={guide}>
       {[1, 2, 3, 4, 5].map((count) => (
         <ChoiceChip key={count} title={count === 5 ? '5+' : count === 1 && !startsAtOne ? 'Studio' : String(count)}
           selected={value === count} onClick={() => onChange(value === count ? null : count)} expands />
@@ -185,10 +195,14 @@ export function RoomsChoice({ title, value, onChange, startsAtOne = false }: {
 }
 
 /** Classe DPE ou GES parmi A à G (couleurs officielles) ; retoucher la classe choisie l'efface (EnergyClassChoice). */
-export function EnergyClassChoice({ title, value, onChange }: { title: string; value: EnergyClass | null; onChange: (value: EnergyClass | null) => void }) {
+export function EnergyClassChoice({ title, value, onChange, guide }: {
+  title: string;
+  value: EnergyClass | null;
+  onChange: (value: EnergyClass | null) => void;
+} & Guided) {
   const id = useId();
   return (
-    <div className="dsc-choices" role="group" aria-labelledby={id}>
+    <div className="dsc-choices" role="group" aria-labelledby={id} data-guide={guide}>
       <FieldLabel id={id}>{title}</FieldLabel>
       <div className="energy-scale">
         {ENERGY_CLASSES.map((energy) => (

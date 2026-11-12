@@ -62,7 +62,7 @@ export function MediaStep({ draft, update, showsErrors }: StepProps) {
 
   return (
     <>
-      <Card title="Photos">
+      <Card title="Photos" guide="photos">
         {photos.length === 0 ? (
           <p className="dsc-note">Ajoutez au moins une photo. La première est la photo principale de l'annonce.</p>
         ) : (

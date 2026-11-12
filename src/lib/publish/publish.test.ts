@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
-  coOwnershipLotsIssue, coOwnershipNeedsProcedure, emptyHotel, emptyRental, energyCostHint, flatRateWarning, hotelOfDraft, inventoryFeeIssue, missingRequiredFields,
+  buildingOfDraft, coOwnershipLotsIssue, coOwnershipNeedsProcedure, emptyBuilding, emptyHotel, emptyRental, energyCostHint, flatRateWarning, hotelOfDraft, inventoryFeeIssue, missingRequiredFields,
   energyPriceYearIssue, newDraft, rentalBanMessage, rentalChargesLabel, saleChargesLabel, selectCategory, selectSubtype, showsCoOwnership, showsEnergyCosts, showsInventoryFee,
-  showsRentControl, stepIsComplete, subtypes, tenantShareWarning,
+  showsRentControl, stepIsComplete, stepIssues, subtypes, tenantShareWarning, PUBLISH_CATEGORIES, PUBLISH_STEPS,
   type PropertyType, type PublishDraft,
 } from './draft';
-import { canSaveDraft, hasChanges, initialStep, previewRow, recapRows, sameDraft } from './flow';
+import {
+  canSaveDraft, firstIssue, furthestAtStart, guideForRequired, hasChanges, initialStep, previewRow, recapRows, sameDraft, stepOfIssue,
+} from './flow';
 import { appDecodingProblems, assetJson, dayToDate, draftFromRow, listingWrite } from './serialize';
 import { proposedDescription, proposedTitle } from './writing';
 
@@ -329,5 +331,83 @@ describe('année des prix de l’énergie du DPE', () => {
     expect([energyPriceYearIssue(null), energyPriceYearIssue(2024), energyPriceYearIssue(1999), energyPriceYearIssue(20210)])
       .toEqual([null, null, 'Saisissez une année entre 2000 et 2100.', 'Saisissez une année entre 2000 et 2100.']);
     expect(listingWrite(costs(1999), { insert: false }).energy_price_year).toBeNull();
+  });
+});
+
+describe('étapes : revenir librement et mener aux champs à compléter', () => {
+  const kind = (category: (typeof PUBLISH_CATEGORIES)[number], index: number) => selectSubtype(selectCategory(newDraft('x'), category), subtypes(category)[index]);
+  const flatInvest = (index: number) => selectSubtype(selectCategory(flat(), 'investment'), subtypes('investment')[index]);
+  /** Brouillons variés : vides et complets de chaque type, puis l'appartement complet avec un champ retiré à la fois. */
+  function samples(): PublishDraft[] {
+    const list: PublishDraft[] = [newDraft('x'), flat()];
+    for (const category of PUBLISH_CATEGORIES) {
+      subtypes(category).forEach((_, index) => {
+        list.push(kind(category, index));
+        list.push(selectSubtype(selectCategory(flat(), category), subtypes(category)[index]));
+      });
+    }
+    const full = flat();
+    list.push(
+      { ...full, address: null, coordinate: null }, { ...full, address: { ...full.address!, postalCode: '' } }, { ...full, address: { ...full.address!, city: ' ' } },
+      { ...full, price: null }, { ...full, price: 0 }, { ...full, livingArea: null }, { ...full, rooms: null }, { ...full, photos: [] },
+      { ...full, energy: { ...full.energy, energyClass: null } }, { ...full, title: ' ' }, { ...full, description: '' },
+      { ...full, agencyFeesAmount: 9_000 }, { ...full, coOwnershipLots: 12 }, { ...full, coOwnershipLots: 12, agencyFeesAmount: 9_000, price: null },
+      { ...selectCategory(full, 'rental'), energy: { ...full.energy, energyClass: 'G' } },
+      { ...flatInvest(3), assetDetails: { kind: 'building', building: { ...(buildingOfDraft(flatInvest(3)) ?? emptyBuilding()), residentialUnits: 4, commercialUnits: 0 } } },
+      { ...flatInvest(3), assetDetails: { kind: 'building', building: { ...(buildingOfDraft(flatInvest(3)) ?? emptyBuilding()), residentialUnits: 4, commercialUnits: 1 } } },
+    );
+    return list;
+  }
+
+  it('les champs signalés suivent exactement les règles de chaque étape', () => {
+    for (const draft of samples()) {
+      for (const step of PUBLISH_STEPS) {
+        expect(stepIssues(draft, step, NOW).length === 0, `${draft.propertyType} · ${step}`).toBe(stepIsComplete(draft, step, NOW));
+      }
+    }
+  });
+
+  it('dans l’ordre de l’écran, sans les champs cachés ou sans objet', () => {
+    const empty = kind('residential', 0);
+    expect(stepIssues(empty, 'main', NOW)).toEqual(['postalCode', 'city', 'price']);
+    expect(stepIssues(empty, 'features', NOW)).toEqual(['livingArea', 'rooms', 'energyClass']);
+    expect(stepIssues(empty, 'description', NOW)).toEqual(['title', 'description']);
+    // Un local et des bureaux n'ont pas de pièces ; un terrain et un parking pas de DPE.
+    expect(stepIssues(kind('investment', 4), 'features', NOW)).toEqual(['livingArea', 'energyClass']);
+    expect(stepIssues(kind('residential', 2), 'features', NOW)).toEqual(['landArea']);
+    expect(stepIssues(kind('rental', 2), 'features', NOW)).toEqual(['livingArea']);
+    expect(stepIssues(kind('hotel', 0), 'features', NOW)).toEqual(['livingArea', 'hotelRooms', 'energyClass']);
+    expect(stepIssues(kind('investment', 3), 'features', NOW)).toEqual(['livingArea', 'mixedBuilding', 'energyClass']);
+    // Les pièces d'un appartement ne comptent plus une fois le type changé pour un local.
+    const changed = selectSubtype(selectCategory({ ...flat(), rooms: null }, 'investment'), subtypes('investment')[4]);
+    expect(stepIssues(changed, 'features', NOW)).toEqual([]);
+    // Prix et finances : la copropriété avant les honoraires (ordre de l'écran).
+    expect(stepIssues({ ...flat(), coOwnershipLots: 12, agencyFeesAmount: 9_000 }, 'finance', NOW)).toEqual(['coOwnershipProcedure', 'agencyFeesPayer']);
+    expect(stepIssues({ ...selectCategory(flat(), 'rental'), energy: { ...flat().energy, energyClass: 'G' } }, 'features', NOW)).toEqual(['rentalEnergyClass']);
+  });
+
+  it('la première étape à corriger, puis le premier champ de l’écran', () => {
+    const several: PublishDraft = { ...flat(), price: null, photos: [], description: '' };
+    expect(firstIssue(several, 'review', NOW)).toEqual({ step: 'main', field: 'price' });
+    expect(firstIssue(several, 'description', NOW)).toEqual({ step: 'main', field: 'price' });
+    const later: PublishDraft = { ...flat(), photos: [], description: '' };
+    // « Continuer » à l'étape 4 ne regarde pas encore les photos ; à l'étape 6, si.
+    expect(firstIssue(later, 'finance', NOW)).toBeNull();
+    expect(firstIssue(later, 'description', NOW)).toEqual({ step: 'media', field: 'photos' });
+    expect(firstIssue(flat(), 'review', NOW)).toBeNull();
+    // Le prix, demandé aussi à l'étape « Prix et finances », se corrige avec l'adresse.
+    expect(stepOfIssue('price')).toBe('main');
+    expect(guideForRequired('transaction')).toEqual({ step: 'category', field: 'propertyType' });
+    expect(guideForRequired('address')).toEqual({ step: 'main', field: 'address' });
+    expect(guideForRequired('rentalEnergyClass')).toEqual({ step: 'features', field: 'rentalEnergyClass' });
+  });
+
+  it('étape la plus loin atteinte : nouvelle annonce, brouillon repris, modification', () => {
+    expect(furthestAtStart(newDraft('x'), null, 'category', NOW)).toBe(0);
+    const resumed: PublishDraft = { ...flat(), livingArea: null };
+    expect(furthestAtStart(resumed, 'draft', 'main', NOW)).toBe(PUBLISH_STEPS.indexOf('features'));
+    expect(furthestAtStart(flat(), 'draft', 'main', NOW)).toBe(PUBLISH_STEPS.length - 1);
+    expect(furthestAtStart({ ...flat(), price: null }, 'draft', 'media', NOW)).toBe(PUBLISH_STEPS.indexOf('media'));
+    expect(furthestAtStart({ ...flat(), price: null }, 'active', 'main', NOW)).toBe(PUBLISH_STEPS.length - 1);
   });
 });

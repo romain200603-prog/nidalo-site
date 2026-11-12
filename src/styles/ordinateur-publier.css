@@ -3,10 +3,21 @@
    (progression en 7 étapes, photos, aperçu, vérification, confirmation). Sous 1024 px, la page garde le message
    « bientôt » du téléphone : rien ici ne s'applique. */
 @media (min-width: 1024px) {
-  /* Progression : une barre par étape, remplie jusqu'à l'étape en cours. */
-  .dpub-progress { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin: 0 0 4px; }
-  .dpub-progress > span { height: 5px; border-radius: 999px; background: var(--d-card-border); }
-  .dpub-progress > span.is-done { background: var(--d-blue); }
+  /* Progression : une barre par étape, bleue jusqu'à l'étape la plus loin atteinte, un peu plus épaisse pour l'étape
+     en cours. Chaque étape atteinte s'ouvre d'un clic, sur une zone de 44 px de haut prise sur l'espace autour de la
+     barre (les marges négatives laissent la page à la même place). */
+  .dpub-progress { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin: -19.5px 0 -15.5px; }
+  .dpub-progress > * { display: flex; align-items: center; height: 44px; padding: 0; border: 0; background: none; }
+  .dpub-progress > button { cursor: pointer; }
+  .dpub-progress > * > span { flex: 1; height: 5px; border-radius: 999px; background: var(--d-card-border); }
+  .dpub-progress > .is-done > span { background: var(--d-blue); }
+  .dpub-progress > .is-current > span { height: 8px; }
+  .dpub-progress > button:hover > span { background: var(--d-blue-hover); }
+
+  /* En-tête : « Brouillon » (ou « Enregistrer ») puis « Fermer », le même rond que la flèche. */
+  .dpub-head-actions { display: flex; align-items: center; gap: 10px; }
+  /* « Publier mon annonce » atténué tant qu'il manque quelque chose : un clic mène au champ à compléter. */
+  .dpub .dsc-button.is-dimmed { opacity: 0.45; }
   .dpub-spinner { width: 18px; height: 18px; border-width: 2px; }
   .dpub-progress-text { color: var(--d-grey); font-size: 14px; font-weight: 600; text-align: center; }
   .dpub .dsc-action-buttons.is-single { grid-template-columns: minmax(0, 1fr); }
