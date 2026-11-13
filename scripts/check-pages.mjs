@@ -2083,9 +2083,9 @@ try {
   // Messages sur ordinateur (maquette 3) : boîte de réception, conversation, actions envoyées au serveur simulé comme
   // l'app les envoie, temps réel, à 1440 × 960 puis 1024 × 768 ; horloge figée au vendredi 6 novembre 2026, 10 h 50
   // à Paris. Captures pour Romain : 3-messages-*.png.
-  const chatContext = async ({ width = 1440, height = 960, account = {}, signedIn = true, phone = false } = {}) => {
+  const chatContext = async ({ width = 1440, height = 960, account = {}, signedIn = true, phone = false, reducedMotion = 'no-preference' } = {}) => {
     const context = await browser.newContext(phone ? { ...devices['iPhone 13'], locale: 'fr-FR', timezoneId: 'Europe/Paris' }
-      : { viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR', timezoneId: 'Europe/Paris' });
+      : { viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR', timezoneId: 'Europe/Paris', reducedMotion });
     await context.clock.setFixedTime(CHAT_NOW);
     const server = await mock(context, { signedIn, listingRows: [...listings, ...HOME_LISTINGS], account });
     const chat = chatState();
@@ -2594,6 +2594,119 @@ try {
     }
     await page.close();
     await chatDesk.close();
+  }
+
+  // Messages vocaux et GIF envoyés depuis l'app (MessageAttachment .audio et .gif), dans la conversation archivée avec
+  // Marc P. : le site les lit (lecture au premier appui par une URL signée, barres et durée ; GIF de KLIPY sans son, en
+  // boucle, image fixe et lecture à l'appui avec « Réduire les animations »), il n'en envoie pas. Une sorte inconnue
+  // affiche la ligne neutre de l'app. Captures : 3-messages-vocal-gif-1440.png et 3-messages-gif-reduit-1440.png.
+  {
+    const V = 'messages vocal et GIF';
+    const VOICE_PATH = `${chatId(3)}/6F1C2E3F-4B5D-4E6F-8A9B-0C1D2E3F4A61.m4a`;
+    const KLIPY = 'https://static.klipy.com/ii/935d7ab9d8c6202580a668421940ec81/14/af/';
+    const voiceFile = await readFile(join(root, 'scripts/fixtures/vocal.m4a'));
+    const gifFiles = { 'V6da8Awi.mp4': ['video/mp4', await readFile(join(root, 'scripts/fixtures/gif.mp4'))], 'uvntdY4w.jpg': ['image/jpeg', await readFile(join(root, 'scripts/fixtures/gif-fixe.jpg'))] };
+    const row = (n, sender, createdAt, item, preview) => ({
+      id: messageId(n), conversation_id: chatId(3), sender_id: sender, kind: 'attachments', client_id: messageId(n), content: { attachments: { _0: [item] } },
+      created_at: createdAt, expires_at: null, message_reactions: [], preview,
+    });
+    const WAVEFORM = Array.from({ length: 48 }, (_, index) => Math.round(50 + 45 * Math.sin(index / 2.3)));
+    for (const reduced of [false, true]) {
+      const { context: voiceDesk, chat } = await chatContext({ width: 1440, height: 960, reducedMotion: reduced ? 'reduce' : 'no-preference' });
+      chat.messages.push(
+        row(26, USER_ID, '2026-11-02T09:59:00Z', {
+          id: '6F1C2E3F-4B5D-4E6F-8A9B-0C1D2E3F4A62', kind: 'gif', fileName: 'Bonjour', byteCount: 0, remoteURL: `${KLIPY}V6da8Awi.mp4`,
+          previewURL: `${KLIPY}uvntdY4w.jpg`, width: 480, height: 270, provider: 'klipy', providerId: 'bonjour-662',
+        }, '🎞️ GIF'),
+        row(27, MARC_ID, '2026-11-02T09:59:30Z', { id: '6F1C2E3F-4B5D-4E6F-8A9B-0C1D2E3F4A63', kind: 'sticker', fileName: 'Autocollant', byteCount: 0 }, '✨ Autocollant'),
+        row(28, MARC_ID, '2026-11-02T10:05:00Z', {
+          id: '6F1C2E3F-4B5D-4E6F-8A9B-0C1D2E3F4A61', kind: 'audio', fileName: 'Message vocal', storagePath: VOICE_PATH, byteCount: voiceFile.length,
+          durationSeconds: 3.2, waveform: WAVEFORM,
+        }, '🎤 Message vocal (0:03)'),
+      );
+      // Avec « Réduire les animations », le fichier du vocal est illisible : la bulle doit le dire.
+      chat.files.set(VOICE_PATH, { type: 'audio/mp4', body: reduced ? Buffer.from('pas un fichier son') : voiceFile });
+      const klipy = [];
+      await voiceDesk.route(/^https:\/\/static\.klipy\.com\//, (route) => {
+        const url = route.request().url();
+        klipy.push(url);
+        const file = gifFiles[url.split('/').pop()];
+        return file ? route.fulfill({ status: 200, contentType: file[0], headers: { 'access-control-allow-origin': '*' }, body: file[1] }) : route.fulfill({ status: 404, body: '' });
+      });
+      const voicePage = await open(voiceDesk, '/messages/', `${V}${reduced ? ' (animations réduites)' : ''}`);
+      const voiceReads = [];
+      voicePage.on('request', (request) => { if (request.method() === 'GET' && request.url().includes(`/object/sign/message-attachments/${VOICE_PATH}`)) voiceReads.push(request.url()); });
+      await voicePage.waitForSelector('.dm-list .dm-row');
+      await voicePage.click('.dm-chip[aria-label="Archivés"]');
+      await waitForRows(voicePage, ['Marc P.'], `${V} : archivées`);
+      expectSame(V, 'aperçu du vocal dans la liste', (await inboxRows(voicePage))[0]?.preview, '🎤 Message vocal (0:03)');
+      await voicePage.click(rowLink(3));
+      await voicePage.waitForURL(`${base}/messages/?c=${chatId(3)}`);
+      await voicePage.waitForSelector('.dm-voice');
+      const voiceShape = await voicePage.evaluate(() => {
+        const bubble = document.querySelector('.dm-voice');
+        const gif = document.querySelector('.dm-gif');
+        const box = gif?.getBoundingClientRect();
+        return {
+          received: !bubble.classList.contains('is-out') && !bubble.closest('.dm-msg')?.classList.contains('is-out'), bars: bubble.querySelectorAll('.dm-voice-bars > span').length,
+          time: bubble.querySelector('.dm-voice-time')?.textContent, button: bubble.querySelector('.dm-voice-play')?.getAttribute('aria-label'),
+          label: bubble.getAttribute('aria-label'), width: Math.round(bubble.getBoundingClientRect().width),
+          gifMine: Boolean(gif?.closest('.dm-msg.is-out')), gifSize: box ? [Math.round(box.width), Math.round(box.height)] : null,
+          gifStatus: gif?.querySelectorAll('.dm-status.is-on-image').length ?? 0, gifOuterStatus: gif?.closest('.dm-msg')?.querySelectorAll(':scope > .dm-msg-status').length ?? null,
+          unsupported: [...document.querySelectorAll('.dm-caption.is-unsupported')].map((el) => el.textContent),
+        };
+      });
+      expectSame(V, 'bulle vocale et GIF', voiceShape, {
+        received: true, bars: 28, time: '0:03', button: 'Écouter le message vocal', label: 'Message vocal, 0:03', width: 250,
+        gifMine: true, gifSize: [240, 135], gifStatus: 1, gifOuterStatus: 0, unsupported: ['Ce contenu n\'est pas pris en charge par cette version de Nidalo.'],
+      });
+      if (!reduced) {
+        // GIF : vidéo de KLIPY, sans son, en boucle, qui joue seule.
+        await voicePage.waitForFunction(() => { const video = document.querySelector('.dm-gif video'); return video && video.currentTime > 0.2; }, null, { timeout: 8000 })
+          .catch(async () => problems.push(`${V} : le GIF ne joue pas (${await voicePage.$eval('.dm-gif', (el) => el.outerHTML.slice(0, 400))})`));
+        expectSame(V, 'vidéo du GIF', await voicePage.evaluate(() => {
+          const video = document.querySelector('.dm-gif video');
+          return video ? [video.getAttribute('src'), video.muted, video.loop, video.closest('.dm-gif').querySelectorAll('img').length] : null;
+        }), [`${KLIPY}V6da8Awi.mp4`, true, true, 0]);
+        // Vocal : le lien signé est prêt dès l'affichage (comme les documents), mais le fichier ne se charge qu'à
+        // l'appui ; lecture, barres écoutées, puis pause.
+        await voicePage.waitForTimeout(800);
+        if (voiceReads.length) problems.push(`${V} : fichier du vocal chargé avant l'appui`);
+        await voicePage.click('.dm-voice-play');
+        await voicePage.waitForSelector('.dm-voice-play[aria-label="Mettre en pause"]', { timeout: 8000 }).catch(() => problems.push(`${V} : le vocal ne joue pas`));
+        expectSame(V, 'URL signée du vocal, demandée une fois', chat.signs.filter((sign) => sign.path === VOICE_PATH).map((sign) => sign.body), [{ expiresIn: 600 }]);
+        if (!voiceReads.length) problems.push(`${V} : fichier du vocal non lu à l'appui`);
+        await voicePage.waitForFunction(() => document.querySelectorAll('.dm-voice-bars > span.is-played').length >= 8, null, { timeout: 8000 })
+          .catch(() => problems.push(`${V} : barres écoutées absentes`));
+        await voicePage.click('.dm-voice-play');
+        await voicePage.waitForSelector('.dm-voice-play[aria-label="Écouter le message vocal"]', { timeout: 8000 }).catch(() => problems.push(`${V} : pause sans effet`));
+        const paused = await voicePage.$eval('.dm-voice', (bubble) => [bubble.querySelectorAll('.dm-voice-bars > span.is-played').length, bubble.querySelector('.dm-voice-time').textContent]);
+        if (!(paused[0] >= 8 && paused[0] < 28) || !/^0:0[1-3]$/.test(paused[1])) problems.push(`${V} : vocal en pause ${JSON.stringify(paused)}`);
+        await chatShot(voicePage, '3-messages-vocal-gif-1440.png');
+        // Jusqu'au bout : la bulle revient au début, avec la durée totale.
+        await voicePage.click('.dm-voice-play');
+        await voicePage.waitForFunction(() => document.querySelector('.dm-voice-play')?.getAttribute('aria-label') === 'Écouter le message vocal'
+          && document.querySelectorAll('.dm-voice-bars > span.is-played').length === 0, null, { timeout: 10000 }).catch(() => problems.push(`${V} : fin du vocal`));
+        expectSame(V, 'vocal fini', await textOf(voicePage, '.dm-voice-time'), '0:03');
+      } else {
+        // « Réduire les animations » : image fixe et bouton lecture ; le GIF joue à l'appui.
+        await imagesLoaded(voicePage, '.dm-gif img', 1, `${V} : image fixe`);
+        expectSame(V, 'GIF fixe', [await voicePage.getAttribute('.dm-gif img', 'src'), await voicePage.locator('.dm-gif video').count(), await voicePage.getAttribute('.dm-gif-play', 'aria-label')],
+          [`${KLIPY}uvntdY4w.jpg`, 0, 'Lire le GIF']);
+        await chatShot(voicePage, '3-messages-gif-reduit-1440.png');
+        await voicePage.click('.dm-gif-play');
+        await voicePage.waitForSelector('.dm-gif video', { timeout: 8000 }).catch(() => problems.push(`${V} : le GIF ne joue pas à l'appui`));
+        expectSame(V, 'GIF lancé', await voicePage.getAttribute('.dm-gif-play', 'aria-label'), 'Arrêter le GIF');
+        // Fichier du vocal illisible : le message d'erreur de l'app, et un nouvel essai possible.
+        await voicePage.click('.dm-voice-play');
+        await voicePage.waitForSelector('.dm-voice-error', { timeout: 8000 }).catch(() => problems.push(`${V} : erreur de lecture non affichée`));
+        expectSame(V, 'erreur de lecture', [await textOf(voicePage, '.dm-voice-error'), await voicePage.isDisabled('.dm-voice-play')], ['Lecture impossible. Réessayez.', false]);
+      }
+      const outside = klipy.filter((url) => !url.startsWith(KLIPY));
+      if (outside.length) problems.push(`${V} : adresses inattendues ${outside.join(', ')}`);
+      await voicePage.close();
+      await voiceDesk.close();
+    }
   }
 
   // Premier message sans prénom : « Votre prénom » (comme l'app), enregistré comme updateUser, puis le message part.

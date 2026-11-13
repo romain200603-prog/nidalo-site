@@ -3,7 +3,7 @@ import { Icon } from '../../components/Icon';
 import { formatPrice } from '../../lib/format';
 import { allowedActions, effectiveStatus, offerGapLabel, offerStatusLabel, type OfferAction, type OfferRow } from '../../lib/listing/offers';
 import type { Message } from '../../lib/messages/api';
-import { documentIcon, documentLine, isMedia, type Attachment } from '../../lib/messages/content';
+import { documentIcon, documentLine, isMedia, UNSUPPORTED_ATTACHMENT, type Attachment } from '../../lib/messages/content';
 import { clock, durationLabel, sizeLabel } from '../../lib/messages/format';
 import { sameId, type Conversation } from '../../lib/messages/inbox';
 import { sendText, toggleHeart } from '../../lib/messages/store';
@@ -11,6 +11,7 @@ import {
   bubbleText, groupSender, mediaEntries, QUICK_REPLIES, senderName, showsQuickReplies, threadDays, type ThreadRow,
 } from '../../lib/messages/thread';
 import { ActionMenu, CounterpartAvatar, Dialog, showIphoneOnly, useSignedUrl } from './parts';
+import { GifBubble, VoiceBubble } from './VoiceGif';
 
 // Messages de la conversation ouverte (ConversationView.messagesList) : jours, séries de bulles, bulles blanches
 // reçues et bleues envoyées, cœur, pièces jointes (AttachmentBubble), cartes d'offre (OfferCard), lignes système,
@@ -184,7 +185,8 @@ function MessageRow({ row, conversation, offer, offersLoading, me, onOfferAction
   }
 
   if (content.kind === 'attachments') {
-    const hasMedia = content.items.some(isMedia);
+    // Photos, vidéos et GIF portent l'heure sur l'image.
+    const hasMedia = content.items.some((item) => isMedia(item) || item.kind === 'gif');
     return (
       <div className={`dm-msg${outgoing ? ' is-out' : ''}${spacing}`}>
         {name}
@@ -327,9 +329,14 @@ function AttachmentBubble({ items, caption, outgoing, message, onOpenMedia }: {
           case 'document': return <DocumentCard key={item.id} item={item} outgoing={outgoing} />;
           case 'location': return <LocationCard key={item.id} item={item} outgoing={outgoing} />;
           case 'contact': return <ContactCard key={item.id} item={item} outgoing={outgoing} />;
+          case 'audio': return <VoiceBubble key={item.id} item={item} outgoing={outgoing} />;
+          case 'gif': return (
+            <GifBubble key={item.id} item={item} status={<StatusLabel time={message.createdAt} outgoing={outgoing} read={message.isRead} className="is-on-image" />} />
+          );
           default: return null;
         }
       })}
+      {items.length === 0 && !text && <p className={`dm-caption is-unsupported${outgoing ? ' is-out' : ''}`}>{UNSUPPORTED_ATTACHMENT}</p>}
       {media.length === 0 && text && <p className={`dm-caption${outgoing ? ' is-out' : ''}`}>{text}</p>}
     </div>
   );

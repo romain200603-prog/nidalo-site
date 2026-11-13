@@ -24,16 +24,19 @@ const pages = [
 const EDITOR_NAME = process.env.NIDALO_EDITEUR ?? 'Romain Badel';
 
 const SUPABASE = 'https://izzsoitqtzzswkpvdozd.supabase.co';
+/** GIF envoyés depuis l'app : affichés depuis le serveur de KLIPY, tels quels (rien n'est copié chez Nidalo). */
+const KLIPY_MEDIA = 'https://static.klipy.com';
 
 /** Règles de sécurité du navigateur : seuls les serveurs listés peuvent être contactés. */
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'none'",
   "script-src 'self'",
   "style-src 'self'",
-  `img-src 'self' data: blob: ${SUPABASE} https://data.geopf.fr`,
+  `img-src 'self' data: blob: ${SUPABASE} https://data.geopf.fr ${KLIPY_MEDIA}`,
   "font-src 'self'",
-  // Vidéos des messages (URL signées du bucket message-attachments) et vidéo choisie avant envoi (blob:).
-  `media-src ${SUPABASE} blob:`,
+  // Vidéos et messages vocaux des messages (URL signées du bucket message-attachments), vidéo choisie avant envoi
+  // (blob:) et GIF de KLIPY en vidéo.
+  `media-src ${SUPABASE} blob: ${KLIPY_MEDIA}`,
   `connect-src 'self' ${SUPABASE} ${SUPABASE.replace('https:', 'wss:')} https://tiles.openfreemap.org https://data.geopf.fr https://geo.api.gouv.fr`,
   "worker-src 'self' blob:",
   "child-src 'self' blob:",

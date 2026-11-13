@@ -2,7 +2,9 @@
 // ImmoDomain/Messaging/Message.swift et MessageAttachment.swift). Le site lit chaque sorte de message ; il n'écrit
 // que du texte et des pièces jointes, comme l'app (CompositeMessagingRepository.send : text, attachments).
 
-export type AttachmentKind = 'photo' | 'video' | 'document' | 'location' | 'contact';
+import { durationLabel } from './format';
+
+export type AttachmentKind = 'photo' | 'video' | 'document' | 'location' | 'contact' | 'audio' | 'gif';
 
 export const DOCUMENT_CATEGORIES = [
   'energyDiagnostic', 'asbestos', 'lead', 'otherDiagnostic', 'technicalReport', 'floorPlan', 'propertyPhotos',
@@ -24,6 +26,15 @@ export type Attachment = {
   longitude?: number;
   detail?: string;
   contactKey?: string;
+  /** Message vocal : niveaux du son, de 0 à 100. */
+  waveform?: number[];
+  /** GIF : adresses chez le fournisseur (KLIPY), rien n'est copié chez Nidalo. */
+  remoteURL?: string;
+  previewURL?: string;
+  width?: number;
+  height?: number;
+  provider?: string;
+  providerId?: string;
 };
 
 export type MessageContent =
@@ -45,7 +56,21 @@ const isObject = (value: unknown): value is Json => typeof value === 'object' &&
 const text = (value: unknown): string | null => (typeof value === 'string' ? value : null);
 const number = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
 
-const KINDS: readonly AttachmentKind[] = ['photo', 'video', 'document', 'location', 'contact'];
+const KINDS: readonly AttachmentKind[] = ['photo', 'video', 'document', 'location', 'contact', 'audio', 'gif'];
+
+/** Niveaux d'un vocal : nombres de 0 à 100 ([UInt8] de Swift), ou octets en base64 (Data de Swift). */
+function levels(value: unknown): number[] | null {
+  let raw: number[] = [];
+  if (Array.isArray(value)) raw = value.filter((level): level is number => typeof level === 'number' && Number.isFinite(level));
+  else if (typeof value === 'string' && value) {
+    try {
+      raw = [...atob(value)].map((character) => character.charCodeAt(0));
+    } catch {
+      raw = [];
+    }
+  }
+  return raw.length ? raw.slice(0, 200).map((level) => Math.min(100, Math.max(0, level))) : null;
+}
 
 function attachment(value: unknown): Attachment | null {
   if (!isObject(value)) return null;
@@ -70,6 +95,18 @@ function attachment(value: unknown): Attachment | null {
   if (detail !== null) item.detail = detail;
   const contactKey = text(value.contactKey);
   if (contactKey !== null) item.contactKey = contactKey;
+  const waveform = levels(value.waveform);
+  if (waveform) item.waveform = waveform;
+  for (const key of ['remoteURL', 'previewURL', 'provider'] as const) {
+    const field = text(value[key]);
+    if (field !== null) item[key] = field;
+  }
+  const providerId = text(value.providerId) ?? (number(value.providerId) !== null ? String(value.providerId) : null);
+  if (providerId !== null) item.providerId = providerId;
+  const width = number(value.width);
+  const height = number(value.height);
+  if (width !== null && width > 0) item.width = width;
+  if (height !== null && height > 0) item.height = height;
   return item;
 }
 
@@ -132,8 +169,12 @@ export function attachmentsPreview(items: Attachment[], caption: string | null):
       case 'document': return `📎 ${only.fileName}`;
       case 'location': return '📍 Localisation';
       case 'contact': return `👤 ${only.fileName}`;
+      case 'audio': return only.durationSeconds !== undefined ? `🎤 Message vocal (${durationLabel(only.durationSeconds)})` : '🎤 Message vocal';
+      case 'gif': return '🎞️ GIF';
     }
   }
+  // Aucune pièce lisible (sorte venue d'une version plus récente de l'app) : jamais « 0 photos ».
+  if (items.length === 0) return '📎 Pièce jointe';
   if (photos === items.length) return `📷 ${photos} photos`;
   if (videos === items.length) return `🎥 ${videos} vidéos`;
   return `📎 ${items.length} pièces jointes`;
@@ -157,6 +198,44 @@ export function contentPreview(content: MessageContent): string {
 }
 
 export const isMedia = (item: Attachment) => item.kind === 'photo' || item.kind === 'video';
+
+/** Texte d'une pièce jointe d'une sorte inconnue, comme dans l'app. */
+export const UNSUPPORTED_ATTACHMENT = 'Ce contenu n\'est pas pris en charge par cette version de Nidalo.';
+
+/** Adresse d'un GIF que le site affiche : https chez KLIPY seulement (static.klipy.com), sinon `null`. */
+export function gifAddress(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.username || url.password) return null;
+    // Le même serveur que la règle de sécurité du site (img-src et media-src de vite.config.ts).
+    if (url.hostname !== 'static.klipy.com' || url.port) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+/** Un GIF en vidéo (mp4, webm) plutôt qu'en image (gif, webp). */
+export const isVideoAddress = (address: string) => /\.(mp4|webm)$/i.test(new URL(address).pathname);
+
+/** Proportions d'un GIF (largeur / hauteur) : celles envoyées, bornées comme les photos ; carré sans taille. */
+export function gifRatio(item: Pick<Attachment, 'width' | 'height'>): number {
+  if (!item.width || !item.height) return 1;
+  return Math.min(Math.max(item.width / item.height, 0.75), 320 / 120);
+}
+
+/** Barres d'un vocal : `count` hauteurs de 0 à 1, moyennes des niveaux reçus ; barres basses sans niveaux. */
+export function voiceBars(waveform: number[] | undefined, count: number): number[] {
+  if (!waveform || waveform.length === 0) return Array.from({ length: count }, () => 0.3);
+  return Array.from({ length: count }, (_, index) => {
+    const start = Math.floor((index * waveform.length) / count);
+    const end = Math.max(start + 1, Math.floor(((index + 1) * waveform.length) / count));
+    const slice = waveform.slice(start, Math.min(end, waveform.length));
+    const average = slice.reduce((sum, level) => sum + level, 0) / Math.max(1, slice.length);
+    return Math.min(1, Math.max(0, average / 100));
+  });
+}
 
 /** Extension en majuscules (« PDF »), vide sans extension (MessageAttachment.fileExtension). */
 export function fileExtension(fileName: string): string {
