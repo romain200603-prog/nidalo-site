@@ -1,8 +1,9 @@
-// Vérification de « Continuer avec Google » dans Chromium, sans réseau : Supabase et Google sont simulés. Le départ
-// vers Google doit viser l'adresse de retour déclarée dans Supabase (https://nidalo.fr/compte/, exactement) avec un
-// défi PKCE ; au retour, Mon compte échange le code (même vérificateur que le défi), nettoie l'adresse, fait choisir
-// son profil à un compte tout neuf et ramène un compte existant sur la page d'où il était parti. Google annulé ou
-// code refusé : un message clair. Apple garde « Bientôt disponible ». Un lien d'e-mail marche toujours comme avant.
+// Vérification de « Continuer avec Google » et « Continuer avec Apple » dans Chromium, sans réseau : Supabase, Google
+// et Apple sont simulés. Le départ doit viser le bon service et l'adresse de retour déclarée dans Supabase
+// (https://nidalo.fr/compte/, exactement) avec un défi PKCE ; au retour, Mon compte échange le code (même vérificateur
+// que le défi), nettoie l'adresse, fait choisir son profil à un compte tout neuf et ramène un compte existant sur la
+// page d'où il était parti. Service annulé ou code refusé : un message clair, qui nomme le service choisi. Un lien
+// d'e-mail marche toujours comme avant.
 // Lancer après la construction : node scripts/check-google.mjs [dossier construit, docs/ par défaut]
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
@@ -37,7 +38,8 @@ const SUPABASE = 'https://izzsoitqtzzswkpvdozd.supabase.co';
 const STORAGE_KEY = 'sb-izzsoitqtzzswkpvdozd-auth-token';
 const RETURN_URL = 'https://nidalo.fr/compte/';
 const GOOGLE_MESSAGE = 'La connexion avec Google n\'a pas abouti. Réessayez, ou connectez-vous avec votre adresse e-mail.';
-const APPLE_MESSAGE = 'La connexion avec Apple arrivera dans une prochaine version. En attendant, connectez-vous avec votre adresse e-mail.';
+const APPLE_MESSAGE = 'La connexion avec Apple n\'a pas abouti. Réessayez, ou connectez-vous avec votre adresse e-mail.';
+const RETURN_KEY = 'nidalo.providerReturn';
 const USER_ID = 'a0000000-0000-4000-8000-0000000000c2';
 const USER_EMAIL = 'claire.martin@exemple.fr';
 
@@ -48,30 +50,33 @@ const empty = (route, status = 204) => route.fulfill({ status, headers: cors, bo
 const problems = [];
 const check = (ok, what) => { if (!ok) problems.push(what); };
 
-/** Compte de test : `fresh` = créé par Google à l'instant ; sinon un compte par e-mail d'octobre, relié à Google. */
-function user(fresh) {
+/**
+ * Compte de test : `fresh` = créé par Google ou Apple (`provider`) à l'instant ; sinon un compte par e-mail d'octobre,
+ * relié au service.
+ */
+function user(fresh, provider = 'google') {
   const now = new Date();
   const created = fresh ? new Date(now.getTime() - 3000).toISOString() : '2026-10-01T08:00:00Z';
   return {
     id: USER_ID, aud: 'authenticated', role: 'authenticated', email: USER_EMAIL, email_confirmed_at: created,
-    app_metadata: fresh ? { provider: 'google', providers: ['google'] } : { provider: 'email', providers: ['email', 'google'] },
+    app_metadata: fresh ? { provider, providers: [provider] } : { provider: 'email', providers: ['email', provider] },
     user_metadata: fresh ? { full_name: 'Claire Martin', email: USER_EMAIL, email_verified: true } : {},
     created_at: created, last_sign_in_at: now.toISOString(),
   };
 }
 
-function session(fresh) {
+function session(fresh, provider) {
   const b64 = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
   const now = Math.floor(Date.now() / 1000);
   const access = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: USER_ID, email: USER_EMAIL, role: 'authenticated', aud: 'authenticated', exp: now + 7200, iat: now })}.c2lnbmF0dXJl`;
-  return { access_token: access, token_type: 'bearer', expires_in: 7200, expires_at: now + 7200, refresh_token: 'jeton-de-test', user: user(fresh) };
+  return { access_token: access, token_type: 'bearer', expires_in: 7200, expires_at: now + 7200, refresh_token: 'jeton-de-test', user: user(fresh, provider) };
 }
 
 /**
- * Serveur simulé pour un scénario. `google` : où Google renvoie après le départ (`code` ou `error`) ; `fresh` : le
- * compte rendu à l'échange ; `refuse` : code d'erreur de l'échange.
+ * Serveur simulé pour un scénario. `back` : ce que le service (Google ou Apple) renvoie après le départ (`code` ou
+ * `error`) ; `fresh` : le compte rendu à l'échange, créé par `provider` ; `refuse` : code d'erreur de l'échange.
  */
-async function mock(context, { google = { code: 'code-google' }, fresh = false, refuse = null } = {}) {
+async function mock(context, { back: backParams = { code: 'code-google' }, fresh = false, refuse = null, provider = 'google' } = {}) {
   const state = { authorize: [], exchanges: [], writes: [], profileType: 'individual', signedIn: false };
   await context.route(`${SUPABASE}/auth/v1/**`, (route) => {
     const request = route.request();
@@ -79,8 +84,8 @@ async function mock(context, { google = { code: 'code-google' }, fresh = false, 
     if (url.pathname.endsWith('/authorize')) {
       state.authorize.push(url);
       const back = new URL(`${base}/compte/`);
-      for (const [key, value] of Object.entries(google)) back.searchParams.set(key, value);
-      // Supabase → Google → Supabase → le site : ici directement le retour, sur le site de test.
+      for (const [key, value] of Object.entries(backParams)) back.searchParams.set(key, value);
+      // Supabase → Google ou Apple → Supabase → le site : ici directement le retour, sur le site de test.
       return route.fulfill({ status: 302, headers: { location: back.toString() } });
     }
     if (request.method() === 'OPTIONS') return empty(route, 200);
@@ -90,12 +95,12 @@ async function mock(context, { google = { code: 'code-google' }, fresh = false, 
       state.exchanges.push(body);
       if (refuse) return json(route, { code: 400, error_code: refuse, msg: 'refusé' }, 400);
       state.signedIn = true;
-      return json(route, session(fresh));
+      return json(route, session(fresh, provider));
     }
     if (url.pathname.endsWith('/logout')) return empty(route);
     if (!state.signedIn) return json(route, { code: 'no_authorization', message: 'Pas de session' }, 401);
-    if (url.pathname.endsWith('/user')) return json(route, user(fresh));
-    return json(route, session(fresh));
+    if (url.pathname.endsWith('/user')) return json(route, user(fresh, provider));
+    return json(route, session(fresh, provider));
   });
   await context.route(`${SUPABASE}/rest/v1/**`, (route) => {
     const request = route.request();
@@ -163,13 +168,16 @@ async function open(context, path, name, { expectedErrors = 0 } = {}) {
 const storageValue = (page, key) => page.evaluate((k) => window.localStorage.getItem(k), key);
 const tidy = (text) => (text ?? '').replace(/[\s  ]+/g, ' ').trim();
 
-/** Le départ vers Google : l'adresse de retour exacte et un défi PKCE qui correspond au vérificateur envoyé ensuite. */
-function checkDeparture(name, state) {
-  check(state.authorize.length === 1, `${name} : ${state.authorize.length} départ(s) vers Google au lieu d'un`);
+/**
+ * Le départ vers Google ou Apple : le bon service, l'adresse de retour exacte et un défi PKCE qui correspond au
+ * vérificateur envoyé ensuite.
+ */
+function checkDeparture(name, state, provider = 'google') {
+  check(state.authorize.length === 1, `${name} : ${state.authorize.length} départ(s) au lieu d'un`);
   const url = state.authorize[0];
   if (!url) return;
   const params = url.searchParams;
-  check(params.get('provider') === 'google', `${name} : provider ${params.get('provider')}`);
+  check(params.get('provider') === provider, `${name} : provider ${params.get('provider')} au lieu de ${provider}`);
   check(params.get('redirect_to') === RETURN_URL, `${name} : retour ${params.get('redirect_to')} au lieu de ${RETURN_URL}`);
   check(params.get('code_challenge_method') === 's256', `${name} : méthode PKCE ${params.get('code_challenge_method')}`);
   check(!params.has('scopes') && !params.has('skip_http_redirect'), `${name} : paramètres en trop ${url.search}`);
@@ -195,7 +203,7 @@ try {
     check(state.exchanges[0]?.auth_code === 'code-google', `${name} : code échangé ${state.exchanges[0]?.auth_code}`);
     const address = new URL(page.url());
     check(address.pathname === '/compte/' && address.search === '', `${name} : adresse ${address.pathname}${address.search} après le retour`);
-    check(await storageValue(page, 'nidalo.googleReturn') === null, `${name} : marque du départ vers Google restée`);
+    check(await storageValue(page, RETURN_KEY) === null, `${name} : marque du départ vers Google restée`);
     await page.getByRole('radio', { name: /Professionnel/ }).click();
     await page.getByRole('button', { name: /Continuer/ }).click();
     await page.getByRole('heading', { name: 'Quel est votre profil ?' }).waitFor({ state: 'detached', timeout: 8000 })
@@ -230,7 +238,7 @@ try {
   {
     const name = 'Google annulé';
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-    const state = await mock(context, { google: { error: 'access_denied', error_code: 'access_denied', error_description: 'The user denied access' } });
+    const state = await mock(context, { back: { error: 'access_denied', error_code: 'access_denied', error_description: 'The user denied access' } });
     const page = await open(context, '/compte/', name);
     await page.locator('.signin-card .provider-google').click();
     await page.locator('.signin-card .signin-error').waitFor({ timeout: 8000 }).catch(() => {});
@@ -252,24 +260,68 @@ try {
     await context.close();
   }
 
-  // 5. Apple : toujours « Bientôt disponible », sans départ ; le bouton Google ne part qu'au clic.
+  // 5. Apple, téléphone, Mon compte, compte tout neuf : départ vers Apple (pas Google), retour, choix du profil.
   {
-    const name = 'Apple';
+    const name = 'Apple, nouveau compte (téléphone)';
     const context = await browser.newContext({ ...devices['iPhone 13'] });
-    const state = await mock(context);
+    const state = await mock(context, { back: { code: 'code-apple' }, fresh: true, provider: 'apple' });
     const page = await open(context, '/compte/', name);
+    check(tidy(await page.locator('.signin-card .provider-apple').textContent()) === 'Continuer avec Apple', `${name} : bouton Apple « ${tidy(await page.locator('.provider-apple').textContent())} »`);
     await page.locator('.signin-card .provider-apple').click();
-    const dialog = page.locator('.alert-dialog');
-    await dialog.waitFor({ timeout: 4000 }).catch(() => problems.push(`${name} : pas de fenêtre « Bientôt disponible »`));
-    const text = tidy(await dialog.textContent().catch(() => ''));
-    check(text.includes('Bientôt disponible') && text.includes(APPLE_MESSAGE), `${name} : fenêtre « ${text} »`);
-    await page.getByRole('button', { name: 'J\'ai compris' }).click();
-    check(state.authorize.length === 0, `${name} : départ vers Google sans clic sur Google`);
-    check(tidy(await page.locator('.signin-card .provider-google').textContent()) === 'Continuer avec Google', `${name} : bouton Google « ${tidy(await page.locator('.provider-google').textContent())} »`);
+    await page.getByRole('heading', { name: 'Quel est votre profil ?' }).waitFor({ timeout: 8000 })
+      .catch(async () => problems.push(`${name} : « Quel est votre profil ? » absent (${page.url()} ; ${tidy(await page.locator('main').textContent().catch(() => '')).slice(0, 300)} ; échanges ${state.exchanges.length} ; départs ${state.authorize.length})`));
+    check(await page.locator('.alert-dialog').count() === 0, `${name} : une fenêtre s'ouvre au lieu de partir vers Apple`);
+    checkDeparture(name, state, 'apple');
+    check(state.exchanges[0]?.auth_code === 'code-apple', `${name} : code échangé ${state.exchanges[0]?.auth_code}`);
+    const address = new URL(page.url());
+    check(address.pathname === '/compte/' && address.search === '', `${name} : adresse ${address.pathname}${address.search} après le retour`);
+    check(await storageValue(page, RETURN_KEY) === null, `${name} : marque du départ vers Apple restée`);
+    await page.getByRole('radio', { name: /Particulier/ }).click();
+    await page.getByRole('button', { name: /Continuer/ }).click();
+    await page.getByRole('heading', { name: 'Quel est votre profil ?' }).waitFor({ state: 'detached', timeout: 8000 })
+      .catch(() => problems.push(`${name} : le choix du profil ne se ferme pas`));
+    // « Particulier » est déjà le type du compte neuf : rien à écrire, le choix se ferme quand même.
+    const written = state.writes.filter((w) => w.table === 'profiles').map((w) => w.body?.account_type);
+    check(written.length === 0, `${name} : type écrit ${JSON.stringify(written)}`);
+    check(await storageValue(page, 'nidalo.newAccount') === null, `${name} : compte encore « tout neuf » après le choix`);
     await context.close();
   }
 
-  // 6. Lien d'un e-mail de création de compte, sans Google : choix du profil comme avant ; lien expiré : message des e-mails.
+  // 6. Apple, ordinateur, Favoris, compte existant relié à Apple : retour sur Favoris, connecté.
+  {
+    const name = 'Apple, compte existant (ordinateur)';
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const state = await mock(context, { back: { code: 'code-apple' }, fresh: false, provider: 'apple' });
+    const page = await open(context, '/favoris/', name);
+    await page.locator('.signin-card .provider-apple').click();
+    await page.waitForURL((url) => url.pathname === '/favoris/' && state.exchanges.length === 1, { timeout: 8000 })
+      .catch(() => problems.push(`${name} : pas de retour sur Favoris (${page.url()})`));
+    await page.waitForLoadState('networkidle');
+    checkDeparture(name, state, 'apple');
+    check(await page.locator('.signin-card').count() === 0, `${name} : la carte de connexion est encore affichée sur Favoris`);
+    check(await page.getByRole('heading', { name: 'Quel est votre profil ?' }).count() === 0, `${name} : choix du profil pour un compte existant`);
+    check(await storageValue(page, STORAGE_KEY) !== null, `${name} : session absente après le retour`);
+    const writes = state.writes.filter((w) => !w.table.startsWith('rpc/'));
+    check(writes.length === 0, `${name} : écritures inattendues ${JSON.stringify(writes)}`);
+    await context.close();
+  }
+
+  // 7. Apple annulé (« Annuler » sur la page d'Apple) : message d'Apple, pas celui de Google ; aucun échange.
+  {
+    const name = 'Apple annulé';
+    const context = await browser.newContext({ ...devices['iPhone 13'] });
+    const state = await mock(context, { back: { error: 'access_denied', error_code: 'access_denied', error_description: 'user_cancelled_authorize' }, provider: 'apple' });
+    const page = await open(context, '/compte/', name);
+    await page.locator('.signin-card .provider-apple').click();
+    await page.locator('.signin-card .signin-error').waitFor({ timeout: 8000 }).catch(() => {});
+    check(tidy(await page.locator('.signin-card .signin-error').textContent().catch(() => null)) === APPLE_MESSAGE, `${name} : message « ${tidy(await page.locator('.signin-error').textContent().catch(() => ''))} »`);
+    check(new URL(page.url()).search === '', `${name} : adresse non nettoyée ${new URL(page.url()).search}`);
+    check(state.exchanges.length === 0, `${name} : échange de code sans code`);
+    check(state.authorize[0]?.searchParams.get('provider') === 'apple', `${name} : départ vers ${state.authorize[0]?.searchParams.get('provider')}`);
+    await context.close();
+  }
+
+  // 8. Lien d'un e-mail de création de compte, sans Google : choix du profil comme avant ; lien expiré : message des e-mails.
   {
     const name = 'lien d\'e-mail';
     const context = await browser.newContext({ ...devices['iPhone 13'] });
@@ -306,4 +358,4 @@ if (problems.length) {
   for (const problem of problems) console.log(`- ${problem}`);
   process.exit(1);
 }
-console.log('check-google : connexion avec Google OK (6 scénarios : nouveau compte, compte existant, annulation, code refusé, Apple, lien d\'e-mail)');
+console.log('check-google : connexion avec Google et Apple OK (8 scénarios : Google nouveau compte, compte existant, annulation, code refusé ; Apple nouveau compte, compte existant, annulation ; lien d\'e-mail)');

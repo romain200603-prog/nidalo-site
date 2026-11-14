@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Page } from '../components/Layout';
 import { SignInCard } from '../components/account/SignInCard';
-import { authMessage, GOOGLE_MESSAGE, isNetworkError, isNewAccount, linkErrorMessage, openLink, takeGoogleReturn } from '../lib/account/auth';
+import { authMessage, isNetworkError, isNewAccount, linkErrorMessage, openLink, providerMessage, takeProviderReturn } from '../lib/account/auth';
 import { PATHS } from '../lib/paths';
 import { accountStore, loadAccount } from '../lib/account/profile';
 import { cleanToken, invitationPath, pendingInvitation, rememberInvitation } from '../lib/account/team';
@@ -32,20 +32,20 @@ import { ViewedListings } from './account/ViewedListings';
 import '../styles/account.css';
 
 // Mon compte (Features/Profile/ProfileView.swift) : la carte de connexion, le choix du profil d'un compte neuf,
-// puis l'espace du compte et ses écrans (`?vue=…`). Les liens des e-mails et la connexion avec Google reviennent ici
-// (`?code=…`).
+// puis l'espace du compte et ses écrans (`?vue=…`). Les liens des e-mails et la connexion avec Google ou Apple
+// reviennent ici (`?code=…`).
 
 /**
- * Lien d'un e-mail ou retour de Google : échange du code, ou erreur rapportée dans l'adresse. L'adresse est ensuite
- * nettoyée. Après Google, on retrouve la page d'où l'on était parti, sauf un compte tout neuf : il choisit d'abord
- * son profil ici, comme après la confirmation d'un e-mail.
+ * Lien d'un e-mail ou retour de Google ou d'Apple : échange du code, ou erreur rapportée dans l'adresse. L'adresse est
+ * ensuite nettoyée. Après Google ou Apple, on retrouve la page d'où l'on était parti, sauf un compte tout neuf : il
+ * choisit d'abord son profil ici, comme après la confirmation d'un e-mail.
  */
 function useEmailLink(): { checked: boolean; error: string | null } {
   const [state, setState] = useState<{ checked: boolean; error: string | null }>({ checked: false, error: null });
   useEffect(() => {
     const url = new URL(window.location.href);
     const hash = new URLSearchParams(url.hash.slice(1));
-    const fromGoogle = takeGoogleReturn();
+    const fromProvider = takeProviderReturn();
     const linkError = linkErrorMessage(url.searchParams) ?? linkErrorMessage(hash);
     const code = url.searchParams.get('code');
     const clean = () => {
@@ -54,7 +54,7 @@ function useEmailLink(): { checked: boolean; error: string | null } {
     };
     if (linkError) {
       clean();
-      setState({ checked: true, error: fromGoogle !== null ? GOOGLE_MESSAGE : linkError });
+      setState({ checked: true, error: fromProvider !== null ? providerMessage(fromProvider.provider) : linkError });
       return;
     }
     if (!code) {
@@ -64,16 +64,16 @@ function useEmailLink(): { checked: boolean; error: string | null } {
     openLink(code)
       .then((purpose) => {
         if (purpose === 'recovery') recoveryStore.set(true);
-        if (fromGoogle !== null && fromGoogle !== PATHS.account && !isNewAccount()) {
+        if (fromProvider !== null && fromProvider.to !== PATHS.account && !isNewAccount()) {
           // La page d'avant s'ouvre à la place de Mon compte : l'attente reste affichée jusque-là.
-          window.location.replace(fromGoogle);
+          window.location.replace(fromProvider.to);
           return;
         }
         setState({ checked: true, error: null });
       })
       .catch((error: unknown) => setState({
         checked: true,
-        error: fromGoogle !== null && !isNetworkError(error) ? GOOGLE_MESSAGE : authMessage(error),
+        error: fromProvider !== null && !isNetworkError(error) ? providerMessage(fromProvider.provider) : authMessage(error),
       }))
       .finally(clean);
   }, []);
