@@ -286,6 +286,8 @@ async function mock(context, { signedIn = false, listingRows = listings, account
   const pro = tables.profiles?.[0]?.account_type === 'professional';
   const contactsRead = (request, table) => pro && pagePath(request) === '/compte/' && request.method() === 'POST'
     && ['rpc/my_conversations', 'rpc/my_visit_requests', 'rpc/my_offers'].includes(table);
+  // La page Messages marche aussi sur téléphone avec un compte (demande de Romain du 14 novembre 2026).
+  const messagesPage = (request) => signedIn && pagePath(request) === '/messages/';
   const requests = [];
   const json = (route, status, body) =>
     route.fulfill({ status, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: body === undefined ? '' : JSON.stringify(body) });
@@ -301,7 +303,7 @@ async function mock(context, { signedIn = false, listingRows = listings, account
       try { body = request.postDataJSON(); } catch { body = request.postData(); }
       const width = pageWidth(request);
       badgeRequests.push({ table, method: request.method(), search: url.search, body, width, signedIn });
-      if (width !== null && width < 1024 && !contactsRead(request, table)) problems.push(`téléphone : ${table} demandé (rien ne doit changer sous 1024 px)`);
+      if (width !== null && width < 1024 && !contactsRead(request, table) && !messagesPage(request)) problems.push(`téléphone : ${table} demandé (rien ne doit changer sous 1024 px)`);
       if (!signedIn) {
         problems.push(`sans compte : ${table} demandé`);
         return json(route, 200, []);
@@ -323,7 +325,7 @@ async function mock(context, { signedIn = false, listingRows = listings, account
       // Fiche d'une annonce sur ordinateur : offres, demandes de visite et agenda du compte (vides ici ; les actions
       // sont vérifiées par scripts/check-listing.mjs). Rien de cela sans compte, ni sous 1024 px.
       const width = pageWidth(request);
-      if (width !== null && width < 1024 && !contactsRead(request, table)) problems.push(`téléphone : ${table} demandé (rien ne doit changer sous 1024 px)`);
+      if (width !== null && width < 1024 && !contactsRead(request, table) && !messagesPage(request)) problems.push(`téléphone : ${table} demandé (rien ne doit changer sous 1024 px)`);
       if (!signedIn) problems.push(`sans compte : ${table} demandé`);
       else if (!['rpc/my_offers', 'rpc/my_visit_requests', 'agenda_visits'].includes(table)) problems.push(`${table} appelé sans action de la personne`);
       return json(route, 200, []);
@@ -403,10 +405,11 @@ async function mock(context, { signedIn = false, listingRows = listings, account
       body: JSON.stringify({ tilejson: '3.0.0', tiles: ['https://tiles.openfreemap.org/planet/{z}/{x}/{y}.pbf'], minzoom: 0, maxzoom: 14, vector_layers: [], attribution: 'OpenFreeMap © OpenMapTiles Data from OpenStreetMap' }) }));
   await context.route('https://tiles.openfreemap.org/**', (route) => route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*' }, body: '' }));
   // Temps réel (Supabase Realtime, protocole Phoenix 2.0.0) : on accepte les abonnements postgres_changes et
-  // on peut envoyer un changement de table, comme le serveur quand une ligne change.
+  // on peut envoyer un changement de table, comme le serveur quand une ligne change, ou dire qui est « en ligne » sur
+  // le canal de présence d'une conversation (page Messages).
   const sockets = [];
   await context.routeWebSocket(/^wss:\/\/izzsoitqtzzswkpvdozd\.supabase\.co\/realtime\//, (ws) => {
-    const socket = { ws, topics: new Map() };
+    const socket = { ws, topics: new Map(), joins: new Map(), presence: [] };
     sockets.push(socket);
     ws.onMessage((message) => {
       let frame;
@@ -417,9 +420,14 @@ async function mock(context, { signedIn = false, listingRows = listings, account
       if (event === 'phx_join') {
         const changes = (payload?.config?.postgres_changes ?? []).map((filter, index) => ({ ...filter, id: sockets.length * 1000 + socket.topics.size * 10 + index }));
         socket.topics.set(topic, changes);
+        socket.joins.set(topic, joinRef);
         response = { postgres_changes: changes };
       }
-      if (event === 'phx_leave') socket.topics.delete(topic);
+      if (event === 'phx_leave') {
+        socket.topics.delete(topic);
+        socket.joins.delete(topic);
+      }
+      if (event === 'presence') socket.presence.push({ topic, payload });
       ws.send(JSON.stringify([joinRef, ref, topic, 'phx_reply', { status: 'ok', response }]));
     });
   });
@@ -435,7 +443,21 @@ async function mock(context, { signedIn = false, listingRows = listings, account
       }
     }
   };
-  return { state, followed, pushChange, requests };
+  /** Personnes « en ligne » (présence) sur le canal d'une conversation, à toutes les pages qui l'ont rejoint. */
+  const pushPresence = (conversationId, userIds) => {
+    const topic = `realtime:presence-${conversationId.toLowerCase()}`;
+    for (const { ws, joins } of sockets) {
+      if (!joins.has(topic)) continue;
+      const state = Object.fromEntries(userIds.map((id) => [id.toLowerCase(), { metas: [{ phx_ref: `presence-${id}`, online: true }] }]));
+      ws.send(JSON.stringify([joins.get(topic), null, topic, 'presence_state', state]));
+    }
+  };
+  /** Canaux de présence rejoints, et annonces envoyées par les pages (track). */
+  const presence = () => ({
+    joined: [...new Set(sockets.flatMap((socket) => [...socket.joins.keys()].filter((topic) => topic.startsWith('realtime:presence-'))))],
+    tracked: sockets.flatMap((socket) => socket.presence),
+  });
+  return { state, followed, pushChange, pushPresence, presence, requests };
 }
 
 const problems = [];
@@ -560,7 +582,9 @@ async function open(context, path, name) {
   });
   page.on('pageerror', (error) => problems.push(`${name}: erreur ${error.message}`));
   const isPhone = () => (page.viewportSize()?.width ?? 0) < 1024;
-  page.on('websocket', (socket) => { if (isPhone()) problems.push(`${name}: temps réel ouvert sur téléphone (${socket.url()})`); });
+  // Sur téléphone, seule la page Messages ouvre le temps réel (demande de Romain du 14 novembre 2026).
+  const onMessages = () => { try { return new URL(page.url()).pathname === '/messages/'; } catch { return false; } };
+  page.on('websocket', (socket) => { if (isPhone() && !onMessages()) problems.push(`${name}: temps réel ouvert sur téléphone (${socket.url()})`); });
   page.on('request', (request) => { if (isPhone() && request.url().includes('/fonts/')) problems.push(`${name}: police chargée sur téléphone (${request.url()})`); });
   await page.addInitScript(() => {
     document.addEventListener('securitypolicyviolation', (e) => console.error(`CSP bloque ${e.violatedDirective} ${e.blockedURI}`));
@@ -587,12 +611,13 @@ const NINA_PHONE = '0639985678';
 /** Identifiant écrit comme Swift l'envoie (`uuidString`). */
 const UPPER_UUID = /^[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/;
 const sameChatId = (a, b) => !!a && !!b && String(a).toLowerCase() === String(b).toLowerCase();
-/** Tables et fonctions de la messagerie : jamais demandées sans compte ni sous 1024 px. */
+/** Tables et fonctions de la messagerie : jamais demandées sans compte ; sur téléphone, seulement par la page Messages. */
 const CHAT_TABLES = [
   'rpc/my_conversations', 'conversation_participants', 'rpc/public_profiles', 'rpc/my_communities', 'rpc/professional_contacts', 'user_blocks',
   'messages', 'rpc/mark_conversation_read', 'message_reactions', 'conversation_preferences', 'reports', 'rpc/find_account_by_phone',
   'rpc/start_phone_conversation', 'rpc/start_direct_conversation', 'rpc/my_offers', 'rpc/make_offer', 'rpc/accept_offer', 'rpc/decline_offer',
   'rpc/withdraw_offer', 'rpc/counter_offer', 'agenda_visits', 'rpc/my_visit_requests', 'rpc/start_listing_conversation',
+  'rpc/accept_visit_request', 'rpc/propose_visit_slots', 'listing_lots',
 ];
 const chatProfile = (userId, publicName, fields = {}) => ({
   user_id: userId, public_name: publicName, avatar_path: null, account_type: 'individual', member_since: '2026-01-15', agency_id: null,
@@ -697,6 +722,24 @@ function chatState() {
         start: '2026-11-12T17:00:00Z', durationMinutes: 60, status: 'confirmed', contactName: 'Agence Démo Lyon', address: '12 rue de l\'Exemple, 69002 Lyon',
       },
     }],
+    // Demandes de visite (my_visit_requests) : A, la visite confirmée de jeudi (demandée par le compte) ; B, Julien
+    // demande samedi 10 h ou dimanche 14 h (le compte peut accepter un créneau ou en proposer un autre).
+    visitRequests: [
+      chatVisitRow(1, {
+        listing: homeId(1), title: 'Appartement 3 pièces', requester: { userId: USER_ID, name: 'Claire M.', kind: 'individual' },
+        recipient: { userId: AGENT_ID, name: 'Agence Démo Lyon', kind: 'agency', agencyId: 'b1000000-0000-4000-8000-000000000001' },
+        slots: [visitSlot(1, '2026-11-12T17:00:00Z')], status: 'accepted', acceptedSlot: visitSlot(1, '2026-11-12T17:00:00Z'), createdAt: '2026-11-05T17:25:00Z',
+      }),
+      chatVisitRow(2, {
+        listing: homeId(7), title: 'Appartement 2 pièces', requester: { userId: OTHER_ID, name: 'Julien M.', kind: 'individual' },
+        recipient: { userId: USER_ID, name: 'Claire M.', kind: 'individual' },
+        slots: [visitSlot(2, '2026-11-07T09:00:00Z'), visitSlot(3, '2026-11-08T13:00:00Z')], status: 'pending', createdAt: '2026-11-05T19:20:00Z',
+      }),
+    ],
+    /** Lots des annonces (listing_lots) : l'appartement de B en a trois, dont deux loués. */
+    lots: { [homeId(7)]: ['leased', 'leased', 'vacant'] },
+    /** Réponses retardées (ms) par table, pour voir les états de chargement. */
+    slow: {},
     preferences: { [chatId(2)]: { is_favorite: true }, [chatId(3)]: { is_archived: true }, [chatId(4)]: { muted_until: '4001-01-01T00:00:00+00:00' } },
     blocks: [],
     reports: [],
@@ -708,6 +751,39 @@ function chatState() {
     uploads: [],
     tick: 0,
   };
+}
+
+const visitRequestId = (n) => `e2000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const visitSlotId = (n) => `f3000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const visitSlot = (n, start) => ({ id: visitSlotId(n), start, durationMinutes: 60 });
+
+/** Demande de visite telle que le serveur la garde (colonnes de my_visit_requests, sans le rôle du compte). */
+function chatVisitRow(n, { listing, title, requester, recipient, slots, status, acceptedSlot = null, createdAt }) {
+  return {
+    id: visitRequestId(n), listing_id: listing, listing_snapshot: { listingId: listing, title }, requester, recipient, slots, mode: 'onSite',
+    meeting_place: null, status, accepted_slot: acceptedSlot, proposed_slots: null, proposed_by: null, created_at: createdAt, updated_at: createdAt,
+  };
+}
+
+/** Actions permises au compte sur une demande (private.visit_allowed_actions du serveur). */
+function visitActions(request, role) {
+  switch (request.status) {
+    case 'pending': return role === 'recipient' ? ['accept', 'decline', 'propose'] : ['cancel'];
+    case 'counterProposed': {
+      const actions = request.proposed_by !== role ? ['accept', 'decline'] : [];
+      if (role === 'recipient' && !request.accepted_slot && request.proposed_by === 'recipient') actions.push('propose');
+      if (role === 'requester' || request.accepted_slot) actions.push('cancel');
+      return actions;
+    }
+    case 'accepted': return ['propose', 'cancel'];
+    default: return [];
+  }
+}
+
+/** Ligne de my_visit_requests : la demande, le rôle du compte et ce qu'il peut faire. */
+function chatVisitRequest(request) {
+  const role = sameChatId(request.requester.userId, USER_ID) ? 'requester' : 'recipient';
+  return { ...request, my_role: role, allowed_actions: visitActions(request, role) };
 }
 
 /** Heure du serveur simulé : une seconde de plus à chaque écriture, après l'heure figée des pages. */
@@ -940,7 +1016,27 @@ function chatRespond(chat, reply, { table, method, params, body, single }) {
     case 'agenda_visits':
       return reply(200, chat.agenda);
     case 'rpc/my_visit_requests':
-      return reply(200, []);
+      return reply(200, chat.visitRequests.map(chatVisitRequest));
+    case 'rpc/accept_visit_request': {
+      // Comme la fonction du serveur : le créneau choisi (de la demande ou de la dernière proposition) est confirmé.
+      const request = chat.visitRequests.find((item) => sameChatId(item.id, body?.p_request_id));
+      if (!request || !chatVisitRequest(request).allowed_actions.includes('accept')) return refuse('Cette demande ne peut plus être acceptée.');
+      const slot = [...(request.status === 'counterProposed' ? request.proposed_slots ?? [] : request.slots)].find((item) => sameChatId(item.id, body?.p_slot_id));
+      if (!slot) return refuse('Ce créneau n\'est plus proposé.');
+      Object.assign(request, { status: 'accepted', accepted_slot: slot, updated_at: chatClock(chat) });
+      return reply(204);
+    }
+    case 'rpc/propose_visit_slots': {
+      const request = chat.visitRequests.find((item) => sameChatId(item.id, body?.p_request_id));
+      const row = request ? chatVisitRequest(request) : null;
+      if (!row || !row.allowed_actions.includes('propose')) return refuse('Impossible de proposer un autre créneau.');
+      Object.assign(request, { status: 'counterProposed', proposed_slots: body.p_slots, proposed_by: row.my_role, updated_at: chatClock(chat) });
+      return reply(204);
+    }
+    case 'listing_lots': {
+      const id = (params.get('listing_id') ?? '').replace(/^eq\./, '').toLowerCase();
+      return reply(200, (chat.lots[id] ?? []).map((status) => ({ status })));
+    }
     case 'rpc/start_listing_conversation': {
       const conversation = chat.conversations.find((item) => item.listing === body?.p_listing_id);
       return conversation ? reply(200, conversation.id) : refuse('Annonce introuvable.');
@@ -966,7 +1062,9 @@ async function mockMessaging(context, chat, { signedIn = true } = {}) {
     const headers = await request.allHeaders();
     const width = pageWidth(request);
     chat.calls.push({ table, method: request.method(), search: decodeURIComponent(url.search), body, prefer: headers.prefer ?? '', width, path: pagePath(request), writesBefore: writes.length });
-    if (width !== null && width < 1024) problems.push(`téléphone : ${table} demandé (rien ne doit changer sous 1024 px)`);
+    // Sur téléphone, seule la page Messages lit la messagerie.
+    if (width !== null && width < 1024 && pagePath(request) !== '/messages/') problems.push(`téléphone : ${table} demandé hors de la page Messages`);
+    if (chat.slow[table]) await new Promise((resolve) => setTimeout(resolve, chat.slow[table]));
     const reply = (status, value) => route.fulfill({ status, contentType: 'application/json', headers: cors, body: value === undefined ? '' : JSON.stringify(value) });
     if (!signedIn) {
       problems.push(`sans compte : ${table} demandé`);
@@ -980,7 +1078,7 @@ async function mockMessaging(context, chat, { signedIn = true } = {}) {
     const signing = url.pathname.startsWith('/storage/v1/object/sign/');
     const path = decodeURIComponent(url.pathname.replace(/^\/storage\/v1\/object\/(sign\/)?message-attachments\//, ''));
     const width = pageWidth(request);
-    if (width !== null && width < 1024) problems.push(`téléphone : fichier ${path} demandé`);
+    if (width !== null && width < 1024 && pagePath(request) !== '/messages/') problems.push(`téléphone : fichier ${path} demandé hors de la page Messages`);
     if (!signedIn) problems.push(`sans compte : fichier ${path} demandé`);
     const reply = (status, value) => route.fulfill({ status, contentType: 'application/json', headers: cors, body: JSON.stringify(value) });
     if (signing && request.method() === 'POST') {
@@ -1056,14 +1154,11 @@ async function waitForMessagesBadge(page, want, name) {
 function inboxRows(page) {
   return page.$$eval('.dm-list .dm-row', (rows) => rows.map((row) => ({
     name: row.querySelector('.dm-row-name')?.textContent ?? null,
-    badge: row.querySelector('.dm-badge')?.textContent ?? null,
     time: row.querySelector('.dm-row-time')?.textContent ?? null,
+    listing: row.querySelector('.dm-row-listing')?.textContent ?? null,
     preview: row.querySelector('.dm-row-preview')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
-    check: row.querySelector('.dm-row-preview .dm-check')?.getAttribute('aria-label') ?? null,
     unread: row.querySelector('.dm-unread')?.textContent ?? null,
     greyPill: Boolean(row.querySelector('.dm-unread.is-muted')),
-    bell: Boolean(row.querySelector('.dm-row-muted')),
-    sub: row.querySelector('.dm-row-sub')?.textContent ?? null,
   })));
 }
 const rowNames = async (page) => (await inboxRows(page)).map((row) => row.name);
@@ -2080,11 +2175,12 @@ try {
     await edge.close();
   }
 
-  // Messages sur ordinateur (maquette 3) : boîte de réception, conversation, actions envoyées au serveur simulé comme
-  // l'app les envoie, temps réel, à 1440 × 960 puis 1024 × 768 ; horloge figée au vendredi 6 novembre 2026, 10 h 50
-  // à Paris. Captures pour Romain : 3-messages-*.png.
+  // Messages (demande de Romain du 14 novembre 2026) : une vraie messagerie, deux colonnes à partir de 1024 px (liste de
+  // 360 px, conversation sur tout le reste), une seule colonne en dessous ; actions envoyées au serveur simulé comme l'app
+  // les envoie, temps réel, « En ligne », demandes de visite, à 1440 × 960 puis 1024 × 768 ; horloge figée au vendredi
+  // 6 novembre 2026, 10 h 50 à Paris. Captures pour Romain : 3-messages-*.png.
   const chatContext = async ({ width = 1440, height = 960, account = {}, signedIn = true, phone = false, reducedMotion = 'no-preference' } = {}) => {
-    const context = await browser.newContext(phone ? { ...devices['iPhone 13'], locale: 'fr-FR', timezoneId: 'Europe/Paris' }
+    const context = await browser.newContext(phone ? { ...devices['iPhone 13'], locale: 'fr-FR', timezoneId: 'Europe/Paris', reducedMotion }
       : { viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR', timezoneId: 'Europe/Paris', reducedMotion });
     await context.clock.setFixedTime(CHAT_NOW);
     const server = await mock(context, { signedIn, listingRows: [...listings, ...HOME_LISTINGS], account });
@@ -2095,21 +2191,39 @@ try {
   const A = chatId(1).toUpperCase();
   const rowLink = (n) => `.dm-list .dm-row[href="/messages/?c=${chatId(n)}"]`;
   const INITIAL_ROWS = [
-    { name: 'Agence Démo Lyon', badge: 'PRO', time: '10:45', preview: 'Bien reçu, je transmets votre offre au propriétaire.', check: null, unread: '1', greyPill: false, bell: false, sub: 'Appartement 3 pièces · Lyon 2e' },
-    { name: 'Visite groupée Lyon 2e', badge: null, time: '09:12', preview: 'Merci, à samedi !', check: null, unread: '3', greyPill: true, bell: false, sub: '3 membres' },
-    { name: 'Julien M.', badge: 'Particulier', time: 'Hier', preview: 'Je peux signer rapidement si l\'offre vous convient.', check: null, unread: '2', greyPill: false, bell: false, sub: 'Appartement 2 pièces · Lyon 6e' },
-    { name: 'Lucas G.', badge: 'Particulier', time: 'Mar.', preview: 'Nouvelle conversation', check: null, unread: null, greyPill: false, bell: false, sub: 'Maison familiale 5 pièces · Écully' },
-    { name: 'Compte supprimé', badge: 'Particulier', time: '27 octobre', preview: 'Vous : Merci, je reviens vers vous rapidement.', check: 'Envoyé', unread: null, greyPill: false, bell: false, sub: 'Studio rénové' },
+    { name: 'Agence Démo Lyon', time: '10:45', listing: 'Appartement 3 pièces', preview: 'Bien reçu, je transmets votre offre au propriétaire.', unread: '1', greyPill: false },
+    { name: 'Visite groupée Lyon 2e', time: '09:12', listing: null, preview: 'Merci, à samedi !', unread: '3', greyPill: true },
+    // La demande de visite de Julien, plus récente que son dernier message, en tient lieu.
+    { name: 'Julien M.', time: 'Hier', listing: 'Appartement 2 pièces', preview: 'Demande de visite · sam. 7 nov. à 10:00', unread: '2', greyPill: false },
+    { name: 'Lucas G.', time: 'Mar.', listing: 'Maison familiale 5 pièces', preview: 'Nouvelle conversation', unread: null, greyPill: false },
+    { name: 'Compte supprimé', time: '27 oct.', listing: 'Studio rénové', preview: 'Vous : Merci, je reviens vers vous rapidement.', unread: null, greyPill: false },
   ];
   const ALL_NAMES = INITIAL_ROWS.map((row) => row.name);
+  const flat = (text) => text?.replace(/\s+/g, ' ').trim() ?? null;
+  const texts = (page, selector) => page.$$eval(selector, (els) => els.map((el) => el.textContent.replace(/\s+/g, ' ').trim()));
+  /** Carte de la demande de visite d'une conversation : titre, date, lieu, créneaux, boutons, issue. */
+  const visitCard = (page) => page.evaluate(() => {
+    const card = document.querySelector('.dm-visit');
+    const text = (selector) => card?.querySelector(selector)?.textContent.replace(/\s+/g, ' ').trim() ?? null;
+    return card ? {
+      kind: text('.dm-visit-kind'), when: text('.dm-visit-when'), where: text('.dm-visit-where'),
+      slots: [...card.querySelectorAll('.dm-visit-slot')].map((el) => [el.textContent.replace(/\s+/g, ' ').trim(), el.getAttribute('aria-pressed')]),
+      state: text('.dm-visit-state'), actions: [...card.querySelectorAll('.dm-visit-actions button')].map((el) => [el.textContent, Math.round(el.getBoundingClientRect().height)]),
+      outcome: text('.dm-visit-outcome'), confirmed: Boolean(card.querySelector('.dm-visit-outcome.is-confirmed')), width: Math.round(card.getBoundingClientRect().width),
+    } : null;
+  });
+  /** Réponses rapides au-dessus du champ. */
+  const quickReplies = (page) => texts(page, '.dm-quick button');
+  /** Tous les boutons et liens visibles de la page ont un nom (texte, aria-label ou title). */
+  const unnamedControls = (page) => page.$$eval('.dm button, .dm a[href], .dm textarea, .dm input', (els) => els
+    .filter((el) => el.getClientRects().length > 0 && !(el.getAttribute('aria-label') || el.textContent.trim() || (el.labels?.length ?? 0) > 0))
+    .map((el) => el.outerHTML.slice(0, 120)));
 
   for (const [width, height] of [[1440, 960], [1024, 768]]) {
     const M = `messages ${width}`;
     const { context: chatDesk, server: chatServer, chat } = await chatContext({ width, height });
     page = await open(chatDesk, '/messages/', `messages-${width}`);
     await page.waitForSelector('.dm-list .dm-row');
-    await page.waitForSelector('.dm-next-card');
-    await imagesLoaded(page, '.dm-next-photo img', 1, M);
     // Pastille : 1 + 2 + 3 non-lus ; l'archivée n'y compte pas.
     await waitForMessagesBadge(page, '6', M);
     expectSame(M, 'volet de droite sans ?c=', await textOf(page, '.dm-main'), 'Sélectionnez une conversation');
@@ -2117,52 +2231,54 @@ try {
     const layout = await page.evaluate(() => {
       const box = (selector) => document.querySelector(selector)?.getBoundingClientRect();
       return {
-        side: box('.dm-side')?.width, chips: [...document.querySelectorAll('.dm-chip')].map((chip) => Math.round(chip.getBoundingClientRect().height)), top: box('.dm')?.top, bottom: box('.dm')?.bottom, pageScroll: document.documentElement.scrollHeight - innerHeight,
-        overflowX: document.documentElement.scrollWidth - innerWidth, footer: Boolean(document.querySelector('.dfoot, footer.footer')),
-        active: document.querySelector('.dtop-round[href="/messages/"]')?.getAttribute('aria-current') ?? null,
+        side: Math.round(box('.dm-side')?.width ?? 0), main: Math.round(box('.dm-main')?.width ?? 0), top: box('.dm')?.top, bottom: box('.dm')?.bottom,
+        pageScroll: document.documentElement.scrollHeight - innerHeight, overflowX: document.documentElement.scrollWidth - innerWidth,
+        footer: Boolean(document.querySelector('.dfoot, footer.footer')), active: document.querySelector('.dtop-round[href="/messages/"]')?.getAttribute('aria-current') ?? null,
+        search: Math.round(box('.dm-search')?.height ?? 0), tabs: [...document.querySelectorAll('.dm-tab')].map((tab) => Math.round(tab.getBoundingClientRect().height)),
+        font: getComputedStyle(document.querySelector('.dm')).fontFamily.split(',')[0].replace(/["']/g, ''),
+        rowAvatar: Math.round(document.querySelector('.dm-row .dm-avatar')?.getBoundingClientRect().width ?? 0),
       };
     });
-    expectSame(M, 'mise en page', layout, { side: 420, chips: [34, 34, 34, 34, 34], top: 72, bottom: height, pageScroll: 0, overflowX: 0, footer: false, active: 'page' });
-    expectSame(M, 'en-tête de la colonne', [await textOf(page, '.dm-side-head h1'), await textOf(page, '.dm-side-head p'), await page.getAttribute('.dm-compose', 'aria-label'),
-      await page.getAttribute('.dm-search input', 'placeholder')], ['Messages', 'Vos échanges, votre futur chez-vous.', 'Nouveau message', 'Rechercher un contact ou un bien']);
+    expectSame(M, 'mise en page', layout, {
+      side: 360, main: width - 360, top: 72, bottom: height, pageScroll: 0, overflowX: 0, footer: false, active: 'page', search: 44, tabs: [32, 32, 32],
+      font: 'Nidalo Inter', rowAvatar: 48,
+    });
+    expectSame(M, 'en-tête de la colonne', [await textOf(page, '.dm-side-head h1'), await page.getAttribute('.dm-compose', 'aria-label'),
+      await page.getAttribute('.dm-search input', 'placeholder')], ['Messages', 'Nouveau message', 'Rechercher une conversation']);
     expectSame(M, 'conversations', await inboxRows(page), INITIAL_ROWS);
-    expectSame(M, 'nombre de conversations', await textOf(page, '.dm-list-head'), `Toutes les conversations ${INITIAL_ROWS.length}`);
-    expectSame(M, 'filtres', await page.$$eval('.dm-chip', (els) => els.map((el) => [el.getAttribute('aria-label'), el.getAttribute('aria-pressed')])),
-      [['Tous', 'true'], ['Non lus, 3', 'false'], ['Favoris', 'false'], ['Visites', 'false'], ['Archivés', 'false']]);
-    expectSame(M, 'prochaine visite', [await textOf(page, '.dm-next .dm-section-head'), await page.getAttribute('.dm-next .dm-section-head a', 'href'), await textOf(page, '.dm-next-card')],
-      // « Voir l'agenda » ouvre Mon agenda (Mon espace sur ordinateur).
-      ['Prochaine visite Voir l’agenda', '/compte/?vue=agenda', 'VISITE CONFIRMÉE Jeu. 12 nov. · 18h00 Appartement 3 pièces · Lyon 2e 238 000 € AD Avec Agence Démo Lyon']);
+    expectSame(M, 'filtres', await page.$$eval('.dm-tab', (els) => els.map((el) => [el.getAttribute('aria-label'), el.getAttribute('aria-pressed')])),
+      [['Toutes', 'true'], ['Non lues, 3', 'false'], ['Archivées', 'false']]);
     // Aucune conversation n'est ouverte d'elle-même : aucune ligne n'est sélectionnée.
     if (await page.locator('.dm-row[aria-current="true"]').count()) problems.push(`${M} : une conversation est sélectionnée sans ?c=`);
     await chatShot(page, `3-messages-vide-${width}.png`);
 
     if (width === 1440) {
-      // Filtres de l'app : non lus (sans les archivées), favoris, visite à venir, archivées.
-      for (const [label, names] of [['Non lus, 3', ['Agence Démo Lyon', 'Visite groupée Lyon 2e', 'Julien M.']], ['Favoris', ['Julien M.']], ['Visites', ['Agence Démo Lyon']],
-        ['Archivés', ['Marc P.']], ['Tous', ALL_NAMES]]) {
-        await page.click(`.dm-chip[aria-label="${label}"]`);
+      // Filtres : non lues (sans les archivées), archivées, toutes.
+      for (const [label, names] of [['Non lues, 3', ['Agence Démo Lyon', 'Visite groupée Lyon 2e', 'Julien M.']], ['Archivées', ['Marc P.']], ['Toutes', ALL_NAMES]]) {
+        await page.click(`.dm-tab[aria-label="${label}"]`);
         await waitForRows(page, names, `${M} : filtre ${label}`);
-        if ((await page.getAttribute(`.dm-chip[aria-label="${label}"]`, 'aria-pressed')) !== 'true') problems.push(`${M} : filtre ${label} non enfoncé`);
-        if (label === 'Archivés' && await page.locator('.dm-next').count()) problems.push(`${M} : prochaine visite affichée dans les archivées`);
+        if ((await page.getAttribute(`.dm-tab[aria-label="${label}"]`, 'aria-pressed')) !== 'true') problems.push(`${M} : filtre ${label} non enfoncé`);
       }
-      // Recherche : contacts, conversations et annonces (une ville) ; puis un nom ; « Annuler » rend la liste.
-      await page.fill('.dm-search input', 'Écully');
-      await page.waitForSelector('.dm-listing-result');
-      await page.waitForFunction(() => !document.querySelector('.dm-results .spinner'), null, { timeout: 8000 }).catch(() => undefined);
-      const results = () => page.evaluate(() => ({
-        titles: [...document.querySelectorAll('.dm-results-title')].map((el) => el.textContent.trim()),
-        contacts: [...document.querySelectorAll('.dm-results button.dm-contact .dm-contact-name')].map((el) => el.textContent),
-        conversations: [...document.querySelectorAll('.dm-results a.dm-contact .dm-contact-name')].map((el) => el.textContent),
-        listings: [...document.querySelectorAll('.dm-listing-result .dm-listing-title')].map((el) => el.textContent),
-      }));
-      expectSame(M, 'recherche « Écully »', await results(), { titles: ['Contacts', 'Conversations', 'Annonces'], contacts: ['Lucas G.'], conversations: ['Lucas G.'], listings: ['Maison familiale 5 pièces'] });
-      await page.fill('.dm-search input', 'Julien');
-      await page.waitForFunction(() => document.querySelector('.dm-results a.dm-contact .dm-contact-name')?.textContent === 'Julien M.' && !document.querySelector('.dm-results .spinner'), null, { timeout: 8000 })
-        .catch(() => undefined);
-      await page.waitForTimeout(400);
-      expectSame(M, 'recherche « Julien »', await results(), { titles: ['Contacts', 'Conversations'], contacts: ['Julien M.'], conversations: ['Julien M.'], listings: [] });
-      await page.click('.dm-search-cancel');
-      await waitForRows(page, ALL_NAMES, `${M} : après « Annuler »`);
+      // Recherche par nom ou par titre d'annonce (pas dans le texte des messages) ; la croix et Échap la vident.
+      await page.fill('.dm-search input', 'lyon');
+      await waitForRows(page, ['Agence Démo Lyon', 'Visite groupée Lyon 2e'], `${M} : recherche « lyon »`);
+      await page.fill('.dm-search input', 'maison');
+      await waitForRows(page, ['Lucas G.'], `${M} : recherche « maison »`);
+      await page.click('.dm-search-clear');
+      await waitForRows(page, ALL_NAMES, `${M} : recherche effacée`);
+      await page.fill('.dm-search input', 'bonjour');
+      await page.waitForSelector('.dm-inbox-empty h3');
+      expectSame(M, 'recherche sans résultat', await textOf(page, '.dm-inbox-empty'), 'Aucune conversation trouvée Essayez un autre nom ou un autre titre d\'annonce.');
+      await page.press('.dm-search input', 'Escape');
+      await waitForRows(page, ALL_NAMES, `${M} : recherche vidée par Échap`);
+      // Clavier : de la recherche, Tab va aux filtres, avec un contour bleu visible.
+      await page.focus('.dm-search input');
+      await page.keyboard.press('Tab');
+      expectSame(M, 'focus au clavier', await page.evaluate(() => {
+        const el = document.activeElement;
+        const style = getComputedStyle(el);
+        return [el.getAttribute('aria-label'), style.outlineStyle, style.outlineWidth, style.outlineColor];
+      }), ['Toutes', 'solid', '3px', 'rgb(67, 91, 170)']);
     }
 
     // Ouvrir la conversation de l'agence : elle s'ouvre à droite sans recharger la page, est lue puis marquée lue une fois.
@@ -2172,56 +2288,97 @@ try {
     await page.waitForURL(`${base}/messages/?c=${chatId(1)}`);
     await page.waitForSelector('.dm-thread-inner .dm-day');
     await page.waitForSelector('.dm-offer .dm-offer-amount');
+    await page.waitForSelector('.dm-visit');
+    await page.waitForSelector('.dm-banner-link');
     const read = await oneCall(chat, 'rpc/mark_conversation_read', mark, `${M} : ouverture`);
     if (read) expectSame(M, 'conversation marquée lue', read.body, { p_conversation_id: A });
     await waitForMessagesBadge(page, '5', `${M} : après l'ouverture`);
     if ((await page.evaluate(() => window.nidaloMarker)) !== 'même page') problems.push(`${M} : la page s'est rechargée à l'ouverture`);
     expectSame(M, 'lecture des messages', chatCalls(chat, 'messages', mark).map((call) => `${call.method} ${call.search}`),
       [`GET ?select=id,conversation_id,sender_id,kind,client_id,content,created_at,expires_at,message_reactions(user_id,emoji,created_at)&conversation_id=eq.${A}&order=created_at.desc&limit=200`]);
+    const pad = width >= 1280 ? 40 : 24;
     const opened = await page.evaluate(() => {
       const row = document.querySelector('.dm-row[aria-current="true"]');
-      const sent = document.querySelector('.dm-bubble.is-out');
-      const received = document.querySelector('.dm-bubble:not(.is-out)');
-      const style = (el) => (el ? [getComputedStyle(el).backgroundColor, getComputedStyle(el).color] : null);
+      const inner = document.querySelector('.dm-thread-inner').getBoundingClientRect();
+      const sent = [...document.querySelectorAll('.dm-bubble.is-out')];
+      const received = [...document.querySelectorAll('.dm-bubble:not(.is-out)')];
+      const style = (el) => (el ? [getComputedStyle(el).backgroundColor, getComputedStyle(el).color, getComputedStyle(el).borderRadius] : null);
+      const msgs = [...document.querySelectorAll('.dm-msg')];
       return {
         row: row?.querySelector('.dm-row-name')?.textContent ?? null, rowBackground: row ? getComputedStyle(row).backgroundColor : null,
-        unread: row?.querySelector('.dm-unread')?.textContent ?? null, sent: style(sent), received: style(received),
-        column: Math.round(document.querySelector('.dm-thread-inner')?.getBoundingClientRect().width ?? 0),
+        unread: row?.querySelector('.dm-unread')?.textContent ?? null, sent: style(sent[0]), received: style(received[0]),
+        receivedLeft: [...new Set(received.map((el) => Math.round(el.getBoundingClientRect().left - inner.left)))],
+        sentRight: [...new Set(sent.map((el) => Math.round(inner.right - el.getBoundingClientRect().right)))],
+        gaps: [...new Set(msgs.slice(1).map((el) => getComputedStyle(el).marginTop))].sort(),
+        avatars: [...document.querySelectorAll('.dm-msg-avatar:not(.is-empty)')].map((el) => Math.round(el.getBoundingClientRect().width)),
+        fresh: document.querySelectorAll('.is-new').length,
       };
     });
     expectSame(M, 'conversation ouverte', opened, {
-      row: 'Agence Démo Lyon', rowBackground: 'rgb(238, 242, 250)', unread: null, sent: ['rgb(60, 92, 176)', 'rgb(255, 255, 255)'],
-      received: ['rgb(255, 255, 255)', 'rgb(36, 45, 56)'], column: width === 1440 ? 760 : 556,
+      row: 'Agence Démo Lyon', rowBackground: 'rgb(239, 242, 249)', unread: null,
+      sent: ['rgb(67, 91, 170)', 'rgb(255, 255, 255)', '18px 18px 6px'], received: ['rgb(255, 255, 255)', 'rgb(37, 44, 55)', '18px 18px 18px 6px'],
+      receivedLeft: [pad + 36], sentRight: [pad], gaps: ['14px', '4px'], avatars: opened.avatars.map(() => 28), fresh: 0,
     });
-    expectSame(M, 'en-tête', [await textOf(page, '.dm-head-title'), await textOf(page, '.dm-head .dm-badge'), await textOf(page, '.dm-head-sub'),
-      await page.getAttribute('.dm-head-who', 'href')], ['Agence Démo Lyon', 'PRO', 'Appartement 3 pièces · Lyon 2e', `/messages/?c=${chatId(1)}&vue=details`]);
-    await page.waitForSelector('.dm-banner-link');
-    expectSame(M, 'bandeau du bien', [await textOf(page, '.dm-banner-title'), await textOf(page, '.dm-banner-line'), await textOf(page, '.dm-banner-link'),
-      await page.getAttribute('a.dm-banner', 'href')], ['Appartement 3 pièces', 'Lyon 2e · Rue de l\'Exemple · 238 000 €', 'Voir l\'annonce', `/annonce/?id=${homeId(1)}`]);
-    expectSame(M, 'jours', await page.$$eval('.dm-day-label', (els) => els.map((el) => el.textContent)), ['Hier · 18:02', 'Aujourd\'hui · 09:58']);
-    // Coches : l'agence a tout lu jusqu'à 10:45 ; aucun « Lu », « En ligne » ni « écrit… » (absents de l'app).
-    expectSame(M, 'coches', await page.$$eval('.dm-msg.is-out .dm-check', (els) => els.map((el) => el.getAttribute('aria-label'))), ['Vu', 'Vu', 'Vu']);
-    const paneText = await textOf(page, '.dm-pane');
-    if (/En ligne|écrit…|écrit\.\.\.|\bLu\b/.test(paneText ?? '')) problems.push(`${M} : « En ligne », « écrit… » ou « Lu » affiché`);
+    expectSame(M, 'en-tête', [await textOf(page, '.dm-head-title'), await textOf(page, '.dm-head-sub'), await page.getAttribute('.dm-head-who', 'href'),
+      await page.$$eval('.dm-head-tools button', (els) => els.map((el) => el.getAttribute('aria-label')))],
+    ['Agence Démo Lyon', 'Vu il y a 5 min', `/messages/?c=${chatId(1)}&vue=details`, ['Proposer une visite', 'Appeler', 'Plus d\'options']]);
+    expectSame(M, 'barre de l\'annonce', [await textOf(page, '.dm-banner-title'), await textOf(page, '.dm-banner-line'), await textOf(page, '.dm-banner-link'),
+      await page.getAttribute('a.dm-banner', 'href')], ['Appartement 3 pièces', 'Lyon 2e · 238 000 € · 7,8 % brut', 'Voir l\'annonce', `/annonce/?id=${homeId(1)}`]);
+    expectSame(M, 'jours', await page.$$eval('.dm-day-label', (els) => els.map((el) => el.textContent)), ['Hier', 'Aujourd\'hui']);
+    // Coches dans les bulles : l'agence a tout lu jusqu'à 10:45.
+    expectSame(M, 'coches', await page.$$eval('.dm-msg.is-out .dm-status .dm-check', (els) => els.map((el) => el.getAttribute('aria-label'))), ['Lu', 'Lu', 'Lu']);
+    expectSame(M, 'demande de visite confirmée', await visitCard(page), {
+      kind: 'Demande de visite', when: 'Jeudi 12 novembre · 18:00', where: 'Appartement 3 pièces · sur place', slots: [], state: null, actions: [],
+      outcome: 'Visite confirmée', confirmed: true, width: 340,
+    });
     expectSame(M, 'carte d\'offre', [await textOf(page, '.dm-offer-head'), await textOf(page, '.dm-offer-amount'), await textOf(page, '.dm-offer-gap'),
       await textOf(page, '.dm-offer-conditions'), await textOf(page, '.dm-offer-expiry'), await page.$$eval('.dm-offer-actions button', (els) => els.map((el) => el.textContent))],
-      ['OFFRE En attente', '228 000 €', '4,2 % sous le prix affiché', 'Sous réserve d\'obtention du prêt', 'Valable jusqu\'au 13 novembre', ['Retirer']]);
+    ['Offre En attente', '228 000 €', '4,2 % sous le prix affiché', 'Sous réserve d\'obtention du prêt', 'Valable jusqu\'au 13 novembre', ['Retirer']]);
+    // Les photos plus haut dans le fil se chargent à l'approche (loading="lazy") : on y va, puis on revient en bas.
+    await page.locator('.dm-media-tile img').first().scrollIntoViewIfNeeded();
     await imagesLoaded(page, '.dm-media-tile img', 2, `${M} : photos`);
-    await page.waitForSelector('a.dm-doc');
+    await page.$eval('.dm-thread', (el) => { el.scrollTop = el.scrollHeight; });
+    await page.waitForSelector('a.dm-file');
     const signedPhotos = await page.$$eval('.dm-media-tile img', (els) => els.map((el) => el.getAttribute('src')));
     expectSame(M, 'photos (URL signées)', signedPhotos, AGENT_PHOTOS.map((path) => `https://izzsoitqtzzswkpvdozd.supabase.co/storage/v1/object/sign/message-attachments/${path}?token=jeton-de-test`));
     expectSame(M, 'URL signées demandées', [...new Map(chat.signs.map((sign) => [sign.path, sign.body])).entries()].sort(),
       [[AGENT_PHOTOS[0], { expiresIn: 600 }], [AGENT_PHOTOS[1], { expiresIn: 600 }], [LOAN_PDF, { expiresIn: 600 }]]);
-    expectSame(M, 'document', [await textOf(page, '.dm-doc-name'), await textOf(page, '.dm-doc-line'), await page.getAttribute('a.dm-doc', 'href'), await page.getAttribute('a.dm-doc', 'target')],
-      ['Simulation_pret.pdf', 'Justificatif de revenus · PDF · 245 Ko', `https://izzsoitqtzzswkpvdozd.supabase.co/storage/v1/object/sign/message-attachments/${LOAN_PDF}?token=jeton-de-test`, '_blank']);
-    expectSame(M, 'réponses rapides', await page.$$eval('.dm-quick button', (els) => els.map((el) => el.textContent)), ['Parfait, merci\u00a0!', 'Décaler la visite', 'Questions']);
-    expectSame(M, 'barre d\'écriture', [await page.getAttribute('.dm-composer textarea', 'placeholder'), await page.getAttribute('.dm-plus', 'aria-label'),
-      await page.getAttribute('.dm-emoji', 'aria-label'), await page.isDisabled('.dm-send')], ['Votre message...', 'Ajouter une pièce jointe', 'Ajouter un émoji', true]);
+    expectSame(M, 'fichier', [await textOf(page, '.dm-file-name'), await textOf(page, '.dm-file-line'), await textOf(page, '.dm-file-badge'),
+      await page.$eval('.dm-file-badge', (el) => getComputedStyle(el).color), await page.getAttribute('a.dm-file', 'href'), await page.getAttribute('a.dm-file', 'target')],
+    ['Simulation_pret.pdf', 'PDF · 245 Ko', 'PDF', 'rgb(229, 72, 77)', `https://izzsoitqtzzswkpvdozd.supabase.co/storage/v1/object/sign/message-attachments/${LOAN_PDF}?token=jeton-de-test`, '_blank']);
+    // Zone de saisie : bande blanche (12 / 24 / 16 px), « + » de 44 px, champ de 52 px, envoi de 52 px grisé tant que
+    // le champ est vide ; une conversation sur une annonce propose « Envoyer le dossier complet ».
+    expectSame(M, 'réponses rapides', await quickReplies(page), ['Envoyer le dossier complet']);
+    const composer = async () => page.evaluate(() => {
+      const size = (selector) => { const box = document.querySelector(selector).getBoundingClientRect(); return [Math.round(box.width), Math.round(box.height)]; };
+      const bottom = getComputedStyle(document.querySelector('.dm-bottom'));
+      return {
+        band: [bottom.paddingTop, bottom.paddingLeft, bottom.paddingBottom, bottom.borderTopColor, bottom.backgroundColor],
+        plus: size('.dm-plus'), field: size('.dm-field')[1], send: size('.dm-send'), sendColor: getComputedStyle(document.querySelector('.dm-send')).backgroundColor,
+        disabled: document.querySelector('.dm-send').disabled, placeholder: document.querySelector('.dm-field textarea').placeholder,
+        labels: ['.dm-plus', '.dm-emoji', '.dm-send'].map((selector) => document.querySelector(selector).getAttribute('aria-label')),
+        chip: Math.round(document.querySelector('.dm-quick button')?.getBoundingClientRect().height ?? 0),
+      };
+    });
+    expectSame(M, 'zone de saisie', await composer(), {
+      band: ['12px', '24px', '16px', 'rgb(236, 234, 229)', 'rgb(255, 255, 255)'], plus: [44, 44], field: 52, send: [52, 52], sendColor: 'rgb(201, 206, 214)',
+      disabled: true, placeholder: 'Écrivez votre message…', labels: ['Ajouter une pièce jointe', 'Ajouter un émoji', 'Envoyer'], chip: 34,
+    });
     const atBottom = await page.evaluate(() => { const el = document.querySelector('.dm-thread'); return el.scrollHeight - el.scrollTop - el.clientHeight; });
     if (atBottom > 2) problems.push(`${M} : la conversation ne s'ouvre pas en bas (${atBottom} px plus bas)`);
+    expectSame(M, 'boutons et champs sans nom', await unnamedControls(page), []);
     await chatShot(page, `3-messages-${width}.png`);
 
     if (width === 1440) {
+      // « En ligne » : l'agence a la page Messages ouverte (présence sur le canal de la conversation).
+      const joined = chatServer.presence().joined;
+      if (!joined.includes(`realtime:presence-${chatId(1)}`)) problems.push(`${M} : canal de présence de A non rejoint (${JSON.stringify(joined)})`);
+      if (!chatServer.presence().tracked.some((item) => item.topic === `realtime:presence-${chatId(1)}` && item.payload?.event === 'track')) problems.push(`${M} : le compte ne s'annonce pas en ligne`);
+      chatServer.pushPresence(chatId(1), [AGENT_ID]);
+      await page.waitForFunction(() => document.querySelector('.dm-head-sub')?.textContent === 'En ligne', null, { timeout: 8000 })
+        .catch(async () => problems.push(`${M} : « En ligne » non affiché (${await textOf(page, '.dm-head-sub')})`));
+      expectSame(M, 'point vert', await page.$eval('.dm-head-sub .dm-online-dot', (el) => getComputedStyle(el).backgroundColor).catch(() => null), 'rgb(43, 182, 115)');
+
       // Cœur (message_reactions, comme setReaction) : posé, puis retiré.
       const lastReceived = page.locator('.dm-msg:not(.is-out)').last();
       mark = chat.calls.length;
@@ -2239,7 +2396,8 @@ try {
       const unliked = await oneCall(chat, 'message_reactions', mark, `${M} : cœur retiré`);
       if (unliked) expectSame(M, 'cœur retiré', [unliked.method, unliked.search], ['DELETE', `?message_id=eq.${messageId(7).toUpperCase()}&user_id=eq.${USER_ID.toUpperCase()}`]);
 
-      // Envois : une réponse rapide, puis un texte (émoji, Entrée), avec exactement les colonnes de l'app (MessageInsert).
+      // Écrire : le champ grandit jusqu'à 5 lignes ; un émoji choisi dans le panneau se place au curseur ; Maj + Entrée
+      // va à la ligne ; Entrée envoie, avec exactement les colonnes de l'app (MessageInsert) ; le message arrive en fondu.
       const checkInsert = (call, what, content, preview) => {
         if (!call) return;
         const body = call.body ?? {};
@@ -2248,30 +2406,47 @@ try {
           { id: body.id, conversation_id: A, client_id: body.id, content, preview }]);
         if (!call.prefer.includes('return=representation')) problems.push(`${M} : ${what} : Prefer « ${call.prefer} »`);
       };
-      mark = chat.calls.length;
-      await page.click('.dm-quick button:text-is("Parfait, merci !")');
-      checkInsert(await oneCall(chat, 'messages', mark, `${M} : réponse rapide`, (call) => call.method === 'POST'), 'réponse rapide', chatText('Parfait, merci\u00a0!'), 'Parfait, merci\u00a0!');
-      await page.waitForFunction(() => [...document.querySelectorAll('.dm-bubble.is-out')].at(-1)?.textContent === 'Parfait, merci\u00a0!', null, { timeout: 8000 })
-        .catch(() => problems.push(`${M} : la réponse rapide n'apparaît pas`));
-      if (await page.locator('.dm-quick').count()) problems.push(`${M} : réponses rapides affichées après mon message`);
+      const fieldHeight = () => page.$eval('.dm-field textarea', (el) => Math.round(el.getBoundingClientRect().height));
+      await page.fill('.dm-composer textarea', 'Une\ndeux');
+      expectSame(M, 'champ de 2 lignes', await fieldHeight(), 72);
+      await page.fill('.dm-composer textarea', 'Un\ndeux\ntrois\nquatre\ncinq\nsix\nsept');
+      expectSame(M, 'champ de 7 lignes (5 affichées)', await fieldHeight(), 138);
+      await page.fill('.dm-composer textarea', '');
+      expectSame(M, 'champ vide', await fieldHeight(), 50);
       mark = chat.calls.length;
       await page.fill('.dm-composer textarea', 'Merci, à jeudi ');
+      expectSame(M, 'envoi possible', [await page.isDisabled('.dm-send'), await page.$eval('.dm-send', (el) => getComputedStyle(el).backgroundColor)], [false, 'rgb(67, 91, 170)']);
       await page.click('.dm-emoji');
-      expectSame(M, 'émoji ajouté', await page.inputValue('.dm-composer textarea'), 'Merci, à jeudi 🙂');
-      await page.focus('.dm-composer textarea');
+      await page.waitForSelector('.dm-emoji-panel');
+      expectSame(M, 'panneau des émojis', [await page.getAttribute('.dm-emoji', 'aria-expanded'), await page.locator('.dm-emoji-panel button').count()], ['true', 32]);
+      await page.click('.dm-emoji-panel button[aria-label="🙂"]');
+      expectSame(M, 'émoji ajouté', [await page.inputValue('.dm-composer textarea'), await page.locator('.dm-emoji-panel').count(),
+        await page.evaluate(() => document.activeElement?.matches('.dm-composer textarea') ?? false)], ['Merci, à jeudi 🙂', 0, true]);
+      await page.keyboard.press('Shift+Enter');
+      expectSame(M, 'Maj + Entrée', await page.inputValue('.dm-composer textarea'), 'Merci, à jeudi 🙂\n');
+      await page.keyboard.press('Backspace');
+      if (chatCalls(chat, 'messages', mark).some((call) => call.method === 'POST')) problems.push(`${M} : Maj + Entrée envoie le message`);
       await page.keyboard.press('Enter');
       checkInsert(await oneCall(chat, 'messages', mark, `${M} : texte`, (call) => call.method === 'POST'), 'texte envoyé', chatText('Merci, à jeudi 🙂'), 'Merci, à jeudi 🙂');
-      await page.waitForFunction(() => [...document.querySelectorAll('.dm-bubble.is-out')].at(-1)?.textContent === 'Merci, à jeudi 🙂', null, { timeout: 8000 })
+      await page.waitForFunction(() => [...document.querySelectorAll('.dm-bubble.is-out .dm-text')].at(-1)?.textContent === 'Merci, à jeudi 🙂', null, { timeout: 8000 })
         .catch(() => problems.push(`${M} : le texte envoyé n'apparaît pas`));
-      expectSame(M, 'après l\'envoi', [await page.inputValue('.dm-composer textarea'), await page.$$eval('.dm-msg.is-out .dm-check', (els) => els.at(-1)?.getAttribute('aria-label')),
-        (await inboxRows(page))[0]], ['', 'Envoyé', { ...INITIAL_ROWS[0], preview: 'Vous : Merci, à jeudi 🙂', check: 'Envoyé', unread: null, time: '10:50' }]);
+      expectSame(M, 'après l\'envoi', [await page.inputValue('.dm-composer textarea'), await page.isDisabled('.dm-send'),
+        await page.$$eval('.dm-msg.is-out .dm-status .dm-check', (els) => els.at(-1)?.getAttribute('aria-label')),
+        await page.evaluate(() => [...document.querySelectorAll('.dm-msg')].map((el) => el.classList.contains('is-new')).join('')), (await inboxRows(page))[0]],
+      ['', true, 'Envoyé', `${'false'.repeat(await page.locator('.dm-msg').count() - 1)}true`, { ...INITIAL_ROWS[0], preview: 'Vous : Merci, à jeudi 🙂', unread: null, time: '10:50' }]);
       if (await page.locator('dialog.alert-dialog[open]').count()) problems.push(`${M} : une fenêtre (prénom ?) s'ouvre alors que le compte a un prénom`);
+
+      // « Envoyer le dossier complet » : le choix des documents immobiliers, comme dans le « + ».
+      await page.click('.dm-quick button:text-is("Envoyer le dossier complet")');
+      expectSame(M, 'dossier complet', await dialogTitle(page, 'sheet'), 'Documents immobiliers');
+      await page.click('dialog.dm-sheet[open] .dm-sheet-close');
+      await page.waitForSelector('dialog.dm-sheet[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${M} : « Documents immobiliers » reste ouvert`));
 
       // « + » : sources de l'app (Photos et vidéos, Documents depuis l'ordinateur), pas d'offre tant qu'une offre attend.
       await page.click('.dm-plus');
       expectSame(M, 'menu « + »', [await dialogTitle(page, 'sheet'), await page.$$eval('dialog[open] .dm-sources button', (els) => els.map((el) => el.querySelector('.dm-source-title').textContent)),
         await page.$$eval('dialog[open] .dm-wide-title', (els) => els.map((el) => el.textContent))],
-        ['Joindre', ['Appareil photo', 'Photos et vidéos', 'Documents', 'Caméra vidéo', 'Localisation', 'Contacts', 'Mon dossier'], ['Documents immobiliers']]);
+      ['Joindre', ['Appareil photo', 'Photos et vidéos', 'Documents', 'Caméra vidéo', 'Localisation', 'Contacts', 'Mon dossier'], ['Documents immobiliers']]);
       // Une photo de l'ordinateur : envoyée dans message-attachments au chemin de l'app, puis le message qui la cite.
       mark = chat.calls.length;
       let uploads = chat.uploads.length;
@@ -2318,15 +2493,14 @@ try {
         expectSame(M, 'message du document', [documentMessage?.body?.content, documentMessage?.body?.preview],
           [{ attachments: { _0: [{ id: item.id, kind: 'document', fileName: 'dpe.pdf', storagePath: documentUpload.path, byteCount: PDF_BYTES.length, category: 'energyDiagnostic' }] } }, '📎 dpe.pdf']);
       }
-      await page.waitForFunction(() => [...document.querySelectorAll('.dm-doc-name')].some((el) => el.textContent === 'dpe.pdf'), null, { timeout: 8000 })
+      await page.waitForFunction(() => [...document.querySelectorAll('.dm-file-name')].some((el) => el.textContent === 'dpe.pdf'), null, { timeout: 8000 })
         .catch(() => problems.push(`${M} : le document envoyé n'apparaît pas`));
 
-      // Temps réel : l'agence lit (coches « Vu »), puis écrit ; tout arrive sans recharger, et la conversation est relue
-      // puis marquée lue une fois de plus.
+      // Temps réel : l'agence lit (coches « Lu »), puis écrit ; tout arrive sans recharger, le nouveau message en fondu,
+      // et la conversation est relue puis marquée lue une fois de plus.
       chat.participants.find((item) => item.conversation_id === chatId(1) && item.user_id === AGENT_ID).last_read_at = new Date(CHAT_NOW.getTime() + 60_000).toISOString();
       chatServer.pushChange('conversation_participants');
-      await page.waitForFunction(() => [...document.querySelectorAll('.dm-msg.is-out .dm-check')].every((el) => el.getAttribute('aria-label') === 'Vu')
-        && document.querySelector('.dm-row[aria-current="true"] .dm-row-preview .dm-check')?.getAttribute('aria-label') === 'Vu', null, { timeout: 8000 })
+      await page.waitForFunction(() => [...document.querySelectorAll('.dm-msg.is-out .dm-status .dm-check')].every((el) => el.getAttribute('aria-label') === 'Lu'), null, { timeout: 8000 })
         .catch(() => problems.push(`${M} : coches non mises à jour après la lecture de l'agence`));
       mark = chat.calls.length;
       chat.messages.push({
@@ -2335,21 +2509,21 @@ try {
       });
       chat.conversations[0].unread += 1;
       chatServer.pushChange('messages');
-      await page.waitForFunction(() => [...document.querySelectorAll('.dm-bubble')].at(-1)?.textContent === 'Je vous appelle demain matin pour organiser la suite.', null, { timeout: 8000 })
+      await page.waitForFunction(() => [...document.querySelectorAll('.dm-bubble .dm-text')].at(-1)?.textContent === 'Je vous appelle demain matin pour organiser la suite.', null, { timeout: 8000 })
         .catch(() => problems.push(`${M} : le message reçu en temps réel n'apparaît pas`));
+      if (!(await page.evaluate(() => [...document.querySelectorAll('.dm-msg')].at(-1)?.classList.contains('is-new')))) problems.push(`${M} : le message reçu n'arrive pas en fondu`);
       const liveRead = await oneCall(chat, 'rpc/mark_conversation_read', mark, `${M} : message reçu`);
       if (liveRead) expectSame(M, 'message reçu marqué lu', liveRead.body, { p_conversation_id: A });
       await waitForMessagesBadge(page, '5', `${M} : après le message reçu`);
       if ((await page.evaluate(() => window.nidaloMarker)) !== 'même page') problems.push(`${M} : la page s'est rechargée`);
-      expectSame(M, 'temps réel suivi', ['messages', 'conversation_participants', 'message_reactions', 'offers'].filter((table) => !chatServer.followed().includes(table)), []);
+      expectSame(M, 'temps réel suivi', ['messages', 'conversation_participants', 'message_reactions', 'offers', 'visit_requests'].filter((table) => !chatServer.followed().includes(table)), []);
 
-      // Menu ⋮ : les actions de l'app ; chaque réglage relit la conversation puis enregistre tous ses réglages.
-      expectSame(M, 'menu ⋮', await headerMenu(page), ['Archiver', 'Mettre en sourdine', 'Ajouter aux favoris', 'Bloquer', 'Signaler']);
+      // Menu « … » : Archiver, Signaler, Bloquer. Archiver relit la conversation puis enregistre tous ses réglages.
+      expectSame(M, 'menu « … »', await headerMenu(page), ['Archiver', 'Signaler', 'Bloquer']);
       const settings = { is_archived: false, is_favorite: false, muted_until: null, saves_photos: false, cleared_at: null };
-      const setting = async (label, change, notice = null) => {
+      const setting = async (label, change) => {
         const before = chat.calls.length;
         await headerMenu(page, label);
-        if (notice) expectSame(M, `avis de « ${label} »`, await noticeText(page, M), notice);
         const write = await oneCall(chat, 'conversation_preferences', before, `${M} : ${label}`);
         const reread = chatCalls(chat, 'rpc/my_conversations', before).filter((call) => call.body?.p_conversation_id);
         expectSame(M, `« ${label} » : relecture`, reread.map((call) => call.body), [{ p_conversation_id: A }]);
@@ -2363,11 +2537,6 @@ try {
       await waitForRows(page, ALL_NAMES.slice(1), `${M} : après « Archiver »`);
       await setting('Désarchiver', { is_archived: false });
       await waitForRows(page, ALL_NAMES, `${M} : après « Désarchiver »`);
-      await setting('Mettre en sourdine', { muted_until: '4001-01-01T00:00:00.000Z' });
-      await page.waitForSelector(`${rowLink(1)} .dm-row-muted`, { timeout: 8000 }).catch(() => problems.push(`${M} : cloche barrée absente après la sourdine`));
-      await setting('Réactiver les notifications', { muted_until: null });
-      await setting('Ajouter aux favoris', { is_favorite: true }, 'Conversation ajoutée aux favoris.');
-      await setting('Retirer des favoris', { is_favorite: false }, 'Conversation retirée des favoris.');
       // Bloquer (user_blocks), puis débloquer depuis la barre qui remplace la saisie.
       mark = chat.calls.length;
       await headerMenu(page, 'Bloquer');
@@ -2376,8 +2545,8 @@ try {
       expectSame(M, 'avis du blocage', await noticeText(page, M), 'Compte bloqué.');
       const blocked = await oneCall(chat, 'user_blocks', mark, `${M} : bloquer`, (call) => call.method !== 'GET');
       if (blocked) expectSame(M, 'blocage', [blocked.method, blocked.body], ['POST', { blocked_id: AGENT_ID.toUpperCase() }]);
-      expectSame(M, 'compte bloqué', [await textOf(page, '.dm-bottom-line'), await page.locator('.dm-composer').count(), (await headerMenu(page))[3]],
-        ['Vous avez bloqué ce compte Débloquer', 0, 'Débloquer']);
+      expectSame(M, 'compte bloqué', [await textOf(page, '.dm-bottom-line'), await page.locator('.dm-composer').count(), (await headerMenu(page))[2],
+        await page.locator('.dm-head-tools button[aria-label="Proposer une visite"]').count()], ['Vous avez bloqué ce compte Débloquer', 0, 'Débloquer', 0]);
       mark = chat.calls.length;
       await page.click('.dm-bottom-line .dm-link-button');
       await page.waitForSelector('.dm-composer');
@@ -2398,7 +2567,7 @@ try {
         if (!UPPER_UUID.test(report.body?.id ?? '')) problems.push(`${M} : identifiant du signalement ${report.body?.id}`);
         expectSame(M, 'signalement envoyé', [report.method, report.body], ['POST', { id: report.body?.id, target_type: 'conversation', target_id: A, reason: 'scam', details: 'Demande de virement avant la visite.' }]);
       }
-      // Appeler : « Appeler X ? » puis le numéro publié de l'agence (lien tel:) ; ici, « Annuler ».
+      // Appeler (l'agence a publié son numéro) : « Appeler X ? » puis le numéro (lien tel:) ; ici, « Annuler ».
       await page.click('.dm-head button[aria-label="Appeler"]');
       expectSame(M, 'appel', [await dialogTitle(page), await page.locator('dialog.alert-dialog[open] .alert-actions button').first().textContent()],
         ['Appeler Agence Démo Lyon ?', 'Appeler le 06 39 98 12 00']);
@@ -2434,20 +2603,83 @@ try {
           && cards[1].querySelector('.dm-offer-status')?.textContent === 'En attente';
       }, null, { timeout: 8000 }).catch(() => problems.push(`${M} : la nouvelle offre n'apparaît pas dans la conversation`));
 
-      // B : le compte vend ; refuser (motif), accepter, contre-offre (decline_offer, accept_offer, counter_offer).
+      // B : le compte vend ; Julien demande une visite (samedi 10 h ou dimanche 14 h) et fait une offre.
       mark = chat.calls.length;
       await page.click(rowLink(2));
       await page.waitForURL(`${base}/messages/?c=${chatId(2)}`);
       await page.waitForSelector('.dm-offer-actions');
+      await page.waitForSelector('.dm-visit-actions');
+      await page.waitForFunction(() => /lots/.test(document.querySelector('.dm-banner-line')?.textContent ?? ''), null, { timeout: 8000 }).catch(() => undefined);
       const readB = await oneCall(chat, 'rpc/mark_conversation_read', mark, `${M} : ouverture de B`);
       if (readB) expectSame(M, 'B marquée lue', readB.body, { p_conversation_id: chatId(2).toUpperCase() });
       await waitForMessagesBadge(page, '3', `${M} : après l'ouverture de B`);
+      expectSame(M, 'en-tête de B (numéro non partagé : pas d\'appel)', [await textOf(page, '.dm-head-sub'), await page.$$eval('.dm-head-tools button', (els) => els.map((el) => el.getAttribute('aria-label'))),
+        await textOf(page, '.dm-banner-line')], ['Vu le 4 nov.', ['Proposer une visite', 'Plus d\'options'], 'Lyon 6e · 265 000 € · 3 lots dont 2 loués']);
       expectSame(M, 'offre reçue', [await textOf(page, '.dm-offer-head'), await textOf(page, '.dm-offer-gap'), await page.$$eval('.dm-offer-actions button', (els) => els.map((el) => el.textContent))],
-        ['OFFRE En attente', '3,8 % sous le prix affiché', ['Accepter', 'Contre-offre', 'Refuser']]);
+        ['Offre En attente', '3,8 % sous le prix affiché', ['Accepter', 'Contre-offre', 'Refuser']]);
+      const pendingVisit = {
+        kind: 'Demande de visite', when: 'Samedi 7 novembre · 10:00', where: 'Appartement 2 pièces · sur place',
+        slots: [['sam. 7 nov. à 10:00', 'true'], ['dim. 8 nov. à 14:00', 'false']], state: null, actions: [['Accepter', 38], ['Autre créneau', 38]],
+        outcome: null, confirmed: false, width: 340,
+      };
+      expectSame(M, 'demande de visite reçue', await visitCard(page), pendingVisit);
+      expectSame(M, 'réponses rapides après une demande', await quickReplies(page), ['Oui, samedi 10 h', 'Proposer un autre créneau', 'Envoyer le dossier complet']);
+      await chatShot(page, '3-messages-visite-1440.png');
       // « Faire une offre » n'est pas proposé au vendeur.
       await page.click('.dm-plus');
       expectSame(M, '« + » du vendeur', await page.$$eval('dialog[open] .dm-wide-title', (els) => els.map((el) => el.textContent)), ['Documents immobiliers']);
       await page.click('dialog.dm-sheet[open] .dm-sheet-close');
+
+      // Demande de visite : « Autre créneau » (propose_visit_slots), puis, remise en attente (temps réel), « Oui,
+      // samedi 10 h » accepte le premier créneau et l'autre créneau choisi sur la carte (accept_visit_request).
+      const visitAgain = async () => {
+        Object.assign(chat.visitRequests[1], { status: 'pending', accepted_slot: null, proposed_slots: null, proposed_by: null });
+        chatServer.pushChange('visit_requests');
+        await page.waitForFunction(() => document.querySelectorAll('.dm-visit-actions button').length === 2 && document.querySelectorAll('.dm-visit-slot').length === 2, null, { timeout: 8000 })
+          .catch(() => problems.push(`${M} : la demande remise en attente (temps réel) n'est pas relue`));
+      };
+      mark = chat.calls.length;
+      await page.click('.dm-visit-actions button:text-is("Autre créneau")');
+      expectSame(M, 'autre créneau', await textOf(page, 'dialog.dm-decline[open] h2'), 'Proposer un autre créneau');
+      expectSame(M, 'créneau proposé par défaut', [await page.inputValue('dialog.dm-decline[open] input[aria-label="Jour du créneau 1"]'),
+        await page.inputValue('dialog.dm-decline[open] select[aria-label="Heure du créneau 1"]')], ['2026-11-07', '600']);
+      await page.selectOption('dialog.dm-decline[open] select[aria-label="Heure du créneau 1"]', '900');
+      await page.click('dialog.dm-decline[open] button[type="submit"]');
+      const proposed = await oneCall(chat, 'rpc/propose_visit_slots', mark, `${M} : autre créneau`);
+      if (proposed) {
+        const slot = proposed.body?.p_slots?.[0] ?? {};
+        if (!UPPER_UUID.test(slot.id ?? '')) problems.push(`${M} : identifiant du créneau proposé ${slot.id}`);
+        expectSame(M, 'créneau proposé', proposed.body, { p_request_id: visitRequestId(2), p_slots: [{ id: slot.id, start: '2026-11-07T14:00:00Z', durationMinutes: 60 }] });
+      }
+      await page.waitForFunction(() => document.querySelector('.dm-visit-kind')?.textContent === 'Autre créneau proposé', null, { timeout: 8000 })
+        .catch(() => problems.push(`${M} : la carte ne montre pas l'autre créneau`));
+      expectSame(M, 'après « Autre créneau »', [await visitCard(page), await quickReplies(page)], [{
+        kind: 'Autre créneau proposé', when: 'Samedi 7 novembre · 15:00', where: 'Appartement 2 pièces · sur place', slots: [], state: 'En attente de réponse',
+        actions: [['Autre créneau', 38]], outcome: null, confirmed: false, width: 340,
+      }, ['Proposer un autre créneau', 'Envoyer le dossier complet']]);
+      await visitAgain();
+      mark = chat.calls.length;
+      await page.click('.dm-quick button:has-text("Oui, samedi")');
+      const acceptedFirst = await oneCall(chat, 'rpc/accept_visit_request', mark, `${M} : « Oui, samedi 10 h »`);
+      if (acceptedFirst) expectSame(M, '« Oui, samedi 10 h »', acceptedFirst.body, { p_request_id: visitRequestId(2), p_slot_id: visitSlotId(2) });
+      await page.waitForSelector('.dm-visit-outcome.is-confirmed', { timeout: 8000 }).catch(() => problems.push(`${M} : « Visite confirmée » absent après « Oui, samedi 10 h »`));
+      expectSame(M, 'visite confirmée', [await visitCard(page), await quickReplies(page),
+        await page.$eval('.dm-visit-outcome', (el) => getComputedStyle(el).color).catch(() => null)], [{
+        ...pendingVisit, slots: [], actions: [], outcome: 'Visite confirmée', confirmed: true,
+      }, ['Envoyer le dossier complet'], 'rgb(47, 122, 78)']);
+      if (chatCalls(chat, 'messages', mark).some((call) => call.method === 'POST')) problems.push(`${M} : « Oui, samedi 10 h » envoie aussi un message`);
+      await visitAgain();
+      mark = chat.calls.length;
+      await page.click('.dm-visit-slot:has-text("dim. 8 nov.")');
+      expectSame(M, 'créneau choisi', [(await visitCard(page))?.when, (await visitCard(page))?.slots], ['Dimanche 8 novembre · 14:00', [['sam. 7 nov. à 10:00', 'false'], ['dim. 8 nov. à 14:00', 'true']]]);
+      await page.click('.dm-visit-actions button:text-is("Accepter")');
+      const acceptedSecond = await oneCall(chat, 'rpc/accept_visit_request', mark, `${M} : accepter dimanche`);
+      if (acceptedSecond) expectSame(M, 'accepter dimanche', acceptedSecond.body, { p_request_id: visitRequestId(2), p_slot_id: visitSlotId(3) });
+      await page.waitForSelector('.dm-visit-outcome.is-confirmed', { timeout: 8000 }).catch(() => problems.push(`${M} : « Visite confirmée » absent après « Accepter »`));
+      expectSame(M, 'dimanche confirmé', (await visitCard(page))?.when, 'Dimanche 8 novembre · 14:00');
+      await chatShot(page, '3-messages-visite-confirmee-1440.png');
+
+      // Offre de B : refuser (motif), accepter, contre-offre (decline_offer, accept_offer, counter_offer).
       const pendingAgain = async () => {
         Object.assign(chat.offers[1], { status: 'pending', decline_reason: null, responded_at: null });
         chatServer.pushChange('offers');
@@ -2489,12 +2721,9 @@ try {
         expectSame(M, 'contre-offre envoyée', countered.body, { p_id: countered.body?.p_id, p_parent_offer_id: offerId(2).toUpperCase(), p_amount: 260000 });
       }
       await page.waitForFunction(() => {
-        const cards = [...document.querySelectorAll('.dm-offer')].map((card) => card.textContent.replace(/\s/g, ' '));
-        return cards.length === 2 && cards[0].includes('Contre-offre envoyée') && cards[1].includes('CONTRE-OFFRE') && cards[1].includes('260 000 €') && cards[1].includes('Retirer');
+        const cards = [...document.querySelectorAll('.dm-offer')].map((card) => card.textContent.replace(/\s+/g, ' ').trim());
+        return cards.length === 2 && cards[0].includes('Contre-offre envoyée') && cards[1].startsWith('Contre-offre') && cards[1].includes('260 000 €') && cards[1].includes('Retirer');
       }, null, { timeout: 8000 }).catch(async () => problems.push(`${M} : cartes après la contre-offre ${JSON.stringify(await page.$$eval('.dm-offer', (els) => els.map((el) => el.textContent)))}`));
-      // Un numéro non publié : l'avis de l'app, pas d'appel.
-      await page.click('.dm-head button[aria-label="Numéro non partagé"]');
-      expectSame(M, 'appel sans numéro', await noticeText(page, M), 'Julien M. n\'a pas partagé son numéro. Vous pouvez lui écrire ici.');
     }
 
     // D : groupe en sourdine, marqué lu à l'ouverture ; ses infos et l'ajout de membres restent dans l'app iPhone.
@@ -2508,14 +2737,14 @@ try {
     expectSame(M, 'groupe', [await textOf(page, '.dm-head-title'), await textOf(page, '.dm-head-sub'), await page.locator('.dm-head button[aria-label="Appeler"]').count(),
       await page.locator('.dm-head button[aria-label="Ajouter des membres"]').count(), await page.$$eval('.dm-sender', (els) => [...new Set(els.map((el) => el.textContent))]),
       await textOf(page, '.dm-system'), await page.locator('.dm-quick, .dm-banner').count()],
-      ['Visite groupée Lyon 2e', 'Vous, Camille R., Agence Démo Lyon', 0, 1, ['Camille R.', 'Agence Démo Lyon'], 'Claire M. a créé le groupe « Visite groupée Lyon 2e »', 0]);
+    ['Visite groupée Lyon 2e', 'Vous, Camille R., Agence Démo Lyon', 0, 1, ['Camille R.', 'Agence Démo Lyon'], 'Claire M. a créé le groupe « Visite groupée Lyon 2e »', 0]);
     await chatShot(page, `3-messages-groupe-${width}.png`);
     if (width === 1440) {
       await page.click('.dm-head-who');
       await iphoneOnly(page, `${M} : groupe`, 'Infos du groupe');
       await page.click('.dm-head button[aria-label="Ajouter des membres"]');
       await iphoneOnly(page, `${M} : groupe`, 'Ajouter des membres');
-      expectSame(M, 'menu ⋮ du groupe', await headerMenu(page), ['Infos du groupe', 'Ajouter aux favoris', 'Réactiver les notifications', 'Archiver', 'Signaler le groupe']);
+      expectSame(M, 'menu « … » du groupe', await headerMenu(page), ['Infos du groupe', 'Ajouter aux favoris', 'Réactiver les notifications', 'Archiver', 'Signaler le groupe']);
       mark = chat.calls.length;
       await headerMenu(page, 'Réactiver les notifications');
       const unmuted = await oneCall(chat, 'conversation_preferences', mark, `${M} : groupe réactivé`);
@@ -2555,7 +2784,7 @@ try {
     await page.click('.dm-compose');
     expectSame(M, 'nouvelle discussion', [await dialogTitle(page, 'sheet'), await page.$$eval('dialog[open] .dm-quick-actions .dm-action-text', (els) => els.map((el) => el.textContent)),
       await page.$$eval('dialog[open] .dm-results-title', (els) => els.map((el) => el.textContent))],
-      ['Nouvelle discussion', ['Nouveau groupe', 'Nouvelle communauté', 'Nouveau contact', 'Nouvelle diffusion'], ['Contacts fréquents', 'A', 'C', 'I', 'J', 'L', 'M']]);
+    ['Nouvelle discussion', ['Nouveau groupe', 'Nouvelle communauté', 'Nouveau contact', 'Nouvelle diffusion'], ['Contacts fréquents', 'A', 'C', 'I', 'J', 'L', 'M']]);
     await page.waitForTimeout(300);
     await chatShot(page, `3-messages-nouvelle-${width}.png`);
     if (width === 1440) {
@@ -2582,6 +2811,8 @@ try {
       const started = await oneCall(chat, 'rpc/start_phone_conversation', mark, `${M} : écrire`);
       if (started) expectSame(M, 'conversation par numéro', started.body, { p_phone: NINA_PHONE });
       if (await page.locator('dialog.dm-sheet[open]').count()) problems.push(`${M} : « Nouvelle discussion » reste ouverte`);
+      // Une conversation sans annonce : ni barre de l'annonce, ni réponse rapide.
+      expectSame(M, 'conversation sans annonce', await page.locator('.dm-banner, .dm-quick').count(), 0);
       // Une agence qui publie, pas encore contactée : start_direct_conversation.
       await page.click('.dm-compose');
       await page.fill('dialog[open] input[aria-label="Nom, numéro ou nom de profil"]', 'Immo');
@@ -2594,6 +2825,90 @@ try {
     }
     await page.close();
     await chatDesk.close();
+  }
+
+  // Chargement : la liste et la conversation de l'adresse en formes grises (squelettes), pendant la lecture.
+  {
+    const M = 'messages chargement';
+    const { context: slowDesk, chat } = await chatContext({ width: 1440, height: 960 });
+    // La liste arrive au bout de 1,5 s, les messages au bout de 3 s : d'abord tout en gris, puis le fil seul.
+    chat.slow = { 'rpc/my_conversations': 1500, messages: 3000 };
+    page = await slowDesk.newPage();
+    page.on('pageerror', (error) => problems.push(`${M}: erreur ${error.message}`));
+    await page.goto(`${base}/messages/?c=${chatId(1)}`);
+    await page.waitForSelector('.dm-skel-list[role="status"]', { timeout: 8000 }).catch(() => problems.push(`${M} : pas de squelette dans la liste`));
+    expectSame(M, 'squelettes', [await page.locator('.dm-skel-row').count(), await page.locator('.dm-main .dm-skel-head').count(),
+      await page.getAttribute('.dm-skel-list', 'aria-label'), await page.locator('.dm-main .dm-thread.is-skeleton[role="status"]').count()],
+    [6, 1, 'Chargement des conversations', 1]);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(out, '3-messages-chargement-1440.png') });
+    await page.waitForSelector('.dm-head-title', { timeout: 8000 });
+    expectSame(M, 'fil en cours de lecture', [await page.locator('.dm-thread.is-skeleton .dm-skel-bubble').count(), await page.locator('.dm-skel-list').count()], [5, 0]);
+    await page.waitForSelector('.dm-thread-inner .dm-day', { timeout: 8000 }).catch(() => problems.push(`${M} : le fil ne remplace pas le squelette`));
+    if (await page.locator('.dm-skel').count()) problems.push(`${M} : des squelettes restent affichés`);
+    await page.close();
+    await slowDesk.close();
+  }
+
+  // Longue conversation avec un PDF et une demande de visite, à 1280, 1440 et 390 px de large (point 9 de la
+  // demande) : la fin du fil s'affiche, rien ne dépasse, la carte et le fichier gardent leur taille.
+  {
+    const longChat = (chat) => {
+      const lines = [
+        'Bonjour, l\'appartement est-il toujours disponible ?', 'Oui, toujours disponible. Souhaitez-vous des photos supplémentaires ?',
+        'Avec plaisir, surtout la cuisine.', 'Je vous les envoie ce soir.', 'Merci ! Les charges de copropriété sont de combien ?',
+        '180 € par mois, eau froide et chauffage compris.', 'D\'accord. Et la taxe foncière ?', '1 150 € pour 2025.',
+        'Le syndic est-il professionnel ?', 'Oui, un cabinet de Lyon 6e, très réactif.', 'Y a-t-il des travaux votés ?',
+        'Le ravalement est voté pour 2027, la quote-part est à la charge du vendeur.', 'Parfait, c\'est noté.',
+        'Je peux vous transmettre les trois derniers procès-verbaux d\'assemblée générale.', 'Oui, merci beaucoup.',
+        'Le bien est-il loué actuellement ?', 'Deux lots sur trois sont loués, le troisième est libre depuis septembre.',
+        'Quel est le loyer des lots loués ?', '640 € et 710 € hors charges, baux de 2023.', 'Merci pour toutes ces précisions !',
+        'Avec plaisir. N\'hésitez pas si vous avez d\'autres questions.', 'Je vais réfléchir et je reviens vers vous rapidement.',
+      ];
+      lines.forEach((text, index) => {
+        const sender = index % 2 === 0 ? OTHER_ID : USER_ID;
+        const at = new Date(Date.parse('2026-11-01T08:00:00Z') + index * 3 * 3_600_000).toISOString();
+        chat.messages.push({
+          id: messageId(100 + index), conversation_id: chatId(2), sender_id: sender, kind: 'text', client_id: messageId(100 + index), content: chatText(text),
+          created_at: at, expires_at: null, message_reactions: [], preview: text,
+        });
+      });
+      const path = `${chatId(2)}/7A1C2E3F-4B5D-4E6F-8A9B-0C1D2E3F4A70.pdf`;
+      chat.files.set(path, { type: 'application/pdf', body: PDF_BYTES });
+      chat.messages.push({
+        id: messageId(140), conversation_id: chatId(2), sender_id: USER_ID, kind: 'attachments', client_id: messageId(140),
+        content: { attachments: { _0: [{ id: '0B6D1F2A-3C4E-4F5A-9B6C-7D8E9F0A1B70', kind: 'document', fileName: 'Diagnostics_appartement.pdf', storagePath: path, byteCount: 1_240_000 }] } },
+        created_at: '2026-11-05T19:16:00Z', expires_at: null, message_reactions: [], preview: '📎 Diagnostics_appartement.pdf',
+      });
+    };
+    for (const [label, size] of [['1280', { width: 1280, height: 800 }], ['1440', { width: 1440, height: 960 }], ['390', { phone: true }]]) {
+      const M = `messages longue conversation ${label}`;
+      const { context: longContext, chat } = await chatContext(size);
+      longChat(chat);
+      page = await open(longContext, `/messages/?c=${chatId(2)}`, `messages-longue-${label}`);
+      await page.waitForSelector('.dm-visit-actions');
+      await page.waitForSelector('a.dm-file', { timeout: 8000 }).catch(() => problems.push(`${M} : le PDF n'apparaît pas`));
+      await page.waitForTimeout(400);
+      const shape = await page.evaluate(() => {
+        const thread = document.querySelector('.dm-thread');
+        const box = (selector) => { const el = [...document.querySelectorAll(selector)].at(-1); const rect = el?.getBoundingClientRect(); return rect ? Math.round(rect.width) : null; };
+        return {
+          days: [...document.querySelectorAll('.dm-day-label')].map((el) => el.textContent), bottom: Math.round(thread.scrollHeight - thread.scrollTop - thread.clientHeight),
+          overflowX: document.documentElement.scrollWidth - innerWidth, pageScroll: document.documentElement.scrollHeight - innerHeight,
+          visit: box('.dm-visit'), file: document.querySelector('.dm-file-name')?.textContent ?? null, fileLine: document.querySelector('.dm-file-line')?.textContent ?? null,
+          scrolls: thread.scrollHeight > thread.clientHeight,
+        };
+      });
+      expectSame(M, 'fil', shape, {
+        days: ['Dim. 1 nov.', 'Lun. 2 nov.', 'Mar. 3 nov.', 'Mer. 4 nov.', 'Hier'], bottom: 0, overflowX: 0, pageScroll: 0,
+        visit: label === '390' ? shape.visit : 340, file: 'Diagnostics_appartement.pdf', fileLine: 'PDF · 1,2 Mo', scrolls: true,
+      });
+      if (label === '390' && !(shape.visit > 260 && shape.visit <= 340)) problems.push(`${M} : carte de visite de ${shape.visit} px sur téléphone`);
+      expectSame(M, 'boutons et champs sans nom', await unnamedControls(page), []);
+      await chatShot(page, `3-messages-longue-${label}.png`);
+      await page.close();
+      await longContext.close();
+    }
   }
 
   // Messages vocaux et GIF envoyés depuis l'app (MessageAttachment .audio et .gif), dans la conversation archivée avec
@@ -2637,7 +2952,7 @@ try {
       const voiceReads = [];
       voicePage.on('request', (request) => { if (request.method() === 'GET' && request.url().includes(`/object/sign/message-attachments/${VOICE_PATH}`)) voiceReads.push(request.url()); });
       await voicePage.waitForSelector('.dm-list .dm-row');
-      await voicePage.click('.dm-chip[aria-label="Archivés"]');
+      await voicePage.click('.dm-tab[aria-label="Archivées"]');
       await waitForRows(voicePage, ['Marc P.'], `${V} : archivées`);
       expectSame(V, 'aperçu du vocal dans la liste', (await inboxRows(voicePage))[0]?.preview, '🎤 Message vocal (0:03)');
       await voicePage.click(rowLink(3));
@@ -2717,6 +3032,7 @@ try {
     page = await open(nameDesk, `/messages/?c=${chatId(5)}`, 'messages-prenom');
     await page.waitForSelector('.dm-thread-empty');
     if (chatCalls(chat, 'rpc/mark_conversation_read').length) problems.push(`${M} : conversation sans non-lus marquée lue`);
+    expectSame(M, 'réponses rapides', await quickReplies(page), ['Envoyer le dossier complet']);
     await page.click('.dm-plus');
     expectSame(M, '« + » de l\'acheteur', await page.$$eval('dialog[open] .dm-wide-title', (els) => els.map((el) => el.textContent)), ['Documents immobiliers', 'Faire une offre']);
     await page.click('dialog[open] .dm-sources button[aria-label="Localisation"]');
@@ -2758,16 +3074,44 @@ try {
     await nameDesk.close();
   }
 
-  // Sous 1024 px : la page « bientôt » du téléphone, même avec le compte et une adresse ?c= ; rien n'est demandé.
+  // Sous 1024 px (iPhone 13, 390 px) : une seule colonne, comme dans l'app, avec la police du téléphone. La liste
+  // au-dessus de la barre du bas, puis la conversation en plein écran (barre cachée, saisie tout en bas) ; « Retour
+  // aux conversations » revient à la liste. Captures : 3-messages-telephone-*.png.
   {
+    const M = 'messages téléphone';
     const { context: chatPhone, chat } = await chatContext({ phone: true });
-    for (const path of ['/messages/', `/messages/?c=${chatId(1)}`]) {
-      page = await open(chatPhone, path, `messages-telephone-connecte ${path}`);
-      await page.waitForSelector('.card.state h1');
-      expectSame('messages téléphone', `page ${path}`, [await textOf(page, '.card.state h1'), await page.locator('.dm').count()], ['Vos messages', 0]);
-      await page.close();
-    }
-    if (chat.calls.length) problems.push(`messages téléphone : ${chat.calls.map((call) => call.table).join(', ')} demandé(s)`);
+    page = await open(chatPhone, '/messages/', 'messages-telephone');
+    await page.waitForSelector('.dm-list .dm-row');
+    const phoneShape = () => page.evaluate(() => {
+      const shown = (selector) => Boolean(document.querySelector(selector)?.getClientRects().length);
+      const bottom = document.querySelector('.dm-bottom')?.getBoundingClientRect();
+      return {
+        list: shown('.dm-side'), pane: shown('.dm-main'), tabbar: shown('.tabbar'), overflowX: document.documentElement.scrollWidth - innerWidth,
+        pageScroll: document.documentElement.scrollHeight - innerHeight,
+        font: getComputedStyle(document.querySelector('.dm')).fontFamily.split(',')[0].replace(/["']/g, '').trim(),
+        composerGap: bottom ? Math.round(innerHeight - bottom.bottom) : null,
+      };
+    });
+    expectSame(M, 'liste', await phoneShape(), { list: true, pane: false, tabbar: true, overflowX: 0, pageScroll: 0, font: '-apple-system', composerGap: null });
+    expectSame(M, 'conversations', await inboxRows(page), INITIAL_ROWS);
+    await chatShot(page, '3-messages-telephone-liste.png');
+    const mark = chat.calls.length;
+    await page.click(rowLink(2));
+    await page.waitForURL(`${base}/messages/?c=${chatId(2)}`);
+    await page.waitForSelector('.dm-visit-actions');
+    const readB = await oneCall(chat, 'rpc/mark_conversation_read', mark, `${M} : ouverture de B`);
+    if (readB) expectSame(M, 'B marquée lue', readB.body, { p_conversation_id: chatId(2).toUpperCase() });
+    expectSame(M, 'conversation', await phoneShape(), { list: false, pane: true, tabbar: false, overflowX: 0, pageScroll: 0, font: '-apple-system', composerGap: 0 });
+    expectSame(M, 'boutons de l\'en-tête', await page.$$eval('.dm-head button', (els) => els.map((el) => el.getAttribute('aria-label'))),
+      ['Retour aux conversations', 'Proposer une visite', 'Plus d\'options']);
+    expectSame(M, 'réponses rapides', await quickReplies(page), ['Oui, samedi 10 h', 'Proposer un autre créneau', 'Envoyer le dossier complet']);
+    expectSame(M, 'boutons et champs sans nom', await unnamedControls(page), []);
+    await chatShot(page, '3-messages-telephone-conversation.png');
+    await page.click('.dm-back');
+    await page.waitForURL(`${base}/messages/`);
+    await page.waitForSelector('.dm-list .dm-row');
+    expectSame(M, 'retour à la liste', [(await phoneShape()).tabbar, (await phoneShape()).pane], [true, false]);
+    await page.close();
     await chatPhone.close();
   }
   // Sans compte, sur ordinateur : l'invitation à se connecter ; rien de la messagerie n'est demandé.

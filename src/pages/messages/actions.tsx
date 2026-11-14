@@ -56,6 +56,29 @@ export function directMenuItems({ conversation, isBlocked, onBlock, onReport }: 
   return items;
 }
 
+/** Menu « … » de l'en-tête d'une conversation à deux sur le site (demande du 14 novembre 2026) : Archiver, Signaler, Bloquer. */
+export function headerMenuItems({ conversation, isBlocked, onBlock, onReport }: {
+  conversation: Conversation;
+  isBlocked: boolean;
+  onBlock: () => void;
+  onReport: () => void;
+}): MenuItem[] {
+  const items: MenuItem[] = [
+    {
+      label: conversation.isArchived ? 'Désarchiver' : 'Archiver', icon: 'archive',
+      onSelect: () => void setArchived(conversation.id, !conversation.isArchived),
+    },
+    { label: 'Signaler', icon: 'flag', destructive: true, onSelect: onReport },
+  ];
+  const other = conversation.otherUserId;
+  if (conversation.counterpart.name !== DELETED_ACCOUNT && other) {
+    items.push(isBlocked
+      ? { label: 'Débloquer', icon: 'ban', onSelect: () => void unblockWithNotice(other) }
+      : { label: 'Bloquer', icon: 'ban', destructive: true, onSelect: onBlock });
+  }
+  return items;
+}
+
 /** Menu ⋮ d'un groupe : infos (dans l'app iPhone), favori, sourdine « toujours », archiver, signaler le groupe. */
 export function groupMenuItems({ conversation, onReport }: { conversation: Conversation; onReport: () => void }): MenuItem[] {
   const muted = isMuted(conversation);

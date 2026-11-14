@@ -1,10 +1,11 @@
-import { daysBetween, dayLabel, clock, DISTANT_FUTURE } from './format';
+import { daysBetween, daySeparatorLabel, DISTANT_FUTURE } from './format';
 import type { Message } from './api';
 import { contentPreview, type Attachment, type MessageContent } from './content';
 import { sameId, type Conversation, type ListingSnapshot } from './inbox';
+import type { ConversationVisitRequest } from './visitRequests';
 
 // Conversation ouverte, comme l'app : messages visibles (ConversationMessages.visible), jours et séries de bulles
-// (ConversationView.messagesList), réponses rapides, bandeau du bien (bannerLocation), « Détails »
+// (ConversationView.messagesList), bandeau du bien (bannerLocation), « Détails »
 // (ImmoDomain/Messaging/ConversationDetails.swift) et médias partagés (SharedMedia).
 
 export const isSystem = (content: MessageContent) => content.kind === 'system';
@@ -18,43 +19,7 @@ export function visibleMessages(messages: Message[], clearedAt: Date | null, now
   });
 }
 
-export type ThreadRow = { message: Message; startsGroup: boolean; endsGroup: boolean };
-export type ThreadDay = { key: string; label: string; rows: ThreadRow[] };
-
 const dayKey = (date: Date) => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
-
-/** Messages par jour (« Aujourd'hui · 10:42 ») ; une série = messages qui se suivent du même expéditeur. */
-export function threadDays(messages: Message[], now: Date = new Date()): ThreadDay[] {
-  const days: ThreadDay[] = [];
-  for (const message of messages) {
-    const key = dayKey(message.createdAt);
-    let day = days[days.length - 1];
-    if (!day || day.key !== key) {
-      day = { key, label: `${dayLabel(message.createdAt, now)} · ${clock(message.createdAt)}`, rows: [] };
-      days.push(day);
-    }
-    day.rows.push({ message, startsGroup: true, endsGroup: true });
-  }
-  for (const day of days) {
-    day.rows.forEach((row, index) => {
-      const previous = day.rows[index - 1];
-      const next = day.rows[index + 1];
-      row.startsGroup = !previous || !sameSender(previous.message, row.message);
-      row.endsGroup = !next || !sameSender(next.message, row.message);
-    });
-  }
-  return days;
-}
-
-const sameSender = (a: Message, b: Message) => (a.senderId ?? '').toLowerCase() === (b.senderId ?? '').toLowerCase();
-
-/** Les trois réponses rapides de l'app, à deux, quand le dernier message vient de l'autre personne. */
-export const QUICK_REPLIES = ['Parfait, merci !', 'Décaler la visite', 'Questions'] as const;
-
-export function showsQuickReplies(conversation: Conversation, messages: Message[], me: string | null): boolean {
-  const last = messages[messages.length - 1];
-  return !conversation.isGroup && !!last && !sameId(last.senderId, me);
-}
 
 /** « Lyon 2e · Rue Victor Hugo » quand l'adresse de la visite est connue, sinon la ville (bannerLocation). */
 export function bannerLocation(listing: Pick<ListingSnapshot, 'city'>, address: string | null): string {
@@ -208,3 +173,49 @@ export const bubbleText = contentPreview;
 
 /** Jours entre un message et maintenant, pour l'en-tête de la visionneuse. */
 export const ageInDays = daysBetween;
+
+// MARK: - Fil de la page Messages du site (demande de Romain du 14 novembre 2026)
+
+/** Un élément du fil : un message, ou une demande de visite (carte), placés dans l'ordre du temps. */
+export type SiteThreadItem =
+  | { kind: 'message'; key: string; at: Date; senderId: string | null; message: Message }
+  | { kind: 'visit'; key: string; at: Date; senderId: string | null; request: ConversationVisitRequest };
+
+export type SiteThreadRow = { item: SiteThreadItem; startsGroup: boolean; endsGroup: boolean };
+export type SiteThreadDay = { key: string; label: string; rows: SiteThreadRow[] };
+
+/** Expéditeur pour les séries : une ligne système est seule dans sa série. */
+const seriesKey = (item: SiteThreadItem) =>
+  (item.kind === 'message' && isSystem(item.message.content) ? `system:${item.key}` : (item.senderId ?? '').toLowerCase());
+
+/**
+ * Jours (« Aujourd'hui », « Hier », « Mer. 12 nov. ») et séries : messages et demandes de visite qui se suivent du même
+ * expéditeur forment une série (4 px entre eux, 14 px quand l'expéditeur change ; l'avatar à côté du dernier).
+ */
+export function siteThreadDays(messages: Message[], requests: ConversationVisitRequest[], now: Date = new Date()): SiteThreadDay[] {
+  const items: SiteThreadItem[] = [
+    ...messages.map((message): SiteThreadItem => ({ kind: 'message', key: message.id, at: message.createdAt, senderId: message.senderId, message })),
+    ...requests.map((request): SiteThreadItem => ({
+      kind: 'visit', key: `visite-${request.id}`, at: request.createdAt, senderId: request.requester.userId, request,
+    })),
+  ].sort((a, b) => a.at.getTime() - b.at.getTime());
+  const days: SiteThreadDay[] = [];
+  for (const item of items) {
+    const key = dayKey(item.at);
+    let day = days[days.length - 1];
+    if (!day || day.key !== key) {
+      day = { key, label: daySeparatorLabel(item.at, now), rows: [] };
+      days.push(day);
+    }
+    day.rows.push({ item, startsGroup: true, endsGroup: true });
+  }
+  for (const day of days) {
+    day.rows.forEach((row, index) => {
+      const previous = day.rows[index - 1];
+      const next = day.rows[index + 1];
+      row.startsGroup = !previous || seriesKey(previous.item) !== seriesKey(row.item);
+      row.endsGroup = !next || seriesKey(next.item) !== seriesKey(row.item);
+    });
+  }
+  return days;
+}

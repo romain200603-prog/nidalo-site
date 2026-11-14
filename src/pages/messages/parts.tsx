@@ -3,7 +3,9 @@ import { Icon } from '../../components/Icon';
 import type { IconName } from '../../components/iconPaths';
 import { createStore, useStore } from '../../lib/account/session';
 import { knownSignedUrl, signedUrl } from '../../lib/messages/files';
-import { counterpartInitials, type Counterpart } from '../../lib/messages/inbox';
+import { avatarUrl } from '../../lib/account/profile';
+import { avatarColors, avatarKey, counterpartInitials, type Conversation, type Counterpart } from '../../lib/messages/inbox';
+import { profileOf } from '../../lib/messages/store';
 import { AlertDialog, Modal } from '../listing/Dialogs';
 
 // Morceaux communs de la page Messages : avatars à initiales (InitialsAvatar), badge PRO / Particulier
@@ -26,22 +28,57 @@ export function useSignedUrl(path: string | null | undefined): string | null {
 }
 
 /**
- * Avatar rond à initiales, couleur pastel selon l'interlocuteur ; un groupe a l'icône « users », une communauté un
- * carré arrondi et l'icône « users-round », ou leur photo (InitialsAvatar).
+ * Avatar rond : la photo (photo de profil, logo de l'agence ou photo du groupe), sinon les initiales sur une couleur
+ * pastel fixe, calculée à partir de l'identifiant de la personne (`colorKey`) ; un groupe a l'icône « users », une
+ * communauté un carré arrondi et l'icône « users-round ».
  */
-export function CounterpartAvatar({ counterpart, size, className = '' }: { counterpart: Pick<Counterpart, 'name' | 'kind' | 'imagePath'>; size: number; className?: string }) {
+export function CounterpartAvatar({ counterpart, size, className = '', photo = null, colorKey }: {
+  counterpart: Pick<Counterpart, 'name' | 'kind' | 'imagePath'>;
+  size: number;
+  className?: string;
+  /** Photo publique (bucket avatars), si la personne en a une. */
+  photo?: string | null;
+  colorKey?: string;
+}) {
   const image = useSignedUrl(counterpart.imagePath);
+  const [failed, setFailed] = useState<string | null>(null);
   const isGroup = counterpart.kind === 'group' || counterpart.kind === 'community';
+  const source = image ?? photo;
+  const colors = avatarColors(colorKey ?? counterpart.name);
   return (
     <span
       className={`dm-avatar is-${counterpart.kind} ${className}`}
-      style={{ width: size, height: size, fontSize: Math.round(size * 0.34), borderRadius: counterpart.kind === 'community' ? size * 0.28 : '50%' }}
+      style={{
+        width: size, height: size, fontSize: Math.round(size * 0.36), borderRadius: counterpart.kind === 'community' ? size * 0.28 : '50%',
+        background: colors.background, color: colors.color,
+      }}
       aria-hidden="true"
     >
-      {image ? <img src={image} alt="" /> : isGroup ? (
+      {source && failed !== source ? <img src={source} alt="" onError={() => setFailed(source)} /> : isGroup ? (
         <Icon name={counterpart.kind === 'group' ? 'users' : 'usersRound'} />
       ) : counterpartInitials(counterpart.name)}
     </span>
+  );
+}
+
+/** Photo publique de l'interlocuteur d'une conversation à deux : sa photo de profil, ou le logo de son agence. */
+export function counterpartPhoto(conversation: Pick<Conversation, 'isGroup' | 'otherUserId' | 'counterpart'>): string | null {
+  if (conversation.isGroup) return null;
+  const profile = profileOf(conversation.otherUserId);
+  if (!profile) return null;
+  return avatarUrl(conversation.counterpart.kind === 'agency' ? profile.agency_logo_path ?? null : profile.avatar_path);
+}
+
+/** Avatar d'une conversation : photo de l'interlocuteur (ou du groupe), couleur fixe de la personne. */
+export function ConversationAvatar({ conversation, size, className }: { conversation: Conversation; size: number; className?: string }) {
+  return (
+    <CounterpartAvatar
+      counterpart={conversation.counterpart}
+      size={size}
+      className={className}
+      photo={counterpartPhoto(conversation)}
+      colorKey={avatarKey(conversation)}
+    />
   );
 }
 

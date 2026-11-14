@@ -8,16 +8,16 @@ import {
 } from './content';
 import { reducedSize, storagePath, videoWithoutMetadata } from './files';
 import {
-  clock, DISTANT_FUTURE, dayLabel, durationLabel, formattedPhoneNumber, listLabel, looksLikePhoneNumber, matchesWords, muteLabel,
+  clock, DISTANT_FUTURE, durationLabel, formattedPhoneNumber, listLabel, looksLikePhoneNumber, matchesWords, muteLabel,
   normalizedPhoneNumber, sizeLabel, telHref, typingPhoneNumber,
 } from './format';
 import {
-  contactMatches, contactsFrom, conversationFrom, counterpartInitials, filterIncludes, groupSummary, matchesInboxQuery, rowPreview,
+  contactMatches, contactsFrom, conversationFrom, counterpartInitials, filterIncludes, groupSummary, matchesListSearch, rowPreview,
   sectionLetter, unreadConversationCount, type ProfileRow, type ServerInboxRow,
 } from './inbox';
 import {
-  bannerLocation, callState, canOpenDetails, linkTitle, mediaPreview, mutedUntil, muteNotice, needsFirstName, sharedItems, showsQuickReplies,
-  threadDays, videoState, visibleMessages, visitState,
+  bannerLocation, callState, canOpenDetails, linkTitle, mediaPreview, mutedUntil, muteNotice, needsFirstName, sharedItems,
+  siteThreadDays, videoState, visibleMessages, visitState,
 } from './thread';
 
 // Messagerie : mêmes formats, textes et règles que l'app (données inventées).
@@ -58,9 +58,6 @@ describe('Heures, tailles et numéros (MessageTime, AttachmentPolicy, PhoneNumbe
     expect(listLabel(new Date(2026, 10, 5, 23, 0), NOW)).toBe('Hier');
     expect(listLabel(new Date(2026, 10, 3, 8, 0), NOW)).toBe('Mar.');
     expect(listLabel(new Date(2026, 9, 27, 8, 0), NOW)).toBe('27 octobre');
-    expect(dayLabel(new Date(2026, 10, 6, 1, 0), NOW)).toBe('Aujourd\'hui');
-    expect(dayLabel(new Date(2026, 10, 5, 1, 0), NOW)).toBe('Hier');
-    expect(dayLabel(new Date(2026, 10, 2, 1, 0), NOW)).toBe('Lundi 2 novembre');
   });
 
   it('tailles en Ko, Mo, Go (1 000 octets par Ko) et durées', () => {
@@ -316,9 +313,10 @@ describe('Boîte de réception (conversation(from:), MessagesView)', () => {
 
   it('recherche et contacts (MessagingDirectory)', () => {
     const lyon = conversation({ last_message_preview: 'Bonjour Claire' });
-    expect(matchesInboxQuery(lyon, 'agence lyon')).toBe(true);
-    expect(matchesInboxQuery(lyon, 'appart')).toBe(true);
-    expect(matchesInboxQuery(lyon, 'bordeaux')).toBe(false);
+    expect(matchesListSearch(lyon, 'agence lyon')).toBe(true);
+    expect(matchesListSearch(lyon, 'appart')).toBe(true);
+    expect(matchesListSearch(lyon, 'bordeaux')).toBe(false);
+    expect(matchesListSearch(lyon, 'bonjour')).toBe(false);
     const second = conversation({ conversation_id: 'c2', created_at: '2026-11-04T09:00:00Z' });
     const contacts = contactsFrom([lyon, second], [
       { user_id: 'p1', agency_id: 'ag1', agency_name: 'Immo Démo Croix-Rousse', agency_city: 'Lyon' },
@@ -348,20 +346,17 @@ describe('Conversation ouverte (ConversationView, ConversationDetails)', () => {
   });
 
   it('jours et séries de bulles du même expéditeur', () => {
-    const days = threadDays([
+    const days = siteThreadDays([
       message({ id: 'a', createdAt: new Date(2026, 10, 5, 18, 2) }),
       message({ id: 'b', createdAt: new Date(2026, 10, 6, 9, 58) }),
       message({ id: 'c', createdAt: new Date(2026, 10, 6, 10, 0) }),
       message({ id: 'd', senderId: ME, createdAt: new Date(2026, 10, 6, 10, 5) }),
-    ], NOW);
-    expect(days.map((day) => day.label)).toEqual(['Hier · 18:02', 'Aujourd\'hui · 09:58']);
-    expect(days[1].rows.map((item) => `${item.message.id}${item.startsGroup ? '<' : ''}${item.endsGroup ? '>' : ''}`)).toEqual(['b<', 'c>', 'd<>']);
+    ], [], NOW);
+    expect(days.map((day) => day.label)).toEqual(['Hier', 'Aujourd\'hui']);
+    expect(days[1].rows.map((row) => `${row.item.key}${row.startsGroup ? '<' : ''}${row.endsGroup ? '>' : ''}`)).toEqual(['b<', 'c>', 'd<>']);
   });
 
-  it('réponses rapides, bandeau, prénom demandé, « Détails »', () => {
-    expect(showsQuickReplies(direct, [message()], ME)).toBe(true);
-    expect(showsQuickReplies(direct, [message({ senderId: ME.toUpperCase() })], ME)).toBe(false);
-    expect(showsQuickReplies(direct, [], ME)).toBe(false);
+  it('bandeau, prénom demandé, « Détails »', () => {
     expect(bannerLocation({ city: 'Lyon 2e' }, '12 rue de l\'Exemple, 69002 Lyon')).toBe('Lyon 2e · Rue de l\'Exemple');
     expect(bannerLocation({ city: 'Lyon 2e' }, null)).toBe('Lyon 2e');
     expect(needsFirstName({ conversation: direct, messages: [], firstName: ' ' })).toBe(true);

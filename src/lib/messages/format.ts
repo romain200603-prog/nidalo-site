@@ -9,7 +9,6 @@ import { searchNormalized } from '../places';
 const capitalized = (text: string) => text.charAt(0).toLocaleUpperCase('fr-FR') + text.slice(1);
 const weekdayShort = new Intl.DateTimeFormat('fr-FR', { weekday: 'short' });
 const dayMonthWide = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long' });
-const dayWide = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 const dayMonthShort = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
 const dayMonthYearShort = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -40,12 +39,53 @@ export function listLabel(date: Date, now: Date = new Date()): string {
   return dayMonthWide.format(date);
 }
 
-/** « Aujourd'hui », « Hier » ou « Lundi 28 septembre » (MessageTime.dayLabel). */
-export function dayLabel(date: Date, now: Date = new Date()): string {
+// MARK: - Page Messages du site (demande de Romain du 14 novembre 2026)
+
+const weekdayDayMonth = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+
+/** Heure d'une conversation de la liste : « 14:10 » aujourd'hui, « Hier », « Mer. » dans la semaine, sinon « 10 nov. ». */
+export function rowTimeLabel(date: Date, now: Date = new Date()): string {
   const days = daysBetween(date, now);
-  if (days === 0) return 'Aujourd\'hui';
+  if (days <= 0) return clock(date);
   if (days === 1) return 'Hier';
-  return capitalized(dayWide.format(date));
+  if (days < 7) return capitalized(weekdayShort.format(date));
+  const text = dayMonthShort.format(date);
+  return date.getFullYear() === now.getFullYear() ? text : `${text} ${date.getFullYear()}`;
+}
+
+/** Séparateur de date du fil : « Aujourd'hui », « Hier », sinon « Mer. 12 nov. » (l'année si ce n'est pas celle-ci). */
+export function daySeparatorLabel(date: Date, now: Date = new Date()): string {
+  const days = daysBetween(date, now);
+  if (days <= 0) return 'Aujourd\'hui';
+  if (days === 1) return 'Hier';
+  const text = capitalized(weekdayDayMonth.format(date));
+  return date.getFullYear() === now.getFullYear() ? text : `${text} ${date.getFullYear()}`;
+}
+
+/**
+ * Sous le nom, quand la personne n'est pas en ligne : la dernière fois qu'elle a lu la conversation (son
+ * last_read_at, la même lecture que les coches « vu ») : « Vu il y a 5 min », « Vu il y a 2 h », « Vu hier à 18:42 »,
+ * puis « Vu le 10 nov. ».
+ */
+export function lastSeenLabel(date: Date, now: Date = new Date()): string {
+  const minutes = Math.floor((now.getTime() - date.getTime()) / 60_000);
+  if (minutes < 1) return 'Vu à l\'instant';
+  if (minutes < 60) return `Vu il y a ${minutes} min`;
+  const days = daysBetween(date, now);
+  if (minutes < 24 * 60 && days === 0) return `Vu il y a ${Math.floor(minutes / 60)} h`;
+  if (days <= 1) return `Vu hier à ${clock(date)}`;
+  const text = dayMonthShort.format(date);
+  return `Vu le ${date.getFullYear() === now.getFullYear() ? text : `${text} ${date.getFullYear()}`}`;
+}
+
+/**
+ * Montants et nombres sans coupure à l'affichage : « 61 800 € », « 1 250 000 € » ou « 24,7 % » gardent leurs
+ * espaces insécables. Le texte enregistré ne change pas.
+ */
+export function keepNumbersTogether(text: string): string {
+  return text
+    .replace(/(\d)[ \u202F](?=\d{3}(?!\d))/g, '$1\u00A0')
+    .replace(/(\d)[ \u202F](?=(?:€|%|m²|k€|M€)(?![\p{L}\d]))/gu, '$1\u00A0');
 }
 
 /** « 6 nov. 2026 » : date d'un document dans « Médias et fichiers » (SharedMediaView.subtitle). */

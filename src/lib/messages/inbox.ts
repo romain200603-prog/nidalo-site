@@ -128,6 +128,8 @@ export type Conversation = {
   isSellerSide: boolean;
   buyerId: string | null;
   sellerId: string | null;
+  /** Dernière lecture de l'autre personne (conversation à deux) : « Vu il y a … » dans l'en-tête du site. */
+  otherLastReadAt: Date | null;
 };
 
 export const sameId = (a: string | null | undefined, b: string | null | undefined): boolean =>
@@ -250,6 +252,7 @@ export function conversationFrom(row: ServerInboxRow, {
     isSellerSide: !isGroup && sameId(row.seller_id, me),
     buyerId: row.buyer_id,
     sellerId: row.seller_id,
+    otherLastReadAt: isGroup ? null : date(row.other_last_read_at),
   };
 }
 
@@ -265,14 +268,6 @@ export function groupSummary(members: Member[]): string {
 // MARK: - Filtres (InboxFilter)
 
 export type InboxFilter = 'all' | 'unread' | 'favorites' | 'visits' | 'archived';
-
-export const INBOX_FILTERS: { value: InboxFilter; title: string }[] = [
-  { value: 'all', title: 'Tous' },
-  { value: 'unread', title: 'Non lus' },
-  { value: 'favorites', title: 'Favoris' },
-  { value: 'visits', title: 'Visites' },
-  { value: 'archived', title: 'Archivés' },
-];
 
 export function filterIncludes(filter: InboxFilter, conversation: Conversation, hasVisit: boolean): boolean {
   switch (filter) {
@@ -303,23 +298,6 @@ export function rowPreview(conversation: Conversation, me: string | null): { tex
   if (!last) return { text: conversation.lastMessagePreview ?? 'Nouvelle conversation', mine: false, read: false, muted: true };
   const mine = sameId(last.senderId, me) && last.content.kind !== 'system';
   return { text: `${mine ? 'Vous : ' : ''}${contentPreview(last.content)}`, mine, read: last.isRead, muted: false };
-}
-
-/** Recherche dans la boîte : interlocuteur, sujet, bien, ville, dernier message et membres (matchesInboxQuery). */
-export function matchesInboxQuery(conversation: Conversation, query: string): boolean {
-  if (!searchNormalized(query)) return true;
-  return matchesWords(query, [
-    conversation.counterpart.name, conversation.counterpart.subtitle, conversation.listing?.title ?? '',
-    conversation.listing?.city ?? '', conversation.lastMessagePreview ?? '', ...conversation.members.map((member) => member.name),
-  ]);
-}
-
-/** Conversation trouvée par la recherche de la messagerie (MessagingDirectory.matches(conversation:)). */
-export function conversationMatches(conversation: Conversation, query: string): boolean {
-  return matchesWords(query, [
-    conversation.counterpart.name, conversation.counterpart.subtitle, conversation.listing?.title ?? '',
-    conversation.listing?.city ?? '', conversation.lastMessagePreview ?? '',
-  ]);
 }
 
 // MARK: - Carnet de contacts (MessagingDirectory.contacts)
@@ -410,3 +388,39 @@ export function contactDetail(contact: Contact): string {
 export function counterpartInitials(name: string): string {
   return name.split(' ').filter(Boolean).slice(0, 2).map((word) => [...word][0] ?? '').join('').toLocaleUpperCase('fr-FR');
 }
+
+// MARK: - Page Messages du site (demande de Romain du 14 novembre 2026)
+
+/** Les trois onglets de la liste du site. */
+export const SITE_INBOX_FILTERS: { value: InboxFilter; title: string }[] = [
+  { value: 'all', title: 'Toutes' },
+  { value: 'unread', title: 'Non lues' },
+  { value: 'archived', title: 'Archivées' },
+];
+
+/** Recherche de la liste du site : nom de l'interlocuteur ou titre de l'annonce. */
+export function matchesListSearch(conversation: Pick<Conversation, 'counterpart' | 'listing'>, query: string): boolean {
+  if (!searchNormalized(query)) return true;
+  return matchesWords(query, [conversation.counterpart.name, conversation.listing?.title ?? '']);
+}
+
+/** Couleurs pastel des avatars sans photo (fond, texte), dans l'ordre de la demande. */
+export const AVATAR_COLORS: readonly { background: string; color: string }[] = [
+  { background: '#F6E3D7', color: '#9A5B3E' },
+  { background: '#E1E8F8', color: '#3A5BAE' },
+  { background: '#DDEFE4', color: '#2F7A4E' },
+  { background: '#EDE3F6', color: '#6E4A9A' },
+  { background: '#F8ECD2', color: '#946B1E' },
+  { background: '#D9F0EE', color: '#2C7A72' },
+  { background: '#F7E1E4', color: '#A0465A' },
+];
+
+/** Couleur fixe d'une personne ou d'un groupe : toujours la même pour le même identifiant. */
+export function avatarColors(key: string): { background: string; color: string } {
+  let hash = 0;
+  for (const char of key.toLowerCase()) hash = (Math.imul(hash, 31) + (char.codePointAt(0) ?? 0)) >>> 0;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
+/** Identifiant qui fixe la couleur de l'avatar d'une conversation : l'autre personne, sinon la conversation. */
+export const avatarKey = (conversation: Pick<Conversation, 'id' | 'otherUserId'>): string => conversation.otherUserId ?? conversation.id;

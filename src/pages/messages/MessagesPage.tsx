@@ -1,41 +1,26 @@
 import { useEffect, useState } from 'react';
 import { Page } from '../../components/Layout';
-import { SoonCard } from '../../components/SoonCard';
 import { SignInCard } from '../../components/account/SignInCard';
-import { SOON_PAGES } from '../../components/soonPages';
 import { isNewAccount } from '../../lib/account/auth';
 import { useSession } from '../../lib/account/session';
-import { useDesktop } from '../../lib/desktop';
 import { sameId } from '../../lib/messages/inbox';
+import { MAX_PRESENCE_CHANNELS, usePresence } from '../../lib/messages/presence';
 import { openConversation, useMessaging } from '../../lib/messages/store';
 import { canOpenDetails } from '../../lib/messages/thread';
 import { PATHS } from '../../lib/paths';
-import { Spinner } from '../account/parts';
-import { ConversationPane, MissingConversation, NoConversation } from './Conversation';
+import { ConversationPane, MissingConversation, NoConversation, PaneSkeleton } from './Conversation';
 import { DetailsView, MediaView } from './Details';
-import { Inbox } from './Inbox';
+import { Inbox, ListSkeleton } from './Inbox';
 import { NewConversationSheet } from './NewConversation';
 import { NoticeDialogs } from './parts';
 import { useRoute } from './route';
 
-// Messages sur ordinateur (maquette 3) : la boîte de réception à gauche (420 px), la conversation ouverte à droite,
-// sur toute la hauteur sous la barre du haut, sans pied de page. Rien n'est ouvert sans ?c= dans l'adresse.
-// En dessous de 1024 px, le message « bientôt » du téléphone reste tel quel.
+// Page Messages (demande de Romain du 14 novembre 2026) : à partir de 1024 px, la liste à gauche (360 px) et la
+// conversation ouverte à droite, sur toute la hauteur sous la barre du haut, sans pied de page. En dessous de 1024 px,
+// une seule colonne comme dans l'app : la liste, ou la conversation de l'adresse (?c=…) avec une flèche retour.
+// Rien n'est ouvert sans ?c= dans l'adresse.
 
 export function MessagesPage() {
-  const desktop = useDesktop();
-  if (!desktop) {
-    const page = SOON_PAGES.messages;
-    return (
-      <Page section={page.section}>
-        <SoonCard icon={page.icon} title={page.title} text={page.text} />
-      </Page>
-    );
-  }
-  return <DesktopMessages />;
-}
-
-function DesktopMessages() {
   const session = useSession();
   if (session.status === 'signedOut') {
     // Sans compte : l'invitation à se connecter des autres pages du compte (Favoris).
@@ -51,17 +36,34 @@ function DesktopMessages() {
   }
   return (
     <Page section="messages" fill>
-      {session.status === 'loading' ? <div className="dm dm-starting"><Spinner /></div> : <Messenger userId={session.userId} />}
+      {session.status === 'loading' ? <Starting /> : <Messenger userId={session.userId} />}
     </Page>
+  );
+}
+
+/** Session en cours de lecture : la page en gris, la liste et la conversation de l'adresse s'il y en a une. */
+function Starting() {
+  const route = useRoute();
+  return (
+    <div className={`dm ${route.conversationId ? 'is-thread' : 'is-list'}`}>
+      <aside className="dm-side" aria-label="Conversations"><ListSkeleton /></aside>
+      <div className="dm-main">{route.conversationId ? <PaneSkeleton /> : <NoConversation />}</div>
+    </div>
   );
 }
 
 function Messenger({ userId }: { userId: string }) {
   const route = useRoute();
-  const { inbox, thread, offers, visits, blocked } = useMessaging(userId);
+  const { inbox, thread, offers, visits, visitRequests, blocked } = useMessaging(userId);
   const [composing, setComposing] = useState(false);
   const conversations = inbox.status === 'ready' ? inbox.conversations : [];
   const conversation = route.conversationId ? conversations.find((item) => sameId(item.id, route.conversationId)) ?? null : null;
+
+  // « En ligne » : la conversation ouverte, puis les conversations à deux les plus récentes.
+  const presence = usePresence(userId, [
+    ...(conversation && !conversation.isGroup ? [conversation.id] : []),
+    ...conversations.filter((item) => !item.isGroup && !item.isArchived && !item.hasLeft).slice(0, MAX_PRESENCE_CHANNELS).map((item) => item.id),
+  ]);
 
   // La conversation de l'adresse est lue (et marquée lue si elle a des non-lus) ; aucune sans ?c=.
   useEffect(() => { openConversation(route.conversationId); }, [route.conversationId]);
@@ -72,7 +74,7 @@ function Messenger({ userId }: { userId: string }) {
   if (!route.conversationId) {
     pane = <NoConversation />;
   } else if (inbox.status !== 'ready') {
-    pane = inbox.status === 'loading' ? <div className="dm-pane dm-pane-empty"><Spinner /></div> : <NoConversation />;
+    pane = inbox.status === 'loading' ? <PaneSkeleton /> : <NoConversation />;
   } else if (!conversation) {
     pane = <MissingConversation />;
   } else if (route.view === 'details' && canOpenDetails(conversation)) {
@@ -86,7 +88,8 @@ function Messenger({ userId }: { userId: string }) {
         conversation={conversation}
         thread={thread}
         offers={offers}
-        visits={visits.value}
+        visitRequests={visitRequests.value}
+        presence={presence}
         blocked={blocked}
         me={userId}
       />
@@ -94,8 +97,15 @@ function Messenger({ userId }: { userId: string }) {
   }
 
   return (
-    <div className="dm">
-      <Inbox inbox={inbox} visits={visits.value} me={userId} selectedId={route.conversationId} onCompose={() => setComposing(true)} />
+    <div className={`dm ${route.conversationId ? 'is-thread' : 'is-list'}`}>
+      <Inbox
+        inbox={inbox}
+        offers={offers.value}
+        visitRequests={visitRequests.value}
+        me={userId}
+        selectedId={route.conversationId}
+        onCompose={() => setComposing(true)}
+      />
       <div className="dm-main">{pane}</div>
       <NewConversationSheet open={composing} conversations={conversations} onClose={() => setComposing(false)} />
       <NoticeDialogs />

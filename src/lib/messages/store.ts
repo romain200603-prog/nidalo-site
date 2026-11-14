@@ -16,6 +16,7 @@ import {
   conversationFrom, sameId, upper, type CommunityRow, type Conversation, type ParticipantRow, type ProfessionalContactRow,
   type ProfileRow, type ServerInboxRow,
 } from './inbox';
+import { fetchConversationVisitRequests, type ConversationVisitRequest } from './visitRequests';
 
 // État de la page Messages, comme MessagingStore de l'app (Data/MessagingStore.swift) : la boîte de réception vient
 // des lignes de my_conversations déjà lues pour la pastille (lib/badges.ts), complétées par les membres des groupes,
@@ -292,6 +293,8 @@ export const offersStore = createStore<Loadable<OfferRow[]>>({ status: 'idle', v
 export const visitsStore = createStore<Loadable<ConversationVisit[]>>({ status: 'idle', value: [] });
 export const blockedStore = createStore<Set<string>>(new Set());
 export const professionalsStore = createStore<Loadable<ProfessionalContactRow[]>>({ status: 'idle', value: [] });
+/** Demandes de visite du compte, montrées en carte dans le fil et en aperçu dans la liste (page du 14 novembre 2026). */
+export const visitRequestsStore = createStore<Loadable<ConversationVisitRequest[]>>({ status: 'idle', value: [] });
 
 /** Offres du compte (my_offers), relues après chaque action et chaque changement reçu (refreshRemote). */
 export async function loadOffers(): Promise<void> {
@@ -301,6 +304,17 @@ export async function loadOffers(): Promise<void> {
   } catch {
     const current = offersStore.get();
     if (current.status !== 'ready') offersStore.set({ status: 'error', value: [] });
+  }
+}
+
+/** Demandes de visite (my_visit_requests), relues après chaque réponse et chaque changement reçu. */
+export async function loadVisitRequests(): Promise<void> {
+  if (visitRequestsStore.get().status === 'idle') visitRequestsStore.set({ status: 'loading', value: [] });
+  try {
+    visitRequestsStore.set({ status: 'ready', value: await fetchConversationVisitRequests() });
+  } catch {
+    const current = visitRequestsStore.get();
+    if (current.status !== 'ready') visitRequestsStore.set({ status: 'error', value: [] });
   }
 }
 
@@ -337,6 +351,12 @@ export async function refreshAfterOffer() {
 function onLiveChange() {
   reloadThread();
   void loadOffers();
+  void loadVisitRequests();
+}
+
+/** Après une réponse à une demande de visite : demandes et agenda relus. */
+export async function refreshAfterVisit() {
+  await Promise.all([loadVisitRequests(), loadVisits()]);
 }
 
 /**
@@ -348,9 +368,10 @@ export function useMessaging(userId: string | null) {
     if (!userId) return undefined;
     const stopBadges = startLiveBadges();
     const stopListening = onMessagingChange(onLiveChange);
-    const channel = follow(['message_reactions', 'offers'], () => void liveReload());
+    const channel = follow(['message_reactions', 'offers', 'visit_requests'], () => void liveReload());
     void loadOffers();
     void loadVisits();
+    void loadVisitRequests();
     void fetchBlockedIds().then((ids) => blockedStore.set(ids));
     return () => {
       stopListening();
@@ -363,6 +384,7 @@ export function useMessaging(userId: string | null) {
     thread: useStore(threadStore),
     offers: useStore(offersStore),
     visits: useStore(visitsStore),
+    visitRequests: useStore(visitRequestsStore),
     blocked: useStore(blockedStore),
   };
 }

@@ -148,7 +148,7 @@ const ISO_SECONDS = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/;
 /** Messagerie (page Messages, ouverte par « Envoyer un message » et après une offre). */
 const MESSAGING_TABLES = [
   'messages', 'conversation_participants', 'user_blocks', 'rpc/my_communities', 'rpc/professional_contacts', 'rpc/mark_conversation_read',
-  'message_reactions', 'conversation_preferences',
+  'message_reactions', 'conversation_preferences', 'listing_lots',
 ];
 /** Tables et fonctions du compte : jamais demandées sans compte. */
 const ACCOUNT_TABLES = [
@@ -1155,7 +1155,7 @@ try {
   await page.waitForSelector('.dm-thread .dm-offer .dm-offer-amount', { timeout: 10000 })
     .catch(() => problems.push('offre: la carte de l’offre n’apparaît pas dans la conversation'));
   expect('offre', 'carte dans la conversation', await page.textContent('.dm-thread .dm-offer').catch(() => null),
-    /^OFFRE\s*En attente\s*228\s000\s€\s*4,2\s%\ssous le prix affiché\s*Sous réserve d'obtention du prêt\s*Valable jusqu'au .+Retirer$/);
+    /^Offre\s*En attente\s*228\s000\s€\s*4,2\s%\ssous le prix affiché\s*Sous réserve d'obtention du prêt\s*Valable jusqu'au .+Retirer\s*\d{2}:\d{2}$/);
   const offerCalls = calls.length;
   // « Retour » : la fiche, avec « Offre en attente ».
   await page.goBack();

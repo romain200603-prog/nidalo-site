@@ -16,12 +16,22 @@ import { sendAttachments, sendText } from '../../lib/messages/store';
 import { needsFirstName } from '../../lib/messages/thread';
 import { Dialog, Sheet, showIphoneOnly, showNotice } from './parts';
 
-// Barre d'écriture de la conversation (ConversationView.composer) : « + » (pièces jointes), « Votre message... »,
-// émoji, envoi. Le premier message d'une conversation à deux demande d'abord le prénom (« Votre prénom »), comme
-// l'app. Le « + » ouvre « Joindre » (AttachmentMenuSheet) : les photos, vidéos et documents viennent de
-// l'ordinateur ; l'aperçu (AttachmentPreviewSheet) envoie chaque fichier puis le message.
+// Zone de saisie (demande de Romain du 14 novembre 2026) : réponses rapides selon le contexte, puis « + » (pièces
+// jointes), « Écrivez votre message… » (jusqu'à 5 lignes), émojis, envoi (grisé tant que le champ est vide). Entrée
+// envoie, Maj + Entrée va à la ligne. Le premier message d'une conversation à deux demande d'abord le prénom (« Votre
+// prénom »), comme l'app. Le « + » ouvre « Joindre » (AttachmentMenuSheet) : les photos, vidéos et documents viennent
+// de l'ordinateur ; l'aperçu (AttachmentPreviewSheet) envoie chaque fichier puis le message.
+
+/** Réponse rapide au-dessus du champ : une action, ou `documents` pour choisir des documents à envoyer. */
+export type Suggestion = { key: string; label: string; icon?: IconName; disabled?: boolean; onSelect: (() => void) | 'documents' };
 
 const SEND_FAILED = 'Le message n\'a pas pu être envoyé. Réessayez.';
+
+/** Émojis du bouton à droite du champ (le site n'a pas le clavier d'émojis de l'iPhone). */
+const EMOJIS = [
+  '😀', '😊', '🙂', '😉', '😍', '🥰', '😂', '😅', '😇', '🤔', '😮', '😢', '🙏', '👍', '👎', '👏',
+  '💪', '👌', '🤝', '🙌', '👋', '✌️', '❤️', '🔥', '🎉', '✅', '❌', '⏰', '🏠', '🔑', '📅', '📍',
+];
 
 /** Sources du « + », dans l'ordre de l'app (AttachmentSource) ; `null` : seulement dans l'app iPhone. */
 const SOURCES: { key: string; title: string; subtitle: string; icon: IconName; web: 'media' | 'documents' | null }[] = [
@@ -34,36 +44,81 @@ const SOURCES: { key: string; title: string; subtitle: string; icon: IconName; w
   { key: 'dossier', title: 'Mon dossier', subtitle: 'Pièces de votre dossier immobilier, avec filigrane', icon: 'folderCheck', web: null },
 ];
 
-export function Composer({ conversation, messages, onMakeOffer }: {
+export function Composer({ conversation, messages, suggestions, onMakeOffer }: {
   conversation: Conversation;
+  /** Réponses rapides selon le contexte (demande de visite, dossier). */
+  suggestions: Suggestion[];
   /** Tous les messages lus de la conversation (le prénom n'est demandé que s'il n'y en a aucun) ; `null` pendant la lecture. */
   messages: Message[] | null;
   /** « Faire une offre » dans le « + » : acheteur d'une annonce en vente, sans offre en cours. */
   onMakeOffer: (() => void) | null;
 }) {
   const account = useStore(accountStore);
+  const emojiPanelId = useId();
   const [draft, setDraft] = useState('');
   const [askName, setAskName] = useState(false);
   const [menu, setMenu] = useState<'closed' | 'sources' | 'categories'>('closed');
+  const [emojis, setEmojis] = useState(false);
   const [pending, setPending] = useState<PendingFile[]>([]);
   const field = useRef<HTMLTextAreaElement>(null);
+  const emojiButton = useRef<HTMLButtonElement>(null);
+  const emojiPanel = useRef<HTMLDivElement>(null);
   const mediaInput = useRef<HTMLInputElement>(null);
   const documentInput = useRef<HTMLInputElement>(null);
   const category = useRef<DocumentCategory | null>(null);
   const pendingRef = useRef<PendingFile[]>([]);
+  // Place du curseur après un émoji ajouté, appliquée une fois le champ mis à jour.
+  const caret = useRef<number | null>(null);
   pendingRef.current = pending;
 
   useEffect(() => { void loadAccount(); }, []);
   // Page quittée ou autre conversation : les aperçus locaux sont libérés.
   useEffect(() => () => releasePending(pendingRef.current), []);
 
-  // Champ de 1 à 4 lignes, comme le TextField vertical de l'app.
+  // Champ d'une à cinq lignes, puis il défile.
   useLayoutEffect(() => {
     const el = field.current;
     if (!el) return;
+    const style = getComputedStyle(el);
+    const lines = 5 * (parseFloat(style.lineHeight) || 22) + (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 4 * 24 + 24)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, lines)}px`;
+    if (caret.current !== null) {
+      el.focus();
+      el.setSelectionRange(caret.current, caret.current);
+      caret.current = null;
+    }
   }, [draft]);
+
+  // Panneau des émojis : se ferme avec Échap ou un clic ailleurs.
+  useEffect(() => {
+    if (!emojis) return undefined;
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!emojiPanel.current?.contains(target) && !emojiButton.current?.contains(target)) setEmojis(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setEmojis(false);
+      emojiButton.current?.focus();
+    };
+    document.addEventListener('pointerdown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [emojis]);
+
+  /** Met l'émoji à la place du curseur, puis remet le curseur juste après. */
+  const insertEmoji = (emoji: string) => {
+    const el = field.current;
+    const start = el?.selectionStart ?? draft.length;
+    const end = el?.selectionEnd ?? draft.length;
+    caret.current = start + emoji.length;
+    setDraft(`${draft.slice(0, start)}${emoji}${draft.slice(end)}`);
+    setEmojis(false);
+  };
 
   const firstName = account.status === 'ready' ? account.account.details?.first_name ?? '' : '';
   const canSend = draft.trim() !== '';
@@ -139,134 +194,161 @@ export function Composer({ conversation, messages, onMakeOffer }: {
   };
 
   return (
-    <div className="dm-composer">
-      <button type="button" className="dm-plus" onClick={() => setMenu('sources')} aria-label="Ajouter une pièce jointe" title="Ajouter une pièce jointe">
-        <Icon name="plus" />
-      </button>
-      <div className="dm-field">
-        <textarea
-          ref={field}
-          rows={1}
-          value={draft}
-          placeholder="Votre message..."
-          aria-label="Votre message"
-          onChange={(event) => setDraft(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            // Entrée envoie, Maj + Entrée va à la ligne.
-            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              void send();
-            }
-          }}
-        />
-        <button
-          type="button"
-          className="dm-emoji"
-          onClick={() => {
-            setDraft((value) => `${value}🙂`);
-            field.current?.focus();
-          }}
-          aria-label="Ajouter un émoji"
-          title="Ajouter un émoji"
-        >
-          <Icon name="smile" />
-        </button>
-      </div>
-      <button type="button" className="dm-send" onClick={() => void send()} disabled={!canSend} aria-label="Envoyer" title="Envoyer">
-        <Icon name="arrowUp" />
-      </button>
-
-      <input ref={mediaInput} type="file" accept={MEDIA_ACCEPT} multiple hidden onChange={(event) => void onMedia(event)} data-testid="dm-media-input" />
-      <input ref={documentInput} type="file" accept={DOCUMENT_ACCEPT} multiple hidden onChange={onDocuments} data-testid="dm-document-input" />
-
-      <Sheet open={menu === 'sources'} title="Joindre" onClose={() => setMenu('closed')} className="dm-attach-sheet">
-        <div className="dm-sheet-content">
-          <ul className="dm-sources">
-            {SOURCES.map((source) => (
-              <li key={source.key}>
-                <button type="button" onClick={() => choose(source)} title={source.subtitle} aria-label={source.key === 'dossier' ? 'Depuis mon dossier' : source.title} aria-describedby={`dm-source-${source.key}`}>
-                  <span className="dm-source-icon"><Icon name={source.icon} /></span>
-                  <span className="dm-source-title">{source.title}</span>
-                  <span id={`dm-source-${source.key}`} className="dm-visually-hidden">{source.subtitle}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <WideRow icon="house" title="Documents immobiliers" subtitle="Diagnostics, plans, mandats, quittances…" onClick={() => setMenu('categories')} />
-          {onMakeOffer && (
-            <WideRow
-              icon="handshake"
-              title="Faire une offre"
-              subtitle="Proposer un prix d'achat au vendeur"
-              tone="green"
+    <>
+      {suggestions.length > 0 && (
+        <div className="dm-quick" role="group" aria-label="Réponses rapides">
+          {suggestions.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              disabled={item.disabled}
               onClick={() => {
-                setMenu('closed');
-                onMakeOffer();
+                if (item.onSelect === 'documents') setMenu('categories');
+                else item.onSelect();
               }}
-            />
+            >
+              {item.icon && <Icon name={item.icon} />}
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="dm-composer">
+        <button type="button" className="dm-plus" onClick={() => setMenu('sources')} aria-label="Ajouter une pièce jointe" title="Ajouter une pièce jointe">
+          <Icon name="plus" />
+        </button>
+        <div className="dm-field">
+          <textarea
+            ref={field}
+            rows={1}
+            value={draft}
+            placeholder="Écrivez votre message…"
+            aria-label="Votre message"
+            onChange={(event) => setDraft(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              // Entrée envoie, Maj + Entrée va à la ligne.
+              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                void send();
+              }
+            }}
+          />
+          <button
+            ref={emojiButton}
+            type="button"
+            className="dm-emoji"
+            onClick={() => setEmojis((open) => !open)}
+            aria-label="Ajouter un émoji"
+            aria-expanded={emojis}
+            aria-controls={emojis ? emojiPanelId : undefined}
+            title="Ajouter un émoji"
+          >
+            <Icon name="smile" />
+          </button>
+          {emojis && (
+            <div ref={emojiPanel} id={emojiPanelId} className="dm-emoji-panel" role="group" aria-label="Émojis">
+              {EMOJIS.map((emoji) => (
+                <button key={emoji} type="button" onClick={() => insertEmoji(emoji)} aria-label={emoji}>{emoji}</button>
+              ))}
+            </div>
           )}
         </div>
-      </Sheet>
+        <button type="button" className="dm-send" onClick={() => void send()} disabled={!canSend} aria-label="Envoyer" title="Envoyer">
+          <Icon name="arrowUp" />
+        </button>
 
-      <Sheet open={menu === 'categories'} title="Documents immobiliers" onClose={() => setMenu('closed')} onBack={() => setMenu('sources')} className="dm-categories-sheet">
-        <div className="dm-sheet-content">
-          <p className="dm-sheet-note">Choisissez le type de document pour l'indiquer au destinataire, ou envoyez n'importe quel document autorisé.</p>
-          <ul className="dm-card dm-rows">
-            {DOCUMENT_CATEGORIES.map((item) => (
-              <li key={item}>
-                <button
-                  type="button"
-                  className="dm-action-row"
-                  onClick={() => {
-                    setMenu('closed');
-                    category.current = item;
-                    documentInput.current?.click();
-                  }}
-                >
-                  <span className="dm-row-icon"><Icon name={CATEGORY_ICONS[item]} /></span>
-                  <span className="dm-action-text"><span>{CATEGORY_LABELS[item]}</span></span>
-                  <Icon name="chevronRight" className="icon dm-chevron" />
-                </button>
-              </li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            className="dm-link-button dm-centered"
-            onClick={() => {
-              setMenu('closed');
-              category.current = null;
-              documentInput.current?.click();
-            }}
-          >
-            Envoyer un document sans catégorie
-          </button>
-        </div>
-      </Sheet>
+        <input ref={mediaInput} type="file" accept={MEDIA_ACCEPT} multiple hidden onChange={(event) => void onMedia(event)} data-testid="dm-media-input" />
+        <input ref={documentInput} type="file" accept={DOCUMENT_ACCEPT} multiple hidden onChange={onDocuments} data-testid="dm-document-input" />
 
-      <PreviewSheet
-        items={pending}
-        conversationId={conversation.id}
-        onRemove={(id) => setPending((current) => {
-          releasePending(current.filter((item) => item.id === id));
-          return current.filter((item) => item.id !== id);
-        })}
-        onDone={() => setPending((current) => {
-          releasePending(current);
-          return [];
-        })}
-      />
+        <Sheet open={menu === 'sources'} title="Joindre" onClose={() => setMenu('closed')} className="dm-attach-sheet">
+          <div className="dm-sheet-content">
+            <ul className="dm-sources">
+              {SOURCES.map((source) => (
+                <li key={source.key}>
+                  <button type="button" onClick={() => choose(source)} title={source.subtitle} aria-label={source.key === 'dossier' ? 'Depuis mon dossier' : source.title} aria-describedby={`dm-source-${source.key}`}>
+                    <span className="dm-source-icon"><Icon name={source.icon} /></span>
+                    <span className="dm-source-title">{source.title}</span>
+                    <span id={`dm-source-${source.key}`} className="dm-visually-hidden">{source.subtitle}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <WideRow icon="house" title="Documents immobiliers" subtitle="Diagnostics, plans, mandats, quittances…" onClick={() => setMenu('categories')} />
+            {onMakeOffer && (
+              <WideRow
+                icon="handshake"
+                title="Faire une offre"
+                subtitle="Proposer un prix d'achat au vendeur"
+                tone="green"
+                onClick={() => {
+                  setMenu('closed');
+                  onMakeOffer();
+                }}
+              />
+            )}
+          </div>
+        </Sheet>
 
-      <FirstNameDialog
-        open={askName}
-        lastName={account.status === 'ready' ? account.account.details?.last_name ?? '' : ''}
-        onClose={() => setAskName(false)}
-        onSend={(first) => {
-          setAskName(false);
-          void onNamed(first);
-        }}
-      />
-    </div>
+        <Sheet open={menu === 'categories'} title="Documents immobiliers" onClose={() => setMenu('closed')} onBack={() => setMenu('sources')} className="dm-categories-sheet">
+          <div className="dm-sheet-content">
+            <p className="dm-sheet-note">Choisissez le type de document pour l'indiquer au destinataire, ou envoyez n'importe quel document autorisé.</p>
+            <ul className="dm-card dm-rows">
+              {DOCUMENT_CATEGORIES.map((item) => (
+                <li key={item}>
+                  <button
+                    type="button"
+                    className="dm-action-row"
+                    onClick={() => {
+                      setMenu('closed');
+                      category.current = item;
+                      documentInput.current?.click();
+                    }}
+                  >
+                    <span className="dm-row-icon"><Icon name={CATEGORY_ICONS[item]} /></span>
+                    <span className="dm-action-text"><span>{CATEGORY_LABELS[item]}</span></span>
+                    <Icon name="chevronRight" className="icon dm-chevron" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              className="dm-link-button dm-centered"
+              onClick={() => {
+                setMenu('closed');
+                category.current = null;
+                documentInput.current?.click();
+              }}
+            >
+              Envoyer un document sans catégorie
+            </button>
+          </div>
+        </Sheet>
+
+        <PreviewSheet
+          items={pending}
+          conversationId={conversation.id}
+          onRemove={(id) => setPending((current) => {
+            releasePending(current.filter((item) => item.id === id));
+            return current.filter((item) => item.id !== id);
+          })}
+          onDone={() => setPending((current) => {
+            releasePending(current);
+            return [];
+          })}
+        />
+
+        <FirstNameDialog
+          open={askName}
+          lastName={account.status === 'ready' ? account.account.details?.last_name ?? '' : ''}
+          onClose={() => setAskName(false)}
+          onSend={(first) => {
+            setAskName(false);
+            void onNamed(first);
+          }}
+        />
+      </div>
+    </>
   );
 }
 
