@@ -1,16 +1,16 @@
 import { useEffect, type MouseEvent } from 'react';
 import { Icon } from '../../components/Icon';
 import type { IconName } from '../../components/iconPaths';
-import { startLiveBadges } from '../../lib/badges';
+import { startLiveBadges, startLiveNotifications } from '../../lib/badges';
 import { useStore } from '../../lib/account/session';
+import { useDesktop } from '../../lib/desktop';
 import {
   markAllNotificationsRead, markNotificationRead, notificationsStore, notificationTarget, relativeDate, unreadNotificationCount,
   type NidaloNotification, type NotificationKind,
 } from '../../lib/notifications';
 import { EmptyState, ScreenHeader, Spinner } from './parts';
 
-// Centre de notifications sur ordinateur, comme NotificationsView de l'app (HomeView.swift:360-433). Sur téléphone,
-// cet écran reste « bientôt » (AccountPage).
+// Centre de notifications, sur ordinateur et sur téléphone, comme NotificationsView de l'app (HomeView.swift:360-433).
 
 /** Icône de chaque sorte, celles de NotificationRow (HomeView.swift:463-472). */
 const KIND_ICONS: Record<NotificationKind, IconName> = {
@@ -76,12 +76,14 @@ function NotificationItem({ item }: { item: NidaloNotification }) {
 
 export function NotificationsScreen({ signedIn }: { signedIn: boolean }) {
   const state = useStore(notificationsStore);
+  const desktop = useDesktop();
 
   useEffect(() => {
-    // Lecture et temps réel partagés avec les pastilles de la barre du haut.
     if (!signedIn) return undefined;
-    return startLiveBadges();
-  }, [signedIn]);
+    // Sur ordinateur, lecture et temps réel partagés avec les pastilles de la barre du haut ; sur téléphone, sans
+    // pastilles, les notifications seules.
+    return desktop ? startLiveBadges() : startLiveNotifications();
+  }, [signedIn, desktop]);
 
   const unread = signedIn ? unreadNotificationCount(state.items) : 0;
   const action = unread > 0

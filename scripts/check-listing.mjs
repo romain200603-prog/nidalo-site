@@ -1135,10 +1135,16 @@ try {
   expect('fiche-telephone-connecte', 'offre', await page.textContent('.header-card a.hc-offer'), 'Offre en attente');
   expect('fiche-telephone-connecte', 'lien de l’offre', await page.getAttribute('.header-card a.hc-offer', 'href'), `/messages/?c=${conversationId(1)}`);
   expect('fiche-telephone-connecte', 'carte des visites', await page.textContent('.visit-card .visit-subtitle'), 'Visite prévue · Visite confirmée');
-  if (await page.$('.visit-card a, a.visit-card')) problems.push('fiche-telephone-connecte: la carte des visites mène à Mon agenda, encore « bientôt » sur téléphone');
+  // « Agenda » ouvre Mon agenda, comme sur ordinateur (Mon agenda marche sur téléphone depuis le 14 novembre).
+  expect('fiche-telephone-connecte', 'bouton Agenda', await page.$$eval('.visit-card a', (links) => links.map((link) => `${link.className} ${link.textContent} ${link.getAttribute('href')}`).join(' | ')),
+    'visit-agenda Agenda /compte/?vue=agenda');
   // Avec un compte, le numéro de l'agence : « Téléphone » l'appelle.
   expect('fiche-telephone-connecte', 'appel', await page.getAttribute('.action-bar a.action-bar-item', 'href'), 'tel:0639984567');
   await page.screenshot({ path: join(out, 'fiche-telephone-connecte.png') });
+  // La carte des visites et son bouton « Agenda », sous le résumé.
+  await page.$eval('.header-card', (el) => el.scrollIntoView({ block: 'start' }));
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: join(out, 'telephone-fiche-agenda.png') });
   await page.close();
   // Une offre attend déjà une réponse : l'adresse de l'offre ouvre la conversation, qui la montre (comme l'app).
   page = await open(phoneMember, `/annonce/?id=${FICHE}&vue=offre`, 'adresse-offre-en-attente-telephone');
@@ -1155,9 +1161,10 @@ try {
   await ready(page, 'fiche-telephone-actions');
   expect('fiche-telephone-actions', 'offre', await page.textContent('.header-card button.hc-offer'), 'Faire une offre');
   expect('fiche-telephone-actions', 'carte des visites', await page.textContent('.visit-card .visit-text'), 'Aucune visite prévueDemandez une visite au vendeur ou à l\'agence.');
+  if (await page.$('.visit-card a, a.visit-card')) problems.push('fiche-telephone-actions: la carte « Aucune visite prévue » est un lien');
 
-  // « Visiter » : le formulaire à son adresse, create_visit_request, puis la confirmation, sans Mon agenda (encore
-  // « bientôt » sur téléphone) ; « Fermer » revient à la fiche, qui montre la demande.
+  // « Visiter » : le formulaire à son adresse, create_visit_request, puis la confirmation avec « Voir mon agenda »,
+  // comme sur ordinateur ; « Fermer » revient à la fiche, dont la carte des visites ouvre la demande.
   phoneMark = calls.length;
   await page.tap('.action-bar-item >> nth=1');
   await waitForAddress(page, `${base}/annonce/?id=${FICHE}&vue=visite`);
@@ -1195,14 +1202,16 @@ try {
     });
   }
   expect('visite-telephone', 'titre de la confirmation', await page.textContent('.dl-visit-screen h1'), 'Demande envoyée');
-  expect('visite-telephone', 'texte de la confirmation', await page.textContent('.dl-sent-text'), 'Ce n\'est pas encore une visite confirmée : Agence Démo Centre doit choisir un créneau, ou en proposer un autre.');
-  expect('visite-telephone', 'boutons de la confirmation', await page.$$eval('.dl-screen-actions > *', (els) => els.map((el) => `${el.tagName} ${el.textContent}`).join(' | ')), 'BUTTON Fermer');
+  expect('visite-telephone', 'texte de la confirmation', await page.textContent('.dl-sent-text'), 'Ce n\'est pas encore une visite confirmée : Agence Démo Centre doit choisir un créneau, ou en proposer un autre. Vous la retrouvez dans Mon compte › Mon agenda.');
+  expect('visite-telephone', 'boutons de la confirmation', await page.$$eval('.dl-screen-actions > *', (els) => els.map((el) => `${el.tagName} ${el.textContent} ${el.getAttribute('href')}`).join(' | ')),
+    'A Voir mon agenda /compte/?vue=agenda | BUTTON Fermer null');
   await checkPhoneScreen(page, 'visite-telephone-envoyee');
   await fullShot(page, 'telephone-visite-envoyee.png');
-  await page.tap('.dl-screen-actions .dl-submit');
+  await page.tap('.dl-screen-actions .dl-secondary');
   await waitForAddress(page, `${base}/annonce/?id=${FICHE}`);
   await page.waitForSelector('.header-card .hc-price-value');
   expect('visite-telephone', 'carte des visites après l’envoi', await page.textContent('.visit-card .visit-text'), 'Demande de visite envoyéeEn attente · Agence Démo Centre');
+  expect('visite-telephone', 'lien de la carte des visites', await page.getAttribute('a.visit-card', 'href'), `/compte/?vue=demande-visite&id=${phoneCreated?.body?.p_id}`);
   expect('visite-telephone', 'titre de la page après l’envoi', await page.title(), 'Appartement 3 pièces à Lyon 2e · Nidalo');
   await page.$eval('.header-card', (el) => el.scrollIntoView({ block: 'start' }));
   await page.waitForTimeout(200);

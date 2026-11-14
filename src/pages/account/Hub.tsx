@@ -13,7 +13,6 @@ import { activeSalesCount, loadSales, salesStore, salesSubtitle } from '../../li
 import { loadSavedSearches, savedSearchesStore } from '../../lib/account/savedSearches';
 import { loadTeam, memberAgency, ROLE_LABELS, teamStore, teamSubtitle } from '../../lib/account/team';
 import { currentUserId, useStore } from '../../lib/account/session';
-import { useDesktop } from '../../lib/desktop';
 import { parisDay } from '../../lib/listing/views';
 import { accountPath, AGENCY_FORM_PATH, AGENCY_PATH, CONTACTS_PATH, MANDATES_PATH, OPPORTUNITIES_PATH, PATHS, SALES_PATH, TEAM_PATH } from '../../lib/paths';
 import { ActivityTile, RowGroup, SpaceProfileCard, SpaceSection, type RowItem } from './parts';
@@ -83,7 +82,7 @@ export function Hub({ account }: { account: Account }) {
           />
           <ProjectCard />
           <SpaceSection icon="calendar" title="Mon agenda">
-            <RowGroup rows={[{ icon: 'calendarDays', title: 'Mon agenda', subtitle: 'Visites et rendez-vous', href: soonPath('agenda') }]} />
+            <RowGroup rows={[{ icon: 'calendarDays', title: 'Mon agenda', subtitle: 'Visites et rendez-vous', href: accountPath('agenda') }]} />
           </SpaceSection>
           <SpaceSection icon="layoutGrid" title="Mes activités">
             <div className="activity-tiles">
@@ -214,8 +213,6 @@ function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
   const opportunityRows = opportunities.status === 'ready' ? opportunities.rows : [];
   const contactItems = contacts.status === 'ready' ? contacts.items.filter((contact) => isOwnContact(contact, me)) : [];
   const newContacts = contactItems.filter((contact) => contact.isNew).length;
-  // Ordinateur : l'agenda des visites est sur le site (Mon agenda) ; sur téléphone, « bientôt » comme avant.
-  const desktop = useDesktop();
   const agency = pro.status === 'ready' ? pro.agency : null;
   // Membre de l'équipe d'une agence (responsable ou agent) : la carte montre l'agence et son rôle, et mène à l'équipe.
   const member = agency ? null : memberAgency(team);
@@ -241,7 +238,7 @@ function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
           { icon: 'fileText', title: 'Mes mandats', subtitle: mandatesSubtitle(mandateRows, parisDay(new Date())), href: MANDATES_PATH },
           { icon: 'handshake', title: 'Mes ventes', subtitle: salesSubtitle(saleRows), href: SALES_PATH },
           { icon: 'users', title: 'Mes contacts', subtitle: contactsSubtitle(contactItems), badge: newContacts, href: CONTACTS_PATH },
-          { icon: 'calendarDays', title: 'Agenda des visites', subtitle: 'Visites et rendez-vous', href: desktop ? accountPath('agenda') : soonPath('agenda') },
+          { icon: 'calendarDays', title: 'Agenda des visites', subtitle: 'Visites et rendez-vous', href: accountPath('agenda') },
           { icon: 'sparkles', title: 'Mes opportunités', subtitle: opportunitiesSubtitle(opportunityRows), href: OPPORTUNITIES_PATH },
         ]} />
       </SpaceSection>

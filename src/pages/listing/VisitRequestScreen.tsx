@@ -1,7 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import { ListingPhoto } from '../../components/PhotoPager';
-import { useDesktop } from '../../lib/desktop';
 import { formatPrice } from '../../lib/format';
 import {
   areValidSlots, createVisitRequestParams, dayString, hourLabel, INVALID_SLOTS_MESSAGE, isSlotPast, REQUEST_STATUS_LABELS,
@@ -15,8 +14,7 @@ import { ExtraIcon } from './icons';
 // « Demander une visite » (/annonce/?id=…&vue=visite), dans une colonne de 640 px sur ordinateur, sur toute la largeur
 // sur téléphone : le formulaire de l'app (Features/Visits/VisitRequestFormView.swift et VisitRequestComponents.swift),
 // mêmes champs, textes et règles. La demande part avec create_visit_request et les arguments de l'app, puis la
-// confirmation « Demande envoyée ». Mon agenda n'est sur le site que sur ordinateur (AccountPage) : sur téléphone, la
-// confirmation n'y renvoie pas.
+// confirmation « Demande envoyée », avec « Voir mon agenda » (Mon compte, sur ordinateur et sur téléphone).
 
 const MODES: { value: VisitMode; label: string }[] = [{ value: 'onSite', label: 'Sur place' }, { value: 'video', label: 'En visio' }];
 
@@ -103,8 +101,6 @@ export function VisitRequestScreen({ row, photo, recipientName, initialMode = 'o
   const [sent, setSent] = useState<Date[] | null>(null);
   const busy = useRef(false);
   const today = dayString(new Date());
-  // Mon agenda : sur ordinateur seulement (sur téléphone, Mon compte le montre encore « bientôt »).
-  const hasAgenda = useDesktop();
 
   const send = async () => {
     if (busy.current) return;
@@ -163,7 +159,7 @@ export function VisitRequestScreen({ row, photo, recipientName, initialMode = 'o
             </div>
             <p className="dl-sent-text">
               Ce n'est pas encore une visite confirmée : {recipientName} doit choisir un créneau, ou en proposer un autre.
-              {hasAgenda && ' Vous la retrouvez dans Mon compte › Mon agenda.'}
+              {' Vous la retrouvez dans Mon compte › Mon agenda.'}
             </p>
             <ul className="dl-sent-slots">
               {sent.map((start) => (
@@ -172,14 +168,8 @@ export function VisitRequestScreen({ row, photo, recipientName, initialMode = 'o
             </ul>
           </div>
           <div className="dl-screen-actions">
-            {hasAgenda ? (
-              <>
-                <a className="dl-submit" href={accountPath('agenda')}>Voir mon agenda</a>
-                <button type="button" className="dl-secondary" onClick={onClose}>Fermer</button>
-              </>
-            ) : (
-              <button type="button" className="dl-submit" onClick={onClose}>Fermer</button>
-            )}
+            <a className="dl-submit" href={accountPath('agenda')}>Voir mon agenda</a>
+            <button type="button" className="dl-secondary" onClick={onClose}>Fermer</button>
           </div>
         </>
       ) : (

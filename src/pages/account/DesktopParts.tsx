@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import type { IconName } from '../../components/iconPaths';
+import { useDesktop } from '../../lib/desktop';
 import { PATHS } from '../../lib/paths';
 import { Modal } from '../listing/Dialogs';
 
@@ -157,7 +158,8 @@ export type MenuItem = { label: string; icon?: IconName; onClick: () => void; da
 
 /**
  * Menu de l'app (Menu) : liste d'actions sous le bouton « … », ou sous un bouton à libellé (`trigger`) ; Échap ou
- * un clic ailleurs le referme.
+ * un clic ailleurs le referme. Sur téléphone, la page défile juste assez pour le montrer en entier, au-dessus de la
+ * barre du bas.
  */
 export function ActionMenu({ label, items, trigger, triggerClassName = 'dsc-menu-button' }: {
   label: string;
@@ -167,7 +169,12 @@ export function ActionMenu({ label, items, trigger, triggerClassName = 'dsc-menu
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const id = useId();
+  const desktop = useDesktop();
+  useEffect(() => {
+    if (open && !desktop) listRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [open, desktop]);
   useEffect(() => {
     if (!open) return;
     const onPointer = (event: MouseEvent) => {
@@ -190,7 +197,7 @@ export function ActionMenu({ label, items, trigger, triggerClassName = 'dsc-menu
         {trigger ?? <Icon name="ellipsis" />}
       </button>
       {open && (
-        <div className="dsc-menu-list" role="menu" id={id}>
+        <div className="dsc-menu-list" role="menu" id={id} ref={listRef}>
           {items.map((item) => (
             <button key={item.label} type="button" role="menuitem" className={item.danger ? 'is-danger' : undefined}
               onClick={() => { setOpen(false); item.onClick(); }}>

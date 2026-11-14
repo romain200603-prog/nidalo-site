@@ -275,6 +275,11 @@ function pagePath(request) {
   try { return new URL(request.frame().url()).pathname; } catch { return null; }
 }
 
+/** Écran de Mon compte qui a envoyé une demande (paramètre « vue » de son adresse), ou null. */
+function pageView(request) {
+  try { return new URL(request.frame().url()).searchParams.get('vue'); } catch { return null; }
+}
+
 /**
  * `listingRows` : annonces renvoyées par la table listings (par défaut les trois de fixtures/listings.json) ;
  * `account` : tables du compte de test à remplacer (projet avec critères, autre nom affiché…).
@@ -288,6 +293,10 @@ async function mock(context, { signedIn = false, listingRows = listings, account
     && ['rpc/my_conversations', 'rpc/my_visit_requests', 'rpc/my_offers'].includes(table);
   // La page Messages marche aussi sur téléphone avec un compte (demande de Romain du 14 novembre 2026).
   const messagesPage = (request) => signedIn && pagePath(request) === '/messages/';
+  // L'écran Notifications aussi (même jour) : sur téléphone, il lit et marque les notifications, sans les conversations
+  // (pas de pastilles sur téléphone).
+  const notificationsScreen = (request, table) => signedIn && pagePath(request) === '/compte/' && pageView(request) === 'notifications'
+    && ['notifications', 'rpc/mark_notifications_read'].includes(table);
   const requests = [];
   const json = (route, status, body) =>
     route.fulfill({ status, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: body === undefined ? '' : JSON.stringify(body) });
@@ -303,7 +312,9 @@ async function mock(context, { signedIn = false, listingRows = listings, account
       try { body = request.postDataJSON(); } catch { body = request.postData(); }
       const width = pageWidth(request);
       badgeRequests.push({ table, method: request.method(), search: url.search, body, width, signedIn });
-      if (width !== null && width < 1024 && !contactsRead(request, table) && !messagesPage(request)) problems.push(`téléphone : ${table} demandé (rien ne doit changer sous 1024 px)`);
+      if (width !== null && width < 1024 && !contactsRead(request, table) && !messagesPage(request) && !notificationsScreen(request, table)) {
+        problems.push(`téléphone : ${table} demandé (rien ne doit changer sous 1024 px)`);
+      }
       if (!signedIn) {
         problems.push(`sans compte : ${table} demandé`);
         return json(route, 200, []);
@@ -1338,6 +1349,29 @@ async function favShot(page, file) {
   await page.screenshot({ path: join(out, file), fullPage: true });
 }
 
+/**
+ * Téléphone : rien ne dépasse de l'écran (pas de défilement de côté ; boutons, liens, onglets et feuilles dans
+ * l'écran) ni de sa carte (cartes de visite, cartes du formulaire, lignes de notification, feuilles).
+ */
+async function phoneFits(page, name) {
+  const outside = await page.evaluate(() => {
+    const width = document.documentElement.clientWidth;
+    const label = (element) => `${element.className || element.tagName} « ${element.textContent.replace(/\s+/g, ' ').trim().slice(0, 30)} »`;
+    const found = [];
+    if (document.documentElement.scrollWidth > width) found.push(`page de ${document.documentElement.scrollWidth} px pour ${width}`);
+    for (const element of document.querySelectorAll('main button, main a, main input, main select, main textarea, dialog[open], dialog[open] button, dialog[open] input, .dsc-menu-list')) {
+      const box = element.getBoundingClientRect();
+      if (box.width === 0 && box.height === 0) continue;
+      if (box.left < -0.5 || box.right > width + 0.5) found.push(`${label(element)} de ${Math.round(box.left)} à ${Math.round(box.right)} px`);
+    }
+    for (const card of document.querySelectorAll('.dsc-visit, .dsc-card, .notification-row, dialog[open], .dsc-menu-list')) {
+      if (card.scrollWidth > card.clientWidth + 1) found.push(`${label(card)} : contenu de ${card.scrollWidth} px pour ${card.clientWidth}`);
+    }
+    return found;
+  });
+  if (outside.length) problems.push(`${name} : dépasse : ${outside.slice(0, 6).join(' ; ')}`);
+}
+
 // MARK: - Mon espace sur ordinateur (maquette 5) : projet, agenda, visites et biens consultés, avec des données inventées.
 
 const SPACE_STORAGE = 'https://izzsoitqtzzswkpvdozd.supabase.co/storage/v1/object/public/listing-photos/';
@@ -1435,7 +1469,8 @@ function spaceState(fields = {}) {
 /**
  * Serveur de Mon espace, par-dessus mock() : projet (lecture, upsert), agenda (lecture, ajout), demandes de visite,
  * profils publics, conversations et « Mes annonces » quand l'état les fournit ; déconnexions notées. Sous 1024 px,
- * rien n'est servi ici : mock() signale la demande (rien ne doit changer sur téléphone).
+ * seulement pour Mon agenda et Ajouter une visite, qui y marchent comme sur ordinateur (demande de Romain du
+ * 14 novembre 2026) ; ailleurs, mock() signale la demande.
  */
 async function mockSpace(context, space) {
   const cors = { 'access-control-allow-origin': '*' };
@@ -1449,7 +1484,8 @@ async function mockSpace(context, space) {
     // Fiche lue par son identifiant : comme Postgres, majuscules ou minuscules (l'app écrit les identifiants en majuscules).
     const detail = table === 'listings' && url.searchParams.get('id')?.startsWith('eq.') ? url.searchParams.get('id').slice(3).toLowerCase() : null;
     const served = SPACE_TABLES.includes(table) && (table !== 'rpc/my_conversations' || space.conversations !== null);
-    if ((!served && !myListings && !detail) || (width !== null && width < 1024)) return route.fallback();
+    const phoneAgenda = pagePath(request) === '/compte/' && ['agenda', 'ajouter-visite'].includes(pageView(request));
+    if ((!served && !myListings && !detail) || (width !== null && width < 1024 && !phoneAgenda)) return route.fallback();
     let body = null;
     try { body = request.postDataJSON(); } catch { body = request.postData(); }
     const headers = await request.allHeaders();
@@ -3474,6 +3510,8 @@ try {
       }, viewed);
       return { context, server };
     };
+    /** Cartes « À venir » de Mon agenda sur ordinateur : le téléphone doit montrer les mêmes. */
+    let desktopAgenda = null;
 
     // La page au plus près de la maquette : projet Investissement à 57 %, agenda libre, 2 recherches, 4 biens consultés,
     // aucune annonce. Mesures de la maquette à 1440 px (contenu de 1200, colonne de 280, projet 544, agenda 320).
@@ -3638,6 +3676,7 @@ try {
             route: plans('Villeurbanne'), request: `/compte/?vue=demande-visite&id=${SPACE_REQUEST_ID}`, menu: false }),
         ]],
       ]);
+      desktopAgenda = await agendaCards(page);
       expectSame(A, 'lien Itinéraire', await page.$eval('.dsc-visit a.dsc-visit-action', (link) => [link.textContent, link.getAttribute('target'), link.getAttribute('rel')]),
         ['Itinéraire', '_blank', 'noopener noreferrer']);
       // Menu « … » d'une visite à venir : les actions de l'app, toutes dans l'app iPhone.
@@ -3903,8 +3942,9 @@ try {
       await context.close();
     }
 
-    // Compte professionnel : son espace garde son écran ; sur ordinateur, « Agenda des visites » ouvre Mon agenda.
-    for (const [width, href] of [[1440, '/compte/?vue=agenda'], [1023, '/compte/?vue=bientot&ecran=agenda']]) {
+    // Compte professionnel : son espace garde son écran ; « Agenda des visites » ouvre Mon agenda, sur ordinateur et
+    // sur téléphone.
+    for (const [width, href] of [[1440, '/compte/?vue=agenda'], [1023, '/compte/?vue=agenda']]) {
       const context = await browser.newContext({ viewport: { width, height: 900 }, locale: 'fr-FR' });
       await mock(context, { signedIn: true, account: { profiles: [{ ...ACCOUNT.profiles[0], account_type: 'professional', professional_profile_id: 'b2000000-0000-4000-8000-000000000001' }] } });
       page = await open(context, '/compte/', `espace pro ${width}`);
@@ -3915,15 +3955,18 @@ try {
       await context.close();
     }
 
-    // À 1023 px : la page du téléphone ; les écrans de l'ordinateur y sont « bientôt » et rien de l'agenda n'est demandé.
+    // À 1023 px : la page du téléphone ; Mon projet et Biens consultés y sont « bientôt » (Mon agenda et Ajouter une
+    // visite y ont leur écran : vérifiés plus bas, sur téléphone).
     {
       const context = await browser.newContext({ viewport: { width: 1023, height: 768 }, locale: 'fr-FR' });
       await mock(context, { signedIn: true });
       page = await open(context, '/compte/', 'Mon espace 1023');
       await page.waitForSelector('.project-card');
       expectSame('Mon espace 1023', 'page du téléphone', [await page.locator('.dsp, .dsc, .dtop, .dfoot').count(), await page.locator('.space-profile').count()], [0, 1]);
+      expectSame('Mon espace 1023', 'lien Mon agenda', await page.$$eval('a.row', (rows) => rows.filter((row) => row.querySelector('.row-title')?.textContent === 'Mon agenda')
+        .map((row) => row.getAttribute('href'))), ['/compte/?vue=agenda']);
       await page.close();
-      for (const [view, title] of [['agenda', 'Mon agenda'], ['ajouter-visite', 'Mon agenda'], ['projet', 'Mon projet immobilier'], ['consultes', 'Biens consultés']]) {
+      for (const [view, title] of [['projet', 'Mon projet immobilier'], ['consultes', 'Biens consultés']]) {
         page = await open(context, `/compte/?vue=${view}`, `${view} 1023`);
         await page.waitForSelector('.soon-card');
         expectSame(`${view} 1023`, 'écran « bientôt »', [await textOf(page, '.soon-card h2'), await page.locator('.dsc').count()], [title, 0]);
@@ -3945,6 +3988,109 @@ try {
       }
       const asked = guestServer.requests.filter((request) => ['real_estate_projects', 'agenda_visits', 'rpc/my_visit_requests', 'profiles'].includes(request.table));
       if (asked.length) problems.push(`Mon espace sans compte : ${asked.map((request) => request.table).join(', ')} demandé`);
+      await context.close();
+    }
+
+    // Téléphone (demande de Romain du 14 novembre) : Mon agenda et Ajouter une visite, les écrans de l'ordinateur, à
+    // 390 px (iPhone 13) et 320 px (iPhone SE), ouverts depuis Mon compte : les cartes de l'ordinateur, rien ne dépasse,
+    // la feuille « Bien concerné » tient dans l'écran et « Enregistrer » insère la visite. Captures :
+    // agenda-telephone*.png, ajouter-visite-telephone*.png, ajouter-visite-feuille-telephone*.png.
+    for (const device of ['iPhone 13', 'iPhone SE']) {
+      const A = `Mon agenda ${device}`;
+      const V = `Ajouter une visite ${device}`;
+      const suffix = device === 'iPhone SE' ? '-320' : '';
+      const screenWidth = devices[device].viewport.width;
+      const space = spaceState({ conversations: SPACE_CONVERSATIONS });
+      const context = await spaceBrowser.newContext({ ...devices[device], locale: 'fr-FR', timezoneId: 'Europe/Paris' });
+      await context.clock.setFixedTime(CHAT_NOW);
+      await mock(context, { signedIn: true, listingRows: SPACE_LISTING_ROWS });
+      await mockSpace(context, space);
+      page = await open(context, '/compte/', A);
+      await page.waitForSelector('.project-card');
+      await page.click('a.row[href="/compte/?vue=agenda"]');
+      await page.waitForURL(`${base}/compte/?vue=agenda`, { timeout: 8000 }).catch(() => problems.push(`${A} : « Mon agenda » ouvre ${page.url()}`));
+      await page.waitForSelector('.dsc-agenda-screen .dsc-visit', { timeout: 8000 }).catch(() => problems.push(`${A} : Mon agenda ne s'affiche pas`));
+      expectSame(A, 'en-tête', [await textOf(page, '.dsc-head h1'), await page.getAttribute('.dsc-back', 'href'), await textOf(page, '.dsc-add-visit'),
+        await page.$$eval('.dsc-tab', (tabs) => tabs.map((tab) => [tab.childNodes[0]?.textContent ?? null, tab.querySelector('.dsc-tab-count')?.textContent ?? null]))],
+      ['Agenda des visites', '/compte/', 'Ajouter une visite manuellement', [['À venir', '3'], ['Passées', '1'], ['Annulées', '1']]]);
+      expectSame(A, 'cartes À venir, celles de l\'ordinateur', await agendaCards(page), desktopAgenda);
+      expectSame(A, 'bouton calendrier', await page.locator('.dsc-square').isVisible(), screenWidth >= 360);
+      await phoneFits(page, A);
+      await tallShot(page, `agenda-telephone${suffix}.png`);
+      // Menu « … » d'une visite : entier dans l'écran, au-dessus de la barre du bas (la page défile juste assez).
+      await page.locator('.dsc-visit').nth(0).locator('.dsc-menu-button').click();
+      await page.waitForSelector('.dsc-menu-list');
+      await page.waitForTimeout(300);
+      expectSame(A, 'menu « … » entier au-dessus de la barre du bas', await page.evaluate(() => {
+        const menu = document.querySelector('.dsc-menu-list').getBoundingClientRect();
+        return menu.top >= 0 && menu.bottom <= document.querySelector('.tabbar').getBoundingClientRect().top;
+      }), true);
+      await phoneFits(page, `${A}, menu « … »`);
+      await page.screenshot({ path: join(out, `agenda-menu-telephone${suffix}.png`) });
+      await page.keyboard.press('Escape');
+      await page.waitForSelector('.dsc-menu-list', { state: 'detached', timeout: 4000 }).catch(() => problems.push(`${A} : Échap ne referme pas le menu « … »`));
+      // Passées et Annulées : leurs cartes, dans l'écran.
+      for (const [index, tab] of [[1, 'Passées'], [2, 'Annulées']]) {
+        await page.click(`.dsc-tab >> nth=${index}`);
+        await page.waitForFunction((i) => document.querySelectorAll('.dsc-tab')[i]?.getAttribute('aria-selected') === 'true', index, { timeout: 4000 }).catch(() => undefined);
+        expectSame(A, `onglet ${tab}`, (await agendaCards(page)).map(([group, cards]) => [group, cards.length]), [['Ces 7 derniers jours', 1]]);
+        await phoneFits(page, `${A}, ${tab}`);
+      }
+      await page.click('.dsc-tab >> nth=0');
+
+      // Ajouter une visite, depuis l'agenda.
+      await page.click('.dsc-add-visit');
+      await page.waitForURL(`${base}/compte/?vue=ajouter-visite&depuis=agenda`, { timeout: 8000 }).catch(() => problems.push(`${V} : ouvert à ${page.url()}`));
+      await page.waitForSelector('.dsc-form-screen .dsc-choose');
+      expectSame(V, 'formulaire vide', [await textOf(page, '.dsc-head h1'), await page.isDisabled('.dsc-head-action .dsc-button-primary'),
+        await page.$$eval('.dsc-form-screen .dsc-card-title', (titles) => titles.map((title) => title.textContent))],
+      ['Nouvelle visite', true, ['Bien concerné', 'Date et heure', 'Rendez-vous', 'Rappels et suivi']]);
+      await phoneFits(page, V);
+      await tallShot(page, `ajouter-visite-telephone${suffix}.png`);
+      await page.click('.dsc-choose');
+      await page.waitForSelector('dialog.dsc-picker[open] .dsc-picker-section', { timeout: 8000 });
+      await page.waitForTimeout(300);
+      expectSame(V, 'feuille Bien concerné [gauche, droite, dans la hauteur, sections]', await page.evaluate(() => {
+        const box = document.querySelector('dialog.dsc-picker[open]').getBoundingClientRect();
+        return [Math.round(box.left), Math.round(box.right), box.top >= 0 && box.bottom <= window.innerHeight,
+          [...document.querySelectorAll('dialog.dsc-picker[open] .dsc-picker-section h3')].map((title) => title.textContent)];
+      }), [16, screenWidth - 16, true, ['Mes annonces', 'Mes favoris', 'Biens de mes conversations']]);
+      await phoneFits(page, `${V}, feuille Bien concerné`);
+      await page.screenshot({ path: join(out, `ajouter-visite-feuille-telephone${suffix}.png`) });
+      await page.click('dialog.dsc-picker[open] .dsc-picker-section[aria-label="Biens de mes conversations"] .dsc-picker-row');
+      await page.waitForFunction(() => document.querySelector('.dsc-place input')?.value === 'Lyon 3e (69003)', null, { timeout: 8000 })
+        .catch(async () => problems.push(`${V} : adresse proposée « ${await page.inputValue('.dsc-place input')} »`));
+      expectSame(V, 'bien choisi', [await textOf(page, '.dsc-chosen-title'), await page.getByLabel('Contact ou agence').inputValue()],
+        ['Appartement lumineux avec balcon', 'Agence du Parc']);
+      await phoneFits(page, `${V}, bien choisi`);
+      await page.getByRole('button', { name: 'Programmer quand même' }).click();
+      await page.getByLabel('Date', { exact: true }).fill('2026-11-10');
+      await page.getByLabel('Heure de début', { exact: true }).fill('14:30');
+      const phoneMark = space.calls.length;
+      await page.click('.dsc-head-action .dsc-button-primary');
+      const inserted = await oneSpaceCall(space, 'agenda_visits', 'POST', phoneMark, V);
+      expectSame(V, 'visite insérée [début, annonce, adresse, contact]', [inserted?.body?.start_at ?? null, inserted?.body?.listing_id ?? null,
+        inserted?.body?.visit?.address ?? null, inserted?.body?.visit?.contactName ?? null],
+      ['2026-11-10T13:30:00.000', listings[0].id.toUpperCase(), 'Lyon 3e (69003)', 'Agence du Parc']);
+      await page.waitForURL(`${base}/compte/?vue=agenda`, { timeout: 8000 }).catch(() => problems.push(`${V} : après l'enregistrement, ${page.url()} au lieu de Mon agenda`));
+      await page.waitForFunction(() => document.querySelector('.dsc-tab .dsc-tab-count')?.textContent === '4', null, { timeout: 8000 })
+        .catch(() => problems.push(`${V} : la visite enregistrée n'apparaît pas dans Mon agenda`));
+      await page.close();
+      await context.close();
+    }
+
+    // Sans compte, sur téléphone : l'invitation à se connecter ; rien de l'agenda n'est demandé.
+    {
+      const context = await spaceBrowser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
+      const guestServer = await mock(context);
+      for (const view of ['agenda', 'ajouter-visite']) {
+        page = await open(context, `/compte/?vue=${view}`, `${view} téléphone sans compte`);
+        await page.waitForSelector('.signin-card');
+        expectSame(`${view} téléphone sans compte`, 'page', [await page.locator('.dsc').count(), await textOf(page, '.signin-card h1')], [0, 'Bienvenue sur NIDALO']);
+        await page.close();
+      }
+      const asked = guestServer.requests.filter((request) => ['agenda_visits', 'rpc/my_visit_requests', 'rpc/my_conversations'].includes(request.table));
+      if (asked.length) problems.push(`Mon agenda téléphone sans compte : ${asked.map((request) => request.table).join(', ')} demandé`);
       await context.close();
     }
   } finally {
@@ -4028,6 +4174,77 @@ try {
   await page.waitForSelector('input[autocomplete="tel"]');
   await page.screenshot({ path: join(out, 'mes-informations-telephone-long.png'), fullPage: true });
   await signedPhone.close();
+
+  // Notifications sur téléphone (demande de Romain du 14 novembre) : l'écran de l'ordinateur, ouvert depuis Mon compte,
+  // à 390 px (iPhone 13) et 320 px (iPhone SE). Sans compte, son message et aucune demande ; avec le compte, les lignes
+  // et leurs liens, un clic marque la notification lue, « Tout lire » toutes, et une nouvelle notification arrive en
+  // direct ; seules les notifications sont lues et suivies (pas de pastilles sur téléphone). Captures :
+  // notifications-telephone*.png.
+  {
+    const guestPhone = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
+    await mock(guestPhone);
+    const asked = badgeRequests.length;
+    page = await open(guestPhone, '/compte/?vue=notifications', 'notifications-telephone-sans-compte');
+    await page.waitForSelector('.notifications-screen .account-empty');
+    const guestText = (await page.textContent('.notifications-screen'))?.replace(/\s+/g, ' ') ?? '';
+    for (const text of ['Notifications', 'Aucune notification pour l’instant', 'Connectez-vous pour recevoir les réponses à vos demandes de visite et les rappels.']) {
+      if (!guestText.includes(text)) problems.push(`notifications téléphone sans compte : « ${text} » absent`);
+    }
+    if (await page.locator('.notifications-read-all').count()) problems.push('notifications téléphone sans compte : « Tout lire » affiché');
+    await phoneFits(page, 'notifications téléphone sans compte');
+    await page.screenshot({ path: join(out, 'notifications-telephone-sans-compte.png') });
+    await page.close();
+    if (badgeRequests.length > asked) problems.push('notifications téléphone sans compte : demandes au serveur');
+    await guestPhone.close();
+  }
+  for (const device of ['iPhone 13', 'iPhone SE']) {
+    const N = `notifications ${device}`;
+    const suffix = device === 'iPhone SE' ? '-320' : '';
+    const member = await browser.newContext({ ...devices[device], locale: 'fr-FR' });
+    const live = await mock(member, { signedIn: true });
+    const asked = badgeRequests.length;
+    page = await open(member, '/compte/', N);
+    await page.waitForSelector('.project-card');
+    await page.click('a.row[href="/compte/?vue=notifications"]');
+    await page.waitForURL(`${base}/compte/?vue=notifications`, { timeout: 8000 }).catch(() => problems.push(`${N} : la ligne Notifications ouvre ${page.url()}`));
+    await page.waitForSelector('.notification-row');
+    const rowsOf = () => page.$$eval('.notification-row', (links) => links.map((link) => [link.getAttribute('href'), Boolean(link.querySelector('.notification-dot'))]));
+    const rows = await rowsOf();
+    const known = live.state.notifications.filter((row) => NOTIFICATION_KINDS.includes(row.kind)).sort((a, b) => b.created_at.localeCompare(a.created_at));
+    expectSame(N, 'lignes [nombre, non lues, « Tout lire »]', [rows.length, rows.filter((row) => row[1]).length, await page.locator('.notifications-read-all').count()],
+      [known.length, expectedBadges(live.state).notifications, 1]);
+    expectSame(N, 'liens', rows.map((row) => row[0]), [`/messages/?c=${conversationId(1)}`, `/annonce/?id=${listings[0].id}`, `/annonce/?id=${listings[2].id}`,
+      '/compte/?vue=demande-visite&id=e0000000-0000-4000-8000-000000000003']);
+    await waitFor(() => live.followed().includes('notifications'), `${N} : temps réel`);
+    expectSame(N, 'tables suivies en direct', [...new Set(live.followed())].sort(), ['notifications']);
+    expectSame(N, 'lectures', [...new Set(badgeRequests.slice(asked).map((request) => request.table))], ['notifications']);
+    await phoneFits(page, N);
+    await tallShot(page, `notifications-telephone${suffix}.png`);
+    // Un clic : cette notification est marquée lue (p_ids : son id), puis son écran s'ouvre (ici l'annonce, simulée).
+    await page.route(new RegExp(`^${base}/annonce/`), (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Annonce</title>' }));
+    let before = writes.length;
+    await page.click(`.notification-row[href="/annonce/?id=${listings[0].id}"]`);
+    await page.waitForURL(/\/annonce\/\?id=/, { timeout: 8000 }).catch(() => problems.push(`${N} : le clic n'a pas ouvert l'annonce (${page.url()})`));
+    expectSame(N, 'clic', writes.slice(before).filter((write) => write.table === 'rpc/mark_notifications_read').map((write) => write.body), [{ p_ids: [notificationId(2)] }]);
+    await page.close();
+    // « Tout lire » : mark_notifications_read avec p_ids null, puis plus aucune non lue.
+    page = await open(member, '/compte/?vue=notifications', `${N}, tout lire`);
+    await page.waitForSelector('.notifications-read-all');
+    before = writes.length;
+    await page.click('.notifications-read-all');
+    await page.waitForFunction(() => !document.querySelector('.notification-dot') && !document.querySelector('.notifications-read-all'), null, { timeout: 8000 })
+      .catch(() => problems.push(`${N} : après « Tout lire », non-lues encore affichées`));
+    expectSame(N, 'tout lire', writes.slice(before).filter((write) => write.table === 'rpc/mark_notifications_read').map((write) => write.body), [{ p_ids: null }]);
+    // En direct : une nouvelle notification s'ajoute en haut, non lue, et « Tout lire » revient.
+    await waitFor(() => live.followed().includes('notifications'), `${N} : temps réel après « Tout lire »`);
+    live.state.notifications.push({ id: notificationId(6), kind: 'newRequest', request_id: 'e0000000-0000-4000-8000-000000000004', listing_id: listings[0].id, conversation_id: null,
+      offer_id: null, title: listings[0].title, body: 'Julien Moreau souhaite visiter ce bien.', created_at: new Date().toISOString(), read_at: null });
+    live.pushChange('notifications');
+    await page.waitForFunction((count) => document.querySelectorAll('.notification-row').length === count && document.querySelectorAll('.notification-dot').length === 1
+      && Boolean(document.querySelector('.notifications-read-all')), known.length + 1, { timeout: 8000 }).catch(() => problems.push(`${N} : la nouvelle notification n'arrive pas en direct`));
+    await page.close();
+    await member.close();
+  }
 } finally {
   await browser.close();
   server.close();

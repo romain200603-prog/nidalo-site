@@ -210,6 +210,26 @@ export function startLiveBadges(): () => void {
   };
 }
 
+/**
+ * Sur téléphone, l'écran Notifications seul (pas de barre du haut ni de pastilles) : il lit et suit seulement les
+ * notifications, comme NotificationsView de l'app, et les relit quand l'onglet redevient visible.
+ */
+export function startLiveNotifications(): () => void {
+  void loadNotifications();
+  const channel = follow(NOTIFICATION_TABLES, () => void loadNotifications());
+  const onVisible = () => {
+    if (document.visibilityState === 'visible') void loadNotifications();
+  };
+  document.addEventListener('visibilitychange', onVisible);
+  let stopped = false;
+  return () => {
+    if (stopped) return;
+    stopped = true;
+    document.removeEventListener('visibilitychange', onVisible);
+    void supabase.removeChannel(channel);
+  };
+}
+
 export type Badges = { shown: boolean; messages: number; notifications: number };
 
 /**

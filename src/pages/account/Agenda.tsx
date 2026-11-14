@@ -13,7 +13,7 @@ import { accountPath, conversationPath, visitRequestPath } from '../../lib/paths
 import { ActionMenu, ChoiceDialog, IphoneOnlyDialog, ScreenHead, Thumb, type MenuItem } from './DesktopParts';
 import { Spinner } from './parts';
 
-// « Mon agenda » sur ordinateur (Features/Visits/VisitsAgendaView.swift), dans la colonne de 640 px : onglets
+// « Mon agenda » sur ordinateur, dans la colonne de 640 px, et sur téléphone (Features/Visits/VisitsAgendaView.swift) : onglets
 // À venir, Passées, Annulées avec leur nombre ; visites groupées par date ; Itinéraire (Plans), Contacter (la
 // conversation liée, sinon une conversation avec le vendeur) et le menu « … ». Les visites viennent de
 // agenda_visits, les demandes de visite pas encore acceptées de my_visit_requests (lib/account/agenda). Le détail d'une

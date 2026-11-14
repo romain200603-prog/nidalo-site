@@ -104,8 +104,8 @@ function AccountContent() {
 
   // Rien tant que la session n'est pas connue : la carte ne clignote pas.
   if (session.status === 'loading' || !link.checked) return <Spinner />;
-  // Ordinateur : comme la cloche de l'app, l'écran Notifications s'ouvre aussi sans compte, avec son message.
-  if (desktop && view === 'notifications' && session.status === 'signedOut' && !link.error) return <NotificationsScreen signedIn={false} />;
+  // Comme la cloche de l'app, l'écran Notifications s'ouvre aussi sans compte, avec son message.
+  if (view === 'notifications' && session.status === 'signedOut' && !link.error) return <NotificationsScreen signedIn={false} />;
   if (session.status === 'signedOut') return <SignInCard linkError={link.error} notice={invitation !== null ? <InvitationIntro /> : undefined} />;
   if (recovery) return <SignInCard recovery onPasswordSaved={() => refresh((n) => n + 1)} />;
   if (account.status === 'error') {
@@ -136,11 +136,11 @@ function AccountContent() {
     case 'legal': return <LegalScreen />;
     case 'securite': return <SecurityScreen />;
     case 'supprimer': return <DeleteAccountScreen />;
-    // Notifications : l'écran de l'app sur ordinateur ; sur téléphone, « bientôt » comme avant.
-    case 'notifications': return desktop ? <NotificationsScreen signedIn /> : <SoonScreen screen="notifications" />;
-    // Ordinateur : Mon agenda, Ajouter une visite, Mon projet et Biens consultés ; sur téléphone, « bientôt ».
-    case 'agenda': return desktop ? <AgendaScreen /> : <SoonScreen screen="agenda" />;
-    case 'ajouter-visite': return desktop ? <AddVisit fromAgenda={params.get('depuis') === 'agenda'} /> : <SoonScreen screen="agenda" />;
+    // Notifications, Mon agenda et Ajouter une visite : les écrans de l'app, sur ordinateur et sur téléphone.
+    case 'notifications': return <NotificationsScreen signedIn />;
+    case 'agenda': return <AgendaScreen />;
+    case 'ajouter-visite': return <AddVisit fromAgenda={params.get('depuis') === 'agenda'} />;
+    // Mon projet et Biens consultés : sur ordinateur ; sur téléphone, « bientôt ».
     case 'projet': return desktop ? <ProjectEditor /> : <SoonScreen screen="projet" />;
     case 'consultes': return desktop ? <ViewedListings /> : <SoonScreen screen="consultes" />;
     case 'demande-visite': return <SoonScreen screen="demande-visite" />;

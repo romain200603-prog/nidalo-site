@@ -3,6 +3,7 @@ import type { HeaderFact } from '../../lib/listing/rows';
 import {
   REQUEST_STATUS_LABELS, requestDisplayStatus, VISIT_STATUS_LABELS, visitDateLong, visitDisplayStatus, type AgendaVisit, type VisitRequestRow,
 } from '../../lib/listing/visits';
+import { accountPath, visitRequestPath } from '../../lib/paths';
 import { useFitTexts } from './fitText';
 import { ExtraIcon } from './icons';
 
@@ -71,23 +72,41 @@ export function HeaderCard({ category, price, priceSecondary, priceNote, conditi
 }
 
 /**
- * Carte Visite (agendaCard de l'app) : le prochain rendez-vous du bien, sinon la demande envoyée, sinon « Aucune visite
- * prévue ». Sans bouton : la visite se demande avec « Visiter » dans la barre du bas. Sur téléphone, Mon agenda et le
- * détail d'une demande ne sont pas encore sur le site : la carte n'y mène pas.
+ * Carte Visite (agendaCard de l'app) : le prochain rendez-vous du bien, avec « Agenda » qui ouvre Mon agenda ; sinon la
+ * demande envoyée, dont toute la carte ouvre la demande (son écran est encore « bientôt » sur le site, comme sur
+ * ordinateur) ; sinon « Aucune visite prévue », sans lien. La visite se demande avec « Visiter » dans la barre du bas.
  */
 export function VisitCard({ upcoming = null, request = null, now }: { upcoming?: AgendaVisit | null; request?: VisitRequestRow | null; now: Date }) {
-  const [title, subtitle] = upcoming
-    ? [visitDateLong(upcoming.start), `Visite prévue · ${VISIT_STATUS_LABELS[visitDisplayStatus(upcoming, now)]}`]
-    : request
-      ? ['Demande de visite envoyée', `${REQUEST_STATUS_LABELS[requestDisplayStatus(request, now)]} · ${request.recipient.name}`]
-      : ['Aucune visite prévue', 'Demandez une visite au vendeur ou à l\'agence.'];
+  const icon = <span className="visit-icon" aria-hidden="true"><ExtraIcon name="calendar" /></span>;
+  const text = (title: string, subtitle: string) => (
+    <span className="visit-text">
+      <span className="visit-title">{title}</span>
+      <span className="visit-subtitle">{subtitle}</span>
+    </span>
+  );
+  if (upcoming) {
+    return (
+      <section className="top-card visit-card" aria-label="Visites">
+        {icon}
+        {text(visitDateLong(upcoming.start), `Visite prévue · ${VISIT_STATUS_LABELS[visitDisplayStatus(upcoming, now)]}`)}
+        <a className="visit-agenda" href={accountPath('agenda')} aria-label="Ouvrir l'agenda des visites">Agenda</a>
+      </section>
+    );
+  }
+  if (request) {
+    const status = REQUEST_STATUS_LABELS[requestDisplayStatus(request, now)];
+    return (
+      <a className="top-card visit-card is-link" href={visitRequestPath(request.id)} aria-label={`Demande de visite envoyée, ${status}. Ouvre votre demande`}>
+        {icon}
+        {text('Demande de visite envoyée', `${status} · ${request.recipient.name}`)}
+        <Icon name="chevronRight" className="icon visit-chevron" />
+      </a>
+    );
+  }
   return (
     <section className="top-card visit-card" aria-label="Visites">
-      <span className="visit-icon" aria-hidden="true"><ExtraIcon name="calendar" /></span>
-      <span className="visit-text">
-        <span className="visit-title">{title}</span>
-        <span className="visit-subtitle">{subtitle}</span>
-      </span>
+      {icon}
+      {text('Aucune visite prévue', 'Demandez une visite au vendeur ou à l\'agence.')}
     </section>
   );
 }

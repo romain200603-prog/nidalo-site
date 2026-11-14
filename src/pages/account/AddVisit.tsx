@@ -24,7 +24,7 @@ import { Modal } from '../listing/Dialogs';
 import { ActionMenu, ChoiceDialog, IPHONE_ONLY, IphoneOnlyDialog, ScreenHead, Thumb } from './DesktopParts';
 import { Spinner } from './parts';
 
-// « Ajouter une visite » sur ordinateur (Features/Visits/VisitFormView.swift, création), dans la colonne de 640 px :
+// « Ajouter une visite » sur ordinateur, dans la colonne de 640 px, et sur téléphone (Features/Visits/VisitFormView.swift, création) :
 // bien concerné (une de mes annonces, un favori ou le bien d'une conversation, VisitListingPicker.swift), date et
 // heure, rendez-vous, participants, rappels et suivi. « Enregistrer » écrit dans agenda_visits la même ligne que
 // l'app (lib/account/agenda, newVisitRow). « Préparer ma visite » et « Ajouter à mon calendrier » restent dans l'app
