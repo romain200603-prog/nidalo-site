@@ -78,44 +78,21 @@ export function AlertDialog({ open, onClose, title, message, actions, children }
   );
 }
 
-/** Ce qui demande un compte et n'est pas encore sur le site (écrire, visiter, offre). */
-export type AccountAction = 'message' | 'visit' | 'offer';
-
-const ACCOUNT_TITLES: Record<AccountAction, string> = {
-  message: 'Écrire au vendeur',
-  visit: 'Demander une visite',
-  offer: 'Faire une offre',
-};
-
-/** Ce que le téléphone dit d'une action qui demande un compte : elle arrive bientôt sur le site, l'app le fait déjà. */
-export const ACCOUNT_SOON_MESSAGE = 'Bientôt sur le site, avec votre compte Nidalo. En attendant, c’est déjà possible dans l’app Nidalo, avec le même compte.';
-
 /**
- * Sans compte sur le site (phase 1) : l'action arrive bientôt, et l'app le fait déjà. Pas de lien vers l'app :
- * elle n'ouvre pas encore une annonce depuis un lien (ImmoApp.swift ne gère que les invitations et la connexion).
+ * « Téléphone » sans numéro publié (toujours le cas sans compte : le serveur ne donne pas le numéro) ; « Envoyer un
+ * message » ouvre la conversation, comme sur ordinateur.
  */
-export function AccountDialog({ action, isAgency, onClose }: { action: AccountAction | null; isAgency: boolean; onClose: () => void }) {
-  const title = action === 'message' && isAgency ? 'Écrire à l’agence' : action ? ACCOUNT_TITLES[action] : '';
-  return (
-    <AlertDialog
-      open={action !== null}
-      onClose={onClose}
-      title={title}
-      message={ACCOUNT_SOON_MESSAGE}
-      actions={[{ label: 'Fermer', onClick: onClose, tone: 'primary' }]}
-    />
-  );
-}
-
-/** « Téléphone » sans numéro publié (toujours le cas sans compte : le serveur ne donne pas le numéro). */
-export function NoPhoneDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function NoPhoneDialog({ open, onClose, onMessage }: { open: boolean; onClose: () => void; onMessage: () => void }) {
   return (
     <AlertDialog
       open={open}
       onClose={onClose}
       title="Numéro non disponible"
       message="Ce vendeur ne communique pas son numéro. Écrivez-lui sur Nidalo."
-      actions={[{ label: 'Fermer', onClick: onClose, tone: 'primary' }]}
+      actions={[
+        { label: 'Envoyer un message', onClick: onMessage, tone: 'primary' },
+        { label: 'Fermer', onClick: onClose, tone: 'quiet' },
+      ]}
     />
   );
 }

@@ -1,5 +1,8 @@
 import { Icon } from '../../components/Icon';
 import type { HeaderFact } from '../../lib/listing/rows';
+import {
+  REQUEST_STATUS_LABELS, requestDisplayStatus, VISIT_STATUS_LABELS, visitDateLong, visitDisplayStatus, type AgendaVisit, type VisitRequestRow,
+} from '../../lib/listing/visits';
 import { useFitTexts } from './fitText';
 import { ExtraIcon } from './icons';
 
@@ -8,7 +11,7 @@ import { ExtraIcon } from './icons';
 /** Espaces fines comme la maquette (le prix et le prix au m² de l'app). */
 const narrow = (text: string) => text.replace(/[  ]/g, ' ');
 
-export function HeaderCard({ category, price, priceSecondary, priceNote, condition, title, location, facts, onOffer }: {
+export function HeaderCard({ category, price, priceSecondary, priceNote, condition, title, location, facts, onOffer, offerState = null, offerBusy = false }: {
   category: string;
   price: string;
   priceSecondary: string | null;
@@ -20,6 +23,10 @@ export function HeaderCard({ category, price, priceSecondary, priceNote, conditi
   facts: HeaderFact[];
   /** « Faire une offre » : vente d'un autre compte (demande un compte). */
   onOffer: (() => void) | null;
+  /** Offre en attente ou acceptée (offerStateLabel de l'app) : son état à la place du bouton, qui ouvre la conversation. */
+  offerState?: { label: string; href: string } | null;
+  /** La conversation de l'annonce s'ouvre : le bouton attend. */
+  offerBusy?: boolean;
 }) {
   const ref = useFitTexts<HTMLElement>();
   return (
@@ -30,12 +37,17 @@ export function HeaderCard({ category, price, priceSecondary, priceNote, conditi
         {priceSecondary && <span className="hc-price-secondary">{priceSecondary.replace(/ /g, ' ')}</span>}
       </p>
       {priceNote && <p className="hc-price-note">{priceNote}</p>}
-      {onOffer && (
-        <button type="button" className="hc-offer" onClick={onOffer}>
+      {onOffer && (offerState ? (
+        <a className="hc-offer" href={offerState.href}>
+          <Icon name="handshake" />
+          {offerState.label}
+        </a>
+      ) : (
+        <button type="button" className="hc-offer" onClick={onOffer} disabled={offerBusy}>
           <Icon name="handshake" />
           Faire une offre
         </button>
-      )}
+      ))}
       {condition && <p className="hc-condition">{condition}</p>}
       <h1 id="annonce-titre" className="hc-title">{title}</h1>
       <p className="hc-location">
@@ -58,14 +70,23 @@ export function HeaderCard({ category, price, priceSecondary, priceNote, conditi
   );
 }
 
-/** Carte Visite : sans compte, toujours « Aucune visite prévue », sans bouton (la visite se demande en bas). */
-export function VisitCard() {
+/**
+ * Carte Visite (agendaCard de l'app) : le prochain rendez-vous du bien, sinon la demande envoyée, sinon « Aucune visite
+ * prévue ». Sans bouton : la visite se demande avec « Visiter » dans la barre du bas. Sur téléphone, Mon agenda et le
+ * détail d'une demande ne sont pas encore sur le site : la carte n'y mène pas.
+ */
+export function VisitCard({ upcoming = null, request = null, now }: { upcoming?: AgendaVisit | null; request?: VisitRequestRow | null; now: Date }) {
+  const [title, subtitle] = upcoming
+    ? [visitDateLong(upcoming.start), `Visite prévue · ${VISIT_STATUS_LABELS[visitDisplayStatus(upcoming, now)]}`]
+    : request
+      ? ['Demande de visite envoyée', `${REQUEST_STATUS_LABELS[requestDisplayStatus(request, now)]} · ${request.recipient.name}`]
+      : ['Aucune visite prévue', 'Demandez une visite au vendeur ou à l\'agence.'];
   return (
     <section className="top-card visit-card" aria-label="Visites">
       <span className="visit-icon" aria-hidden="true"><ExtraIcon name="calendar" /></span>
       <span className="visit-text">
-        <span className="visit-title">Aucune visite prévue</span>
-        <span className="visit-subtitle">Demandez une visite au vendeur ou à l'agence.</span>
+        <span className="visit-title">{title}</span>
+        <span className="visit-subtitle">{subtitle}</span>
       </span>
     </section>
   );

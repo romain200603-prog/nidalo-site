@@ -1,7 +1,7 @@
 // Vérification de la fiche d'une annonce (/annonce/) dans Chromium, sans réseau : le serveur Supabase, les services
 // de lieux et la carte sont simulés avec des données inventées (fixtures/listings.json, fixtures/listing-extra.json et
-// fixtures/listing-desktop.json). Sur ordinateur, avec le compte de test, les actions de la fiche (offre, visite,
-// message, favori, comparaison) parlent au serveur simulé, qui note ce qu'elles envoient.
+// fixtures/listing-desktop.json). Avec le compte de test, les actions de la fiche (offre, visite, message ; favori et
+// comparaison sur ordinateur) parlent au serveur simulé, qui note ce qu'elles envoient, sur ordinateur et sur téléphone.
 // Lancer après la construction : node scripts/check-listing.mjs [dossier construit, docs/ par défaut] [dossier des captures]
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
@@ -93,8 +93,9 @@ async function mock(context) {
     }
     if (url.pathname.endsWith('/rpc/public_profiles')) {
       // Profils publics : jamais de téléphone ni d'e-mail pour un visiteur sans compte.
-      const ids = (request.method() === 'POST' ? request.postDataJSON()?.user_ids : null) ?? [];
-      return json(route, profiles.filter((p) => ids.includes(p.user_id)).map((p) => ({ ...p, agency_phone: null })));
+      // Identifiants en majuscules (page Messages) ou en minuscules : le serveur ne fait pas la différence.
+      const ids = ((request.method() === 'POST' ? request.postDataJSON()?.user_ids : null) ?? []).map((value) => String(value).toLowerCase());
+      return json(route, profiles.filter((p) => ids.includes(p.user_id.toLowerCase())).map((p) => ({ ...p, agency_phone: null })));
     }
     if (url.searchParams.get('id') === `eq.${BROKEN}`) {
       brokenRequests += 1;
@@ -157,11 +158,12 @@ const ACCOUNT_TABLES = [
   'agenda_visits', 'saved_searches', 'real_estate_projects', 'professional_profiles', 'professional_profile_details',
   ...MESSAGING_TABLES,
 ];
-/** Celles qui ne servent que sur ordinateur (pastilles, actions de la fiche) : sous 1024 px, rien ne change. */
-const DESKTOP_ONLY = [
-  'notifications', 'rpc/mark_notifications_read', 'rpc/my_conversations', 'rpc/start_listing_conversation', 'rpc/my_offers',
-  'rpc/make_offer', 'rpc/my_visit_requests', 'rpc/create_visit_request', 'agenda_visits', ...MESSAGING_TABLES,
-];
+/**
+ * La cloche des notifications n'est que dans la barre du haut de l'ordinateur : sous 1024 px, la fiche ne la lit jamais
+ * (la page Messages lit les pastilles à toutes les tailles). Écrire, visiter et faire une offre sont sur téléphone
+ * aussi, avec les mêmes tables que sur ordinateur.
+ */
+const DESKTOP_ONLY = ['notifications', 'rpc/mark_notifications_read'];
 
 /** Appels du compte, dans l'ordre : ce que chaque bouton envoie est vérifié d'après eux. */
 const calls = [];
@@ -185,6 +187,15 @@ function pageWidth(request) {
     return request.frame().page().viewportSize()?.width ?? null;
   } catch {
     return null;
+  }
+}
+
+/** Chemin de la page qui fait la demande (« /annonce/ »…), vide pour un worker. */
+function pagePath(request) {
+  try {
+    return new URL(request.frame().page().url()).pathname;
+  } catch {
+    return '';
   }
 }
 
@@ -367,15 +378,17 @@ async function signIn(context, state) {
     const table = url.pathname.replace('/rest/v1/', '');
     if (table === 'rpc/public_profiles') {
       // Avec un compte, le serveur donne aussi le numéro de l'agence.
-      const ids = request.postDataJSON()?.user_ids ?? [];
-      return json(route, profiles.filter((p) => ids.includes(p.user_id)));
+      const ids = (request.postDataJSON()?.user_ids ?? []).map((value) => String(value).toLowerCase());
+      return json(route, profiles.filter((p) => ids.includes(p.user_id.toLowerCase())));
     }
     if (!ACCOUNT_TABLES.includes(table)) return route.fallback();
     let body = null;
     try { body = request.postDataJSON(); } catch { body = request.postData(); }
     const width = pageWidth(request);
     calls.push({ table, method: request.method(), search: decodeURIComponent(url.search), body, width });
-    if (width !== null && width < 1024 && DESKTOP_ONLY.includes(table)) problems.push(`téléphone : ${table} demandé (rien ne doit changer sous 1024 px)`);
+    if (width !== null && width < 1024 && DESKTOP_ONLY.includes(table) && pagePath(request) === '/annonce/') {
+      problems.push(`fiche sur téléphone : ${table} demandé (la cloche n'est que sur ordinateur)`);
+    }
     return respond(route, state, table, request, url, body);
   });
   // Temps réel (pastilles de la barre du haut) : les abonnements sont acceptés, aucun changement n'est envoyé.
@@ -723,6 +736,32 @@ async function fullShot(page, file) {
 }
 
 /** Rien de l'adresse masquée (la rue) dans la page, ni dans le texte ni dans le code. */
+/** Écran « Demander une visite » ou « Faire une offre » sur téléphone : rien ne déborde, pas de texte vide ou faux. */
+async function checkPhoneScreen(page, name) {
+  const issues = await page.evaluate(() => {
+    const found = [];
+    const text = document.body.innerText;
+    for (const bad of ['NaN', 'undefined', 'null', 'Infinity', '[object']) if (text.includes(bad)) found.push(`le texte « ${bad} » est affiché`);
+    if (document.documentElement.scrollWidth > window.innerWidth + 1) found.push(`la page déborde en largeur (${document.documentElement.scrollWidth} px pour ${window.innerWidth} px)`);
+    const screen = document.querySelector('.listing-screen .dl-screen');
+    if (!screen) return ['pas d’écran'];
+    const box = screen.getBoundingClientRect();
+    if (box.left < 0 || box.right > window.innerWidth + 0.5) found.push(`l’écran dépasse (${Math.round(box.left)} à ${Math.round(box.right)} px)`);
+    for (const el of screen.querySelectorAll('button, a, input, select, textarea')) {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0) continue;
+      if (r.left < box.left - 0.5 || r.right > box.right + 0.5) found.push(`« ${(el.textContent || el.getAttribute('aria-label') || el.tagName).trim().slice(0, 40)} » sort de l’écran`);
+    }
+    // Bouton principal bleu (#3C5CB0) : les styles du téléphone (ecrans-fiche-telephone.css) s'appliquent.
+    const submit = screen.querySelector('.dl-submit');
+    if (!submit || getComputedStyle(submit).backgroundColor !== 'rgb(60, 92, 176)') found.push('les styles du téléphone ne s’appliquent pas au bouton principal');
+    const tabbar = document.querySelector('.tabbar');
+    if (tabbar && getComputedStyle(tabbar).display !== 'none') found.push('la barre d’onglets du site est visible');
+    return found;
+  });
+  for (const issue of issues) problems.push(`${name}: ${issue}`);
+}
+
 async function checkHiddenStreet(page, name) {
   const found = await page.evaluate((street) => document.documentElement.outerHTML.includes(street) || document.title.includes(street), HIDDEN_STREET);
   if (found) problems.push(`${name}: la rue d'une adresse masquée est affichée`);
@@ -950,10 +989,28 @@ try {
   await page.screenshot({ path: join(out, 'vente-telephone-visionneuse.png') });
   await page.tap('.viewer-close');
   await page.waitForSelector('dialog.viewer-dialog[open]', { state: 'detached' });
-  await page.tap('.action-bar-item >> nth=1');
-  expect('vente-telephone', 'fenêtre de la visite', await dialogTitle(page), 'Demander une visite');
-  await page.screenshot({ path: join(out, 'vente-telephone-visite.png') });
-  await closeAlert(page);
+  // Sans compte, comme sur ordinateur : « Visiter », « Messages » et « Faire une offre » ouvrent d'abord la connexion ;
+  // « Téléphone » n'a pas de numéro (le serveur ne le donne qu'avec un compte) et propose d'écrire.
+  expect('vente-telephone', 'boutons de la barre', await page.$$eval('.action-bar-item', (els) => els.map((el) => el.textContent.trim()).join(' | ')), 'Messages | Visiter | Téléphone');
+  expect('vente-telephone', 'offre', await page.textContent('.header-card button.hc-offer'), 'Faire une offre');
+  expect('vente-telephone', 'carte des visites', await page.textContent('.visit-card .visit-text'), 'Aucune visite prévueDemandez une visite au vendeur ou à l\'agence.');
+  // Clic plutôt que toucher pour les captures : le reflet bleu du toucher de Chromium y resterait affiché.
+  await page.click('.action-bar-item >> nth=1');
+  await page.waitForSelector('dialog.signin-sheet[open] .signin-card', { timeout: 5000 }).catch(() => problems.push('vente-telephone: « Visiter » n\'ouvre pas la connexion'));
+  await page.screenshot({ path: join(out, 'vente-telephone-connexion.png') });
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('dialog.signin-sheet[open]', { state: 'detached' });
+  if (page.url() !== `${base}/annonce/?id=${SALE}`) problems.push(`vente-telephone: adresse ${page.url()} après la connexion refermée`);
+  await expectSignIn(page, 'vente-telephone', 'Messages', '.action-bar-item >> nth=0');
+  await expectSignIn(page, 'vente-telephone', 'Faire une offre', '.header-card .hc-offer');
+  if (await page.$('.action-bar a.action-bar-item')) problems.push('vente-telephone: un numéro est proposé sans compte');
+  await page.click('.action-bar-item >> nth=2');
+  expect('vente-telephone', 'fenêtre du téléphone', await dialogTitle(page), 'Numéro non disponible');
+  expect('vente-telephone', 'message sans numéro', await page.textContent('dialog[open] .alert-body p'), 'Ce vendeur ne communique pas son numéro. Écrivez-lui sur Nidalo.');
+  expect('vente-telephone', 'boutons sans numéro', await page.$$eval('dialog[open] .alert-actions .btn', (els) => els.map((el) => el.textContent.trim()).join(' | ')), 'Envoyer un message | Fermer');
+  await page.screenshot({ path: join(out, 'vente-telephone-sans-numero.png') });
+  await expectSignIn(page, 'vente-telephone', 'Envoyer un message (fenêtre sans numéro)', 'dialog[open] .alert-actions .btn-primary');
+  if (await page.$('dialog.alert-dialog[open]')) problems.push('vente-telephone: la fenêtre sans numéro reste ouverte');
   await checkMap(page, 'vente-telephone', { coordinate: [45.7597, 4.8491], approximate: true, shots: true });
   await page.close();
 
@@ -1003,12 +1060,23 @@ try {
 
   await checkStates(phone, 'telephone');
 
-  // Écrans faits pour l'ordinateur, ouverts sur téléphone : le message « bientôt » (règle 6 du brief), rien d'autre.
-  const accountSoon = 'Bientôt sur le site, avec votre compte Nidalo. En attendant, c’est déjà possible dans l’app Nidalo, avec le même compte.';
+  // Adresse d'un écran ouverte sans compte, sur téléphone aussi : la fiche, puis la connexion.
+  for (const view of ['visite', 'offre']) {
+    const name = `adresse-${view}-sans-compte-telephone`;
+    page = await open(phone, `/annonce/?id=${SALE}&vue=${view}`, name);
+    await ready(page, name);
+    await page.waitForSelector('dialog.signin-sheet[open] .signin-card', { timeout: 5000 }).catch(() => problems.push(`${name}: la connexion ne s'ouvre pas`));
+    expect(name, 'adresse', page.url(), `${base}/annonce/?id=${SALE}`);
+    if (await page.$('.dl-screen')) problems.push(`${name}: l'écran s'affiche sans compte`);
+    if (await page.$('.card.state')) problems.push(`${name}: un message « bientôt » est affiché`);
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('dialog.signin-sheet[open]', { state: 'detached' });
+    await page.close();
+  }
+
+  // Comparer, fait pour l'ordinateur, ouvert sur téléphone : le message « bientôt » (règle 6 du brief), rien d'autre.
   const screenSoon = 'Cet écran arrive bientôt sur le site. En attendant, il est dans l’app Nidalo, avec le même compte.';
   for (const [path, name, title, text] of [
-    [`/annonce/?id=${SALE}&vue=visite`, 'ecran-visite-telephone', 'Demander une visite', accountSoon],
-    [`/annonce/?id=${SALE}&vue=offre`, 'ecran-offre-telephone', 'Faire une offre', accountSoon],
     ['/comparer/', 'comparer-telephone', 'Comparer', screenSoon],
   ]) {
     page = await open(phone, path, name);
@@ -1041,31 +1109,256 @@ try {
   }
   await small.close();
 
-  // Téléphone avec le compte de test : la fiche ne change pas (fenêtres « bientôt »), rien du compte n'est lu pour elle.
-  const phoneMember = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR', timezoneId: 'Europe/Paris' });
+  // Navigateur réglé en français, pour la suite (téléphone et ordinateur avec le compte de test) : le champ de date s'y
+  // affiche « 19/11/2026 » (jour, mois), comme chez un visiteur français ; le navigateur par défaut l'écrit à
+  // l'américaine (mois, jour).
+  frenchBrowser = await chromium.launch({ env: { ...process.env, LANG: 'fr_FR.UTF-8', LANGUAGE: 'fr_FR:fr', LC_ALL: 'fr_FR.UTF-8' } });
+
+  // Téléphone avec le compte de test (offre en attente et visite confirmée sur FICHE) : la fiche lit le compte comme sur
+  // ordinateur, et montre l'état de l'offre et de la visite (offerStateLabel et agendaCard de l'app).
+  const phoneMember = await frenchBrowser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR', timezoneId: 'Europe/Paris' });
   await mock(phoneMember);
   await signIn(phoneMember, seededState());
+  let phoneMark = calls.length;
   page = await open(phoneMember, `/annonce/?id=${FICHE}`, 'fiche-telephone-connecte');
   await ready(page, 'fiche-telephone-connecte');
+  await page.waitForSelector('.header-card a.hc-offer');
   await common(page, 'fiche-telephone-connecte', { phone: true });
   await checkHiddenStreet(page, 'fiche-telephone-connecte');
   if (await page.$('.dl')) problems.push('fiche-telephone-connecte: la fiche de l’ordinateur est affichée sur téléphone');
-  await page.tap('.action-bar-item >> nth=1');
-  expect('fiche-telephone-connecte', 'fenêtre de la visite', await dialogTitle(page), 'Demander une visite');
-  await closeAlert(page);
+  for (const table of ['rpc/my_conversations', 'rpc/my_offers', 'rpc/my_visit_requests', 'agenda_visits']) {
+    if (!since(phoneMark, table).length) problems.push(`fiche-telephone-connecte: ${table} n'est pas lu`);
+  }
+  for (const table of ['rpc/start_listing_conversation', 'rpc/make_offer', 'rpc/create_visit_request']) {
+    if (since(phoneMark, table).length) problems.push(`fiche-telephone-connecte: ${table} appelé sans action`);
+  }
+  expect('fiche-telephone-connecte', 'offre', await page.textContent('.header-card a.hc-offer'), 'Offre en attente');
+  expect('fiche-telephone-connecte', 'lien de l’offre', await page.getAttribute('.header-card a.hc-offer', 'href'), `/messages/?c=${conversationId(1)}`);
+  expect('fiche-telephone-connecte', 'carte des visites', await page.textContent('.visit-card .visit-subtitle'), 'Visite prévue · Visite confirmée');
+  if (await page.$('.visit-card a, a.visit-card')) problems.push('fiche-telephone-connecte: la carte des visites mène à Mon agenda, encore « bientôt » sur téléphone');
+  // Avec un compte, le numéro de l'agence : « Téléphone » l'appelle.
+  expect('fiche-telephone-connecte', 'appel', await page.getAttribute('.action-bar a.action-bar-item', 'href'), 'tel:0639984567');
   await page.screenshot({ path: join(out, 'fiche-telephone-connecte.png') });
   await page.close();
-  page = await open(phoneMember, `/annonce/?id=${FICHE}&vue=offre`, 'ecran-offre-telephone-connecte');
-  await page.waitForSelector('.card.state h1');
-  expect('ecran-offre-telephone-connecte', 'titre', await page.textContent('.card.state h1'), 'Faire une offre');
+  // Une offre attend déjà une réponse : l'adresse de l'offre ouvre la conversation, qui la montre (comme l'app).
+  page = await open(phoneMember, `/annonce/?id=${FICHE}&vue=offre`, 'adresse-offre-en-attente-telephone');
+  await waitForAddress(page, `${base}/messages/?c=${conversationId(1)}`);
   await page.close();
   await phoneMember.close();
 
+  // Téléphone, compte sans conversation ni offre : écrire, demander une visite et faire une offre, comme sur ordinateur.
+  const phoneFresh = await frenchBrowser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR', timezoneId: 'Europe/Paris' });
+  await mock(phoneFresh);
+  const phoneState = accountState();
+  await signIn(phoneFresh, phoneState);
+  page = await open(phoneFresh, `/annonce/?id=${FICHE}`, 'fiche-telephone-actions');
+  await ready(page, 'fiche-telephone-actions');
+  expect('fiche-telephone-actions', 'offre', await page.textContent('.header-card button.hc-offer'), 'Faire une offre');
+  expect('fiche-telephone-actions', 'carte des visites', await page.textContent('.visit-card .visit-text'), 'Aucune visite prévueDemandez une visite au vendeur ou à l\'agence.');
+
+  // « Visiter » : le formulaire à son adresse, create_visit_request, puis la confirmation, sans Mon agenda (encore
+  // « bientôt » sur téléphone) ; « Fermer » revient à la fiche, qui montre la demande.
+  phoneMark = calls.length;
+  await page.tap('.action-bar-item >> nth=1');
+  await waitForAddress(page, `${base}/annonce/?id=${FICHE}&vue=visite`);
+  await page.waitForSelector('.listing-screen .dl-visit-screen h1');
+  expect('visite-telephone', 'titre', await page.textContent('.dl-visit-screen h1'), 'Demander une visite');
+  expect('visite-telephone', 'titre de la page', await page.title(), 'Demander une visite · Appartement 3 pièces · Nidalo');
+  expect('visite-telephone', 'bien', await page.textContent('.dl-visit-listing-text'), 'Appartement 3 piècesLyon 2e238 000 €');
+  expect('visite-telephone', 'sections', await page.$$eval('.dl-visit-screen .dl-form-section h2', (els) => els.map((el) => el.textContent).join(' | ')), 'Créneau souhaité | Type de visite | Message (facultatif)');
+  if (await page.$('.action-bar, .header-card')) problems.push('visite-telephone: la fiche reste affichée sous le formulaire');
+  await checkPhoneScreen(page, 'visite-telephone');
+  const phoneDay = await page.evaluate(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 5);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+  await page.locator('.dl-slot').nth(0).locator('input.dl-date').fill(phoneDay);
+  await page.locator('.dl-slot').nth(0).locator('select').selectOption('1080');
+  await page.fill('.dl-visit-screen textarea', 'Bonjour, je peux venir en fin de journée.');
+  await fullShot(page, 'telephone-visite-formulaire.png');
+  const phoneStart = await page.evaluate((day) => {
+    const [y, m, d] = day.split('-').map(Number);
+    return new Date(y, m - 1, d, 18, 0).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  }, phoneDay);
+  phoneMark = calls.length;
+  await page.tap('.dl-visit-screen .dl-submit');
+  await page.waitForSelector('.dl-visit-screen .dl-sent');
+  const phoneCreated = once('visite-telephone', phoneMark, 'rpc/create_visit_request');
+  if (phoneCreated) {
+    const body = phoneCreated.body ?? {};
+    const slots = Array.isArray(body.p_slots) ? body.p_slots : [];
+    if (!UUID.test(body.p_id ?? '') || slots.length !== 1 || !UUID.test(slots[0]?.id ?? '')) problems.push(`visite-telephone: identifiants ${JSON.stringify(body)}`);
+    expectJSON('visite-telephone', 'arguments de create_visit_request', body, {
+      p_id: body.p_id, p_listing_id: FICHE, p_slots: [{ id: slots[0]?.id, start: phoneStart, durationMinutes: 60 }],
+      p_message: 'Bonjour, je peux venir en fin de journée.', p_mode: 'onSite',
+    });
+  }
+  expect('visite-telephone', 'titre de la confirmation', await page.textContent('.dl-visit-screen h1'), 'Demande envoyée');
+  expect('visite-telephone', 'texte de la confirmation', await page.textContent('.dl-sent-text'), 'Ce n\'est pas encore une visite confirmée : Agence Démo Centre doit choisir un créneau, ou en proposer un autre.');
+  expect('visite-telephone', 'boutons de la confirmation', await page.$$eval('.dl-screen-actions > *', (els) => els.map((el) => `${el.tagName} ${el.textContent}`).join(' | ')), 'BUTTON Fermer');
+  await checkPhoneScreen(page, 'visite-telephone-envoyee');
+  await fullShot(page, 'telephone-visite-envoyee.png');
+  await page.tap('.dl-screen-actions .dl-submit');
+  await waitForAddress(page, `${base}/annonce/?id=${FICHE}`);
+  await page.waitForSelector('.header-card .hc-price-value');
+  expect('visite-telephone', 'carte des visites après l’envoi', await page.textContent('.visit-card .visit-text'), 'Demande de visite envoyéeEn attente · Agence Démo Centre');
+  expect('visite-telephone', 'titre de la page après l’envoi', await page.title(), 'Appartement 3 pièces à Lyon 2e · Nidalo');
+  await page.$eval('.header-card', (el) => el.scrollIntoView({ block: 'start' }));
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: join(out, 'telephone-fiche-demande-envoyee.png') });
+
+  // « Messages » : la conversation de l'annonce (créée) ; son « + » › « Faire une offre » ouvre le même écran d'offre,
+  // avec les mêmes styles que sur la fiche (ecrans-fiche-telephone.css). Fermé sans envoyer, puis retour à la fiche.
+  phoneMark = calls.length;
+  await page.tap('.action-bar-item >> nth=0');
+  await waitForAddress(page, `${base}/messages/?c=${conversationId(1)}`);
+  const phoneFirst = once('messages-telephone', phoneMark, 'rpc/start_listing_conversation');
+  if (phoneFirst) expectJSON('messages-telephone', 'arguments de start_listing_conversation', phoneFirst.body, { p_listing_id: FICHE });
+  await page.waitForSelector('.dm-plus');
+  await page.tap('.dm-plus');
+  await page.tap('dialog[open] .dm-wide-row:has-text("Faire une offre")');
+  await page.waitForSelector('.dm-pane .dl-offer-screen h1');
+  expect('messages-telephone', 'écran de l’offre', await page.textContent('.dm-pane .dl-offer-screen .dl-screen-head p'), 'Appartement 3 pièces · prix affiché 238 000 €');
+  expect('messages-telephone', 'couleur du bouton d’envoi', await page.$eval('.dm-pane .dl-offer-screen .dl-submit', (el) => getComputedStyle(el).backgroundColor), 'rgb(60, 92, 176)');
+  await page.screenshot({ path: join(out, 'telephone-messages-offre.png') });
+  await page.tap('.dl-screen-close');
+  await page.waitForSelector('.dm-plus');
+  if (since(phoneMark, 'rpc/make_offer').length) problems.push('messages-telephone: make_offer appelé sans envoi');
+  await page.goBack();
+  await waitForAddress(page, `${base}/annonce/?id=${FICHE}`);
+  await page.waitForSelector('.header-card .hc-offer');
+
+  // « Faire une offre » : la conversation de l'annonce (la même), l'écran de l'offre à son adresse, puis la conversation
+  // de l'offre dans Messages ; « Retour » ramène à la fiche, qui montre « Offre en attente ».
+  phoneMark = calls.length;
+  await page.tap('.header-card .hc-offer');
+  await waitForAddress(page, `${base}/annonce/?id=${FICHE}&vue=offre`);
+  await page.waitForSelector('.listing-screen .dl-offer-screen h1');
+  const phoneStarted = once('offre-telephone', phoneMark, 'rpc/start_listing_conversation');
+  if (phoneStarted) expectJSON('offre-telephone', 'arguments de start_listing_conversation', phoneStarted.body, { p_listing_id: FICHE });
+  if (since(phoneMark, 'rpc/make_offer').length) problems.push('offre-telephone: make_offer appelé avant l\'envoi');
+  expect('offre-telephone', 'titre', await page.textContent('.dl-offer-screen h1'), 'Faire une offre');
+  expect('offre-telephone', 'bien et prix', await page.textContent('.dl-offer-screen .dl-screen-head p'), 'Appartement 3 pièces · prix affiché 238 000 €');
+  expect('offre-telephone', 'titre de la page', await page.title(), 'Faire une offre · Appartement 3 pièces · Nidalo');
+  await page.locator('#offre-montant').pressSequentially('228000');
+  expect('offre-telephone', 'montant saisi', await page.inputValue('#offre-montant'), '228 000');
+  expect('offre-telephone', 'écart au prix', await page.textContent('#offre-ecart'), '228 000 € · 4,2 % sous le prix affiché');
+  await page.tap('.dl-offer-screen .dl-chip');
+  expect('offre-telephone', 'condition du prêt', await page.inputValue('#offre-conditions'), 'Sous réserve d\'obtention du prêt');
+  await checkPhoneScreen(page, 'offre-telephone');
+  await fullShot(page, 'telephone-offre.png');
+  phoneMark = calls.length;
+  await page.tap('.dl-offer-screen .dl-submit');
+  await waitForAddress(page, `${base}/messages/?c=${conversationId(1)}`);
+  await page.waitForSelector('.dm-thread .dm-offer .dm-offer-amount', { timeout: 10000 })
+    .catch(() => problems.push('offre-telephone: la carte de l’offre n’apparaît pas dans la conversation'));
+  const phoneOffer = once('offre-telephone', phoneMark, 'rpc/make_offer');
+  if (phoneOffer) {
+    const body = phoneOffer.body ?? {};
+    expectJSON('offre-telephone', 'arguments de make_offer', body, {
+      p_id: body.p_id, p_conversation_id: conversationId(1), p_amount: 228000, p_conditions: 'Sous réserve d\'obtention du prêt', p_expires_at: body.p_expires_at,
+    });
+  }
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: join(out, 'telephone-offre-conversation.png') });
+  await page.goBack();
+  await waitForAddress(page, `${base}/annonce/?id=${FICHE}`);
+  await page.waitForSelector('.header-card a.hc-offer');
+  expect('offre-telephone', 'état de l’offre', await page.textContent('.header-card a.hc-offer'), 'Offre en attente');
+  expect('offre-telephone', 'lien de l’offre', await page.getAttribute('.header-card a.hc-offer', 'href'), `/messages/?c=${conversationId(1)}`);
+  await page.$eval('.header-card', (el) => el.scrollIntoView({ block: 'start' }));
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: join(out, 'telephone-fiche-apres-envoi.png') });
+
+  // « Messages » : la même conversation (aucune autre n'est créée), dans Messages.
+  phoneMark = calls.length;
+  await page.tap('.action-bar-item >> nth=0');
+  await waitForAddress(page, `${base}/messages/?c=${conversationId(1)}`);
+  const phoneMessage = once('message-telephone', phoneMark, 'rpc/start_listing_conversation');
+  if (phoneMessage) expectJSON('message-telephone', 'arguments de start_listing_conversation', phoneMessage.body, { p_listing_id: FICHE });
+  if (phoneState.conversations.length !== 1) problems.push(`message-telephone: ${phoneState.conversations.length} conversations pour une seule annonce`);
+  await page.close();
+
+  // Vendeur sans numéro (SALE, un particulier) : « Téléphone » propose d'écrire, qui ouvre la conversation.
+  page = await open(phoneFresh, `/annonce/?id=${SALE}`, 'vente-telephone-connecte');
+  await ready(page, 'vente-telephone-connecte');
+  await page.tap('.action-bar-item >> nth=2');
+  expect('vente-telephone-connecte', 'fenêtre du téléphone', await dialogTitle(page), 'Numéro non disponible');
+  phoneMark = calls.length;
+  await page.tap('dialog[open] .alert-actions .btn-primary');
+  await waitForAddress(page, `${base}/messages/?c=${conversationId(2)}`);
+  const saleMessage = once('vente-telephone-connecte', phoneMark, 'rpc/start_listing_conversation');
+  if (saleMessage) expectJSON('vente-telephone-connecte', 'arguments de start_listing_conversation', saleMessage.body, { p_listing_id: SALE });
+  await page.close();
+
+  // Adresses ouvertes directement : l'offre (aucune en attente) à son adresse, « Fermer » revient à la fiche ; pas
+  // d'offre sur une location.
+  page = await open(phoneFresh, `/annonce/?id=${SALE}&vue=offre`, 'adresse-offre-telephone');
+  await page.waitForSelector('.listing-screen .dl-offer-screen h1');
+  expect('adresse-offre-telephone', 'adresse', page.url(), `${base}/annonce/?id=${SALE}&vue=offre`);
+  expect('adresse-offre-telephone', 'bien et prix', await page.textContent('.dl-offer-screen .dl-screen-head p'), 'Appartement lumineux avec balcon · prix affiché 238 000 €');
+  await page.tap('.dl-screen-close');
+  await waitForAddress(page, `${base}/annonce/?id=${SALE}`);
+  await page.waitForSelector('.header-card .hc-price-value');
+  await page.close();
+  page = await open(phoneFresh, `/annonce/?id=${RENTAL}&vue=offre`, 'adresse-offre-location-telephone');
+  await waitForAddress(page, `${base}/annonce/?id=${RENTAL}`);
+  await ready(page, 'adresse-offre-location-telephone');
+  if (await page.$('.dl-screen, .hc-offer')) problems.push('adresse-offre-location-telephone: offre proposée sur une location');
+  await page.close();
+
+  // Sa propre annonce : « Voir les demandes » et « Gérer l'annonce », comme sur ordinateur ; rien du compte n'est lu.
+  phoneMark = calls.length;
+  page = await open(phoneFresh, `/annonce/?id=${MINE}`, 'mon-annonce-telephone');
+  await ready(page, 'mon-annonce-telephone');
+  await common(page, 'mon-annonce-telephone', { phone: true });
+  expect('mon-annonce-telephone', 'boutons de la barre', await page.$$eval('.action-bar-item', (els) => els.map((el) => el.textContent.trim()).join(' | ')), 'Voir les demandes | Gérer l\'annonce');
+  if (await page.$('.hc-offer, .visit-card')) problems.push('mon-annonce-telephone: offre ou visite proposée sur sa propre annonce');
+  for (const table of ['rpc/my_conversations', 'rpc/my_offers', 'rpc/my_visit_requests', 'agenda_visits', 'rpc/start_listing_conversation']) {
+    if (since(phoneMark, table).length) problems.push(`mon-annonce-telephone: ${table} demandé pour sa propre annonce`);
+  }
+  // Capture avant les touchers : le reflet bleu du toucher de Chromium resterait sur le bouton.
+  await page.screenshot({ path: join(out, 'mon-annonce-telephone.png') });
+  for (const [index, title] of [[0, 'Voir les demandes'], [1, 'Gérer l\'annonce']]) {
+    await page.tap(`.action-bar-item >> nth=${index}`);
+    expect('mon-annonce-telephone', `fenêtre « ${title} »`, await dialogTitle(page), title);
+    expect('mon-annonce-telephone', `message de « ${title} »`, await page.textContent('dialog[open] .alert-body p'), 'Dans l’app iPhone pour l’instant.');
+    await closeAlert(page);
+  }
+  await page.close();
+  page = await open(phoneFresh, `/annonce/?id=${MINE}&vue=visite`, 'mon-annonce-visite-telephone');
+  await waitForAddress(page, `${base}/annonce/?id=${MINE}`);
+  await ready(page, 'mon-annonce-visite-telephone');
+  if (await page.$('.dl-screen')) problems.push('mon-annonce-visite-telephone: demande de visite sur sa propre annonce');
+  await page.close();
+  await phoneFresh.close();
+
+  // Petit téléphone (320 px) avec le compte : la barre de sa propre annonce, le formulaire de visite et l'offre tiennent.
+  const smallMember = await frenchBrowser.newContext({ ...devices['iPhone SE'], locale: 'fr-FR', timezoneId: 'Europe/Paris' });
+  await mock(smallMember);
+  await signIn(smallMember, accountState());
+  page = await open(smallMember, `/annonce/?id=${MINE}`, 'mon-annonce-petit-telephone');
+  await ready(page, 'mon-annonce-petit-telephone');
+  await common(page, 'mon-annonce-petit-telephone', { phone: true });
+  await page.close();
+  page = await open(smallMember, `/annonce/?id=${FICHE}&vue=visite`, 'visite-petit-telephone');
+  await page.waitForSelector('.listing-screen .dl-visit-screen h1');
+  await page.click('.dl-link-button.is-strong');
+  await page.waitForSelector('.dl-slot >> nth=1');
+  await checkPhoneScreen(page, 'visite-petit-telephone');
+  await fullShot(page, 'telephone-petit-visite-formulaire.png');
+  await page.close();
+  page = await open(smallMember, `/annonce/?id=${FICHE}&vue=offre`, 'offre-petit-telephone');
+  await page.waitForSelector('.listing-screen .dl-offer-screen h1');
+  await page.locator('#offre-montant').pressSequentially('1250000');
+  await checkPhoneScreen(page, 'offre-petit-telephone');
+  await fullShot(page, 'telephone-petit-offre.png');
+  await page.close();
+  await smallMember.close();
+
   // ——— Ordinateur avec le compte de test : chaque action envoie au serveur simulé ce qu'envoie l'app ———
-  // Après le téléphone, dont les étapes restent dans l'ordre et les conditions d'avant. Navigateur réglé en français :
-  // le champ de date s'y affiche « 12/11/2026 » (jour, mois), comme chez un visiteur français ; le navigateur par
-  // défaut l'écrit à l'américaine (mois, jour).
-  frenchBrowser = await chromium.launch({ env: { ...process.env, LANG: 'fr_FR.UTF-8', LANGUAGE: 'fr_FR:fr', LC_ALL: 'fr_FR.UTF-8' } });
+  // Après le téléphone, dont les étapes restent dans l'ordre et les conditions d'avant (navigateur réglé en français).
   const member = await frenchBrowser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, locale: 'fr-FR', timezoneId: 'Europe/Paris' });
   await mock(member);
   const fresh = accountState();
@@ -1272,7 +1565,11 @@ try {
   // Vente sans loyer : pas de carte « Rentabilité » sur la fiche, donc pas de rentabilité sous le montant.
   await page.locator('#offre-montant').pressSequentially('200000');
   if (await page.$('#offre-rentabilite')) problems.push('adresse-offre: rentabilité affichée pour une vente sans loyer');
+  // Après chaque chiffre, le curseur est replacé à l'image suivante (onAmount) : attendre cette image, sinon elle peut
+  // défaire la sélection de fill('') et le montant resterait (vu quand la machine est chargée).
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => done())));
   await page.locator('#offre-montant').fill('');
+  expect('adresse-offre', 'montant effacé', await page.inputValue('#offre-montant'), '');
   // Sans montant, rien ne part : le message de l'app.
   mark = calls.length;
   await page.click('.dl-offer-screen .dl-submit');

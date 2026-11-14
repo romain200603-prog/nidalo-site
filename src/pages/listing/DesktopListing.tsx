@@ -1,16 +1,14 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { Icon } from '../../components/Icon';
 import { HeartIcon } from '../../components/account/HeartButton';
 import { toggleFavorite, useFavorites } from '../../lib/account/favorites';
-import { requireAccount } from '../../lib/account/gate';
-import { currentUserId, useSession } from '../../lib/account/session';
 import { cardKind } from '../../lib/cardContent';
 import { compareState, compareToast, toggleCompare, useCompare } from '../../lib/compare';
 import { formatArea, formatPrice } from '../../lib/format';
 import type { SearchMode } from '../../lib/labels';
-import { listingConversation, openListingConversation, type ListingConversation } from '../../lib/listing/conversation';
+import { listingConversation } from '../../lib/listing/conversation';
 import { hotelOf } from '../../lib/listing/fields';
-import { canMakeOffer, offerStateLabel } from '../../lib/listing/offers';
+import { offerStateLabel } from '../../lib/listing/offers';
 import { FINANCING_OPTIONS, profitabilityFor, profitabilityView, STANDARD_CHOICE } from '../../lib/listing/profitability';
 import { fetchActiveCount, fetchPublisher, type Publisher } from '../../lib/listing/publisher';
 import {
@@ -24,9 +22,7 @@ import {
 } from '../../lib/listing/visits';
 import { countListingView } from '../../lib/listing/views';
 import { placeLine, sortedPhotos, type ListingRow } from '../../lib/listings';
-import {
-  accountPath, comparePath, conversationPath, listingPath, listingScreenFromParams, visitRequestPath, wantsVideoVisit, type ListingScreen,
-} from '../../lib/paths';
+import { accountPath, comparePath, conversationPath, visitRequestPath } from '../../lib/paths';
 import { recordView } from '../../lib/recentlyViewed';
 import { HotelSection, ProfitabilityCard, RentalCostCard } from './CategoryCards';
 import { backTarget, coordinateOf, hotelPerformanceOf, rentalCostOf } from './data';
@@ -34,18 +30,14 @@ import { AlertDialog } from './Dialogs';
 import { Gallery } from './Gallery';
 import { ExtraIcon } from './icons';
 import { LocationSection } from './Location';
-import { OfferScreen } from './OfferScreen';
 import { Avatar, Description, Energy, Features, Footnote, HotelActivity, PracticalInfo, PublisherCard, RiskNote } from './Sections';
-import { useListingAccount } from './useListingAccount';
-import { VisitRequestScreen } from './VisitRequestScreen';
+import { useListingScreens } from './useListingScreens';
 
 // Fiche d'une annonce sur ordinateur (maquette 2 de Romain), avec les actions de l'app (ListingDetailView.swift) :
 // en haut la catégorie, le titre, la ville et Partager · Enregistrer · Comparer ; la galerie ; à gauche le prix, les
 // chiffres clés et les sections de l'app dans son ordre ; à droite, une colonne fixe avec l'état de l'offre, le
 // vendeur, Envoyer un message · Demander une visite · Appeler et l'état de la visite. « Demander une visite » et
 // « Faire une offre » ont leur propre adresse (&vue=visite, &vue=offre), dans une colonne de 640 px.
-
-const sameId = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
 /** Chiffres du numéro gardés pour l'appel (« tel: »), comme l'app : les chiffres et le « + ». */
 const telHref = (phone: string) => `tel:${phone.replace(/[^\d+]/g, '')}`;
@@ -58,18 +50,14 @@ type Notice = 'noPhone' | 'requests' | 'manage' | null;
 const NOTICE_TITLES: Record<'requests' | 'manage', string> = { requests: 'Voir les demandes', manage: 'Gérer l\'annonce' };
 
 export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMode | null }) {
-  const session = useSession();
-  const me = session.status === 'signedIn' ? session.userId : null;
-  // Sans compte, aucune annonce n'est « la mienne » (isOwnListing de l'app).
-  const isOwn = sameId(row.owner_id, me);
-  const { account, refreshOffers, refreshConversations, addRequest } = useListingAccount(isOwn ? null : me);
+  // Écrire, visiter, faire une offre : communs avec le téléphone (useListingScreens).
+  const { session, me, isOwn, account, opening, renderScreen, requestVisit, makeOffer, contactSeller } = useListingScreens(row, mode);
   const [publisher, setPublisher] = useState<Publisher | null>(null);
   const [activeCount, setActiveCount] = useState<number | null>(null);
   const [choice, setChoice] = useState(STANDARD_CHOICE);
   const [toast, setToast] = useState<Toast | null>(null);
   const [copyLink, setCopyLink] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
-  const [opening, setOpening] = useState(false);
   const back = useMemo(backTarget, []);
 
   const kind = cardKind(row, mode);
@@ -86,151 +74,6 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
   const secondary = priceSecondary(row);
   const priceNote = priceFeesNote(row);
   const condition = saleCondition(row);
-
-  // ——— Écrans « Demander une visite » et « Faire une offre » (adresse de la fiche avec &vue=…) ———
-  const [screen, setScreen] = useState<ListingScreen | null>(() => listingScreenFromParams(new URLSearchParams(window.location.search)));
-  const [offerConversation, setOfferConversation] = useState<ListingConversation | null>(null);
-  const screenRef = useRef(screen);
-  /** L'écran a été ouvert depuis la fiche : « Fermer » revient en arrière dans l'historique. */
-  const pushed = useRef(false);
-  /** Position de la fiche quand un écran s'ouvre, retrouvée en le fermant. */
-  const listingScroll = useRef(0);
-  const resolving = useRef(false);
-  const offersRef = useRef(account.offers);
-  offersRef.current = account.offers;
-
-  const setView = useCallback((next: ListingScreen | null) => {
-    if (screenRef.current === null && next !== null) listingScroll.current = window.scrollY;
-    screenRef.current = next;
-    setScreen(next);
-  }, []);
-
-  const go = useCallback((next: ListingScreen | null, how: 'push' | 'replace') => {
-    const url = listingPath(row.id, mode, next);
-    if (how === 'push') {
-      window.history.pushState(null, '', url);
-      pushed.current = true;
-    } else {
-      window.history.replaceState(null, '', url);
-    }
-    setView(next);
-  }, [row.id, mode, setView]);
-
-  const close = useCallback(() => {
-    if (pushed.current) {
-      pushed.current = false;
-      window.history.back();
-      return;
-    }
-    go(null, 'replace');
-  }, [go]);
-
-  useEffect(() => {
-    const onPop = () => {
-      pushed.current = false;
-      const next = listingScreenFromParams(new URLSearchParams(window.location.search));
-      // Revenir sur « Faire une offre » relit la conversation : une offre envoyée entre-temps l'interdit.
-      if (next === 'offre') setOfferConversation(null);
-      setView(next);
-    };
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, [setView]);
-
-  /**
-   * « Faire une offre » (makeOffer de l'app) : la conversation de l'annonce (créée au besoin), puis la feuille d'offre ;
-   * une offre déjà en attente ou acceptée ouvre la conversation, qui la montre.
-   */
-  const resolveOffer = useCallback(async (how: 'push' | 'replace') => {
-    const userId = currentUserId();
-    if (resolving.current) return;
-    if (!userId || sameId(row.owner_id, userId) || row.transaction !== 'sale') {
-      if (how === 'replace') go(null, 'replace');
-      return;
-    }
-    resolving.current = true;
-    setOpening(true);
-    try {
-      const conversation = await openListingConversation(row.id, userId);
-      if (!conversation) {
-        if (how === 'replace') go(null, 'replace');
-        return;
-      }
-      // Les offres du compte, relues pour ne pas proposer une offre déjà en attente.
-      const offers = (await refreshOffers()) ?? offersRef.current;
-      if (canMakeOffer(conversation, offers, new Date())) {
-        setOfferConversation(conversation);
-        go('offre', how);
-      } else {
-        window.location.assign(conversationPath(conversation.id));
-      }
-    } finally {
-      resolving.current = false;
-      setOpening(false);
-    }
-  }, [row.id, row.owner_id, row.transaction, go, refreshOffers]);
-
-  const showVisitForm = useCallback(() => {
-    if (sameId(row.owner_id, currentUserId())) return;
-    go('visite', 'push');
-  }, [row.owner_id, go]);
-
-  /** « Demander une visite » : connexion d'abord si besoin, puis le formulaire. */
-  const requestVisit = () => void requireAccount(showVisitForm);
-  const makeOffer = () => void requireAccount(() => void resolveOffer('push'));
-
-  /** « Envoyer un message » : ouvre (ou crée) la conversation avec le vendeur, dans Messages. */
-  const contactSeller = () => void requireAccount(() => {
-    const userId = currentUserId();
-    if (!userId || sameId(row.owner_id, userId)) return;
-    setOpening(true);
-    void openListingConversation(row.id, userId).then((conversation) => {
-      if (conversation) window.location.assign(conversationPath(conversation.id));
-      else setOpening(false);
-    });
-  });
-
-  // Adresse d'un écran ouverte directement : sans compte, la connexion d'abord ; sa propre annonce (ou une location
-  // pour l'offre) revient à la fiche ; « Faire une offre » retrouve d'abord la conversation.
-  useEffect(() => {
-    if (screen === null || session.status === 'loading') return;
-    if (session.status === 'signedOut') {
-      const wanted = screen;
-      go(null, 'replace');
-      void requireAccount(() => (wanted === 'visite' ? showVisitForm() : void resolveOffer('push')));
-      return;
-    }
-    if (isOwn || (screen === 'offre' && row.transaction !== 'sale')) {
-      go(null, 'replace');
-      return;
-    }
-    if (screen === 'offre' && !offerConversation) void resolveOffer('replace');
-  }, [screen, session.status, isOwn, offerConversation, row.transaction, go, resolveOffer, showVisitForm]);
-
-  // Un autre compte : la feuille d'offre est relue pour lui.
-  useEffect(() => { setOfferConversation(null); }, [me]);
-
-  const shown: ListingScreen | null = me && !isOwn
-    ? (screen === 'visite' ? 'visite' : screen === 'offre' && offerConversation ? 'offre' : null)
-    : null;
-
-  const firstLayout = useRef(true);
-  useLayoutEffect(() => {
-    if (firstLayout.current) {
-      firstLayout.current = false;
-      return;
-    }
-    window.scrollTo(0, shown ? 0 : listingScroll.current);
-    // L'écran ouvert reçoit le focus sur son titre, sauf si un de ses champs l'a déjà (le montant de l'offre).
-    const opened = shown ? document.querySelector<HTMLElement>('.dl-screen') : null;
-    if (opened && !opened.contains(document.activeElement)) opened.querySelector<HTMLElement>('h1')?.focus({ preventScroll: true });
-  }, [shown]);
-
-  useEffect(() => {
-    document.title = shown === 'visite' ? `Demander une visite · ${row.title} · Nidalo`
-      : shown === 'offre' ? `Faire une offre · ${row.title} · Nidalo`
-        : `${row.title} à ${row.city} · Nidalo`;
-  }, [row, shown]);
 
   // « Consultés récemment » de l'accueil : la fiche ouverte est notée dans l'onglet (recordView de l'app). Et une vue
   // pour les statistiques de son auteur, une fois par jour.
@@ -297,39 +140,8 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
   const request = isOwn || upcoming ? null : openRequest(account.requests, row.id, me, now);
   const recipientName = publisher?.name ?? 'Le vendeur';
 
-  if (shown === 'visite') {
-    return (
-      <div className="listing dl">
-        <VisitRequestScreen
-          row={row}
-          photo={photos[0]}
-          recipientName={recipientName}
-          initialMode={wantsVideoVisit(new URLSearchParams(window.location.search)) ? 'video' : 'onSite'}
-          onClose={close}
-          onSent={addRequest}
-        />
-      </div>
-    );
-  }
-  if (shown === 'offre' && offerConversation) {
-    return (
-      <div className="listing dl">
-        <OfferScreen
-          conversationId={offerConversation.id}
-          title={offerConversation.title ?? row.title}
-          price={offerConversation.price ?? price}
-          profitability={profitability}
-          onClose={close}
-          onSent={async () => {
-            // Comme l'app (ListingDetailView.swift:165-176) : offres et conversations relues, puis la conversation de
-            // l'offre s'ouvre dans Messages ; « Retour » ramène à la fiche, qui montre « Offre en attente ».
-            await Promise.all([refreshOffers(), refreshConversations()]);
-            window.location.replace(conversationPath(offerConversation.id));
-          }}
-        />
-      </div>
-    );
-  }
+  const opened = renderScreen({ photo: photos[0], recipientName, profitability });
+  if (opened) return <div className="listing dl">{opened}</div>;
 
   return (
     <div className="listing dl">

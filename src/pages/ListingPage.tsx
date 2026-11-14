@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { Icon } from '../components/Icon';
 import { Page } from '../components/Layout';
-import { SoonCard } from '../components/SoonCard';
 import { cardKind } from '../lib/cardContent';
 import { useDesktop } from '../lib/desktop';
 import { formatArea, formatPrice } from '../lib/format';
 import { fetchListing, ListingNotFound, placeLine, sortedPhotos, UUID_PATTERN, type ListingRow } from '../lib/listings';
+import { listingConversation } from '../lib/listing/conversation';
 import { hotelOf } from '../lib/listing/fields';
+import { offerStateLabel } from '../lib/listing/offers';
 import { FINANCING_OPTIONS, profitabilityFor, profitabilityView, STANDARD_CHOICE } from '../lib/listing/profitability';
 import { fetchActiveCount, fetchPublisher, type Publisher } from '../lib/listing/publisher';
 import {
@@ -14,30 +15,35 @@ import {
   rentalRows, saleCondition,
 } from '../lib/listing/rows';
 import { shareListing } from '../lib/listing/share';
+import { nextVisit, openRequest } from '../lib/listing/visits';
 import { countListingView } from '../lib/listing/views';
-import { listingModeFromParams, listingScreenFromParams, PATHS } from '../lib/paths';
+import { telHref } from '../lib/messages/format';
+import { conversationPath, listingModeFromParams, PATHS } from '../lib/paths';
 import { recordView } from '../lib/recentlyViewed';
 import type { SearchMode } from '../lib/labels';
 import { ActionBar } from './listing/ActionBar';
 import { HotelSection, ProfitabilityCard, RentalCostCard } from './listing/CategoryCards';
 import { backTarget, coordinateOf, hotelPerformanceOf, rentalCostOf } from './listing/data';
 import { DesktopListing } from './listing/DesktopListing';
-import { ACCOUNT_SOON_MESSAGE, AccountDialog, AlertDialog, NoPhoneDialog, type AccountAction } from './listing/Dialogs';
+import { AlertDialog, NoPhoneDialog } from './listing/Dialogs';
 import { Gallery } from './listing/Gallery';
 import { LocationSection } from './listing/Location';
 import { Description, Energy, Features, Footnote, HotelActivity, PracticalInfo, PublisherCard, RiskNote } from './listing/Sections';
 import { HeaderCard, VisitCard } from './listing/TopCards';
+import { useListingScreens } from './listing/useListingScreens';
 
-// Fiche d'une annonce (ListingDetailView.swift). Téléphone : mêmes sections, dans le même ordre ; ce qui demande un
-// compte (écrire, visiter, offre) ouvre une fenêtre qui renvoie vers l'app. Ordinateur (≥ 1024 px) : DesktopListing,
-// avec les actions de l'app ; ses écrans « Demander une visite » et « Faire une offre » (&vue=…) restent « bientôt »
-// sur téléphone.
+// Fiche d'une annonce (ListingDetailView.swift). Téléphone : mêmes sections, dans le même ordre ; écrire au vendeur,
+// demander une visite et faire une offre comme sur ordinateur (useListingScreens), les deux écrans à leur propre
+// adresse (&vue=visite, &vue=offre). Ordinateur (≥ 1024 px) : DesktopListing.
 
 type State = { status: 'loading' } | { status: 'notFound' } | { status: 'error' } | { status: 'ready'; row: ListingRow };
 
+type Notice = 'noPhone' | 'requests' | 'manage' | null;
+
 function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }) {
-  const [account, setAccount] = useState<AccountAction | null>(null);
-  const [noPhone, setNoPhone] = useState(false);
+  // Écrire, visiter, faire une offre : communs avec l'ordinateur (useListingScreens).
+  const { session, me, isOwn, account, opening, renderScreen, requestVisit, makeOffer, contactSeller } = useListingScreens(row, mode);
+  const [notice, setNotice] = useState<Notice>(null);
   const [publisher, setPublisher] = useState<Publisher | null>(null);
   const [activeCount, setActiveCount] = useState<number | null>(null);
   const [choice, setChoice] = useState(STANDARD_CHOICE);
@@ -57,10 +63,6 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
   const price = Number(row.price);
   const livingArea = Number(row.living_area);
 
-  useEffect(() => {
-    document.title = `${row.title} à ${row.city} · Nidalo`;
-  }, [row]);
-
   // « Consultés récemment » de l'accueil : la fiche ouverte est notée dans l'onglet (recordView de l'app). Et une vue
   // pour les statistiques de son auteur, une fois par jour.
   useEffect(() => {
@@ -68,16 +70,24 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
     countListingView(row.id);
   }, [row.id]);
 
+  // Le profil public est relu une fois la session connue : connecté, le serveur donne aussi le numéro de l'agence.
+  const sessionKey = session.status === 'loading' ? null : (me ?? 'sans-compte');
   useEffect(() => {
+    if (sessionKey === null) return;
     let cancelled = false;
     fetchPublisher(row.owner_id, row.created_at)
       .then((p) => { if (!cancelled) setPublisher(p); })
       .catch(() => { /* Sans profil lisible, la carte « Votre interlocuteur » ne s'affiche pas. */ });
+    return () => { cancelled = true; };
+  }, [row.owner_id, row.created_at, sessionKey]);
+
+  useEffect(() => {
+    let cancelled = false;
     fetchActiveCount(row.owner_id)
       .then((count) => { if (!cancelled) setActiveCount(count); })
       .catch(() => { /* Le nombre d'annonces est facultatif. */ });
     return () => { cancelled = true; };
-  }, [row.owner_id, row.created_at]);
+  }, [row.owner_id]);
 
   useEffect(() => {
     if (!toast) return;
@@ -99,8 +109,21 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
     }
   };
 
-  const isAgency = publisher?.isProfessional ?? false;
+  // « Téléphone » : le numéro du vendeur s'il le communique (connecté), sinon la fenêtre « Numéro non disponible ».
+  const phone = publisher?.phone?.trim();
+
   const fees = feesLabel(row);
+
+  // ——— État de l'offre et des visites (lus avec le compte), comme sur ordinateur ———
+  const now = new Date();
+  const conversation = listingConversation(account.conversations, row.id, me);
+  const offerLabel = offerStateLabel(account.offers, conversation, now);
+  const upcoming = isOwn ? null : nextVisit(account.visits, row.id, now);
+  const request = isOwn || upcoming ? null : openRequest(account.requests, row.id, me, now);
+
+  // « Demander une visite » ou « Faire une offre » ouvert : l'écran seul, à la place de la fiche.
+  const opened = renderScreen({ photo: photos[0], recipientName: publisher?.name ?? 'Le vendeur', profitability });
+  if (opened) return <div className="listing listing-screen">{opened}</div>;
 
   return (
     <div className="listing">
@@ -125,10 +148,19 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
               title={row.title}
               location={place}
               facts={headerFacts(row, kind)}
-              onOffer={row.transaction === 'sale' ? () => setAccount('offer') : null}
+              onOffer={!isOwn && row.transaction === 'sale' ? makeOffer : null}
+              offerState={offerLabel && conversation ? { label: offerLabel, href: conversationPath(conversation.id) } : null}
+              offerBusy={opening}
             />
-            <ActionBar onMessage={() => setAccount('message')} onVisit={() => setAccount('visit')} onCall={() => setNoPhone(true)} />
-            <VisitCard />
+            <ActionBar
+              onMessage={contactSeller}
+              onVisit={requestVisit}
+              onCall={() => setNotice('noPhone')}
+              callHref={phone ? telHref(phone) : null}
+              busy={opening}
+              owner={isOwn ? { onRequests: () => setNotice('requests'), onManage: () => setNotice('manage') } : null}
+            />
+            {!isOwn && <VisitCard upcoming={upcoming} request={request} now={now} />}
           </div>
         </div>
         <div className="listing-main">
@@ -143,7 +175,7 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
           {activity && <HotelActivity rows={activity.rows} showsNote={activity.showsNote} />}
           {row.description?.trim() && <Description text={row.description.trim()} />}
           <Features rows={featureRows(row)} />
-          {publisher && <PublisherCard publisher={publisher} fees={fees} activeCount={activeCount} onContact={() => setAccount('message')} />}
+          {publisher && <PublisherCard publisher={publisher} fees={fees} activeCount={activeCount} onContact={isOwn ? undefined : contactSeller} />}
           <Energy energyClass={energyLetter(row.energy_class)} climateClass={energyLetter(row.climate_class)} lines={energyLines(row)} />
           <LocationSection
             coordinate={coordinateOf(row)}
@@ -161,8 +193,14 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
         </div>
       </div>
 
-      <AccountDialog action={account} isAgency={isAgency} onClose={() => setAccount(null)} />
-      <NoPhoneDialog open={noPhone} onClose={() => setNoPhone(false)} />
+      <NoPhoneDialog open={notice === 'noPhone'} onClose={() => setNotice(null)} onMessage={() => { setNotice(null); contactSeller(); }} />
+      <AlertDialog
+        open={notice === 'requests' || notice === 'manage'}
+        onClose={() => setNotice(null)}
+        title={notice === 'manage' ? 'Gérer l\'annonce' : 'Voir les demandes'}
+        message="Dans l’app iPhone pour l’instant."
+        actions={[{ label: 'Fermer', onClick: () => setNotice(null), tone: 'primary' }]}
+      />
       <AlertDialog
         open={copyLink !== null}
         onClose={() => setCopyLink(null)}
@@ -203,26 +241,11 @@ function Loading() {
   );
 }
 
-/** « Demander une visite » et « Faire une offre » sur téléphone : pas encore sur le site (brief, règle 6). */
-const PHONE_SCREENS = {
-  visite: { icon: 'calendarPlus', title: 'Demander une visite' },
-  offre: { icon: 'handshake', title: 'Faire une offre' },
-} as const;
-
 export function ListingPage() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const id = params.get('id') ?? '';
   const mode = listingModeFromParams(params);
   const desktop = useDesktop();
-  // L'adresse est relue à chaque affichage : sur ordinateur, la fiche y ajoute &vue=… (écrans de visite et d'offre) ;
-  // retour ou avance dans l'historique, ou fenêtre rétrécie, le téléphone montre alors « bientôt ».
-  const [, setVisit] = useState(0);
-  useEffect(() => {
-    const onPop = () => setVisit((n) => n + 1);
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, []);
-  const phoneScreen = desktop ? null : listingScreenFromParams(new URLSearchParams(window.location.search));
   const [state, setState] = useState<State>(() => (UUID_PATTERN.test(id) ? { status: 'loading' } : { status: 'notFound' }));
   const [attempt, setAttempt] = useState(0);
 
@@ -241,24 +264,11 @@ export function ListingPage() {
     if (state.status === 'error') document.title = 'Annonce indisponible · Nidalo';
   }, [state.status]);
 
-  // Fiche ouverte : la barre du bas de l'app est masquée (hidesTabBar), place à la barre d'actions.
-  const ready = state.status === 'ready' && phoneScreen === null;
+  // Fiche ouverte (ou un de ses écrans) : la barre du bas de l'app est masquée (hidesTabBar), place à la barre d'actions.
+  const ready = state.status === 'ready';
   useEffect(() => {
     document.body.classList.toggle('page-listing-ready', ready);
   }, [ready]);
-
-  useEffect(() => {
-    if (phoneScreen) document.title = `${PHONE_SCREENS[phoneScreen].title} · Nidalo`;
-  }, [phoneScreen]);
-
-  if (phoneScreen) {
-    const soon = PHONE_SCREENS[phoneScreen];
-    return (
-      <Page section="search">
-        <SoonCard icon={soon.icon} title={soon.title} text={ACCOUNT_SOON_MESSAGE} />
-      </Page>
-    );
-  }
 
   return (
     <Page section="search">

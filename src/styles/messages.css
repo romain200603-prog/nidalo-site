@@ -4,8 +4,10 @@
    la liste puis la conversation avec une flèche retour. La barre du haut du site ne change pas. */
 
 /* Les écrans « Faire une offre » et « Demande de visite » de la fiche s'ouvrent aussi dans la conversation : leurs
-   styles d'ordinateur sont repris ici par @import ; ceux du téléphone sont plus bas (« Écrans de la fiche »). */
+   styles d'ordinateur et de téléphone sont repris ici par @import (ceux du téléphone, communs avec la page d'une
+   annonce, sont dans ecrans-fiche-telephone.css). */
 @import './ordinateur-fiche.css';
+@import './ecrans-fiche-telephone.css';
 
 /* Couleurs et mesures de la page. Sous 1024 px, les jetons de l'ordinateur (--d-…) que la page et les écrans de la
    fiche utilisent sont définis ici, avec la police système du téléphone (aucune police téléchargée). */
@@ -720,70 +722,9 @@ a.dm-file.is-out:hover .dm-file-card { background: rgba(255, 255, 255, 0.2); }
   .dm-viewer-nav.is-prev { left: 8px; }
   .dm-viewer-nav.is-next { right: 8px; }
 
-  /* Écrans de la fiche (« Faire une offre », « Demande de visite ») dans la conversation, sur téléphone. */
-  .dm-offer-host { color: var(--d-text); }
+  /* Écrans de la fiche (« Faire une offre », « Demande de visite ») dans la conversation, sur téléphone : leurs styles
+     sont dans ecrans-fiche-telephone.css, communs avec la page d'une annonce. */
   .dm-offer-host .wrap-narrow { padding-left: 16px; padding-right: 16px; }
-  .dm-offer-host .dl-screen { padding-top: 18px; padding-bottom: 24px; }
-  .dm-offer-host .dl-screen-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
-  .dm-offer-host .dl-screen-titles { min-width: 0; }
-  .dm-offer-host .dl-screen-titles h1 { margin: 0; color: var(--d-text); font-size: 24px; font-weight: 700; line-height: 30px; outline: none; }
-  .dm-offer-host .dl-screen-titles p { margin: 4px 0 0; color: var(--d-grey); font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
-  .dm-offer-host .dl-screen-close { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; border: 1px solid var(--d-card-border); border-radius: 50%; background: #FFFFFF; color: var(--d-text); cursor: pointer; }
-  .dm-offer-host .dl-screen-close .icon { width: 18px; height: 18px; }
-  .dm-offer-host .dl-form-card { display: flex; flex-direction: column; gap: 18px; padding: 16px; border: 1px solid var(--d-card-border); border-radius: 16px; background: #FFFFFF; }
-  .dm-offer-host .dl-form-stack { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
-  .dm-offer-host .dl-field { min-width: 0; display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; border: 0; }
-  .dm-offer-host .dl-label { padding: 0; color: var(--d-text); font-size: 14px; font-weight: 700; }
-  .dm-offer-host .dl-amount { display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 14px; border: 1px solid var(--d-field-border); border-radius: 12px; background: #FFFFFF; }
-  .dm-offer-host .dl-amount input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; color: var(--d-text); font: inherit; font-size: 20px; font-weight: 700; outline: none; }
-  .dm-offer-host .dl-gap { margin: 0; color: var(--d-green-text); font-size: 14px; font-weight: 600; }
-  .dm-offer-host .dl-gap.is-below { color: #81622C; }
-  .dm-offer-host .dl-yield { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 12px; background: var(--d-bg); }
-  .dm-offer-host .dl-yield-title { margin: 0; font-size: 14px; font-weight: 700; }
-  .dm-offer-host .dl-yield-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 0; font-size: 14px; }
-  .dm-offer-host .dl-yield-label { flex: 1; color: var(--d-grey); }
-  .dm-offer-host .dl-yield-value { font-weight: 700; }
-  .dm-offer-host .dl-yield-listed { flex-basis: 100%; color: var(--d-help); font-size: 12.5px; }
-  .dm-offer-host .dl-textarea { width: 100%; min-height: 84px; padding: 10px 12px; border: 1px solid var(--d-field-border); border-radius: 12px; background: #FFFFFF; color: var(--d-text); font: inherit; font-size: 16px; line-height: 22px; resize: vertical; }
-  .dm-offer-host .dl-chip { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--d-blue-light); color: var(--d-blue); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
-  .dm-offer-host .dl-chip .icon { width: 14px; height: 14px; }
-  .dm-offer-host .dl-options { display: flex; gap: 8px; }
-  .dm-offer-host .dl-option { flex: 1 1 0; min-width: 0; height: 44px; padding: 0 6px; border: 1px solid var(--d-field-border); border-radius: 12px; background: #FFFFFF; color: var(--d-text); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
-  .dm-offer-host .dl-option[aria-pressed="true"] { border-color: var(--d-blue); background: var(--d-blue); color: #FFFFFF; font-weight: 700; }
-  .dm-offer-host .dl-submit { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 52px; padding: 0 20px; border: 0; border-radius: 14px; background: var(--d-blue); color: #FFFFFF; font: inherit; font-size: 16px; font-weight: 700; text-decoration: none; cursor: pointer; }
-  .dm-offer-host .dl-submit .icon { width: 18px; height: 18px; }
-  .dm-offer-host .dl-secondary { width: 100%; height: 48px; border: 1px solid var(--d-field-border); border-radius: 14px; background: #FFFFFF; color: var(--d-text); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
-  .dm-offer-host .dl-error { margin: 0; color: var(--d-red); font-size: 14px; font-weight: 600; }
-  .dm-offer-host .dl-form-note, .dm-offer-host .dl-help, .dm-offer-host .dl-notice { margin: 0; color: var(--d-grey); font-size: 13px; line-height: 19px; }
-  .dm-offer-host .dl-screen-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
-  .dm-offer-host .dl-form-card.dl-visit-listing { flex-direction: row; align-items: center; gap: 12px; padding: 12px; }
-  .dm-offer-host .dl-visit-thumb { flex: none; width: 56px; height: 56px; overflow: hidden; border-radius: 10px; background: var(--d-blue-light); }
-  .dm-offer-host .dl-visit-thumb img { width: 100%; height: 100%; object-fit: cover; }
-  .dm-offer-host .dl-visit-listing-text { min-width: 0; display: flex; flex-direction: column; }
-  .dm-offer-host .dl-visit-listing-title { overflow: hidden; font-size: 15px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-  .dm-offer-host .dl-visit-listing-city { color: var(--d-grey); font-size: 13px; }
-  .dm-offer-host .dl-visit-listing-price { font-size: 14px; font-weight: 700; }
-  .dm-offer-host .dl-form-section { gap: 14px; }
-  .dm-offer-host .dl-form-section h2 { margin: 0; display: flex; align-items: center; gap: 8px; color: var(--d-text); font-size: 16px; font-weight: 700; line-height: 22px; }
-  .dm-offer-host .dl-form-section h2 .icon { flex: none; width: 18px; height: 18px; color: var(--d-icon); }
-  .dm-offer-host .dl-slot { display: flex; flex-direction: column; gap: 8px; }
-  .dm-offer-host .dl-slot-row { display: flex; align-items: center; gap: 8px; }
-  .dm-offer-host .dl-date { flex: 1; min-width: 0; height: 44px; padding: 0 10px; border: 1px solid var(--d-field-border); border-radius: 12px; background: #FFFFFF; color: var(--d-text); font: inherit; font-size: 15px; }
-  .dm-offer-host .dl-time { position: relative; flex: 0 0 104px; display: flex; }
-  .dm-offer-host .dl-time select { width: 100%; height: 44px; padding: 0 28px 0 10px; border: 1px solid var(--d-field-border); border-radius: 12px; background: #FFFFFF; color: var(--d-text); font: inherit; font-size: 15px; appearance: none; }
-  .dm-offer-host .dl-time-chevron { position: absolute; top: 50%; right: 8px; width: 16px; height: 16px; margin-top: -8px; pointer-events: none; }
-  .dm-offer-host .dl-link-button { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--d-blue); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
-  .dm-offer-host .dl-link-button.is-strong { font-weight: 700; }
-  .dm-offer-host .dl-spinner { width: 18px; height: 18px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: dm-voice-spin 0.8s linear infinite; }
-  .dm-offer-host .dl-form-card.dl-sent { gap: 10px; margin-top: 14px; }
-  .dm-offer-host .dl-sent-head { display: flex; align-items: center; gap: 10px; }
-  .dm-offer-host .dl-sent-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; background: var(--d-blue-light); color: var(--d-blue); }
-  .dm-offer-host .dl-sent-icon .icon { width: 18px; height: 18px; }
-  .dm-offer-host .dl-sent-titles { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-  .dm-offer-host .dl-sent-title { font-size: 16px; font-weight: 700; }
-  .dm-offer-host .dl-status-badge { padding: 0 8px; border-radius: 999px; background: var(--d-blue-light); color: var(--d-blue); font-size: 12px; font-weight: 700; line-height: 22px; }
-  .dm-offer-host .dl-sent-text { margin: 0; color: var(--d-grey); font-size: 14px; line-height: 20px; }
-  .dm-offer-host .dl-sent-slots { margin: 0; padding-left: 18px; font-size: 14px; line-height: 22px; }
 }
 
 /* Barre du bas du téléphone (jusqu'à 760 px) : la liste s'arrête au-dessus ; une conversation ouverte la cache et
