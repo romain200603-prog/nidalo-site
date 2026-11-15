@@ -186,6 +186,9 @@ describe('Profil agence : enregistrement', () => {
     failing = { 'professional_profile_details.upsert': { code: '23514', message: 'check' } };
     answers = { 'professional_profiles.select': [{ id: 'p1', logo_path: null }] };
     expect(await saveAgency(filled, null)).toBe(AGENCY_SAVE_MESSAGE);
+    // Présentation refusée par le filtre de mots interdits (modération) : le message du serveur, tel quel.
+    failing = { 'professional_profile_details.upsert': { code: 'P0001', message: 'Ce texte contient un mot interdit. Modifiez-le pour continuer.', hint: 'contenu_interdit' } };
+    expect(await saveAgency(filled, null)).toBe('Ce texte contient un mot interdit. Modifiez-le pour continuer.');
     failing = { 'storage.upload': { message: 'refusé' } };
     expect(await saveAgency(filled, new Blob(['jpeg']))).toBe(AGENCY_LOGO_MESSAGE);
   });

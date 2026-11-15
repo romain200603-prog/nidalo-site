@@ -22,6 +22,7 @@ import { NotificationsScreen } from './account/Notifications';
 import { Poster } from './account/Poster';
 import { ProfileChoice } from './account/ProfileChoice';
 import { ProjectEditor } from './account/ProjectEditor';
+import { Reports } from './account/Reports';
 import { Sales } from './account/Sales';
 import { SavedSearchesList } from './account/SavedSearchesList';
 import { ScreenHeader, Spinner } from './account/parts';
@@ -161,6 +162,8 @@ function AccountContent() {
     case 'statistiques': return <Statistics />;
     // Gestion des équipes : l'équipe de l'agence, les invitations en cours et « Inviter un collaborateur ».
     case 'equipes': return <Team screen={params.get('ecran')} invitation={null} />;
+    // Signalements : la modération de Nidalo (le serveur réserve la page aux comptes modérateurs).
+    case 'signalements': return <Reports />;
     // Ordinateur : Mon espace de la maquette 5 pour un compte particulier ; l'espace professionnel garde son écran.
     default: return desktop && current.profile.account_type !== 'professional' ? <DesktopSpace account={current} /> : <Hub account={current} />;
   }

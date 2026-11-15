@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { bannedWordMessage } from '../account/errors';
 import { createStore, currentUserId, useStore } from '../account/session';
 import {
   conversationRowsStore, follow, liveReload, onMessagingChange, patchConversationRow, startLiveBadges, type ConversationRows,
@@ -187,27 +188,35 @@ async function sendContent(conversationId: string, content: Record<string, unkno
   return message;
 }
 
-/** Texte envoyé (sans espaces autour) ; `false` s'il est vide ou n'a pas pu partir. */
-export async function sendText(conversationId: string, text: string): Promise<boolean> {
+/**
+ * Résultat d'un envoi : `refusal` est le message du serveur quand le texte contient un mot interdit (modération), à
+ * montrer tel quel ; `null` pour un autre échec (« n'a pas pu être envoyé »).
+ */
+export type SendOutcome = { sent: true } | { sent: false; refusal: string | null };
+
+const notSent = (error: unknown): SendOutcome => ({ sent: false, refusal: bannedWordMessage(error) });
+
+/** Texte envoyé (sans espaces autour) ; pas envoyé s'il est vide ou n'a pas pu partir. */
+export async function sendText(conversationId: string, text: string): Promise<SendOutcome> {
   const trimmed = text.trim();
-  if (!trimmed) return false;
+  if (!trimmed) return { sent: false, refusal: null };
   try {
     await sendContent(conversationId, textContent(trimmed));
-    return true;
-  } catch {
-    return false;
+    return { sent: true };
+  } catch (error) {
+    return notSent(error);
   }
 }
 
 /** Pièces jointes déjà envoyées dans le dossier, et leur message d'accompagnement facultatif. */
-export async function sendAttachments(conversationId: string, items: Attachment[], caption: string): Promise<boolean> {
-  if (!items.length) return false;
+export async function sendAttachments(conversationId: string, items: Attachment[], caption: string): Promise<SendOutcome> {
+  if (!items.length) return { sent: false, refusal: null };
   const text = caption.trim();
   try {
     await sendContent(conversationId, attachmentsContent(items, text ? text : null));
-    return true;
-  } catch {
-    return false;
+    return { sent: true };
+  } catch (error) {
+    return notSent(error);
   }
 }
 

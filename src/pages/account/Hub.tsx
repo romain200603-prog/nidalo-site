@@ -5,6 +5,7 @@ import { signOut } from '../../lib/account/auth';
 import { listingsCountText, loadMyListings, myListingsStore, ONLINE_STATUSES } from '../../lib/account/myListings';
 import { contactsStore, contactsSubtitle, isOwnContact, loadContacts } from '../../lib/account/contacts';
 import { isOwnMandate, loadMandates, mandatesStore, mandatesSubtitle } from '../../lib/account/mandates';
+import { loadModerator, moderatorStore } from '../../lib/account/moderation';
 import { loadOpportunities, opportunitiesStore, opportunitiesSubtitle } from '../../lib/account/opportunities';
 import { loadProfessional, professionalStore } from '../../lib/account/professional';
 import { saveAccountType, type Account } from '../../lib/account/profile';
@@ -24,6 +25,7 @@ export function Hub({ account }: { account: Account }) {
   const listings = useStore(myListingsStore);
   const searches = useStore(savedSearchesStore);
   const team = useStore(teamStore);
+  const moderator = useStore(moderatorStore);
   const [dialog, setDialog] = useState<'logout' | 'type' | 'review' | null>(null);
   const [typeError, setTypeError] = useState<string | null>(null);
   const isPro = account.profile.account_type === 'professional';
@@ -33,6 +35,7 @@ export function Hub({ account }: { account: Account }) {
     void loadMyListings();
     void loadSavedSearches();
     void loadProject();
+    void loadModerator(currentUserId());
     if (isPro) {
       void loadProfessional();
       void loadContacts();
@@ -65,6 +68,8 @@ export function Hub({ account }: { account: Account }) {
   };
   const privacyRow: RowItem = { icon: 'shieldCheck', title: 'Confidentialité et données', href: accountPath('confidentialite') };
   const legalRow: RowItem = { icon: 'scrollText', title: 'Informations légales', href: accountPath('legal') };
+  // Modération : seulement pour un compte modérateur.
+  const reportsRows: RowItem[] = moderator === true ? [{ icon: 'flag', title: 'Signalements', href: accountPath('signalements') }] : [];
 
   return (
     <div className="space">
@@ -104,8 +109,8 @@ export function Hub({ account }: { account: Account }) {
       <SpaceSection icon="user" title="Compte et sécurité">
         {/* Seul le gérant modifie la fiche de l'agence : un membre de l'équipe n'a pas cette ligne. */}
         <RowGroup rows={isPro && !memberAgency(team)
-          ? [{ icon: 'badgeCheck', title: 'Informations de l\'agence', href: AGENCY_FORM_PATH }, securityRow, privacyRow, typeRow]
-          : [securityRow, privacyRow, typeRow]} />
+          ? [{ icon: 'badgeCheck', title: 'Informations de l\'agence', href: AGENCY_FORM_PATH }, securityRow, privacyRow, typeRow, ...reportsRows]
+          : [securityRow, privacyRow, typeRow, ...reportsRows]} />
         {typeError && <p className="field-error">{typeError}</p>}
       </SpaceSection>
       <SpaceSection icon="gear" title="Paramètres et assistance">

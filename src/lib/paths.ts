@@ -18,7 +18,9 @@ export const PATHS = {
 export type AccountView =
   | 'informations' | 'annonces' | 'recherches' | 'confidentialite' | 'legal' | 'securite' | 'supprimer' | 'bientot'
   | 'notifications' | 'demande-visite' | 'agenda' | 'ajouter-visite' | 'projet' | 'consultes' | 'agence' | 'diffusion' | 'affiche'
-  | 'contacts' | 'statistiques' | 'ventes' | 'mandats' | 'opportunites' | 'equipes';
+  | 'contacts' | 'statistiques' | 'ventes' | 'mandats' | 'opportunites' | 'equipes'
+  // Modération (comptes modérateurs seulement) : le lien de la notification « Nouveau signalement ».
+  | 'signalements';
 
 /** « Publier une annonce » ; avec une annonce, reprend son brouillon ou la modifie (`etape=photos` : ses photos). */
 export function publishPath(listingId: string | null = null, step: 'photos' | null = null): string {

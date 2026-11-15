@@ -133,9 +133,10 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer }: {
     }
     const text = draft;
     setDraft('');
-    if (!await sendText(conversation.id, text)) {
+    const outcome = await sendText(conversation.id, text);
+    if (!outcome.sent) {
       setDraft(text);
-      showNotice(SEND_FAILED);
+      showNotice(outcome.refusal ?? SEND_FAILED);
     }
   };
 
@@ -154,9 +155,10 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer }: {
     }
     const text = draft;
     setDraft('');
-    if (!await sendText(conversation.id, text)) {
+    const outcome = await sendText(conversation.id, text);
+    if (!outcome.sent) {
       setDraft(text);
-      showNotice(SEND_FAILED);
+      showNotice(outcome.refusal ?? SEND_FAILED);
     }
   };
 
@@ -450,8 +452,14 @@ function PreviewSheet({ items, conversationId, onRemove, onDone }: {
         if (cancelled.current) return;
         setProgress((index + 1) / sendable.length);
       }
-      if (!await sendAttachments(conversationId, stored, caption)) throw new Error(UPLOAD_FAILURE);
+      const outcome = await sendAttachments(conversationId, stored, caption);
       if (cancelled.current) return;
+      if (!outcome.sent) {
+        // Message d'accompagnement refusé par le filtre de mots interdits : son message ; sinon l'échec habituel.
+        setProgress(null);
+        setError(outcome.refusal ?? UPLOAD_FAILURE);
+        return;
+      }
       onDone();
     } catch (failure) {
       if (cancelled.current) return;

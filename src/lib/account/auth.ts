@@ -101,7 +101,13 @@ export function takeProviderReturn(now = Date.now()): { provider: Provider; to: 
   }
 }
 
-type AccountUser = { app_metadata?: { provider?: string }; created_at?: string; last_sign_in_at?: string | null };
+type AccountUser = { app_metadata?: { provider?: string; providers?: unknown }; created_at?: string; last_sign_in_at?: string | null };
+
+/** Compte relié à un identifiant Apple (« Continuer avec Apple ») : Supabase le note dans app_metadata. */
+export function usesApple(user: AccountUser | null | undefined): boolean {
+  const meta = user?.app_metadata;
+  return meta?.provider === 'apple' || (Array.isArray(meta?.providers) && meta.providers.includes('apple'));
+}
 
 /**
  * Compte tout juste créé par Google ou Apple (règle de l'app, AuthStore) : créé par l'un d'eux, et moins de 2 minutes

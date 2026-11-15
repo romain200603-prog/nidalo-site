@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import { isNetworkError, NETWORK_MESSAGE } from './auth';
+import { bannedWordMessage } from './errors';
 import { isValidProfileEmail, loadAccount, normalizedPhone, phonePairs } from './profile';
 import { loadProfessional } from './professional';
 import { currentUserId } from './session';
@@ -239,7 +240,8 @@ export async function saveAgency(form: AgencyForm, logo: Blob | null): Promise<s
     const account = await supabase.from('profiles').update({ professional_profile_id: profileId, account_type: 'professional' }).eq('id', userId);
     if (account.error) throw account.error;
   } catch (error) {
-    return isNetworkError(error) ? NETWORK_MESSAGE : AGENCY_SAVE_MESSAGE;
+    // Nom ou présentation de l'agence refusés par le filtre de mots interdits : son message, comme l'app.
+    return bannedWordMessage(error) ?? (isNetworkError(error) ? NETWORK_MESSAGE : AGENCY_SAVE_MESSAGE);
   }
   const logoFailure = logo ? await saveLogo(logo, userId, profileId, oldLogo) : null;
   await Promise.all([loadProfessional(), loadAccount(true)]);

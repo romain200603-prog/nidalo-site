@@ -328,6 +328,40 @@ a.dsc-visit-open:hover .dsc-visit-lines > :first-child { color: var(--d-text); t
 .dsc-action-buttons { display: grid; grid-template-columns: minmax(0, 200px) minmax(0, 1fr); gap: 10px; width: 100%; }
 .dsc-action-buttons .dsc-button { height: 48px; }
 
+/* Signalements (modération, comptes modérateurs seulement) : « À traiter » / « Traités », puis une carte par
+   signalement : motif, date, auteur du signalement, ce qui a été signalé (copie du serveur), la personne visée et les
+   gestes (rouges quand ils retirent, suppriment ou suspendent). */
+.dsc-reports-screen > .dsc-tabs { flex: none; }
+.dsc-reports { display: flex; flex-direction: column; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.dsc-report { gap: 10px; }
+.dsc-report-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.dsc-report-type, .dsc-report-late, .dsc-report-suspended { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 999px; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+.dsc-report-type { background: var(--d-blue-light); color: var(--d-blue); }
+.dsc-report-late, .dsc-report-suspended { background: #FBEDEB; color: var(--d-red); }
+.dsc-report-reason { color: var(--d-text); font-size: 16px; font-weight: 700; line-height: 22px; }
+.dsc-report-meta { color: var(--d-grey); font-size: 13.5px; line-height: 19px; }
+.dsc-report-details { color: var(--d-text); font-size: 14.5px; line-height: 21px; white-space: pre-line; overflow-wrap: anywhere; }
+.dsc-report-body { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px; background: #F6F4F0; }
+.dsc-report-title { color: var(--d-text); font-size: 15px; font-weight: 700; line-height: 21px; overflow-wrap: anywhere; }
+.dsc-report-line { color: var(--d-grey); font-size: 13.5px; line-height: 19px; }
+.dsc-report-text { color: var(--d-text); font-size: 14.5px; line-height: 21px; white-space: pre-line; overflow-wrap: anywhere; }
+.dsc-report-state { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 2px; color: var(--d-grey); font-size: 13px; font-weight: 600; }
+.dsc-report-link { color: var(--d-blue); font-weight: 700; text-decoration: none; }
+.dsc-report-link:hover { text-decoration: underline; }
+.dsc-report-thread { max-height: 280px; overflow-y: auto; }
+.dsc-report-thread ol { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; color: var(--d-text); font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
+.dsc-report-thread strong { font-weight: 700; }
+.dsc-report-person { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--d-text); font-size: 14.5px; font-weight: 600; }
+.dsc-report-person > .icon { flex: none; width: 17px; height: 17px; color: var(--d-icon); }
+.dsc-report-suspended { height: 22px; padding: 0 8px; font-size: 12px; }
+.dsc-report-done { display: flex; align-items: center; gap: 8px; color: var(--d-green-text); font-size: 14px; font-weight: 600; }
+.dsc-report-done > .icon { flex: none; width: 16px; height: 16px; }
+.dsc-report-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 2px; }
+.dsc-small.is-danger { background: #FBEDEB; color: var(--d-red); }
+.dsc-small.is-danger:hover:not(:disabled) { background: #F6DCD8; }
+.dsc-report-failure { display: flex; align-items: flex-start; gap: 8px; padding: 12px 14px; border-radius: 12px; background: #FBEDEB; color: var(--d-red); font-size: 14px; font-weight: 600; line-height: 20px; }
+.dsc-report-failure > .icon { flex: none; width: 17px; height: 17px; margin-top: 1px; }
+
 /* ——— Fenêtres de l'app : bouton plein, rouge pour une action destructive, ou discret ——— */
 .dsc-dialog .alert-body h2 { color: var(--d-text); }
 .dsc-dialog .alert-body p { color: var(--d-grey); }
@@ -398,6 +432,8 @@ a.dsc-visit-open:hover .dsc-visit-lines > :first-child { color: var(--d-text); t
   /* Cartes, formulaires et fenêtres */
   .dsc-card { padding: 16px; }
   .dsc-empty { padding: 32px 18px; }
+  /* Signalements : les gestes remplissent leur ligne (souvent un par ligne), centrés. */
+  .dsc-report-actions .dsc-small { flex: 1 1 auto; justify-content: center; }
   .dsc-input-auto { min-width: 0; width: 180px; max-width: 62%; }
   .dsc-menu-list { min-width: 220px; scroll-margin: 12px 0; }
   /* 16 px de chaque côté : la largeur maximale d'une fenêtre de Chrome (100 % - 38 px) est remplacée. */

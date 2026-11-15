@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Icon } from '../../components/Icon';
+import { usesApple } from '../../lib/account/auth';
 import { deleteMyAccount } from '../../lib/account/deleteAccount';
 import { saveFindableByPhone, type Account } from '../../lib/account/profile';
+import { useSession } from '../../lib/account/session';
 import { accountPath, PATHS } from '../../lib/paths';
 import { ScreenHeader } from './parts';
 
@@ -127,6 +129,9 @@ export function PrivacyScreen({ account }: { account: Account }) {
 
 /** « Supprimer mon compte » (DeleteAccountSheet.swift), en écran sur le site. */
 export function DeleteAccountScreen() {
+  const session = useSession();
+  // Compte « Continuer avec Apple » : l'app coupe elle-même le lien avec Apple ; sur le site, la personne le fait.
+  const apple = session.status === 'signedIn' && usesApple(session.session.user);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function confirm() {
@@ -148,6 +153,13 @@ export function DeleteAccountScreen() {
           informations, projet, recherches enregistrées et favoris. Cette action est irréversible.
         </p>
         <p className="delete-note">Les documents gardés sur votre iPhone ne sont pas concernés.</p>
+        {apple && (
+          <p className="delete-note">
+            Votre compte est relié à votre identifiant Apple. Pour couper aussi ce lien, ouvrez les réglages de votre
+            identifiant Apple (sur l’iPhone, ou sur account.apple.com), rubrique « Se connecter avec Apple », puis retirez
+            Nidalo.
+          </p>
+        )}
         {error && <p className="signin-error" role="alert">{error}</p>}
         <button type="button" className="danger-button" onClick={confirm} disabled={busy}>
           {busy ? <span className="spinner spinner-white" aria-label="Suppression en cours" /> : 'Supprimer définitivement'}

@@ -3,6 +3,7 @@ import { Icon } from '../../components/Icon';
 import type { IconName } from '../../components/iconPaths';
 import { agendaItems, agendaStore, agendaSummary, loadAgenda } from '../../lib/account/agenda';
 import { signOut } from '../../lib/account/auth';
+import { loadModerator, moderatorStore } from '../../lib/account/moderation';
 import { listingsCountText, loadMyListings, myListingsStore } from '../../lib/account/myListings';
 import { saveAccountType, type Account } from '../../lib/account/profile';
 import { PROJECT_STEPS, STEP_LABELS } from '../../lib/account/project';
@@ -191,6 +192,7 @@ type Dialog = 'logout' | 'type' | 'review' | null;
 export function DesktopSpace({ account }: { account: Account }) {
   const listings = useStore(myListingsStore);
   const searches = useStore(savedSearchesStore);
+  const moderator = useStore(moderatorStore);
   const [current, chooseSection] = useCurrentSection();
   const [dialog, setDialog] = useState<Dialog>(null);
   const [iphoneOnly, setIphoneOnly] = useState<string | null>(null);
@@ -202,6 +204,7 @@ export function DesktopSpace({ account }: { account: Account }) {
     void loadSavedSearches();
     void loadEditableProject();
     void loadAgenda();
+    void loadModerator(currentUserId());
   }, []);
 
   const myListings = listings.status === 'ready' ? listings.items : [];
@@ -296,6 +299,8 @@ export function DesktopSpace({ account }: { account: Account }) {
             { icon: 'lock', title: 'Connexion et sécurité', href: accountPath('securite') },
             { icon: 'shield', title: 'Confidentialité et données', href: accountPath('confidentialite') },
             { icon: 'arrowLeftRight', title: 'Type de compte', onClick: () => setDialog('type') },
+            // Modération : seulement pour un compte modérateur.
+            ...(moderator === true ? [{ icon: 'flag' as const, title: 'Signalements', href: accountPath('signalements') }] : []),
           ]} />
           {typeError && <p className="field-error" role="alert">{typeError}</p>}
         </section>
