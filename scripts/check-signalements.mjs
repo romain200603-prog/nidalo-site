@@ -400,9 +400,14 @@ try {
     await mock(context, state);
     let page = await open(context, '/compte/', 'Mon compte (téléphone)');
     await page.locator('.space-section').first().waitFor();
+    await page.waitForTimeout(300);
     await shot(page, 'moncompte-telephone.png');
+    await page.locator('.space-section', { has: page.locator('.section-title', { hasText: 'Compte et sécurité' }) })
+      .screenshot({ path: join(out, 'moncompte-telephone-section.png') });
     await page.goto(`${base}/conditions/`, { waitUntil: 'networkidle' });
     await shot(page, 'conditions-telephone.png');
+    await page.locator('section.card', { has: page.locator('h2', { hasText: /^Signalement$/ }) })
+      .screenshot({ path: join(out, 'conditions-signalement.png') });
     await context.close();
 
     context = await phone();
@@ -410,6 +415,10 @@ try {
     page = await open(context, '/compte/?vue=supprimer', 'supprimer (Apple)');
     await page.locator('.delete-card').waitFor();
     await shot(page, 'supprimer-apple-telephone.png');
+    // Capture de la carte seule : la barre du bas (fixe) est cachée pour ne pas la couvrir (par le CSSOM, que la
+    // politique de sécurité du site laisse passer, contrairement à une balise <style>).
+    await page.locator('nav.tabbar').evaluateAll((bars) => bars.forEach((bar) => bar.style.setProperty('display', 'none', 'important')));
+    await page.locator('.delete-card').screenshot({ path: join(out, 'supprimer-apple-carte.png') });
     await context.close();
 
     context = await desktop();
