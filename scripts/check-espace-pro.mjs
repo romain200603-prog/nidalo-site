@@ -1600,8 +1600,8 @@ try {
     await mock(context, state);
     const page = await open(context, '/compte/', N);
     const row = page.locator('a.row', { hasText: 'Statistiques' });
-    expectSame(N, 'ligne de Mon compte', [tidy(await row.locator('.row-subtitle').textContent()), await row.getAttribute('href')],
-      ['Vues, contacts et performances', '/compte/?vue=statistiques']);
+    expectSame(N, 'ligne de Mon compte', [await row.locator('.row-subtitle').count(), await row.getAttribute('href')],
+      [0, '/compte/?vue=statistiques']);
     await row.click();
     await page.waitForURL('**/compte/?vue=statistiques');
     await page.locator('.stats-listing').first().waitFor();
@@ -2643,9 +2643,9 @@ try {
     expectSame(N, 'Mon compte', [
       tidy(await page.locator('.space-profile-line').textContent()), await page.locator('.space-profile').getAttribute('href'),
       tidy(await page.locator('a.row', { hasText: 'Gestion des équipes' }).locator('.row-subtitle').textContent()),
-      tidy(await page.locator('a.row', { hasText: 'Profil agence' }).locator('.row-subtitle').textContent()),
+      await page.locator('a.row', { hasText: 'Profil agence' }).locator('.row-subtitle').count(),
       await page.locator('a.row', { hasText: 'Informations de l\'agence' }).count(),
-    ], ['Agent de l\'équipe', '/compte/?vue=equipes', '3 membres', 'Fiche agence', 0]);
+    ], ['Agent de l\'équipe', '/compte/?vue=equipes', '3 membres', 0, 0]);
     await shot(page, 'equipes-telephone-agent-compte.png');
 
     await page.locator('.space-profile').click();

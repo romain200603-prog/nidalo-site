@@ -281,11 +281,11 @@ export function DesktopSpace({ account }: { account: Account }) {
               </button>
             </article>
             <DesktopRows rows={[
-              { icon: 'keyRound', title: 'Mon bail de location', subtitle: IPHONE_ONLY, onClick: iphone('Mon bail de location') },
-              { icon: 'receipt', title: 'Quittances de loyer', subtitle: IPHONE_ONLY, onClick: iphone('Quittances de loyer') },
-              { icon: 'clipboardCheck', title: 'États des lieux', subtitle: IPHONE_ONLY, onClick: iphone('États des lieux') },
-              { icon: 'handshake', title: 'Offres et compromis', subtitle: IPHONE_ONLY, onClick: iphone('Offres et compromis') },
-              { icon: 'filePenLine', title: 'Documents à signer', subtitle: IPHONE_ONLY, onClick: iphone('Documents à signer') },
+              { icon: 'keyRound', title: 'Mon bail de location', onClick: iphone('Mon bail de location') },
+              { icon: 'receipt', title: 'Quittances de loyer', onClick: iphone('Quittances de loyer') },
+              { icon: 'clipboardCheck', title: 'États des lieux', onClick: iphone('États des lieux') },
+              { icon: 'handshake', title: 'Offres et compromis', onClick: iphone('Offres et compromis') },
+              { icon: 'filePenLine', title: 'Documents à signer', onClick: iphone('Documents à signer') },
             ]} />
           </div>
         </section>
@@ -293,9 +293,9 @@ export function DesktopSpace({ account }: { account: Account }) {
         <section id="compte-et-securite" className="dsp-section" aria-labelledby="dsp-compte">
           <h2 id="dsp-compte" className="dsp-section-title">Compte et sécurité</h2>
           <DesktopRows rows={[
-            { icon: 'lock', title: 'Connexion et sécurité', subtitle: 'Mot de passe, Face ID, appareils', href: accountPath('securite') },
-            { icon: 'shield', title: 'Confidentialité et données', subtitle: 'Consentements, export de mes données', href: accountPath('confidentialite') },
-            { icon: 'arrowLeftRight', title: 'Type de compte', subtitle: 'Particulier · passer en professionnel', onClick: () => setDialog('type') },
+            { icon: 'lock', title: 'Connexion et sécurité', href: accountPath('securite') },
+            { icon: 'shield', title: 'Confidentialité et données', href: accountPath('confidentialite') },
+            { icon: 'arrowLeftRight', title: 'Type de compte', onClick: () => setDialog('type') },
           ]} />
           {typeError && <p className="field-error" role="alert">{typeError}</p>}
         </section>
@@ -303,12 +303,12 @@ export function DesktopSpace({ account }: { account: Account }) {
         <section id="parametres-et-assistance" className="dsp-section" aria-labelledby="dsp-parametres">
           <h2 id="dsp-parametres" className="dsp-section-title">Paramètres et assistance</h2>
           <DesktopRows rows={[
-            { icon: 'bell', title: 'Notifications', subtitle: 'Alertes, visites et messages', href: accountPath('notifications') },
-            { icon: 'bell', title: 'Alertes sur cet iPhone', subtitle: IPHONE_ONLY, onClick: iphone('Alertes sur cet iPhone') },
-            { icon: 'gear', title: 'Préférences', subtitle: IPHONE_ONLY, onClick: iphone('Préférences') },
-            { icon: 'circleHelp', title: 'Aide et assistance', subtitle: 'Questions fréquentes, nous contacter', href: PATHS.help },
-            { icon: 'star', title: 'Donner mon avis', subtitle: 'Notez l\'application', onClick: () => setDialog('review') },
-            { icon: 'fileText', title: 'Informations légales', subtitle: 'CGU, confidentialité, mentions légales', href: accountPath('legal') },
+            { icon: 'bell', title: 'Notifications', href: accountPath('notifications') },
+            { icon: 'bell', title: 'Alertes sur cet iPhone', onClick: iphone('Alertes sur cet iPhone') },
+            { icon: 'gear', title: 'Préférences', onClick: iphone('Préférences') },
+            { icon: 'circleHelp', title: 'Aide et assistance', href: PATHS.help },
+            { icon: 'star', title: 'Donner mon avis', onClick: () => setDialog('review') },
+            { icon: 'fileText', title: 'Informations légales', href: accountPath('legal') },
           ]} />
         </section>
       </div>

@@ -57,16 +57,14 @@ export function Hub({ account }: { account: Account }) {
   const typeRow: RowItem = {
     icon: 'userRound',
     title: 'Type de compte',
-    subtitle: isPro ? 'Professionnel · passer en particulier' : 'Particulier · passer en professionnel',
     onClick: () => setDialog('type'),
   };
   const securityRow: RowItem = {
     icon: 'lock', title: 'Connexion et sécurité',
-    subtitle: isPro ? 'Mot de passe, double authentification' : 'Mot de passe, Face ID, appareils',
     href: accountPath('securite'),
   };
-  const privacyRow: RowItem = { icon: 'shieldCheck', title: 'Confidentialité et données', subtitle: 'Consentements, export de mes données', href: accountPath('confidentialite') };
-  const legalRow: RowItem = { icon: 'scrollText', title: 'Informations légales', subtitle: 'CGU, confidentialité, mentions légales', href: accountPath('legal') };
+  const privacyRow: RowItem = { icon: 'shieldCheck', title: 'Confidentialité et données', href: accountPath('confidentialite') };
+  const legalRow: RowItem = { icon: 'scrollText', title: 'Informations légales', href: accountPath('legal') };
 
   return (
     <div className="space">
@@ -82,7 +80,7 @@ export function Hub({ account }: { account: Account }) {
           />
           <ProjectCard />
           <SpaceSection icon="calendar" title="Mon agenda">
-            <RowGroup rows={[{ icon: 'calendarDays', title: 'Mon agenda', subtitle: 'Visites et rendez-vous', href: accountPath('agenda') }]} />
+            <RowGroup rows={[{ icon: 'calendarDays', title: 'Mon agenda', href: accountPath('agenda') }]} />
           </SpaceSection>
           <SpaceSection icon="layoutGrid" title="Mes activités">
             <div className="activity-tiles">
@@ -93,12 +91,12 @@ export function Hub({ account }: { account: Account }) {
           </SpaceSection>
           <SpaceSection icon="fileText" title="Contrats et location">
             <RowGroup rows={[
-              { icon: 'fileText', title: 'Mon dossier immobilier', subtitle: 'Dans l’app iPhone pour l’instant', href: soonPath('dossier') },
-              { icon: 'key', title: 'Mon bail de location', subtitle: 'Dans l’app iPhone pour l’instant', href: soonPath('bail') },
-              { icon: 'receipt', title: 'Quittances de loyer', subtitle: 'Dans l’app iPhone pour l’instant', href: soonPath('quittances') },
-              { icon: 'camera', title: 'États des lieux', subtitle: 'Entrée et sortie, avec photos', href: soonPath('etats') },
-              { icon: 'handshake', title: 'Offres et compromis', subtitle: 'Dans l’app iPhone pour l’instant', href: soonPath('offres') },
-              { icon: 'pen', title: 'Documents à signer', subtitle: 'Dans l’app iPhone pour l’instant', href: soonPath('signature') },
+              { icon: 'fileText', title: 'Mon dossier immobilier', href: soonPath('dossier') },
+              { icon: 'key', title: 'Mon bail de location', href: soonPath('bail') },
+              { icon: 'receipt', title: 'Quittances de loyer', href: soonPath('quittances') },
+              { icon: 'camera', title: 'États des lieux', href: soonPath('etats') },
+              { icon: 'handshake', title: 'Offres et compromis', href: soonPath('offres') },
+              { icon: 'pen', title: 'Documents à signer', href: soonPath('signature') },
             ]} />
           </SpaceSection>
         </>
@@ -106,19 +104,19 @@ export function Hub({ account }: { account: Account }) {
       <SpaceSection icon="user" title="Compte et sécurité">
         {/* Seul le gérant modifie la fiche de l'agence : un membre de l'équipe n'a pas cette ligne. */}
         <RowGroup rows={isPro && !memberAgency(team)
-          ? [{ icon: 'badgeCheck', title: 'Informations de l\'agence', subtitle: 'SIREN, carte professionnelle, justificatifs', href: AGENCY_FORM_PATH }, securityRow, privacyRow, typeRow]
+          ? [{ icon: 'badgeCheck', title: 'Informations de l\'agence', href: AGENCY_FORM_PATH }, securityRow, privacyRow, typeRow]
           : [securityRow, privacyRow, typeRow]} />
         {typeError && <p className="field-error">{typeError}</p>}
       </SpaceSection>
       <SpaceSection icon="gear" title="Paramètres et assistance">
         <RowGroup rows={isPro ? [
-          { icon: 'bell', title: 'Notifications', subtitle: 'Nouveaux contacts, visites et messages', href: accountPath('notifications') },
-          { icon: 'circleHelp', title: 'Aide et support Pro', subtitle: 'Conseiller dédié, centre d\'aide', href: PATHS.help },
+          { icon: 'bell', title: 'Notifications', href: accountPath('notifications') },
+          { icon: 'circleHelp', title: 'Aide et support Pro', href: PATHS.help },
           legalRow,
         ] : [
-          { icon: 'bell', title: 'Notifications', subtitle: 'Alertes, visites et messages', href: accountPath('notifications') },
-          { icon: 'circleHelp', title: 'Aide et assistance', subtitle: 'Questions fréquentes, nous contacter', href: PATHS.help },
-          { icon: 'star', title: 'Donner mon avis', subtitle: 'Notez l\'application', onClick: () => setDialog('review') },
+          { icon: 'bell', title: 'Notifications', href: accountPath('notifications') },
+          { icon: 'circleHelp', title: 'Aide et assistance', href: PATHS.help },
+          { icon: 'star', title: 'Donner mon avis', onClick: () => setDialog('review') },
           legalRow,
         ]} />
       </SpaceSection>
@@ -238,17 +236,17 @@ function ProSpaceTop({ onlineCount }: { onlineCount: number }) {
           { icon: 'fileText', title: 'Mes mandats', subtitle: mandatesSubtitle(mandateRows, parisDay(new Date())), href: MANDATES_PATH },
           { icon: 'handshake', title: 'Mes ventes', subtitle: salesSubtitle(saleRows), href: SALES_PATH },
           { icon: 'users', title: 'Mes contacts', subtitle: contactsSubtitle(contactItems), badge: newContacts, href: CONTACTS_PATH },
-          { icon: 'calendarDays', title: 'Agenda des visites', subtitle: 'Visites et rendez-vous', href: accountPath('agenda') },
+          { icon: 'calendarDays', title: 'Agenda des visites', href: accountPath('agenda') },
           { icon: 'sparkles', title: 'Mes opportunités', subtitle: opportunitiesSubtitle(opportunityRows), href: OPPORTUNITIES_PATH },
         ]} />
       </SpaceSection>
       <SpaceSection icon="wrench" title="Outils professionnels">
         <RowGroup rows={[
-          { icon: 'chart', title: 'Statistiques', subtitle: 'Vues, contacts et performances', href: accountPath('statistiques') },
+          { icon: 'chart', title: 'Statistiques', href: accountPath('statistiques') },
           { icon: 'users', title: 'Gestion des équipes', subtitle: teamSubtitle(team), href: TEAM_PATH },
-          { icon: 'share', title: 'Outils de diffusion', subtitle: 'Partager mes annonces', href: accountPath('diffusion') },
-          { icon: 'badgeCheck', title: 'Profil agence', subtitle: agency || member ? 'Fiche agence' : 'À compléter', href: AGENCY_PATH },
-          { icon: 'receipt', title: 'Abonnement NIDALO Pro', subtitle: 'Options, factures et paiement', href: soonPath('abonnement') },
+          { icon: 'share', title: 'Outils de diffusion', href: accountPath('diffusion') },
+          { icon: 'badgeCheck', title: 'Profil agence', subtitle: agency || member ? undefined : 'À compléter', href: AGENCY_PATH },
+          { icon: 'receipt', title: 'Abonnement NIDALO Pro', href: soonPath('abonnement') },
         ]} />
       </SpaceSection>
     </>

@@ -3601,16 +3601,17 @@ try {
       expectSame(E, 'dossier', [await textOf(page, '.dsp-dossier h3'), await textOf(page, '.dsp-dossier p'), await textOf(page, '.dsp-dossier-button')],
         ['Mon dossier immobilier', 'Dans l’app iPhone pour l’instant', 'Compléter mon dossier']);
       const IPHONE = 'Dans l’app iPhone pour l’instant';
+      // Les lignes n'ont plus de description en dessous (15 novembre 2026) : le titre seul.
       expectSame(E, 'contrats et location', await spaceRows(page, '#contrats-et-location'),
-        [['Mon bail de location', IPHONE, null], ['Quittances de loyer', IPHONE, null], ['États des lieux', IPHONE, null], ['Offres et compromis', IPHONE, null],
-          ['Documents à signer', IPHONE, null]]);
+        [['Mon bail de location', null, null], ['Quittances de loyer', null, null], ['États des lieux', null, null], ['Offres et compromis', null, null],
+          ['Documents à signer', null, null]]);
       expectSame(E, 'compte et sécurité', await spaceRows(page, '#compte-et-securite'),
-        [['Connexion et sécurité', 'Mot de passe, Face ID, appareils', '/compte/?vue=securite'], ['Confidentialité et données', 'Consentements, export de mes données', '/compte/?vue=confidentialite'],
-          ['Type de compte', 'Particulier · passer en professionnel', null]]);
+        [['Connexion et sécurité', null, '/compte/?vue=securite'], ['Confidentialité et données', null, '/compte/?vue=confidentialite'],
+          ['Type de compte', null, null]]);
       expectSame(E, 'paramètres et assistance', await spaceRows(page, '#parametres-et-assistance'),
-        [['Notifications', 'Alertes, visites et messages', '/compte/?vue=notifications'], ['Alertes sur cet iPhone', IPHONE, null], ['Préférences', IPHONE, null],
-          ['Aide et assistance', 'Questions fréquentes, nous contacter', '/aide/'], ['Donner mon avis', 'Notez l\'application', null],
-          ['Informations légales', 'CGU, confidentialité, mentions légales', '/compte/?vue=legal']]);
+        [['Notifications', null, '/compte/?vue=notifications'], ['Alertes sur cet iPhone', null, null], ['Préférences', null, null],
+          ['Aide et assistance', null, '/aide/'], ['Donner mon avis', null, null],
+          ['Informations légales', null, '/compte/?vue=legal']]);
       expectSame(E, 'bas de la colonne', [await textOf(page, '.dsp-logout'), await textOf(page, '.dsp-delete'), await page.getAttribute('.dsp-delete', 'href')],
         ['Se déconnecter', 'Supprimer mon compte', '/compte/?vue=supprimer']);
       // Ce que l'app garde sur l'iPhone : « Dans l'app iPhone pour l'instant », sans rien envoyer.
