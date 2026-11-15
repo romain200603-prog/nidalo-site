@@ -99,13 +99,26 @@ export function SpaceProfileCard({ name, line, badge, photo, href }: { name: str
   );
 }
 
-/** Tuile de « Mes activités » : le premier mot du détail en grand. */
+/**
+ * Tuile de « Mes activités », comme l'app (ActivityTile.split) : un nombre en tête du détail passe en grand
+ * (« 1 recherche active » → « 1 », puis « recherche active ») ; un détail sans nombre (« Aucune recherche »,
+ * « Bientôt sur le site ») reste en petit, juste sous le titre.
+ */
 export function ActivityTile({ title, detail, href }: { title: string; detail: string; href: string }) {
-  const [first, ...rest] = detail.split(' ');
+  const space = detail.indexOf(' ');
+  const first = space < 0 ? detail : detail.slice(0, space);
+  if (!/^\d+$/.test(first)) {
+    return (
+      <a className="activity-tile activity-tile-text space-card" href={href}>
+        <span className="activity-title">{title}</span>
+        <span className="activity-detail">{detail}</span>
+      </a>
+    );
+  }
   return (
     <a className="activity-tile space-card" href={href}>
       <span className="activity-title">{title}</span>
-      <span className="activity-detail"><strong>{first}</strong> {rest.join(' ')}</span>
+      <span className="activity-detail"><strong>{first}</strong> {space < 0 ? '' : detail.slice(space + 1)}</span>
     </a>
   );
 }
