@@ -1,3 +1,4 @@
+import { AVATAR_SIDE, cleanPhoto } from '../cleanPhoto';
 import { supabase } from '../supabase';
 import { createStore, currentUserId, sessionStore } from './session';
 import { databaseMessage } from './errors';
@@ -244,29 +245,14 @@ export function publicName(first: string, last: string, showsFullName: boolean):
 
 // MARK: - Photo de profil
 
-/** Photo réduite à 1024 px sur son plus grand côté, en JPEG qualité 0,85 (ProfilePhotoStore). */
-export async function preparedPhoto(file: Blob, maxSide = 1024): Promise<Blob> {
-  let bitmap: ImageBitmap;
-  try {
-    bitmap = await createImageBitmap(file);
-  } catch {
-    throw new Error('Cette photo n\'a pas pu être lue.');
-  }
-  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
-  const width = Math.max(1, Math.round(bitmap.width * scale));
-  const height = Math.max(1, Math.round(bitmap.height * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext('2d');
-  if (!context) throw new Error('Cette photo n\'a pas pu être lue.');
-  context.fillStyle = '#FFFFFF';
-  context.fillRect(0, 0, width, height);
-  context.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close();
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
-  if (!blob) throw new Error('Cette photo n\'a pas pu être lue.');
-  return blob;
+/**
+ * Photo de profil ou logo d'agence réduit à 512 px sur son plus grand côté, en JPEG sans aucune métadonnée (ni lieu, ni
+ * date, ni appareil), avec la préparation commune de cleanPhoto.ts.
+ */
+export async function preparedPhoto(file: Blob, maxSide = AVATAR_SIDE): Promise<Blob> {
+  const photo = await cleanPhoto(file, maxSide);
+  if (!photo) throw new Error('Cette photo n\'a pas pu être lue.');
+  return photo.blob;
 }
 
 /** Photo choisie : `undefined` = inchangée, `null` = supprimée. */

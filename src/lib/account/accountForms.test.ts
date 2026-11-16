@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AuthError } from '@supabase/supabase-js';
-import { authMessage, emailError, linkErrorMessage, NETWORK_MESSAGE, passwordError } from './auth';
+import { authMessage, emailError, linkErrorMessage, NETWORK_MESSAGE, newPasswordError, PASSWORD_RULE, passwordError } from './auth';
 import { greetingName, normalizedPhone, profileErrors, publicName, type Account, type ProfileForm } from './profile';
 
 describe('connexion (AuthStore et AccountSession de l’app)', () => {
@@ -12,10 +12,23 @@ describe('connexion (AuthStore et AccountSession de l’app)', () => {
     expect(passwordError('12345678')).toBeNull();
   });
 
+  it('nouveau mot de passe : 8 caractères au moins, avec une lettre et un chiffre (règle de Supabase)', () => {
+    const refused = 'Le mot de passe doit contenir au moins 8 caractères, dont une lettre et un chiffre.';
+    for (const weak of ['', 'abc123', 'abcdefgh', '12345678', 'ÉÉÉÉÉÉÉ1', 'motdepasse', '        ']) {
+      expect(newPasswordError(weak)).toBe(refused);
+    }
+    for (const strong of ['abcdefg1', 'Nidalo2026', '1234567a', 'élan vert 9', 'A1!A1!A1']) expect(newPasswordError(strong)).toBeNull();
+    // À la connexion, un ancien mot de passe sans chiffre reste accepté.
+    expect(passwordError('motdepasse')).toBeNull();
+    expect(PASSWORD_RULE).toBe('Au moins 8 caractères, avec des lettres et des chiffres.');
+  });
+
   it('traduit les erreurs du serveur', () => {
     const wrong = new AuthError('Invalid login credentials', 400, 'invalid_credentials');
     expect(authMessage(wrong)).toBe('Adresse e-mail ou mot de passe incorrect.');
     expect(authMessage(new TypeError('Failed to fetch'))).toBe(NETWORK_MESSAGE);
+    expect(authMessage(new AuthError('Password should contain at least one character of each: abc…, 0123456789', 422, 'weak_password')))
+      .toBe('Ce mot de passe est trop faible. Choisissez-en un d\'au moins 8 caractères, avec des lettres et des chiffres.');
     expect(authMessage({ code: 'inconnu' })).toBe('L\'opération n\'a pas abouti. Réessayez dans un instant.');
   });
 

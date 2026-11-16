@@ -6,7 +6,7 @@ import {
   attachmentIssue, attachmentsContent, attachmentsPreview, contentMatches, contentPreview, decodeContent, documentIcon, documentLine,
   fileExtension, photoExtension, storageContentType, textContent, type Attachment,
 } from './content';
-import { reducedSize, storagePath, videoWithoutMetadata } from './files';
+import { jpegFileName, reducedSize, storagePath, videoWithoutMetadata } from './files';
 import {
   clock, DISTANT_FUTURE, durationLabel, formattedPhoneNumber, listLabel, looksLikePhoneNumber, matchesWords, muteLabel,
   normalizedPhoneNumber, sizeLabel, telHref, typingPhoneNumber,
@@ -176,7 +176,7 @@ describe('Fichiers envoyés (MessageAttachmentFiles, LocalAttachmentStorage)', (
     expect(storagePath('C1000000-0000-4000-8000-00000000000A', 'F00D.jpg')).toBe('c1000000-0000-4000-8000-00000000000a/F00D.jpg');
   });
 
-  it('vidéo sans lieu ni appareil : « udta » et « meta » deviennent « free », le reste ne change pas', () => {
+  it('vidéo sans lieu ni appareil : « udta » et « meta » deviennent « free », vidées, le reste ne change pas', () => {
     const box = (type: string, payload: number[]) => {
       const size = 8 + payload.length;
       return [size >>> 24, (size >>> 16) & 255, (size >>> 8) & 255, size & 255, ...[...type].map((c) => c.charCodeAt(0)), ...payload];
@@ -199,6 +199,59 @@ describe('Fichiers envoyés (MessageAttachmentFiles, LocalAttachmentStorage)', (
     expect(types(new Uint8Array(input))).toEqual(['moov', 'udta', 'trak', 'meta', 'mdat', 'udta']);
     expect(types(output)).toEqual(['moov', 'free', 'trak', 'free', 'mdat', 'udta']);
     expect(output.length).toBe(bytes.length);
+    // Le contenu des boîtes retirées est effacé : le lieu n'est plus lisible dans les octets du fichier.
+    expect(String.fromCharCode(...output)).not.toContain('lieu+48');
+    const udtaAt = 8 + 4 + 8 + 8;
+    expect([...output.slice(udtaAt, udtaAt + 7)]).toEqual([0, 0, 0, 0, 0, 0, 0]);
+    expect([...output.slice(-4)]).toEqual(text('udta'));
+  });
+
+  it('vidéo sans date : création et modification remises à zéro dans mvhd, tkhd et mdhd (versions 0 et 1)', () => {
+    const box = (type: string, payload: number[]) => {
+      const size = 8 + payload.length;
+      return [size >>> 24, (size >>> 16) & 255, (size >>> 8) & 255, size & 255, ...[...type].map((c) => c.charCodeAt(0)), ...payload];
+    };
+    const ones = (count: number) => Array.from({ length: count }, () => 0xab);
+    // Version 0 : version, options, création (4), modification (4), puis le reste (durée…) qui ne doit pas bouger.
+    const mvhd = box('mvhd', [0, 0, 0, 0, ...ones(8), 0, 0, 0x03, 0xe8, 9, 9, 9, 9]);
+    // Version 1 : création (8), modification (8).
+    const tkhd = box('tkhd', [1, 0, 0, 3, ...ones(16), 7, 7, 7, 7]);
+    const mdhd = box('mdhd', [0, 0, 0, 0, ...ones(8), 0, 0, 0xac, 0x44]);
+    const bytes = [...box('moov', [...mvhd, ...box('trak', [...tkhd, ...box('mdia', mdhd)])]), ...box('mdat', ones(12))];
+    const output = new Uint8Array(videoWithoutMetadata(new Uint8Array(bytes).buffer));
+    const at = (type: string) => {
+      for (let i = 0; i + 4 <= output.length; i += 1) if (String.fromCharCode(...output.slice(i, i + 4)) === type) return i + 4;
+      throw new Error(type);
+    };
+    expect([...output.slice(at('mvhd'), at('mvhd') + 16)]).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x03, 0xe8]);
+    expect([...output.slice(at('tkhd'), at('tkhd') + 24)]).toEqual([1, 0, 0, 3, ...Array(16).fill(0), 7, 7, 7, 7]);
+    expect([...output.slice(at('mdhd'), at('mdhd') + 14)]).toEqual([0, 0, 0, 0, ...Array(8).fill(0), 0, 0]);
+    expect([...output.slice(-12)]).toEqual(ones(12));
+    expect(output.length).toBe(bytes.length);
+  });
+
+  it('vidéo sans XMP : seule la boîte « uuid » d’Adobe devient « free »', () => {
+    const box = (type: string, payload: number[]) => {
+      const size = 8 + payload.length;
+      return [size >>> 24, (size >>> 16) & 255, (size >>> 8) & 255, size & 255, ...[...type].map((c) => c.charCodeAt(0)), ...payload];
+    };
+    const xmp = [0xbe, 0x7a, 0xcf, 0xcb, 0x97, 0xa9, 0x42, 0xe8, 0x9c, 0x71, 0x99, 0x94, 0x91, 0xe3, 0xaf, 0xac];
+    const other = Array.from({ length: 16 }, (_, index) => index);
+    const bytes = [...box('uuid', [...xmp, 1, 2]), ...box('moov', box('uuid', [...other, 3])), ...box('uuid', [1, 2])];
+    const output = new Uint8Array(videoWithoutMetadata(new Uint8Array(bytes).buffer));
+    expect(String.fromCharCode(...output.slice(4, 8))).toBe('free');
+    expect(String.fromCharCode(...output.slice(26 + 12, 26 + 16))).toBe('uuid');
+    expect(String.fromCharCode(...output.slice(-6, -2))).toBe('uuid');
+    expect(output.length).toBe(bytes.length);
+  });
+
+  it('document en image : réencodé en JPEG, son nom prend « .jpg »', () => {
+    expect(jpegFileName('Plan.png')).toBe('Plan.jpg');
+    expect(jpegFileName('Avis.HEIC')).toBe('Avis.jpg');
+    expect(jpegFileName('scan.JPEG')).toBe('scan.JPEG');
+    expect(jpegFileName('photo.jpg')).toBe('photo.jpg');
+    expect(jpegFileName('bail.v2.heif')).toBe('bail.v2.jpg');
+    expect(jpegFileName('.png')).toBe('Photo.jpg');
   });
 });
 

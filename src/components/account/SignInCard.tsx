@@ -2,7 +2,8 @@ import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } fr
 import { Icon } from '../Icon';
 import type { IconName } from '../iconPaths';
 import {
-  authMessage, cleanEmail, emailError, isNetworkError, passwordError, providerMessage, RESEND_DELAY_SECONDS, resendConfirmation,
+  authMessage, cleanEmail, emailError, isNetworkError, newPasswordError, PASSWORD_RULE, passwordError, providerMessage,
+  RESEND_DELAY_SECONDS, resendConfirmation,
   sendPasswordReset, signIn, signInWithProvider, signUp, updatePassword, type LinkPurpose, type Provider,
 } from '../../lib/account/auth';
 import { recoveryStore } from '../../lib/account/session';
@@ -71,7 +72,11 @@ export function SignInCard({ onClose, onSignedIn, linkError = null, recovery = f
     return () => window.clearTimeout(timer);
   }, [resendAt, now]);
 
-  const fieldErrors = submitted ? { email: emailError(email), password: passwordError(password) } : { email: null, password: null };
+  // Inscription et nouveau mot de passe : la règle de Supabase (8 caractères, lettres et chiffres) ; connexion : la
+  // règle d'avant, pour qu'un ancien mot de passe sans chiffre ouvre toujours son compte.
+  const choosesPassword = isSignUp || flow.kind === 'newPassword';
+  const checkPassword = choosesPassword ? newPasswordError : passwordError;
+  const fieldErrors = submitted ? { email: emailError(email), password: checkPassword(password) } : { email: null, password: null };
 
   function clearMessages() {
     setError(null);
@@ -108,7 +113,7 @@ export function SignInCard({ onClose, onSignedIn, linkError = null, recovery = f
     if (busy) return;
     clearMessages();
     setSubmitted(true);
-    if (emailError(email) || passwordError(password)) {
+    if (emailError(email) || checkPassword(password)) {
       (emailError(email) ? emailRef : passwordRef).current?.focus();
       return;
     }
@@ -209,7 +214,7 @@ export function SignInCard({ onClose, onSignedIn, linkError = null, recovery = f
     if (busy) return;
     clearMessages();
     setSubmitted(true);
-    if (passwordError(password)) {
+    if (newPasswordError(password)) {
       passwordRef.current?.focus();
       return;
     }
@@ -272,7 +277,7 @@ export function SignInCard({ onClose, onSignedIn, linkError = null, recovery = f
                   onChange={(event) => setEmail(event.target.value)}
                 />
               </AuthField>
-              <AuthField icon="lock" error={fieldErrors.password}>
+              <AuthField icon="lock" error={fieldErrors.password} hint={isSignUp ? PASSWORD_RULE : null}>
                 <input
                   ref={passwordRef}
                   type={showsPassword ? 'text' : 'password'}
@@ -349,7 +354,7 @@ export function SignInCard({ onClose, onSignedIn, linkError = null, recovery = f
         {flow.kind === 'newPassword' && (
           <form onSubmit={saveNewPassword} noValidate>
             <h1 id={titleId} className="signin-title">Nouveau mot de passe</h1>
-            <p className="signin-subtitle">Choisissez un mot de passe d&apos;au moins 8 caractères.</p>
+            <p className="signin-subtitle">Choisissez un mot de passe d&apos;au moins 8 caractères, avec des lettres et des chiffres.</p>
             <div className="signin-fields">
               <AuthField icon="lock" error={fieldErrors.password}>
                 <input
@@ -376,14 +381,14 @@ export function SignInCard({ onClose, onSignedIn, linkError = null, recovery = f
   );
 }
 
-function AuthField({ icon, error, children }: { icon: IconName; error: string | null; children: ReactNode }) {
+function AuthField({ icon, error, hint = null, children }: { icon: IconName; error: string | null; hint?: string | null; children: ReactNode }) {
   return (
     <div>
       <label className={`auth-field${error ? ' has-error' : ''}`}>
         <Icon name={icon} />
         {children}
       </label>
-      {error && <p className="field-error">{error}</p>}
+      {error ? <p className="field-error">{error}</p> : hint && <p className="field-hint">{hint}</p>}
     </div>
   );
 }

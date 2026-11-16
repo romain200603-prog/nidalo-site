@@ -1,5 +1,5 @@
 import { PHOTO_BUCKET } from '../config';
-import { supabase } from '../supabase';
+import { AUTH_STORAGE_KEY, supabase } from '../supabase';
 import { isNetworkError, NETWORK_MESSAGE, setNewAccount, setPendingLink } from './auth';
 import { MANDATE_BUCKET } from './mandates';
 import { listFiles, removeFiles } from './myListings';
@@ -22,9 +22,25 @@ export async function deleteMyAccount(): Promise<string | null> {
     if (error) throw error;
     setPendingLink(null);
     setNewAccount(false);
-    await supabase.auth.signOut({ scope: 'local' });
+    await signOutDeletedAccount();
     return null;
   } catch (error) {
     return isNetworkError(error) ? NETWORK_MESSAGE : 'La suppression n\'a pas abouti. Réessayez dans un instant.';
   }
+}
+
+/**
+ * Déconnexion de ce navigateur juste après la suppression, sans rien demander au serveur. Même avec
+ * signOut({ scope: 'local' }), supabase-js envoie la session au serveur pour la fermer ; le compte n'existant plus, le
+ * serveur répondait 403 (journaux du 15 novembre). La session est donc d'abord retirée du stockage : supabase-js la
+ * relit à chaque demande, n'a plus rien à envoyer, et signOut({ scope: 'local' }) ne fait plus que le ménage local
+ * (codes de connexion, avis « déconnecté » aux autres onglets).
+ */
+export async function signOutDeletedAccount(): Promise<void> {
+  try {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch {
+    // Stockage indisponible : signOut fait le ménage seul.
+  }
+  await supabase.auth.signOut({ scope: 'local' });
 }

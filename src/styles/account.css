@@ -48,7 +48,7 @@
 .signin-subtitle { margin: 3px 0 0; color: var(--text-secondary); font-size: 13.5px; }
 .signin-subtitle strong { color: var(--ink); font-weight: 700; overflow-wrap: anywhere; }
 .signin-fields { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
-.signin-fields .field-error { margin-top: 5px; font-size: 12px; }
+.signin-fields .field-error, .signin-fields .field-hint { margin-top: 5px; font-size: 12px; }
 .auth-field { display: flex; align-items: center; gap: 10px; height: 51px; padding: 0 6px 0 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--card); cursor: text; }
 .auth-field:focus-within { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(31, 91, 198, 0.18); }
 .auth-field.has-error { border-color: var(--red); }

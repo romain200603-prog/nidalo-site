@@ -1,7 +1,8 @@
 import { supabase } from '../supabase';
+import { cleanPhoto, PHOTO_SIDE } from '../cleanPhoto';
 import {
-  attachmentIssue, CONTENT_MISMATCH, contentMatches, DOCUMENT_EXTENSIONS, lowerExtension, photoExtension, storageContentType,
-  type Attachment, type DocumentCategory,
+  attachmentIssue, CONTENT_MISMATCH, contentMatches, DOCUMENT_EXTENSIONS, lowerExtension, PHOTO_EXTENSIONS, photoExtension,
+  storageContentType, type Attachment, type DocumentCategory,
 } from './content';
 import { sizeLabel } from './format';
 
@@ -11,10 +12,7 @@ import { sizeLabel } from './format';
 // se lisent par URL signée de 10 minutes, demandée pour chaque fichier, comme l'app.
 
 export const ATTACHMENT_BUCKET = 'message-attachments';
-/** Plus grand côté d'une photo envoyée (LocalAttachmentStorage.maxPhotoSide). */
-export const MAX_PHOTO_SIDE = 2048;
-/** Qualité JPEG d'une photo (0,82) et de la vignette d'une vidéo (0,8, 800 px au plus). */
-const PHOTO_QUALITY = 0.82;
+/** Qualité JPEG de la vignette d'une vidéo (0,8, 800 px au plus) ; les photos suivent cleanPhoto.ts. */
 const THUMBNAIL_QUALITY = 0.8;
 const THUMBNAIL_SIDE = 800;
 export const UPLOAD_FAILURE = 'La pièce jointe n\'a pas pu être envoyée. Vérifiez votre connexion et réessayez.';
@@ -99,23 +97,18 @@ export function reducedSize(width: number, height: number, max: number): { width
   return { width: Math.round(width * scale), height: Math.round(height * scale) };
 }
 
-/** Photo réduite à 2 048 px et réencodée en JPEG 0,82, sans métadonnées (ni lieu ni appareil). */
+/** Photo réduite à 2 048 px et réencodée en JPEG 0,82, sans métadonnées (ni lieu, ni date, ni appareil). */
 export async function photoJpeg(file: Blob): Promise<Blob> {
-  let bitmap: ImageBitmap;
-  try {
-    bitmap = await createImageBitmap(file);
-  } catch {
-    throw new Error(UNREADABLE);
-  }
-  const size = reducedSize(bitmap.width, bitmap.height, MAX_PHOTO_SIDE);
-  const canvas = document.createElement('canvas');
-  canvas.width = size.width;
-  canvas.height = size.height;
-  const context = canvas.getContext('2d');
-  if (!context) throw new Error(UNREADABLE);
-  context.drawImage(bitmap, 0, 0, size.width, size.height);
-  bitmap.close();
-  return canvasBlob(canvas, PHOTO_QUALITY);
+  const photo = await cleanPhoto(file, PHOTO_SIDE);
+  if (!photo) throw new Error(UNREADABLE);
+  return photo.blob;
+}
+
+/** Nom d'un document en image une fois réencodé en JPEG : « Plan.png » devient « Plan.jpg ». */
+export function jpegFileName(fileName: string): string {
+  if (/\.jpe?g$/i.test(fileName)) return fileName;
+  const base = fileName.replace(/\.[^.]*$/, '');
+  return `${base || 'Photo'}.jpg`;
 }
 
 /** Première image et durée d'une vidéo (vignette de 800 px au plus, JPEG 0,8) ; `null` si le navigateur ne la lit pas. */
@@ -156,11 +149,18 @@ export async function videoFrame(file: Blob): Promise<{ thumbnail: Blob; duratio
 
 const BOX_NAMES_REMOVED = new Set(['udta', 'meta']);
 const BOX_CONTAINERS = new Set(['moov', 'trak', 'mdia', 'minf']);
+/** En-têtes qui portent une date de création et de modification (vidéo, piste, média). */
+const BOX_DATES = new Set(['mvhd', 'tkhd', 'mdhd']);
+/** Boîte « uuid » des métadonnées XMP (Adobe), qui peut contenir un lieu. */
+const XMP_UUID = [0xbe, 0x7a, 0xcf, 0xcb, 0x97, 0xa9, 0x42, 0xe8, 0x9c, 0x71, 0x99, 0x94, 0x91, 0xe3, 0xaf, 0xac];
 
 /**
- * Vidéo sans ses métadonnées de lieu ni d'appareil (MessageAttachmentFiles.videoWithoutMetadata) : les boîtes « udta »
- * et « meta » (lieu, appareil, logiciel) deviennent des boîtes « free », que tous les lecteurs ignorent ; les images
- * et le son restent identiques, sans recompression.
+ * Vidéo sans ses métadonnées de lieu, de date ni d'appareil (MessageAttachmentFiles.videoWithoutMetadata) : les boîtes
+ * « udta » et « meta » (lieu, appareil, logiciel) et la boîte XMP deviennent des boîtes « free », que tous les lecteurs
+ * ignorent, et leur contenu est effacé (remplacé par des zéros : changer seulement le nom laisserait le lieu lisible
+ * dans le fichier) ; les dates de création et de modification des en-têtes sont remises à zéro. La taille du fichier
+ * ne change pas, les images et le son restent identiques, sans recompression (un navigateur ne sait pas réencoder une
+ * vidéo proprement).
  */
 export function videoWithoutMetadata(buffer: ArrayBuffer): ArrayBuffer {
   const copy = buffer.slice(0);
@@ -181,10 +181,21 @@ export function videoWithoutMetadata(buffer: ArrayBuffer): ArrayBuffer {
       }
       if (size < headerSize || offset + size > end) return;
       const type = String.fromCharCode(view.getUint8(offset + 4), view.getUint8(offset + 5), view.getUint8(offset + 6), view.getUint8(offset + 7));
-      if (BOX_NAMES_REMOVED.has(type)) {
+      const isXmp = type === 'uuid' && offset + headerSize + 16 <= offset + size
+        && XMP_UUID.every((byte, index) => view.getUint8(offset + headerSize + index) === byte);
+      if (BOX_NAMES_REMOVED.has(type) || isXmp) {
         [0x66, 0x72, 0x65, 0x65].forEach((byte, index) => view.setUint8(offset + 4 + index, byte));
+        new Uint8Array(copy, offset + headerSize, size - headerSize).fill(0);
       } else if (BOX_CONTAINERS.has(type)) {
         walk(offset + headerSize, offset + size);
+      } else if (BOX_DATES.has(type)) {
+        // Après la version (1 octet) et les options (3 octets) : création puis modification, 4 octets chacune en
+        // version 0, 8 en version 1.
+        const body = offset + headerSize;
+        const length = view.getUint8(body) === 1 ? 16 : 8;
+        if (body + 4 + length <= offset + size) {
+          for (let index = 0; index < length; index += 1) view.setUint8(body + 4 + index, 0);
+        }
       }
       offset += size;
     }
@@ -216,7 +227,8 @@ async function put(path: string, data: Blob, contentType: string): Promise<void>
 
 /**
  * Prépare et envoie un élément, puis rend sa pièce jointe telle que l'app l'écrit (LocalAttachmentStorage.store, puis
- * MessageAttachmentFiles.upload) : photo en JPEG, vidéo sans métadonnées et sa vignette, document tel quel.
+ * MessageAttachmentFiles.upload) : photo en JPEG, vidéo sans métadonnées et sa vignette, document en image réencodé en
+ * JPEG comme une photo (sans lieu ni EXIF), autre document tel quel.
  */
 export async function uploadPending(item: PendingFile, conversationId: string): Promise<Attachment> {
   const issue = attachmentIssue(item.kind, item.fileName, item.file.size, sizeLabel);
@@ -243,6 +255,12 @@ export async function uploadPending(item: PendingFile, conversationId: string): 
       if (frame.duration !== null) attachment.durationSeconds = frame.duration;
     }
     return { ...attachment, ...category };
+  }
+  if (PHOTO_EXTENSIONS.includes(ext)) {
+    const jpeg = await photoJpeg(item.file);
+    const path = storagePath(conversationId, `${newId()}.jpg`);
+    await put(path, jpeg, 'image/jpeg');
+    return { id: item.id, kind: 'document', fileName: jpegFileName(item.fileName), storagePath: path, byteCount: jpeg.size, ...category };
   }
   const path = storagePath(conversationId, `${newId()}.${ext}`);
   await put(path, item.file, storageContentType('document', ext));

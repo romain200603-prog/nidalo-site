@@ -136,8 +136,21 @@ export function emailError(email: string): string | null {
   return null;
 }
 
+/** Mot de passe saisi pour se connecter : la règle de longueur d'avant, pour ne bloquer aucun ancien compte. */
 export function passwordError(password: string): string | null {
   return [...password].length < 8 ? 'Le mot de passe doit contenir au moins 8 caractères.' : null;
+}
+
+/** Règle d'un nouveau mot de passe, réglée dans Supabase et affichée à l'inscription et au changement. */
+export const PASSWORD_RULE = 'Au moins 8 caractères, avec des lettres et des chiffres.';
+
+/**
+ * Nouveau mot de passe (inscription, « Nouveau mot de passe ») : 8 caractères au moins, dont une lettre et un chiffre,
+ * comme Supabase les compte (lettres a à z sans accent, majuscules ou minuscules, et chiffres 0 à 9).
+ */
+export function newPasswordError(password: string): string | null {
+  if ([...password].length >= 8 && /[A-Za-z]/.test(password) && /[0-9]/.test(password)) return null;
+  return 'Le mot de passe doit contenir au moins 8 caractères, dont une lettre et un chiffre.';
 }
 
 // MARK: - Messages d'erreur (AuthStore.swift 233–275)
@@ -155,7 +168,7 @@ const MESSAGES: Record<string, string> = {
   bad_code_verifier: 'Ouvrez le lien dans le navigateur où vous avez fait la demande, puis réessayez.',
   flow_state_not_found: 'Ouvrez le lien dans le navigateur où vous avez fait la demande, puis réessayez.',
   user_already_exists: 'Un compte existe déjà avec cette adresse.',
-  weak_password: 'Ce mot de passe est trop simple. Choisissez-en un plus long ou plus varié.',
+  weak_password: 'Ce mot de passe est trop faible. Choisissez-en un d\'au moins 8 caractères, avec des lettres et des chiffres.',
   same_password: 'Choisissez un mot de passe différent de l\'ancien.',
 };
 
