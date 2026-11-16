@@ -28,7 +28,7 @@ describe('connexion (AuthStore et AccountSession de l’app)', () => {
     expect(authMessage(wrong)).toBe('Adresse e-mail ou mot de passe incorrect.');
     expect(authMessage(new TypeError('Failed to fetch'))).toBe(NETWORK_MESSAGE);
     expect(authMessage(new AuthError('Password should contain at least one character of each: abc…, 0123456789', 422, 'weak_password')))
-      .toBe('Ce mot de passe est trop faible. Choisissez-en un d\'au moins 8 caractères, avec des lettres et des chiffres.');
+      .toBe('Ce mot de passe est trop faible : il faut au moins 8 caractères, avec des lettres et des chiffres.');
     expect(authMessage({ code: 'inconnu' })).toBe('L\'opération n\'a pas abouti. Réessayez dans un instant.');
   });
 

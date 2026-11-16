@@ -168,7 +168,7 @@ const MESSAGES: Record<string, string> = {
   bad_code_verifier: 'Ouvrez le lien dans le navigateur où vous avez fait la demande, puis réessayez.',
   flow_state_not_found: 'Ouvrez le lien dans le navigateur où vous avez fait la demande, puis réessayez.',
   user_already_exists: 'Un compte existe déjà avec cette adresse.',
-  weak_password: 'Ce mot de passe est trop faible. Choisissez-en un d\'au moins 8 caractères, avec des lettres et des chiffres.',
+  weak_password: 'Ce mot de passe est trop faible : il faut au moins 8 caractères, avec des lettres et des chiffres.',
   same_password: 'Choisissez un mot de passe différent de l\'ancien.',
 };
 
