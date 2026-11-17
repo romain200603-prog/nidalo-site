@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardContent, formatFacts } from './cardContent';
+import { cardContent, compactAmount, formatFacts, formatShortFact, homeTypeLine, shortDay, shortFacts } from './cardContent';
 import type { ListingRow } from './listings';
 import type { SearchMode } from './labels';
 import type { Highlights } from './search';
@@ -109,5 +109,57 @@ describe('fiches', () => {
       ['Rendement net (est.) : 5,2 %', 'positive', true],
       ['Cash-flow estimé : −62 €/mois', 'negative', true],
     ]);
+  });
+});
+
+describe('petite ligne de l’accueil', () => {
+  const line = (c: ReturnType<typeof card>) => shortFacts(c).map((fact) => {
+    const t = formatShortFact(fact, now);
+    return [t.label, t.value.replace(/[\u00A0\u202F]/g, ' '), t.shortLabel, t.energy, t.isMuted];
+  });
+
+  it('achat : prix au m² puis DPE en pastille', () => {
+    expect(line(card(row(), null))).toEqual([[null, '3 839 €/m²', null, null, false], ['DPE', 'C', null, 'C', false]]);
+  });
+
+  it('location : ameublement et disponibilité', () => {
+    const later = new Date(now.getTime() + 10 * 86_400_000);
+    expect(line(card(row({ transaction: 'rent', price: 850, monthly_charges: 60, rental_info: { isFurnished: true, availableFrom: later.toISOString() } }), null)))
+      .toEqual([[null, 'Meublé', null, null, false], ['Disponible le', shortDay(later), null, null, false]]);
+    const past = new Date(now.getTime() - 86_400_000);
+    expect(line(card(row({ transaction: 'rent', price: 850, rental_info: { availableFrom: past.toISOString() } }), null))[0])
+      .toEqual(['Disponible', 'de suite', null, null, false]);
+  });
+
+  it('investissement : loyer encaissé, ou potentiel en gris ; immeuble : loyers encaissés', () => {
+    const leased = card(row({ rental_info: { currentMonthlyRent: 1547, isLeased: true } }), null, highlights);
+    expect(line(leased)).toEqual([['Loyer encaissé', '1 547 €/mois', 'Encaissés', null, false]]);
+    const potential = card(row({ rental_info: { potentialMonthlyRent: 1500 } }), 'invest', highlights);
+    expect(line(potential)).toEqual([['Loyer potentiel', '1 500 €/mois', 'Potentiel', null, true]]);
+    const building = card(row({ property_type: 'building', price: 399000, living_area: 200, rental_info: { currentMonthlyRent: 2700, isLeased: true },
+      asset_details: { building: { _0: { residentialUnits: 3, commercialUnits: 1, vacantUnits: 1 } } } }), null, highlights);
+    expect(line(building)).toEqual([['Loyers encaissés', '2 700 €/mois', 'Encaissés', null, false]]);
+  });
+
+  it('hôtel, terrain et local libre', () => {
+    const hotel = card(row({ property_type: 'hotel', price: 2_400_000, rooms: 28,
+      asset_details: { hotel: { _0: { rooms: 28, annualRevenue: { value: 1_240_000, origin: 'seller' }, scope: 'wallsOnly' } } } }), null);
+    expect(line(hotel).map((fact) => [fact[0], fact[1]])).toEqual([['CA', '1,2 M€'], [null, 'Murs seuls']]);
+    const land = card(row({ property_type: 'land', living_area: 0, land_area: 740, asset_details: { land: { _0: { zoning: 'UB', isServiced: false } } } }), null);
+    expect(line(land).map((fact) => [fact[0], fact[1]])).toEqual([['Zone PLU', 'UB'], [null, 'Non viabilisé'], [null, '322 €/m²']]);
+    expect(line(card(row({ property_type: 'commercial', rental_info: { isLeased: false } }), null))).toEqual([[null, 'Libre de toute occupation', null, null, false]]);
+  });
+
+  it('montants courts, jour court et ligne du type', () => {
+    expect(compactAmount(680_000).replace(/[\u00A0\u202F]/g, ' ')).toBe('680 k€');
+    expect(compactAmount(2_000_000).replace(/[\u00A0\u202F]/g, ' ')).toBe('2 M€');
+    expect(shortDay(new Date(2026, 11, 1))).toBe('1er déc.');
+    expect(shortDay(new Date(2026, 11, 4))).toBe('4 déc.');
+    expect(homeTypeLine({ property_type: 'apartment', rooms: 3, living_area: 62 }).replace(/[\u00A0\u202F]/g, ' ')).toBe('Appartement 3 pièces · 62 m²');
+    expect(homeTypeLine({ property_type: 'building', rooms: 8, living_area: 250 }).replace(/[\u00A0\u202F]/g, ' ')).toBe('Immeuble de rapport · 250 m²');
+    expect(homeTypeLine({ property_type: 'house', rooms: 1, living_area: 0 })).toBe('Maison locative 1 pièce');
+    // Hors Investir : le libellé courant du type.
+    expect(homeTypeLine({ property_type: 'house', rooms: 5, living_area: 128 }, false).replace(/[\u00A0\u202F]/g, ' ')).toBe('Maison 5 pièces · 128 m²');
+    expect(homeTypeLine({ property_type: 'building', rooms: 8, living_area: 0 }, false)).toBe('Immeuble');
   });
 });

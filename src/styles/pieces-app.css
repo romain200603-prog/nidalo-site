@@ -67,9 +67,10 @@
   flex: none; width: 20px; height: 3px; margin-top: 8px; border-radius: 2px; background: var(--tile-ink); opacity: 0;
   transition: opacity var(--app-duration) var(--app-ease);
 }
-.mode-tab[aria-checked="true"] .mode-tile { background: var(--tile-ink); color: #FFFFFF; box-shadow: 0 8px 18px var(--tile-shadow); }
-.mode-tab[aria-checked="true"] .mode-name { color: var(--tile-ink); }
-.mode-tab[aria-checked="true"] .mode-underline { opacity: 1; }
+/* Catégorie choisie (ou ouverte dans la carte des catégories de l'accueil). */
+.mode-tab[aria-checked="true"] .mode-tile, .mode-tab.is-open .mode-tile { background: var(--tile-ink); color: #FFFFFF; box-shadow: 0 8px 18px var(--tile-shadow); }
+.mode-tab[aria-checked="true"] .mode-name, .mode-tab.is-open .mode-name { color: var(--tile-ink); }
+.mode-tab[aria-checked="true"] .mode-underline, .mode-tab.is-open .mode-underline { opacity: 1; }
 .mode-tab:active .mode-tile { transform: scale(0.94); }
 .mode-tab:focus-visible { outline: none; }
 .mode-tab:focus-visible .mode-tile { outline: 3px solid var(--app-brand); outline-offset: 3px; }

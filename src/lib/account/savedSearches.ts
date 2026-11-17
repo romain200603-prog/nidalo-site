@@ -368,6 +368,34 @@ export function budgetLabelOf(query: SearchQueryJson): string | null {
   return null;
 }
 
+/** « 350 k€ » pour un montant rond en milliers (dès 10 000 €), sinon « 1 250 € » (HomeResumeSearchCard.amount). */
+function resumeAmount(value: number): string {
+  const thousands = value / 1000;
+  if (value < 10_000 || thousands !== Math.round(thousands)) return formatPrice(value);
+  return `${new Intl.NumberFormat('fr-FR').format(thousands)} k€`;
+}
+
+/**
+ * « Lyon · Appartement · ≤ 350 k€ » de « Reprendre ma recherche » (HomeResumeSearchCard.summary) : lieu (la grande
+ * ville seule pour une recherche autour d'elle), types de bien et budget, seulement s'ils y sont ; sinon la catégorie.
+ */
+export function resumeSummaryOf(query: SearchQueryJson): string {
+  const parts: string[] = [];
+  const location = query.location;
+  const place = ('around' in location ? knownCityAt(location.around.center) : null) ?? placeLabelOf(query);
+  if (place) parts.push(place);
+  const types = [...new Set(query.propertyTypes)];
+  if (types.length && !(types.length === 1 && types[0] === 'hotel')) {
+    parts.push(types.map((type) => PROPERTY_TYPE_LABELS[type] ?? type).sort().join(', '));
+  }
+  const suffix = query.transaction === 'rent' ? '/mois' : '';
+  const { min, max } = query.price;
+  if (min !== undefined && max !== undefined) parts.push(`${resumeAmount(min)} – ${resumeAmount(max)}${suffix}`);
+  else if (max !== undefined) parts.push(`≤ ${resumeAmount(max)}${suffix}`);
+  else if (min !== undefined) parts.push(`≥ ${resumeAmount(min)}${suffix}`);
+  return parts.length ? parts.join(' · ') : MODE_TITLES[modeOf(query)];
+}
+
 /** Critères principaux : types de bien, surface, pièces, rentabilité. */
 export function criteriaLabelsOf(query: SearchQueryJson): string[] {
   const labels: string[] = [];

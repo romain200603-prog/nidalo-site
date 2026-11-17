@@ -297,6 +297,9 @@ async function mock(context, { signedIn = false, listingRows = listings, account
   // (pas de pastilles sur téléphone).
   const notificationsScreen = (request, table) => signedIn && pagePath(request) === '/compte/' && pageView(request) === 'notifications'
     && ['notifications', 'rpc/mark_notifications_read'].includes(table);
+  // Accueil du téléphone (celui de l'app, novembre 2026) : la cloche de sa barre du haut lit les notifications pour son
+  // point rouge, sans temps réel ni « lu ».
+  const homeBell = (request, table) => signedIn && pagePath(request) === '/' && table === 'notifications' && request.method() === 'GET';
   const requests = [];
   const json = (route, status, body) =>
     route.fulfill({ status, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: body === undefined ? '' : JSON.stringify(body) });
@@ -312,7 +315,8 @@ async function mock(context, { signedIn = false, listingRows = listings, account
       try { body = request.postDataJSON(); } catch { body = request.postData(); }
       const width = pageWidth(request);
       badgeRequests.push({ table, method: request.method(), search: url.search, body, width, signedIn });
-      if (width !== null && width < 1024 && !contactsRead(request, table) && !messagesPage(request) && !notificationsScreen(request, table)) {
+      if (width !== null && width < 1024 && !contactsRead(request, table) && !messagesPage(request) && !notificationsScreen(request, table)
+        && !homeBell(request, table)) {
         problems.push(`téléphone : ${table} demandé (rien ne doit changer sous 1024 px)`);
       }
       if (!signedIn) {
@@ -1605,7 +1609,7 @@ try {
   await page.waitForSelector('.home-search-card');
   await page.waitForSelector('.home-section');
   const yieldChip = await page.locator('.opportunity-card .home-yield').first().textContent().catch(() => null);
-  if (yieldChip?.replace(/\s/g, ' ') !== '5,5 %') problems.push(`accueil : rendement de l'opportunité « ${yieldChip} » au lieu de « 5,5 % »`);
+  if (yieldChip?.replace(/\s/g, ' ') !== '5,5 % brut') problems.push(`accueil : rendement de l'opportunité « ${yieldChip} » au lieu de « 5,5 % brut »`);
   await page.screenshot({ path: join(out, 'accueil-ordinateur.png'), fullPage: true });
   await page.click('.criterion-tile >> nth=0');
   await page.waitForSelector('dialog.selection-dialog[open]');
@@ -1679,7 +1683,7 @@ try {
   await page.getByRole('button', { name: 'DPE C', exact: true }).click();
   const dpe = await page.getByRole('group', { name: 'DPE maximum accepté' }).locator('.field-value').textContent();
   if (dpe !== 'DPE A à C') problems.push(`filtres : DPE affiché « ${dpe} » au lieu de « DPE A à C »`);
-  const chips = await page.locator('dialog[open] .active-chip').allTextContents();
+  const chips = await page.locator('dialog[open] .criterion-chip:not(.is-leaving)').allTextContents();
   if (!chips.some((c) => c.includes('3 à 4 pièces')) || !chips.some((c) => c.includes('1 à 2 chambres')) || !chips.some((c) => /DPE/.test(c))) {
     problems.push(`filtres : pastilles « ${chips.join(' | ')} »`);
   }
@@ -1689,11 +1693,11 @@ try {
   // Un troisième appui recommence la ligne ; « 5+ » ferme la fourchette sans maximum ; retoucher le seul choix l'efface.
   await roomsRow('Pièces').getByRole('button', { name: '2', exact: true }).click();
   await roomsRow('Pièces').getByRole('button', { name: '5+', exact: true }).click();
-  expectSame('filtres', 'pièces 2 puis 5+', [await rowState('Pièces'), (await page.locator('dialog[open] .active-chip').allTextContents()).filter((c) => /pièce/.test(c))],
+  expectSame('filtres', 'pièces 2 puis 5+', [await rowState('Pièces'), (await page.locator('dialog[open] .criterion-chip:not(.is-leaving)').allTextContents()).filter((c) => /pièce/.test(c))],
     [['2 ou plus', ['Studio', '2 allumé', '3 allumé', '4 allumé', '5+ allumé']], ['2 pièces min ']]);
   await roomsRow('Pièces').getByRole('button', { name: '4', exact: true }).click();
   await roomsRow('Pièces').getByRole('button', { name: '4', exact: true }).click();
-  expectSame('filtres', 'pièces effacées', [await rowState('Pièces'), (await page.locator('dialog[open] .active-chip').allTextContents()).filter((c) => /pièce/.test(c))],
+  expectSame('filtres', 'pièces effacées', [await rowState('Pièces'), (await page.locator('dialog[open] .criterion-chip:not(.is-leaving)').allTextContents()).filter((c) => /pièce/.test(c))],
     [['Indifférent', ['Studio', '2', '3', '4', '5+']], []]);
   await roomsRow('Pièces').getByRole('button', { name: '3', exact: true }).click();
   await roomsRow('Pièces').getByRole('button', { name: '4', exact: true }).click();
@@ -2023,7 +2027,9 @@ try {
     real_estate_projects: [{ ...ACCOUNT.real_estate_projects[0], criteria: { residential: { maxBudget: 300000, propertyTypes: ['apartment'], location: { place: 'Lyon' } } } }],
   };
   const homeSections = (p) => p.locator('.dhome-section h2').allTextContents();
-  const sectionCards = (p, id) => p.locator(`section:has(> .dhome-inner #${id}) h3`).allTextContents();
+  // Annonces d'une section, par leur identifiant (la carte de l'app montre le type et la surface, pas le titre).
+  const sectionCards = (p, id) => p.locator(`section:has(> .dhome-inner #${id}) article a.stretched`)
+    .evaluateAll((links) => links.map((link) => new URL(link.href).searchParams.get('id')));
   // Cartes d'une section : lues (dans la page), affichées, et nombre de lignes qu'elles occupent.
   const sectionRow = (p, id) => p.evaluate((sectionId) => {
     const section = document.getElementById(sectionId)?.closest('section');
@@ -2052,7 +2058,7 @@ try {
     const guestWanted = ['Opportunités du moment', 'Biens similaires à vos recherches', 'Nouveautés', 'Baisses de prix'];
     if (JSON.stringify(guestSections) !== JSON.stringify(guestWanted)) problems.push(`accueil ${width} sans compte : sections ${JSON.stringify(guestSections)} au lieu de ${JSON.stringify(guestWanted)}`);
     await checkOneRow(page, width, 'sans compte', ['opportunites', 'similaires', 'nouveautes', 'baisses']);
-    const noPhoto = await page.locator('section:has(#opportunites) .dhome-no-photo').count();
+    const noPhoto = await page.locator('section:has(#opportunites) .home-no-photo').count();
     if (noPhoto < 1 || await page.getByText('Photos à venir').count()) problems.push(`accueil ${width} : annonce sans photo mal affichée`);
     await page.mouse.move(0, 0);
     await page.waitForTimeout(300);
@@ -2111,7 +2117,7 @@ try {
     const budget = (await page.textContent('.criterion-tile >> nth=0 >> .criterion-value'))?.replace(/\s/g, ' ');
     if (budget !== '300 000 €') problems.push(`accueil ${width} : budget du projet « ${budget} » au lieu de « 300 000 € »`);
     const similar = await sectionCards(page, 'similaires');
-    const similarWanted = [HOME_LISTINGS[0], HOME_LISTINGS[3], HOME_LISTINGS[5], HOME_LISTINGS[6], HOME_LISTINGS[7]].map((row) => row.title);
+    const similarWanted = [HOME_LISTINGS[0], HOME_LISTINGS[3], HOME_LISTINGS[5], HOME_LISTINGS[6], HOME_LISTINGS[7]].map((row) => row.id);
     if (JSON.stringify(similar) !== JSON.stringify(similarWanted)) problems.push(`accueil ${width} : biens similaires ${JSON.stringify(similar)} au lieu de ${JSON.stringify(similarWanted)}`);
     if (await page.locator('#consultes').count()) problems.push(`accueil ${width} : « Consultés récemment » affiché sans fiche ouverte`);
     // Fiche ouverte dans le même onglet, puis retour : elle passe en tête de « Consultés récemment ».
@@ -2120,7 +2126,7 @@ try {
     await page.goBack({ waitUntil: 'networkidle' });
     await page.waitForSelector('#consultes', { timeout: 8000 }).catch(() => undefined);
     const viewedFirst = await sectionCards(page, 'consultes');
-    if (viewedFirst[0] !== HOME_LISTINGS[0].title) problems.push(`accueil ${width} : consultés ${JSON.stringify(viewedFirst)} après la fiche « ${HOME_LISTINGS[0].title} »`);
+    if (viewedFirst[0] !== HOME_LISTINGS[0].id) problems.push(`accueil ${width} : consultés ${JSON.stringify(viewedFirst)} après la fiche « ${HOME_LISTINGS[0].id} »`);
     // Trois autres fiches (une de plus que la ligne affichée), puis l'accueil complet pour la capture.
     for (const row of [HOME_LISTINGS[6], HOME_LISTINGS[5], HOME_LISTINGS[2]]) {
       await page.goto(`${base}/annonce/?id=${row.id}`, { waitUntil: 'networkidle' });
@@ -2135,7 +2141,7 @@ try {
       problems.push(`accueil ${width} connecté : sections ${JSON.stringify(memberSections)}`);
     }
     const viewed = await sectionCards(page, 'consultes');
-    const viewedWanted = [HOME_LISTINGS[2], HOME_LISTINGS[5], HOME_LISTINGS[6], HOME_LISTINGS[0]].map((row) => row.title);
+    const viewedWanted = [HOME_LISTINGS[2], HOME_LISTINGS[5], HOME_LISTINGS[6], HOME_LISTINGS[0]].map((row) => row.id);
     if (JSON.stringify(viewed) !== JSON.stringify(viewedWanted)) problems.push(`accueil ${width} : consultés ${JSON.stringify(viewed)} au lieu de ${JSON.stringify(viewedWanted)}`);
     await checkOneRow(page, width, 'connecté', ['opportunites', 'consultes', 'similaires', 'nouveautes', 'baisses']);
     await checkChrome(page, `accueil maquette ${width} connecté`, { signedIn: true, margin: width >= 1280 ? 48 : 32 });
@@ -2159,7 +2165,7 @@ try {
   // « Rechercher des biens » ouvre la même adresse /recherche/ que l'accueil du téléphone, pour les mêmes choix.
   const searchUrl = async (context, name) => {
     const p = await open(context, '/', name);
-    await p.waitForSelector('.home-search-card');
+    await p.waitForSelector('.mode-tab');
     await p.click('.mode-tab >> nth=2');
     for (const [tileIndex, row] of [[0, 4], [1, 3]]) {
       await p.click(`.criterion-tile >> nth=${tileIndex}`);
@@ -2182,18 +2188,41 @@ try {
   await samePhone.close();
   if (desktopSearch !== phoneSearch || !desktopSearch.includes('mode=invest')) problems.push(`accueil : recherche ${desktopSearch} sur ordinateur, ${phoneSearch} sur téléphone`);
 
-  // Téléphone : l'accueil ne fait aucune des lectures de l'ordinateur (projet, fiches consultées, biens similaires).
+  // Téléphone : l'accueil de l'app (novembre 2026). Ses sections dans l'ordre de l'app, toutes avec la même carte
+  // (248 px, photo de 156 px), avec les lectures de l'ordinateur (projet du compte, fiches consultées, biens
+  // similaires) ; avec le compte, la cloche (point rouge des non lues) et « Reprendre ma recherche ». Pas d'en-tête
+  // bleu sous 761 px. Captures : accueil-telephone-app-*.png.
   for (const signedIn of [false, true]) {
+    const H = `accueil téléphone ${signedIn ? 'connecté' : 'sans compte'}`;
     const phoneHome = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
     const phoneServer = await mock(phoneHome, { signedIn, listingRows: HOME_LISTINGS, account: HOME_PROJECT });
     await phoneHome.addInitScript((id) => { try { sessionStorage.setItem('nidalo.consultes', JSON.stringify([id])); } catch { /* indisponible */ } }, homeId(7));
     page = await open(phoneHome, '/', `accueil-telephone-lectures-${signedIn ? 'connecte' : 'sans-compte'}`);
-    await page.waitForSelector('.home-section');
-    if (signedIn) await page.waitForFunction(() => document.querySelector('h1')?.textContent === 'Bonjour Claire', null, { timeout: 8000 }).catch(() => undefined);
-    await page.waitForTimeout(400);
-    const extra = phoneServer.requests.filter((request) => request.path === '/' && (request.table === 'real_estate_projects' || (request.table === 'listings' && !request.search.includes('limit=200'))));
-    if (extra.length) problems.push(`téléphone : l'accueil lit ${extra.map((request) => `${request.table}${request.search}`).join(' ; ')}`);
-    if (await page.locator('.dhome, #consultes, #similaires').count()) problems.push('téléphone : sections de l\'ordinateur affichées');
+    await page.waitForSelector('#consultes', { timeout: 8000 }).catch(() => undefined);
+    await page.waitForSelector('#similaires', { timeout: 8000 }).catch(() => undefined);
+    if (signedIn) await page.waitForSelector('.home-resume', { timeout: 8000 }).catch(() => undefined);
+    await page.waitForTimeout(600);
+    expectSame(H, 'sections', await page.locator('.home-app h2').allTextContents(),
+      ['Opportunités du moment', 'Explorer par ville', 'Consultés récemment', 'Biens similaires à vos recherches', 'Nouveautés', 'Baisses de prix']);
+    const cards = await page.$$eval('.home-app article', (articles) => articles.map((article) => [
+      Math.round(article.getBoundingClientRect().width), Math.round(article.querySelector('.hlc-photo').getBoundingClientRect().height),
+    ]));
+    if (!cards.length || cards.some(([cardWidth, photo]) => cardWidth !== 248 || photo !== 156)) problems.push(`${H} : cartes ${JSON.stringify(cards)} au lieu de 248 px, photo de 156 px`);
+    const viewedIds = await page.locator('section:has(#consultes) article a.stretched').evaluateAll((links) => links.map((link) => new URL(link.href).searchParams.get('id')));
+    expectSame(H, 'consultés', viewedIds, [homeId(7)]);
+    const projectRead = phoneServer.requests.some((request) => request.path === '/' && request.table === 'real_estate_projects');
+    if (projectRead !== signedIn) problems.push(`${H} : projet du compte ${projectRead ? 'lu' : 'non lu'}`);
+    const unread = signedIn ? expectedBadges(phoneServer.state).notifications : 0;
+    expectSame(H, 'barre du haut [titre, cloche, point rouge, en-tête bleu, accueil de l\'ordinateur]', [
+      (await page.textContent('h1'))?.trim(), await page.getAttribute('.home-app-bell', 'aria-label'), await page.locator('.home-app-dot').count(),
+      await page.locator('.topbar').isVisible(), await page.locator('.dhome').count(),
+    ], ['Nidalo', unread > 0 ? `Notifications, ${unread} non lues` : 'Notifications', unread > 0 ? 1 : 0, false, 0]);
+    if (signedIn) {
+      expectSame(H, '« Reprendre ma recherche »', [
+        await page.textContent('.home-resume-title'), (await page.textContent('.home-resume-summary'))?.replace(/\s/g, ' '),
+      ], ['Reprendre ma recherche', 'Lyon · Appartement · ≤ 300 k€']);
+    } else if (await page.locator('.home-resume').count()) problems.push(`${H} : « Reprendre ma recherche » sans compte`);
+    await page.screenshot({ path: join(out, `accueil-telephone-app-${signedIn ? 'connecte' : 'sans-compte'}.png`), fullPage: true });
     await phoneHome.close();
   }
 
@@ -4102,9 +4131,30 @@ try {
   const phone = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
   await mock(phone);
   page = await open(phone, '/', 'accueil-telephone');
-  await page.waitForSelector('.home-section');
+  await page.waitForSelector('#opportunites');
   await page.screenshot({ path: join(out, 'accueil-telephone.png') });
   await page.screenshot({ path: join(out, 'accueil-telephone-long.png'), fullPage: true });
+  // Carte des catégories (HomeCategoryCard) : aucune ouverte au départ ; Investir ouvre ses filtres dans la carte,
+  // « Réduire » les referme, puis Résidentiel.
+  expectSame('accueil téléphone', 'catégories fermées', [await page.locator('.home-category-filters').count(), await page.locator('.mode-tab[aria-expanded="true"]').count()], [0, 0]);
+  await page.click('.mode-tab >> nth=2');
+  await page.waitForSelector('.home-category-filters');
+  await page.waitForTimeout(600);
+  expectSame('accueil téléphone', 'Investir ouvert', [
+    await page.textContent('.mode-tab[aria-expanded="true"] .mode-name'),
+    (await page.textContent('.home-category .place-field-caption'))?.replace(/\s/g, ' '),
+    await page.locator('.home-category .criterion-label').allTextContents(),
+    await page.textContent('.home-more-hint'),
+    await page.textContent('.home-search-title'),
+  ], ['Investir', 'Où investir ?', ['Budget maximum', 'Rentabilité min.', 'Cash-flow min.', 'Travaux acceptés', 'Type d’investissement'],
+    "Type d'actif, lots, fiscalité, vacance, charges...", 'Rechercher des opportunités']);
+  await page.screenshot({ path: join(out, 'accueil-telephone-investir.png') });
+  await page.click('.home-collapse');
+  await page.waitForSelector('.home-category-filters', { state: 'detached', timeout: 4000 })
+    .catch(() => problems.push('accueil téléphone : « Réduire » ne referme pas les filtres'));
+  await page.click('.mode-tab >> nth=0');
+  await page.waitForSelector('.home-category-filters');
+  await page.waitForTimeout(600);
   await page.click('.criterion-tile >> nth=1');
   await page.waitForSelector('dialog.selection-dialog[open]');
   await page.click('dialog[open] .selection-row >> nth=1');
@@ -4151,7 +4201,7 @@ try {
   await page.getByRole('heading', { name: 'Charges et disponibilité' }).scrollIntoViewIfNeeded();
   await page.waitForTimeout(300);
   await page.screenshot({ path: join(out, 'filtres-location-telephone.png') });
-  const rentChips = await page.locator('dialog[open] .active-chip').allTextContents();
+  const rentChips = await page.locator('dialog[open] .criterion-chip:not(.is-leaving)').allTextContents();
   if (!rentChips.some((c) => /^Dispo\. avant le /.test(c))) problems.push(`location : pastilles « ${rentChips.join(' | ')} »`);
   page = await open(phone, '/compte/', 'compte-connexion-telephone');
   await page.waitForSelector('.signin-card');

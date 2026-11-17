@@ -136,16 +136,21 @@ export function SiteFooter() {
   return useDesktop() ? <DesktopFooter /> : <Footer />;
 }
 
-/** `fill` : la page occupe l'écran sous la barre du haut, sans pied de page (Messages sur ordinateur). */
-export function Page({ section, children, wide = false, fill = false }: {
+/**
+ * `fill` : la page occupe l'écran sous la barre du haut, sans pied de page (Messages sur ordinateur).
+ * `appTop` : accueil du téléphone, sa propre barre du haut (celle de l'app) à la place de l'en-tête bleu sous 761 px,
+ * sur le fond de page de l'app.
+ */
+export function Page({ section, children, wide = false, fill = false, appTop = false }: {
   section: Section;
   children: ReactNode;
   wide?: boolean;
   fill?: boolean;
+  appTop?: boolean;
 }) {
   if (isFramed()) return <Framed />;
   return (
-    <div className={fill ? 'page page-fill' : wide ? 'page page-wide' : 'page'}>
+    <div className={`${fill ? 'page page-fill' : wide ? 'page page-wide' : 'page'}${appTop ? ' page-app-top' : ''}`}>
       <a className="skip-link" href="#contenu">
         Aller au contenu
       </a>

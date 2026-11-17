@@ -4,8 +4,8 @@ import { draftFromProject, projectCompletion } from './projectSearch';
 import type { SearchDraft } from './search';
 import { supabase } from './supabase';
 
-// Lectures propres à l'accueil sur ordinateur (≥ 1024 px) : les sections « Consultés récemment » et « Biens
-// similaires à vos recherches » de l'app (Features/Home/HomeView.swift 136–157). Le téléphone ne les fait jamais.
+// Lectures des sections « Consultés récemment » et « Biens similaires à vos recherches » de l'app
+// (Features/Home/HomeView.swift), sur ordinateur comme sur téléphone (accueil de l'app, novembre 2026).
 
 /** Nombre de fiches consultées affichées (HomeView.swift 136 : prefix(8)). */
 export const VIEWED_LIMIT = 8;

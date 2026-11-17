@@ -407,7 +407,6 @@
 .heart-plain::after { inset: -6px; }
 .heart-plain .icon { width: 16px; height: 16px; }
 .gallery-action.is-active { color: var(--blue); }
-.compact-card:has(.heart-plain) .compact-body { padding-right: 24px; }
 .heart-inline { display: inline-flex; flex: none; align-self: flex-start; align-items: center; justify-content: center; width: 30px; height: 30px; margin-top: 9px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--ink); cursor: pointer; }
 .heart-inline .icon { width: 16px; height: 16px; }
 .heart-inline.is-active { color: var(--blue); }

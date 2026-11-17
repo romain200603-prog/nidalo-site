@@ -1,7 +1,8 @@
 import type { IconName } from '../components/iconPaths';
 import { formatArea, formatFraction, formatNumber, formatPrice, formatSignedAmount } from './format';
+import { investmentTypeLabel } from './homeCriteria';
 import type { ListingRow } from './listings';
-import type { SearchMode } from './labels';
+import { propertyTypeLabel, type PropertyType, type SearchMode } from './labels';
 import { pricePerSquareMeter, type Highlights } from './search';
 import {
   assetDetails, bool, date, hotelScope, int, num, rentalInfo, scopeLabel, sourced,
@@ -367,4 +368,96 @@ export function formatFacts(facts: KeyFact[], now = new Date()): FormattedFact[]
 
 export function badgeText(badge: CardBadge): { text: string; tone: Tone } {
   return badge.kind === 'new' ? { text: 'Nouveau', tone: 'neutral' } : { text: `Baisse de prix · avant ${formatPrice(badge.previous)}`, tone: 'positive' };
+}
+
+// MARK: - Petite ligne sous le prix (accueil)
+
+// L'app tire un ou deux faits courts de la fiche (ListingCardContent.shortFacts, absent de l'export de l'app) et les
+// écrit avec ListingCardFormatting.shortFact : ce sont ici les faits de la fiche qui ont une forme courte, dans
+// l'ordre de la fiche (prix au m² et DPE d'un achat, ameublement et disponibilité d'une location, loyer encaissé ou
+// potentiel d'un investissement, type de vente et chiffre d'affaires d'un hôtel, urbanisme d'un terrain).
+
+export type ShortFact =
+  | { kind: 'pricePerSquareMeter'; value: number }
+  | { kind: 'energyClass'; value: string }
+  | { kind: 'furnished'; value: boolean }
+  | { kind: 'availableFrom'; value: Date }
+  | { kind: 'collectedRent'; value: number; lots: number }
+  | { kind: 'potentialRent'; value: number }
+  | { kind: 'vacant' }
+  | { kind: 'hotelScope'; value: HotelScope }
+  | { kind: 'annualRevenue'; value: number }
+  | { kind: 'zoning'; value: string }
+  | { kind: 'serviced'; value: boolean };
+
+export function shortFacts(content: Pick<CardContent, 'facts'>): ShortFact[] {
+  const units = content.facts.find((fact) => fact.kind === 'units');
+  const vacant = content.facts.find((fact) => fact.kind === 'vacantUnits');
+  // Immeuble : lots loués = logements + commerces − lots vacants (« Loyers encaissés » dès deux lots).
+  const leasedLots = units?.kind === 'units'
+    ? Math.max(1, (units.residential ?? 0) + (units.commercial ?? 0) - (vacant?.kind === 'vacantUnits' ? vacant.value : 0))
+    : 1;
+  return content.facts.flatMap((fact): ShortFact[] => {
+    switch (fact.kind) {
+      case 'pricePerSquareMeter': case 'energyClass': case 'furnished': case 'availableFrom': case 'potentialRent': case 'vacant':
+      case 'hotelScope': case 'zoning': case 'serviced':
+        return [fact];
+      case 'currentRent': return [{ kind: 'collectedRent', value: fact.value, lots: 1 }];
+      case 'leased': return fact.annualRent === null ? [] : [{ kind: 'collectedRent', value: Math.round(fact.annualRent / 12), lots: 1 }];
+      case 'annualRent': return [{ kind: 'collectedRent', value: Math.round(fact.value / 12), lots: leasedLots }];
+      case 'annualRevenue': return [{ kind: 'annualRevenue', value: fact.value.value }];
+      default: return [];
+    }
+  });
+}
+
+/** Un fait de la petite ligne : libellé facultatif, valeur, DPE en pastille, loyer potentiel tout en gris. */
+export type ShortFactText = { label: string | null; shortLabel: string | null; value: string; energy: string | null; isMuted: boolean };
+
+const shortMonth = new Intl.DateTimeFormat('fr-FR', { month: 'short' });
+
+/** « 4 déc. », « 1er déc. ». */
+export function shortDay(date: Date): string {
+  const day = date.getDate();
+  return `${day === 1 ? '1er' : day} ${shortMonth.format(date)}`;
+}
+
+/** « 680 k€ », « 1,2 M€ » (Formatters.compactPrice de l'app). */
+export function compactAmount(value: number): string {
+  const number = (n: number, digits: number) => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: digits }).format(n);
+  if (value >= 1_000_000) return `${number(Math.round(value / 100_000) / 10, 1)} M€`;
+  return `${number(Math.round(value / 1_000), 0)} k€`;
+}
+
+export function formatShortFact(fact: ShortFact, now = new Date()): ShortFactText {
+  const text = (value: string, label: string | null = null, extra: Partial<ShortFactText> = {}): ShortFactText =>
+    ({ label, shortLabel: null, value, energy: null, isMuted: false, ...extra });
+  switch (fact.kind) {
+    case 'pricePerSquareMeter': return text(`${formatPrice(fact.value)}/m²`);
+    case 'energyClass': return text(fact.value.toUpperCase(), 'DPE', { energy: fact.value.toUpperCase() });
+    case 'furnished': return text(fact.value ? 'Meublé' : 'Non meublé');
+    case 'availableFrom': return fact.value > now ? text(shortDay(fact.value), 'Disponible le') : text('de suite', 'Disponible');
+    case 'collectedRent':
+      return text(`${formatPrice(fact.value)}/mois`, fact.lots > 1 ? 'Loyers encaissés' : 'Loyer encaissé', { shortLabel: 'Encaissés' });
+    case 'potentialRent': return text(`${formatPrice(fact.value)}/mois`, 'Loyer potentiel', { shortLabel: 'Potentiel', isMuted: true });
+    case 'vacant': return text('Libre de toute occupation');
+    case 'hotelScope': return text(scopeLabel(fact.value));
+    case 'annualRevenue': return text(compactAmount(fact.value), 'CA');
+    case 'zoning': return text(fact.value, 'Zone PLU');
+    case 'serviced': return text(fact.value ? 'Viabilisé' : 'Non viabilisé');
+  }
+}
+
+/**
+ * « Appartement 3 pièces · 62 m² », « Immeuble de rapport · 250 m² » : seulement ce que l'annonce contient.
+ * `investment` : libellé du type dans Investir (PropertyType.investmentLabel, « Maison locative »), celui de la carte
+ * de l'app, qui ne sert qu'aux opportunités ; ailleurs, le libellé courant (« Maison »).
+ */
+export function homeTypeLine(row: Pick<ListingRow, 'property_type' | 'rooms' | 'living_area'>, investment = true): string {
+  let text = investment ? investmentTypeLabel(row.property_type as PropertyType) ?? 'Bien' : propertyTypeLabel(row.property_type);
+  const rooms = row.rooms ?? 0;
+  if ((row.property_type === 'apartment' || row.property_type === 'house') && rooms > 0) text += rooms > 1 ? ` ${rooms} pièces` : ' 1 pièce';
+  const area = Number(row.living_area);
+  if (area > 0) text += ` · ${formatArea(area)}`;
+  return text;
 }

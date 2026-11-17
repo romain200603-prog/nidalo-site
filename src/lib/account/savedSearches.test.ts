@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  budgetLabelOf, criteriaLabelsOf, draftFromQuery, modeOf, placeLabelOf, proposedName, queryFromDraft, sameQuery,
+  budgetLabelOf, criteriaLabelsOf, draftFromQuery, modeOf, placeLabelOf, proposedName, queryFromDraft, resumeSummaryOf, sameQuery,
   type SearchQueryJson,
 } from './savedSearches';
 import { defaultDraft, type SearchDraft } from '../search';
@@ -49,6 +49,18 @@ describe('recherches enregistrées : même format que l’app', () => {
     expect(placeLabelOf(RESIDENTIAL)).toBeNull();
     expect(budgetLabelOf(RESIDENTIAL)).toBe('Jusqu\'à 350 000 €');
     expect(criteriaLabelsOf(RESIDENTIAL)[0]).toBe('Appartement');
+  });
+
+  it('résume la recherche de « Reprendre ma recherche » comme l’app', () => {
+    const plain = (text: string) => text.replace(/[\u00A0\u202F]/g, ' ');
+    expect(plain(resumeSummaryOf(RESIDENTIAL))).toBe('Appartement · ≤ 350 k€');
+    expect(plain(resumeSummaryOf(HOTEL))).toBe('1 300 k€ – 9 900 k€');
+    const lyon = { ...RESIDENTIAL, location: { around: { center: { latitude: 45.764, longitude: 4.8357 }, radiusMeters: 10000 } } } as SearchQueryJson;
+    expect(plain(resumeSummaryOf(lyon))).toBe('Lyon · Appartement · ≤ 350 k€');
+    const rent = { ...RESIDENTIAL, transaction: 'rent', price: { min: 600, max: 1250 }, propertyTypes: ['house', 'apartment'] } as unknown as SearchQueryJson;
+    expect(plain(resumeSummaryOf(rent))).toBe('Appartement, Maison · 600 € – 1 250 €/mois');
+    const bare = { ...RESIDENTIAL, price: {}, propertyTypes: [] } as unknown as SearchQueryJson;
+    expect(resumeSummaryOf(bare)).toBe('Résidentiel');
   });
 
   it('écrit une recherche faite sur le site comme l’app', () => {

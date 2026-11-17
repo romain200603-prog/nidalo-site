@@ -135,6 +135,10 @@ export const ICON_PATHS = {
   arrowLeftRight: "<path d=\"M8 3 4 7l4 4\"/> <path d=\"M4 7h16\"/> <path d=\"m16 21 4-4-4-4\"/> <path d=\"M20 17H4\"/>",
   target: "<circle cx=\"12\" cy=\"12\" r=\"10\"/> <circle cx=\"12\" cy=\"12\" r=\"6\"/> <circle cx=\"12\" cy=\"12\" r=\"2\"/>",
   chevronUp: "<path d=\"m18 15-6-6-6 6\"/>",
+  // Accueil de l'app (Features/Home) : mêmes dessins que Assets.xcassets/Icons (Lucide, ISC).
+  banknote: "<rect width=\"20\" height=\"12\" x=\"2\" y=\"6\" rx=\"2\"/> <circle cx=\"12\" cy=\"12\" r=\"2\"/> <path d=\"M6 12h.01M18 12h.01\"/>",
+  history: "<path d=\"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8\"/> <path d=\"M3 3v5h5\"/> <path d=\"M12 7v5l4 2\"/>",
+  trendingDown: "<path d=\"M16 17h6v-6\"/> <path d=\"m22 17-8.5-8.5-5 5L2 7\"/>",
   // Pictogrammes de l'accueil (maquette de Romain du 07/11/2026), trait de 1,25 : mêmes dessins que l'app
   // (Assets.xcassets/Icons/icon-accueil-*). Cloche et étiquette adaptées de Lucide (ISC).
   pictoConsultes: "<path d=\"M4.96 16.5A9 9 0 1 0 3.76 12.47\"/><path d=\"M1.91 10.62 3.76 12.47 5.61 10.62\"/><path d=\"M12.75 7.25V12l3.6 2.55\"/>",

@@ -133,6 +133,10 @@ type SingleTile<T> = {
   kind: 'single';
   id: string;
   icon: IconName;
+  /** Icône du menu, si elle diffère de celle du champ (accueil du téléphone). */
+  sheetIcon?: IconName;
+  /** Sur toute la largeur, avec un chevron (« Type d'investissement » de l'accueil du téléphone). */
+  fullWidth?: boolean;
   label: string;
   /** Titre du menu, s'il diffère du libellé de la tuile. */
   sheetTitle?: string;
@@ -148,6 +152,8 @@ type MultipleTile = {
   kind: 'multiple';
   id: string;
   icon: IconName;
+  sheetIcon?: IconName;
+  fullWidth?: boolean;
   label: string;
   sheetTitle: string;
   subtitle: string;
@@ -279,5 +285,97 @@ export function moreCriteriaHint(mode: SearchMode): string {
     case 'rent': return 'Étage, extérieur, parking, DPE...';
     case 'invest': return 'Fiscalité, vacance, charges...';
     case 'hotel': return 'Étage, DPE, charges, travaux...';
+  }
+}
+
+// MARK: - Filtres de la carte des catégories (accueil du téléphone)
+
+// Champs ouverts dans la carte des catégories de l'accueil (HomeCategoryFilters, Features/Home/HomeCategoryCard.swift) :
+// mêmes critères, mêmes menus et mêmes seuils que les tuiles ci-dessus ; Investir y montre la rentabilité, le
+// cash-flow, les travaux et le type d'investissement (le type d'actif passe dans « Plus de critères »).
+
+/** Travaux acceptés, avec les mots de l'app ; « Uniquement avec travaux » n'est pas repris (le site ne sait pas le chercher). */
+export function worksPreferenceLabel(value: number | null): string {
+  if (value === null) return 'Indifférent';
+  if (value === 0) return 'Aucun travaux';
+  if (value === LIGHT_WORKS_LIMIT) return 'Travaux légers';
+  return `Jusqu'à ${formatPrice(value)}`;
+}
+
+const WORKS_PREFERENCE_OPTIONS: SelectionOption<number | null>[] = [
+  { value: null, title: worksPreferenceLabel(null), subtitle: 'Avec ou sans travaux', isAny: true },
+  { value: 0, title: worksPreferenceLabel(0), subtitle: 'Bien prêt à louer' },
+  { value: LIGHT_WORKS_LIMIT, title: worksPreferenceLabel(LIGHT_WORKS_LIMIT), subtitle: `Rafraîchissement, jusqu'à ${formatPrice(LIGHT_WORKS_LIMIT)}` },
+];
+
+/** Nombre de chambres saisi : de 1 à 2 000 (SearchCriterionOptions.maxHotelRooms). */
+const MAX_HOTEL_ROOMS = 2_000;
+
+/** Champs de la catégorie, dans l'ordre de l'app (deux par ligne ; « Type d'investissement » sur toute la largeur). */
+export function categoryFields(draft: SearchDraft): CriterionTileSpec[] {
+  switch (draft.mode) {
+    case 'buy':
+    case 'rent':
+      return homeTiles(draft);
+    case 'invest':
+      return [
+        budgetTile(draft, 'Budget maximum', "Prix d'acquisition maximum, frais d'agence inclus.", INVESTMENT_PRICES),
+        single<number | null>({
+          id: 'yield', icon: 'percent', sheetIcon: 'building2', label: 'Rentabilité min.', sheetTitle: 'Rentabilité minimum',
+          subtitle: 'Rendement brut minimal : loyers annuels ÷ prix.',
+          value: draft.minGrossYieldPercent, format: yieldLabel, options: options(YIELDS, 'Tous les rendements', yieldLabel),
+          custom: { placeholder: 'Saisir un rendement', unit: '%', allowsDecimal: true, upperBound: 100, makeValue: (amount) => amount },
+          apply: (d, value) => ({ ...d, minGrossYieldPercent: value }),
+        }),
+        single<number | null>({
+          id: 'cashflow', icon: 'banknote', sheetIcon: 'wallet', label: 'Cash-flow min.', sheetTitle: 'Cash-flow minimum',
+          subtitle: 'Cash-flow mensuel minimal estimé après crédit et charges.',
+          value: draft.minMonthlyCashFlow, format: cashFlowLabel, options: options(CASH_FLOWS, 'Tous les cash-flows', cashFlowLabel),
+          custom: { placeholder: 'Saisir un montant', unit: '€/mois', allowsNegative: true, makeValue: (amount) => amount },
+          apply: (d, value) => ({ ...d, minMonthlyCashFlow: value }),
+        }),
+        single<number | null>({
+          id: 'works', icon: 'wrench', label: 'Travaux acceptés', subtitle: "Selon l'état du bien et le budget travaux indiqué par le vendeur.",
+          value: draft.maxWorksAmount, format: worksPreferenceLabel, options: WORKS_PREFERENCE_OPTIONS,
+          apply: (d, value) => ({ ...d, maxWorksAmount: value }),
+        }),
+        single<InvestmentKind>({
+          id: 'investmentKind', icon: 'briefcase', sheetIcon: 'house', fullWidth: true, label: 'Type d’investissement',
+          subtitle: "Stratégie d'exploitation recherchée.",
+          value: investmentKind(draft), format: (kind) => INVESTMENT_KIND_LABELS[kind], options: INVESTMENT_KIND_OPTIONS,
+          apply: (d, kind) => withInvestmentKind(d, kind),
+        }),
+      ];
+    case 'hotel':
+      return [
+        budgetTile(draft, 'Budget maximum', "Prix d'acquisition maximum de l'hôtel.", HOTEL_PRICES),
+        single<HotelScope | null>({
+          id: 'scope', icon: 'house', label: 'Type de vente', subtitle: 'Ce que comprend le prix de vente.',
+          value: draft.hotelScope, format: hotelScopeLabel, options: HOTEL_SCOPE_OPTIONS,
+          apply: (d, value) => ({ ...d, hotelScope: value }),
+        }),
+        areaTile(draft, HOTEL_AREAS, "Surface totale minimale de l'établissement.", true),
+        single<number | null>({
+          id: 'rooms', icon: 'layers', label: 'Nombre de chambres', subtitle: 'Nombre minimal de chambres.',
+          value: draft.roomsMin, format: bedroomsLabel, options: options(HOTEL_ROOMS, 'Toutes les capacités', bedroomsLabel),
+          custom: { placeholder: 'Saisir un nombre', unit: 'chambres', upperBound: MAX_HOTEL_ROOMS + 1, makeValue: (amount) => Math.trunc(amount) },
+          apply: (d, value) => ({ ...d, roomsMin: value }),
+        }),
+      ];
+  }
+}
+
+/** Autres critères de l'écran complet des filtres ; pour Investir, « Type d'actif » y est passé. */
+export function categoryMoreHint(mode: SearchMode): string {
+  return mode === 'invest' ? "Type d'actif, lots, fiscalité, vacance, charges..." : moreCriteriaHint(mode);
+}
+
+/** Bouton de recherche de la carte des catégories. */
+export function categorySearchTitle(mode: SearchMode): string {
+  switch (mode) {
+    case 'buy': return 'Rechercher des biens';
+    case 'rent': return 'Rechercher une location';
+    case 'invest': return 'Rechercher des opportunités';
+    case 'hotel': return 'Rechercher un hôtel';
   }
 }

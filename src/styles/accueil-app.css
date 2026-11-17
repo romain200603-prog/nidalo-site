@@ -1,0 +1,200 @@
+/* Accueil de l'app (Features/Home : HomeView.swift, HomeCategoryCard.swift, HomeSections.swift), sous 1024 px, et la
+   carte d'annonce de l'accueil (HomeListingCard), aussi sur ordinateur. 1 pt de l'app = 1 px ici ; ombres : flou CSS =
+   2 × le rayon SwiftUI ; « systemApp » de l'app = police système (--app-font-system), « manrope » = --app-font. */
+
+/* ——— Page ——— */
+@media (max-width: 760px) {
+  .page-app-top > .topbar { display: none; }
+}
+@media (max-width: 1023px) {
+  .page-app-top { background: var(--app-page); }
+}
+.home-app { padding-bottom: 28px; color: var(--app-navy); }
+
+/* ——— Barre du haut, sans fond (44) : logo maison, « NIDΛLO », cloche dans un rond blanc ——— */
+.home-app-top { display: flex; align-items: center; height: 44px; margin: calc(10px + env(safe-area-inset-top)) 16px 0; }
+.home-app-brand { display: flex; align-items: center; gap: 10px; margin: 0; }
+.home-app-logo { display: block; width: 32px; height: 27px; }
+/* 19 pt très gras, capitales de 13,3 : le dessin du nom à la même hauteur de capitales. */
+.home-app-word { display: block; width: auto; height: 13.85px; }
+.home-app-bell { position: relative; display: flex; align-items: center; justify-content: center; flex: none; width: 44px; height: 44px; margin: 0 -1px 0 auto; color: var(--app-navy); text-decoration: none; -webkit-tap-highlight-color: transparent; }
+.home-app-bell-circle { position: relative; display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border: 1px solid var(--app-border); border-radius: 50%; background: #FFFFFF; }
+.home-app-bell .icon { width: 20px; height: 20px; }
+/* Point rouge de 8 cerclé de blanc (2), en haut à droite de la cloche. */
+.home-app-dot { position: absolute; left: 22.5px; top: 8px; width: 8px; height: 8px; border-radius: 50%; background: #E5484D; box-shadow: 0 0 0 2px #FFFFFF; }
+.home-app-bell:focus-visible { outline: none; }
+.home-app-bell:focus-visible .home-app-bell-circle { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+/* 761–1023 px : l'en-tête bleu du site est là ; le titre de la page reste pour les lecteurs d'écran. */
+@media (min-width: 761px) {
+  .home-app-top { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .home-app-bell { display: none; }
+}
+
+/* ——— Carte des catégories : pavés, puis les filtres de la catégorie ouverte, en accordéon ——— */
+.home-category { position: relative; margin: 32px 16px 0; padding: 18px 10px 14px; border: 1px solid var(--app-border); border-radius: 26px; background: #FFFFFF; box-shadow: 0 10px 30px rgba(31, 36, 48, 0.07); }
+.home-category.is-moving { overflow: hidden; }
+.home-category-filters { display: flex; flex-direction: column; gap: 10px; padding: 0 2px; }
+.home-category-filters.is-entering { animation: home-filters-in var(--app-duration) var(--app-ease) both; }
+.home-category-filters.is-leaving { pointer-events: none; animation: home-filters-out var(--app-duration) var(--app-ease) both; }
+@keyframes home-filters-in { from { opacity: 0; transform: translateY(-6px); } }
+@keyframes home-filters-out { to { opacity: 0; transform: translateY(-6px); } }
+.home-category-rule { height: 1px; margin: 16px 4px 6px; background: var(--app-border); }
+
+/* Lieu (64) : épingle, titre, saisie (exemple en 16 si vide), chevron ; fond #FAF9F6, contour #EBE9E4, rayon 18. */
+.home-category .home-category-place input { height: 64px; padding: 18px 40px 0 51px; border: 1px solid var(--app-field-border); border-radius: 18px; background: var(--app-field); color: var(--app-navy); font: 700 16px/20px var(--app-font-system); }
+.home-category .home-category-place input::placeholder { color: var(--app-placeholder); font-weight: 400; }
+.home-category .home-category-place input:focus { border-color: var(--app-brand); box-shadow: 0 0 0 3px rgba(60, 92, 176, 0.16); }
+.home-category .home-category-place .place-field-caption { left: 51px; top: 14px; color: var(--app-text-muted); font: 500 12px/14px var(--app-font-system); }
+.home-category .home-category-place .place-field-icon { left: 18px; top: 22px; width: 20px; height: 20px; color: var(--app-navy); }
+.home-category .home-category-place .place-field-chevron { right: 15px; top: 24px; width: 16px; height: 16px; color: var(--app-navy); }
+.home-category .home-category-place .place-field-clear { top: 13px; right: 4px; color: var(--app-text-muted); }
+.home-category .home-category-place .place-list { top: 70px; }
+
+/* Champs (66) : icône de 20, titre 12 moyen gris, valeur 15 gras ; deux par ligne, 10 entre eux. */
+.home-category-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.home-category .criterion-tile { display: flex; align-items: center; width: 100%; min-width: 0; height: auto; min-height: 66px; padding: 0 8px 0 12px; border: 1px solid var(--app-field-border); border-radius: 18px; background: var(--app-field); color: var(--app-navy); text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.home-category .criterion-tile:hover { border-color: var(--app-field-border); }
+.home-category .criterion-tile.is-full { grid-column: 1 / -1; padding: 0 15px; }
+.home-category .criterion-icon { flex: none; width: 20px; height: 20px; color: var(--app-navy); }
+.home-category .criterion-text { flex: 1; gap: 4px; min-width: 0; margin-left: 10px; }
+.home-category .criterion-label { color: var(--app-text-muted); font: 500 12px/14px var(--app-font-system); }
+.home-category .criterion-value { color: var(--app-navy); font: 700 15px/18px var(--app-font-system); }
+.home-category .criterion-chevron { flex: none; width: 16px; height: 16px; margin-left: 4px; color: var(--app-navy); }
+
+/* « Plus de critères » (52, fond bleu clair) */
+.home-more { display: flex; align-items: center; width: 100%; min-height: 52px; padding: 0 12px 0 16px; border: 0; border-radius: 16px; background: var(--app-brand-soft); color: var(--app-brand); text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.home-more .icon { flex: none; width: 20px; height: 20px; }
+.home-more-title { flex: none; margin-left: 10px; font: 700 15px/18px var(--app-font-system); white-space: nowrap; }
+.home-more-hint { flex: 1; min-width: 0; margin-left: 10px; overflow: hidden; color: var(--app-text-muted); font: 400 13px/16px var(--app-font-system); white-space: nowrap; text-overflow: ellipsis; }
+.home-more .home-more-chevron { width: 16px; height: 16px; margin-left: 8px; }
+
+/* Bouton de recherche (56, bleu plein, ombre bleue 30 %, flou 24, décalage 10) */
+.home-category .home-search-button { position: relative; display: flex; align-items: center; justify-content: center; width: 100%; height: auto; min-height: 56px; padding: 0 44px; border: 0; border-radius: 18px; background: var(--app-brand); color: #FFFFFF; font: 700 17px/22px var(--app-font-system); box-shadow: 0 10px 24px rgba(60, 92, 176, 0.3); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.home-category .home-search-button:hover { background: var(--app-brand-pressed); }
+.home-category .home-search-button .icon { position: absolute; top: 50%; width: 20px; height: 20px; margin-top: -10px; }
+.home-category .home-search-button .icon:first-child { left: 17px; }
+.home-category .home-search-button .icon:last-child { right: 17px; }
+.home-search-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* « Réduire » (30 de haut, 44 pour le doigt) */
+.home-collapse { position: relative; display: flex; align-items: center; justify-content: center; gap: 3px; width: 100%; height: 30px; padding: 0; border: 0; background: none; color: var(--app-text-muted); font: 600 13px/16px var(--app-font-system); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.home-collapse::after { content: ''; position: absolute; inset: -7px 0; }
+.home-collapse .icon { width: 16px; height: 16px; }
+
+/* ——— Reprendre ma recherche ——— */
+.home-resume { display: flex; align-items: center; width: calc(100% - 32px); margin: 16px 16px 0; padding: 12px 14px 12px 13px; border: 1px solid var(--app-border); border-radius: 20px; background: #FFFFFF; color: var(--app-navy); text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.home-resume-icon { display: flex; align-items: center; justify-content: center; flex: none; width: 44px; height: 44px; border-radius: 14px; background: var(--app-brand-soft); color: var(--app-brand); }
+.home-resume-icon .icon { width: 20px; height: 20px; }
+.home-resume-text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; margin-left: 12px; }
+.home-resume-title, .home-resume-summary { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.home-resume-title { font: 700 15px/18px var(--app-font-system); }
+.home-resume-summary { color: var(--app-text-secondary); font: 400 13px/16px var(--app-font-system); }
+.home-resume-new { flex: none; min-width: 24px; height: 24px; margin: 0 11px 0 8px; padding: 0 8px; border-radius: 12px; background: var(--app-brand); color: #FFFFFF; font: 700 13px/24px var(--app-font-system); text-align: center; font-variant-numeric: tabular-nums; }
+.home-resume-chevron { flex: none; width: 16px; height: 16px; margin-left: 8px; color: var(--app-navy); }
+.home-resume-new + .home-resume-chevron { margin-left: 0; }
+
+/* ——— Sections : en-tête (pavé de 36, titre 18 gras, « Voir tout »), puis une rangée qui défile ——— */
+.home-app-section { display: flex; flex-direction: column; gap: 14px; margin-top: 32px; }
+.home-app-section.is-first { margin-top: 24px; }
+.home-section-header { display: flex; align-items: flex-start; gap: 10px; padding: 0 16px; }
+.home-section-tile { display: flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; border-radius: 10px; }
+.home-section-tile .icon { width: 22px; height: 22px; }
+.home-section-tile.tint-blue { background: #EEF2FA; color: #3C5CB0; }
+.home-section-tile.tint-green { background: #E6F0EA; color: #2F7A4E; }
+.home-section-tile.tint-teal { background: #E3F1EF; color: #2C7A72; }
+.home-section-tile.tint-amber { background: #F8EED8; color: #946B1E; }
+.home-section-tile.tint-gray { background: #F1F0EC; color: #5D6470; }
+.home-section-tile.tint-red { background: #FDECF1; color: #EB4B47; }
+.home-section-text { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
+.home-section-row { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.home-section-row h2 { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--app-navy); font: 700 18px/22px var(--app-font); white-space: nowrap; }
+.home-section-see-all { position: relative; display: inline-flex; align-items: center; gap: 3px; flex: none; margin-left: auto; color: var(--app-brand); font: 600 13px/16px var(--app-font); text-decoration: none; }
+.home-section-see-all::after { content: ''; position: absolute; inset: -14px; }
+.home-section-see-all .icon { width: 14px; height: 14px; }
+.home-section-text p { margin: -6px 0 0; color: var(--app-text-secondary); font: 400 13px/16px var(--app-font); }
+.home-app-carousel { display: flex; align-items: flex-start; gap: 12px; margin: 0; padding: 0 16px; overflow-x: auto; list-style: none; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.home-app-carousel::-webkit-scrollbar { display: none; }
+.home-app-carousel > li { flex: none; display: flex; }
+
+/* « Explorer par ville » : pastilles blanches (36, 44 pour le doigt) */
+.home-cities { display: flex; flex-direction: column; margin-top: 32px; }
+.home-cities.is-first { margin-top: 24px; }
+.home-cities .home-app-carousel { gap: 10px; margin-top: 14px; padding-top: 4px; padding-bottom: 4px; }
+.home-city { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 15px; border: 1px solid var(--app-border); border-radius: 999px; background: #FFFFFF; color: var(--app-navy); font: 600 14px/17px var(--app-font-system); text-decoration: none; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
+.home-city .icon { width: 14px; height: 14px; color: var(--app-brand); }
+
+/* 761–1023 px (sous l'en-tête bleu du site) : la carte et les titres sur une colonne de 688 px au milieu, les
+   rangées de cartes sur toute la largeur de l'écran, la première carte alignée sur la colonne. */
+@media (min-width: 761px) {
+  .home-category { max-width: 688px; margin-left: auto; margin-right: auto; }
+  .home-resume { width: 100%; max-width: 688px; margin-left: auto; margin-right: auto; }
+  .home-section-header { width: 100%; max-width: 720px; margin-left: auto; margin-right: auto; }
+  .home-app-carousel { padding-left: max(16px, calc((100% - 688px) / 2)); padding-right: max(16px, calc((100% - 688px) / 2)); }
+}
+
+/* ——— Carte d'annonce de l'accueil (HomeListingCard) : 248 de large, photo de 156, rayon 22 ——— */
+.home-listing-card { position: relative; display: flex; flex: none; flex-direction: column; width: 248px; min-width: 0; overflow: hidden; border-radius: 22px; background: #FFFFFF; color: var(--app-navy); }
+/* Contour de 1 dessiné par-dessus la photo, comme dans l'app (strokeBorder). */
+.home-listing-card::before, .home-listing-row::before { content: ''; position: absolute; inset: 0; z-index: 2; border: 1px solid var(--app-border); border-radius: inherit; pointer-events: none; }
+.home-listing-card:has(.stretched:focus-visible), .home-listing-row:has(.stretched:focus-visible) { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+.home-listing-card .stretched:focus-visible, .home-listing-row .stretched:focus-visible { outline: none; }
+.hlc-photo { position: relative; flex: none; height: 156px; background: #EEF1F5; }
+.hlc-photo > .photo, .hlc-photo > .photo-empty, .hlc-photo > .home-no-photo, .hlr-photo > .photo, .hlr-photo > .photo-empty, .hlr-photo > .home-no-photo { width: 100%; height: 100%; }
+.home-no-photo { display: flex; align-items: center; justify-content: center; color: rgba(36, 45, 56, 0.35); }
+.home-no-photo .icon { width: 30px; height: 30px; }
+.home-no-photo.tint-apartment { background: #DDE6F0; }
+.home-no-photo.tint-house { background: #DDEADF; }
+.home-no-photo.tint-business { background: #EFE6DA; }
+.home-no-photo.tint-other { background: #EADFE8; }
+/* Pastilles à 12 du haut et du bord : rendement (capsule), « Nouveau », baisse de prix. */
+.hlc-yield, .hlc-new, .hlc-drop { position: absolute; left: 12px; top: 12px; z-index: 2; display: inline-flex; align-items: center; color: #FFFFFF; white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
+.hlc-yield { height: 24px; padding: 0 11px; border-radius: 12px; font: 700 12px/1 var(--app-font-system); }
+.hlc-yield.is-good { background: var(--app-yield-green); }
+.hlc-yield.is-low { background: var(--app-caution); }
+.hlc-new { height: 20px; padding: 0 7px; border-radius: 6px; background: var(--app-brand); font: 600 11px/1 var(--app-font); }
+.hlc-drop { height: 22px; padding: 0 7px; border-radius: 7px; background: var(--app-price-drop); font: 800 12px/1 var(--app-font); }
+/* Cœur : rond blanc de 32 à 12 du haut et du bord (44 pour le doigt), cœur sombre, plein en bleu. */
+.heart-button.hlc-heart { right: 12px; top: 12px; width: 32px; height: 32px; border-radius: 50%; background: #FFFFFF; color: var(--app-navy); --heart-full: var(--app-brand); }
+.heart-button.hlc-heart::after { inset: -6px; }
+.hlc-heart .icon { width: 16px; height: 16px; margin-top: 2px; }
+.hlc-body { display: flex; flex-direction: column; min-width: 0; padding: 12px 16px 16px; }
+.hlc-price { display: flex; align-items: baseline; gap: 6px; min-width: 0; margin: 0; overflow: hidden; color: var(--app-navy); font-family: var(--app-font-system); white-space: nowrap; }
+.hlc-price s { color: var(--app-text-muted); font-size: 13px; line-height: 16px; font-variant-numeric: tabular-nums; }
+.hlc-now { display: inline-flex; align-items: baseline; gap: 2px; }
+.hlc-amount { font-size: 19px; font-weight: 800; line-height: 23px; font-variant-numeric: tabular-nums; }
+.hlc-suffix { font-size: 13px; font-weight: 600; }
+/* Petite ligne : un ou deux faits en 12, séparés par « · » ; 16 de haut même vide. */
+.hlc-facts { position: relative; display: flex; align-items: center; gap: 5px; height: 16px; margin: 4px 0 0; overflow: hidden; font: 400 12px/16px var(--app-font); white-space: nowrap; }
+.hlc-fact-group, .hlc-fact { display: inline-flex; flex: none; align-items: center; }
+.hlc-fact-group { gap: 5px; }
+.hlc-fact { gap: 4px; }
+.hlc-fact-label, .hlc-fact-dot { color: var(--app-text-secondary); }
+.hlc-fact-value { color: var(--app-navy); font-weight: 600; }
+.hlc-dpe { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 5px; border-radius: 4px; font: 700 11px/1 var(--app-font); }
+.hlc-facts-probe { position: absolute; left: 0; top: 0; display: inline-flex; align-items: center; gap: 5px; width: max-content; visibility: hidden; pointer-events: none; }
+.hlc-type { margin: 5px 0 0; overflow: hidden; color: var(--app-text-dark); font: 400 13px/16px var(--app-font-system); white-space: nowrap; text-overflow: ellipsis; }
+.hlc-type a { color: inherit; text-decoration: none; }
+.hlc-city { display: flex; align-items: center; gap: 5px; margin: 7px 0 0; overflow: hidden; color: var(--app-text-secondary); font: 400 12px/15px var(--app-font-system); white-space: nowrap; }
+.hlc-city .icon { flex: none; width: 12px; height: 12px; }
+
+/* Petite carte horizontale de l'ordinateur : même contenu et même apparence, photo à gauche. */
+.home-listing-row { position: relative; display: flex; align-items: center; gap: 14px; min-width: 0; padding: 10px; border-radius: 22px; background: #FFFFFF; color: var(--app-navy); }
+.hlr-photo { position: relative; flex: none; width: 96px; height: 86px; overflow: hidden; border-radius: 12px; background: #EEF1F5; }
+.hlr-photo .home-no-photo .icon { width: 24px; height: 24px; }
+.hlr-photo .hlc-yield, .hlr-photo .hlc-new, .hlr-photo .hlc-drop { left: 6px; top: 6px; }
+.home-listing-row .hlc-body { flex: 1; padding: 0; }
+.home-listing-row.has-heart .hlc-body { padding-right: 34px; }
+.heart-button.hlc-heart:is(.home-listing-row > *) { right: 8px; top: 8px; }
+
+@media (min-width: 1024px) {
+  .dhome .home-listing-card { width: auto; transition: box-shadow 0.15s ease, transform 0.15s ease; }
+  .dhome .hlc-photo { height: auto; aspect-ratio: 248 / 156; }
+  .dhome .home-listing-row { transition: box-shadow 0.15s ease, transform 0.15s ease; }
+  .dhome .home-listing-card:hover, .dhome .home-listing-row:hover { box-shadow: var(--d-card-hover-shadow); transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-category-filters.is-entering { animation: app-fade-in 0.25s ease-in-out both; }
+  .home-category-filters.is-leaving { animation: app-fade-out 0.25s ease-in-out both; }
+  .dhome .home-listing-card, .dhome .home-listing-row { transition: none; }
+  .dhome .home-listing-card:hover, .dhome .home-listing-row:hover { transform: none; }
+}
