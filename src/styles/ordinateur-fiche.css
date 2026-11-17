@@ -32,6 +32,7 @@
   .dl-tool .icon { flex: none; width: 18px; height: 18px; }
   .dl-tool:hover { background: var(--d-hover); }
   .dl-tool.is-active { border-color: var(--d-blue-line); background: var(--d-blue-light); color: var(--d-blue); }
+  .dl-save { --heart-full: var(--d-blue); }
 
   /* ——— Galerie : 466 px, la grande photo (2/3) et deux photos l'une sur l'autre ; une seule photo sous 3 ——— */
   .dl-gallery { margin-top: 19px; }

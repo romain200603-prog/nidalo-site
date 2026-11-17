@@ -4,6 +4,7 @@ import {
   InfoLine, OptionalBoolPicker, PERCENT_ISSUE, RadiusChoices, RANGE_ISSUE, RangeSliderField, RoomsRangePicker,
 } from '../components/FilterControls';
 import { Icon } from '../components/Icon';
+import { CriterionChipsRow } from '../components/CriterionChips';
 import { ModeTabs } from '../components/ModeTabs';
 import { PlaceField } from '../components/PlaceField';
 import { formatPrice } from '../lib/format';
@@ -247,17 +248,12 @@ export function FiltersDialog({ open, draft, remembered, onClose, onApply, onSho
 
             {!fixedMode && <ModeTabs mode={mode} onChange={changeMode} className="mode-tabs-search filters-modes" />}
 
-            {chips.length > 0 && (
-              <div className="filters-active" role="group" aria-label="Critères appliqués">
-                {chips.map((chip) => (
-                  <button key={chip.id} type="button" className="active-chip" aria-label={`Retirer le critère ${chip.label}`}
-                    onClick={() => replace(chip.remove(working))}>
-                    {chip.label}
-                    <Icon name="x" />
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* Critères appliqués, retirables un par un : ici, seule la croix agit (activeChips de l'app). */}
+            <CriterionChipsRow chips={chips} label="Critères appliqués" className="filters-active"
+              onRemove={(id) => {
+                const chip = chips.find((c) => c.id === id);
+                if (chip) replace(chip.remove(working));
+              }} />
 
             <div className="filters-cards">
               {mode !== 'hotel' && (

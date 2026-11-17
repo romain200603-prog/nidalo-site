@@ -75,7 +75,8 @@ img { max-width: 100%; }
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
     height: calc(var(--tabbar-height) + env(safe-area-inset-bottom));
     padding-bottom: env(safe-area-inset-bottom);
-    background: var(--card); border-top: 1px solid var(--border);
+    /* Fond blanc opaque et filet du haut de la barre de l'app (AppTabBar : .background(.white), tabBarRule). */
+    background: #FFFFFF; border-top: 1px solid #EDEBE7;
   }
   .tabbar a { display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; color: var(--text-muted); font-size: 11px; font-weight: 600; }
   .tabbar a[aria-current="page"] { color: var(--blue); }
@@ -155,13 +156,7 @@ main:focus { outline: none; }
 .tone-muted { color: var(--text-secondary); }
 .tone-caution { color: var(--orange); }
 
-/* Choix Résidentiel · Location · Investir · Hôtels : icône au-dessus du nom */
-.mode-tabs { display: grid; grid-template-columns: repeat(4, 1fr); height: 56px; padding: 3px 0; border-radius: 13px; background: var(--chip); }
-.mode-tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; margin: 0 2px; border: 0; border-radius: 10.5px; background: transparent; color: var(--icon); font-size: 12px; font-weight: 600; cursor: pointer; }
-.mode-tab .icon { width: 19px; height: 19px; }
-.mode-tab[aria-checked="true"] { background: var(--card); color: var(--blue); box-shadow: inset 0 0 0 1px var(--border); }
-.mode-tabs-search .mode-tab { color: var(--ink); }
-.mode-tabs-search .mode-tab[aria-checked="true"] { background: var(--blue); color: #FFFFFF; box-shadow: none; }
+/* Choix Résidentiel · Location · Investir · Hôtels : les pavés de l'app, dans styles/pieces-app.css (ModeTabs). */
 
 /* Champ du lieu, avec suggestions */
 .place-field { position: relative; flex: 1; min-width: 0; }
@@ -184,6 +179,7 @@ main:focus { outline: none; }
 /* Pastilles des critères */
 .chips-row { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 4px; scrollbar-width: none; }
 .chips-row::-webkit-scrollbar { display: none; }
+.chips-row > .criterion-chips { flex: none; overflow: visible; }
 .filter-chip { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); color: rgba(10, 26, 68, 0.8); font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap; }
 .filter-chip .icon { width: 14px; height: 14px; color: var(--text-muted); }
 .filter-chip.accent { border-color: var(--blue); color: var(--blue); font-weight: 700; }
@@ -367,10 +363,7 @@ main:focus { outline: none; }
 .filters-reset { flex: none; width: 40px; height: 40px; border: 1px solid var(--border); border-radius: 50%; background: var(--card); color: var(--blue); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .filters-reset .icon { width: 17px; height: 17px; stroke-width: 2.4; }
 .filters-modes { margin-top: 0; }
-.filters-active { display: flex; gap: 8px; margin: 0 -16px; padding: 0 16px; overflow-x: auto; scrollbar-width: none; }
-.filters-active::-webkit-scrollbar { display: none; }
-.active-chip { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 11px; border: 0; border-radius: 999px; background: var(--blue-soft); color: var(--blue); font-size: 12.5px; font-weight: 600; white-space: nowrap; cursor: pointer; }
-.active-chip .icon { width: 11px; height: 11px; stroke-width: 3; }
+.filters-active { margin: 0 -16px; padding: 0 16px; }
 .filters-apply { flex: none; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--card); box-shadow: 0 -2px 10px rgba(10, 26, 68, 0.06); }
 .filters-apply .btn { width: 100%; min-height: 52px; font-size: 15px; font-weight: 700; }
 .filters-apply .btn .icon { width: 18px; height: 18px; }
@@ -616,7 +609,6 @@ main:focus { outline: none; }
   .criterion-label { font-size: 12px; }
   .criterion-value { font-size: 15px; }
   .more-criteria-hint { font-size: 12px; }
-  .home-search-card .mode-tab { font-size: 13px; }
 }
 @media (min-width: 1024px) {
   .home-carousel { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); width: 100%; max-width: 1180px; margin: 0 auto; overflow: visible; }

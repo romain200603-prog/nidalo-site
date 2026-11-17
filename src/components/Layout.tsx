@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import '../styles/app.css';
 // Ordinateur (≥ 1024 px seulement) : police Inter, couleurs, barre du haut, pied de page, colonne de 640 px.
 import '../styles/ordinateur.css';
+import { ToastHost } from './AppToast';
 import { DesktopFooter } from './DesktopFooter';
 import { DesktopHeader } from './DesktopHeader';
 import { Icon } from './Icon';
@@ -154,6 +155,7 @@ export function Page({ section, children, wide = false, fill = false }: {
       </main>
       {!fill && <SiteFooter />}
       <TabBar section={section} />
+      <ToastHost />
       <SignInSheet />
     </div>
   );

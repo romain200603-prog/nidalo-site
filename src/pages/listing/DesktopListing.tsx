@@ -328,7 +328,7 @@ function SaveTool({ listingId }: { listingId: string }) {
       title={active ? 'Retirer des favoris' : 'Ajouter aux favoris'}
       onClick={() => toggleFavorite(listingId)}
     >
-      <HeartIcon filled={active} />
+      <HeartIcon filled={active} ready={favorites.status === 'ready'} />
       Enregistrer
     </button>
   );

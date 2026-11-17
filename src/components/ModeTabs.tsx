@@ -1,7 +1,14 @@
 import { Icon } from './Icon';
 import { SEARCH_MODES, type SearchMode } from '../lib/labels';
+import '../styles/pieces-app.css';
 
-/** Choix Résidentiel · Location · Investir · Hôtels, icône au-dessus du nom, comme l'accueil de l'app. */
+/**
+ * Choix Résidentiel · Location · Investir · Hôtels : les pavés des catégories de l'app (CategoryTileRow et
+ * HomeCategoryButtonStyle, Features/Home/HomeCategoryCard.swift), les mêmes partout (accueil, recherche, filtres).
+ * Pavé de 60 au pictogramme de 28, nom dessous, petit trait sous la catégorie choisie ; choisie, le pavé passe en
+ * pleine couleur avec le ressort de l'app. Une catégorie est toujours choisie : toucher celle qui l'est ne fait rien.
+ * Les flèches du clavier passent d'une catégorie à l'autre.
+ */
 export function ModeTabs({ mode, onChange, className }: { mode: SearchMode; onChange: (mode: SearchMode) => void; className?: string }) {
   return (
     <div className={`mode-tabs ${className ?? ''}`} role="radiogroup" aria-label="Type de recherche">
@@ -11,8 +18,8 @@ export function ModeTabs({ mode, onChange, className }: { mode: SearchMode; onCh
           type="button"
           role="radio"
           aria-checked={item.mode === mode}
-          className="mode-tab"
-          onClick={() => onChange(item.mode)}
+          className={`mode-tab mode-tab-${item.mode}`}
+          onClick={() => { if (item.mode !== mode) onChange(item.mode); }}
           onKeyDown={(event) => {
             const index = SEARCH_MODES.findIndex((m) => m.mode === mode);
             const step = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0;
@@ -25,8 +32,9 @@ export function ModeTabs({ mode, onChange, className }: { mode: SearchMode; onCh
           }}
           tabIndex={item.mode === mode ? 0 : -1}
         >
-          <Icon name={item.icon} />
-          <span>{item.label}</span>
+          <span className="mode-tile" aria-hidden="true"><Icon name={item.icon} /></span>
+          <span className="mode-name">{item.label}</span>
+          <span className="mode-underline" aria-hidden="true" />
         </button>
       ))}
     </div>

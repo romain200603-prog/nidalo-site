@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Icon } from '../components/Icon';
 import { Page } from '../components/Layout';
 import { cardTag, ListingCard } from '../components/ListingCard';
+import { CriterionChipsRow } from '../components/CriterionChips';
 import { ModeTabs } from '../components/ModeTabs';
 import { PlaceField } from '../components/PlaceField';
 import { ListingPhoto } from '../components/PhotoPager';
@@ -209,14 +210,12 @@ export function SearchPage() {
               </button>
             </div>
             {draft.place && <p className="search-place-label"><Icon name="pin" />{placeLabel(draft)}</p>}
-            <div className="chips-row" aria-label="Critères">
-              {chips.map((chip) => (
-                <button key={chip.id} type="button" className="filter-chip" onClick={() => apply(chip.remove(draft))}
-                  aria-label={`Retirer le critère ${chip.label}`}>
-                  {chip.label}
-                  <Icon name="x" />
-                </button>
-              ))}
+            <div className="chips-row">
+              <CriterionChipsRow chips={chips} onOpen={() => setFiltersOpen(true)}
+                onRemove={(id) => {
+                  const chip = chips.find((c) => c.id === id);
+                  if (chip) apply(chip.remove(draft));
+                }} />
               <button type="button" className="filter-chip accent" onClick={() => setFiltersOpen(true)}>+ Filtres</button>
             </div>
           </div>

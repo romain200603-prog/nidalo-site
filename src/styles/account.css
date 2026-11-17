@@ -402,6 +402,7 @@
 .heart-photo { right: 8px; top: 8px; width: 28px; height: 28px; border-radius: 50%; background: rgba(255, 255, 255, 0.85); color: var(--ink); }
 .heart-photo .icon { width: 15px; height: 15px; margin-top: 1px; }
 .heart-photo.is-active { color: var(--blue); }
+.heart-photo, .heart-inline { --heart-full: var(--blue); }
 .heart-plain { right: 2px; top: 2px; width: 32px; height: 32px; border-radius: 10px; background: transparent; color: var(--blue); }
 .heart-plain::after { inset: -6px; }
 .heart-plain .icon { width: 16px; height: 16px; }

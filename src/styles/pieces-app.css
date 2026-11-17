@@ -1,0 +1,168 @@
+/* Pièces de l'app (DesignSystem et Features/Home de l'app iPhone), les mêmes sur téléphone et sur ordinateur :
+   pavés des catégories, pastille de critère, bouton des filtres, cœur des favoris, message du bas.
+   Couleurs : DesignSystem/Tokens/AppColors.swift et HomeColors.swift ; 1 pt de l'app = 1 px ici.
+   Ombres : flou CSS = 2 × le rayon SwiftUI. Polices : Inter (« manrope » dans l'app) et la police système
+   (« systemApp » dans l'app, SF Pro sur iPhone et Mac). */
+
+:root {
+  --app-brand: #3C5CB0;
+  --app-brand-pressed: #2F4A92;
+  --app-brand-soft: #EEF2FA;
+  --app-navy: #242D38;
+  --app-text-secondary: #75808B;
+  --app-text-muted: #9AA2AA;
+  --app-text-dark: #5B6571;
+  --app-placeholder: #A7AEB5;
+  --app-border: #ECEAE6;
+  --app-field: #FAF9F6;
+  --app-field-border: #EBE9E4;
+  --app-segment: #F2F0EC;
+  --app-page: #FAF9F6;
+  --app-yield-green: #577965;
+  --app-caution: #E59A0B;
+  --app-price-drop: #EB4B47;
+  /* Téléphone : la police du téléphone, aucune police téléchargée (règle du site, vérifiée par check-pages) ;
+     Inter (Nidalo Inter) à partir de 1024 px, comme le reste du site sur ordinateur. */
+  --app-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --app-font-system: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Le ressort de l'app (NidaloMotion.category : réponse 0,45 s, amorti 0,85, sans rebond visible), défini une fois :
+     courbe de Bézier ajustée sur le ressort (écart de moins de 1 %). Les pressions durent 0,25 s comme dans l'app. */
+  --app-ease: cubic-bezier(0.24, 0.15, 0.2, 1.13);
+  --app-duration: 0.45s;
+  --app-press-duration: 0.25s;
+}
+@media (min-width: 1024px) {
+  :root { --app-font: 'Nidalo Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+}
+
+/* ——— Pavés des catégories (CategoryTileRow, HomeCategoryButtonStyle, HomeCategoryTile) ———
+   Quatre colonnes égales ; pavé de 60 (rayon 20) au pictogramme de 28, nom 13 semibold 8 dessous, petit trait de
+   20 × 3 8 dessous pour la catégorie choisie (sa place reste gardée). Choisie : pavé plein de sa couleur, icône
+   blanche, ombre de sa couleur, nom de sa couleur. À l'appui, le pavé rétrécit à 94 %. */
+.mode-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 0; background: none; border-radius: 0; height: auto; }
+.mode-tab {
+  --tile-soft: var(--app-brand-soft);
+  --tile-ink: var(--app-brand);
+  --tile-shadow: rgba(60, 92, 176, 0.35);
+  display: flex; flex-direction: column; align-items: center; min-width: 0; margin: 0; padding: 0;
+  border: 0; border-radius: 0; background: none; box-shadow: none; color: var(--app-navy);
+  font-family: var(--app-font-system); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.mode-tab-rent { --tile-soft: #E3F1EF; --tile-ink: #2C7A72; --tile-shadow: rgba(44, 122, 114, 0.35); }
+.mode-tab-invest { --tile-soft: #E6F0EA; --tile-ink: #2F7A4E; --tile-shadow: rgba(47, 122, 78, 0.35); }
+.mode-tab-hotel { --tile-soft: #F8EED8; --tile-ink: #946B1E; --tile-shadow: rgba(148, 107, 30, 0.35); }
+.mode-tile {
+  display: flex; align-items: center; justify-content: center; flex: none; width: 60px; height: 60px; border-radius: 20px;
+  background: var(--tile-soft); color: var(--tile-ink);
+  transition: background-color var(--app-duration) var(--app-ease), color var(--app-duration) var(--app-ease),
+    box-shadow var(--app-duration) var(--app-ease), transform var(--app-press-duration) var(--app-ease);
+}
+.mode-tile .icon { width: 28px; height: 28px; }
+.mode-name {
+  max-width: 100%; margin-top: 8px; overflow: hidden; color: var(--app-navy); font-size: 13px; font-weight: 600;
+  line-height: 16px; white-space: nowrap; text-overflow: ellipsis; font-variant-numeric: tabular-nums;
+  transition: color var(--app-duration) var(--app-ease);
+}
+.mode-underline {
+  flex: none; width: 20px; height: 3px; margin-top: 8px; border-radius: 2px; background: var(--tile-ink); opacity: 0;
+  transition: opacity var(--app-duration) var(--app-ease);
+}
+.mode-tab[aria-checked="true"] .mode-tile { background: var(--tile-ink); color: #FFFFFF; box-shadow: 0 8px 18px var(--tile-shadow); }
+.mode-tab[aria-checked="true"] .mode-name { color: var(--tile-ink); }
+.mode-tab[aria-checked="true"] .mode-underline { opacity: 1; }
+.mode-tab:active .mode-tile { transform: scale(0.94); }
+.mode-tab:focus-visible { outline: none; }
+.mode-tab:focus-visible .mode-tile { outline: 3px solid var(--app-brand); outline-offset: 3px; }
+
+/* ——— Pastille de critère (RemovableCriterionChip) et sa rangée (CriterionChipsRow) ———
+   Capsule blanche de 38, bordure 1, libellé Inter 13,5 medium bleu marine à 80 % à 14 du bord ; croix de 12 dans un
+   rond gris de 22, 8 après le libellé et 8 avant le bord ; zone d'appui de 44 pour la croix. */
+.criterion-chips { display: flex; gap: 8px; margin: 0; padding: 0; overflow-x: auto; scrollbar-width: none; list-style: none; }
+.criterion-chips::-webkit-scrollbar { display: none; }
+.criterion-chip {
+  position: relative; display: inline-flex; flex: none; align-items: center; height: 38px; border: 1px solid var(--app-border);
+  border-radius: 999px; background: #FFFFFF; font-family: var(--app-font);
+}
+.criterion-chip-label {
+  display: inline-flex; align-items: center; height: 36px; margin: 0; padding: 0 0 0 13px; border: 0; border-radius: 999px 0 0 999px;
+  background: none; color: rgba(36, 45, 56, 0.8); font: 500 13.5px/1 var(--app-font); white-space: nowrap; cursor: pointer;
+}
+span.criterion-chip-label { cursor: default; }
+.criterion-chip-remove {
+  position: relative; display: inline-flex; align-items: center; justify-content: flex-start; width: 37px; height: 36px; margin: 0;
+  padding: 0 0 0 8px; border: 0; border-radius: 0 999px 999px 0; background: none; color: var(--app-text-secondary); cursor: pointer;
+}
+.criterion-chip-remove::after { content: ''; position: absolute; left: -3.5px; right: -3.5px; top: 50%; height: 44px; transform: translateY(-50%); }
+.criterion-chip-cross { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: var(--app-segment); }
+.criterion-chip-cross .icon { width: 12px; height: 12px; }
+.criterion-chip-label:focus-visible, .criterion-chip-remove:focus-visible { outline: 3px solid var(--app-brand); outline-offset: -2px; }
+.criterion-chip.is-new { animation: app-chip-in var(--app-duration) var(--app-ease) both; }
+.criterion-chip.is-leaving { pointer-events: none; animation: app-chip-out var(--app-duration) var(--app-ease) both; }
+@keyframes app-chip-in { from { opacity: 0; transform: scale(0.85); } }
+@keyframes app-chip-out { to { opacity: 0; transform: scale(0.85); } }
+
+/* ——— Bouton des filtres (FiltersButton) : carré gris de 48, réglages de 20, pastille bleue du nombre de critères.
+   Sur la carte : fond blanc flottant avec l'ombre des boutons de la carte. ——— */
+.filters-button.app-filters-button {
+  position: relative; display: inline-flex; flex: none; align-items: center; justify-content: center; width: 48px; height: 48px;
+  margin: 0; padding: 0; border: 0; border-radius: 16px; background: var(--app-segment); color: var(--app-navy); cursor: pointer;
+  box-shadow: none;
+}
+.filters-button.app-filters-button.is-floating { background: #FFFFFF; box-shadow: 0 4px 16px rgba(36, 45, 56, 0.14); }
+.filters-button.app-filters-button .icon { width: 20px; height: 20px; }
+.filters-button.app-filters-button .filters-count {
+  position: absolute; top: -4px; right: -4px; display: inline-flex; align-items: center; justify-content: center; min-width: 17px;
+  height: 17px; padding: 0 4px; border: 0; border-radius: 999px; background: var(--app-brand); color: #FFFFFF;
+  font: 700 10.5px/1 var(--app-font); box-shadow: none;
+}
+.filters-button.app-filters-button:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+
+/* ——— Cœur des favoris (FavoriteHeartIcon) : contour qui s'efface, cœur plein qui apparaît, avec le ressort ;
+   le petit rebond de l'ajout est joué par le script (0,36 s). `--heart-full` : couleur du cœur plein, quand le
+   bouton change de couleur à l'ajout (le cœur qui se vide garde ainsi sa couleur pendant son fondu). ——— */
+.heart-icon { overflow: visible; }
+.heart-icon path { stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; transition: opacity var(--app-duration) var(--app-ease); }
+.heart-icon .heart-icon-empty { fill: none; stroke: currentColor; }
+.heart-icon .heart-icon-full { fill: var(--heart-full, currentColor); stroke: var(--heart-full, currentColor); opacity: 0; }
+.heart-icon.is-filled .heart-icon-empty { opacity: 0; }
+.heart-icon.is-filled .heart-icon-full { opacity: 1; }
+
+/* ——— Message du bas (CompareToast) : fond bleu, 50 de haut, rayon 14, icône 16, texte Inter 14 semibold sur deux
+   lignes au plus, action soulignée à droite. Au-dessus de la barre d'onglets du téléphone, en bas au centre sur
+   ordinateur. Un seul à la fois. ——— */
+.app-toast-host {
+  position: fixed; z-index: 70; left: 16px; right: 16px; bottom: calc(24px + env(safe-area-inset-bottom));
+  display: flex; justify-content: center; margin: 0; pointer-events: none;
+}
+.app-toast {
+  display: flex; align-items: center; gap: 10px; width: 100%; max-width: 358px; min-height: 50px; padding: 0 16px;
+  border-radius: 14px; background: var(--app-brand); color: #FFFFFF; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  font: 600 14px/1.3 var(--app-font); pointer-events: auto; animation: app-toast-in var(--app-duration) var(--app-ease) both;
+}
+.app-toast .icon { flex: none; width: 16px; height: 16px; }
+.app-toast-text { flex: 1; min-width: 0; padding: 6px 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.app-toast-action {
+  flex: none; min-height: 44px; margin: 0 0 0 4px; padding: 0; border: 0; background: none; color: #FFFFFF;
+  font: 700 14px/1 var(--app-font); text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+.app-toast-action:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; border-radius: 4px; }
+.app-toast.is-leaving { animation: app-toast-out 0.2s ease-out both; }
+@keyframes app-toast-in { from { opacity: 0; transform: translateY(100%); } }
+@keyframes app-toast-out { to { opacity: 0; transform: translateY(100%); } }
+@media (max-width: 760px) {
+  .app-toast-host { bottom: calc(var(--tabbar-height) + 28px + env(safe-area-inset-bottom)); }
+  .app-toast { max-width: none; }
+}
+
+/* « Réduire les animations » : des fondus seulement, comme l'app (NidaloMotion.fade, 0,25 s). */
+@media (prefers-reduced-motion: reduce) {
+  .mode-tile, .mode-name, .mode-underline { transition: background-color 0.25s ease-in-out, color 0.25s ease-in-out, box-shadow 0.25s ease-in-out, opacity 0.25s ease-in-out; }
+  .mode-tab:active .mode-tile { transform: none; }
+  .heart-icon path { transition: opacity 0.25s ease-in-out; }
+  .criterion-chip.is-new { animation: app-fade-in 0.25s ease-in-out both; }
+  .criterion-chip.is-leaving { animation: app-fade-out 0.25s ease-in-out both; }
+  .app-toast { animation: app-fade-in 0.25s ease-in-out both; }
+  .app-toast.is-leaving { animation: app-fade-out 0.2s ease-out both; }
+}
+@keyframes app-fade-in { from { opacity: 0; } }
+@keyframes app-fade-out { to { opacity: 0; } }
