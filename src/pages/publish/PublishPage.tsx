@@ -43,7 +43,7 @@ export function PublishPage() {
   if (desktop && !opened) setOpened(true);
   const page = SOON_PAGES.publish;
   return (
-    <Page section={page.section}>
+    <Page section={page.section} phoneHeader={{ title: page.title, back: PATHS.home }}>
       {!desktop && <SoonCard icon={page.icon} title={page.title} text={page.text} />}
       {opened && <div className="dpub-root" hidden={!desktop}><DesktopPublish /></div>}
     </Page>

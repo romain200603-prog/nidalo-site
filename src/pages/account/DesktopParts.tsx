@@ -5,7 +5,7 @@ import { useDesktop } from '../../lib/desktop';
 import { PATHS } from '../../lib/paths';
 import { Modal } from '../listing/Dialogs';
 
-// Briques de Mon espace sur ordinateur (≥ 1024 px) : lignes de réglages, fenêtres de confirmation de l'app
+// Briques de Mon espace sur ordinateur (≥ 1024 px) : fenêtres de confirmation de l'app
 // (domiaConfirmationDialog, rouge pour une action destructive) et avis « Dans l'app iPhone pour l'instant ».
 
 /** Ce que l'app garde sur l'iPhone (documents, alertes, préférences, calendrier). */
@@ -47,41 +47,6 @@ export function IphoneOnlyDialog({ title, onClose }: { title: string | null; onC
   return (
     <ChoiceDialog open={title !== null} title={title ?? ''} message={`${IPHONE_ONLY}.`} onClose={onClose}
       actions={[{ label: 'Fermer', onClick: onClose, tone: 'primary' }]} />
-  );
-}
-
-export type DesktopRow = {
-  icon: IconName;
-  title: string;
-  subtitle?: string;
-  href?: string;
-  onClick?: () => void;
-};
-
-/** Carte de lignes (RowGroup) : icône, titre, sous-titre et chevron ; un lien ou un bouton. */
-export function DesktopRows({ rows }: { rows: DesktopRow[] }) {
-  return (
-    <ul className="dsp-rows">
-      {rows.map((row) => {
-        const content = (
-          <>
-            <span className="dsp-row-icon"><Icon name={row.icon} /></span>
-            <span className="dsp-row-text">
-              <span className="dsp-row-title">{row.title}</span>
-              {row.subtitle && <span className="dsp-row-subtitle">{row.subtitle}</span>}
-            </span>
-            <Icon name="chevronRight" className="icon dsp-row-chevron" />
-          </>
-        );
-        return (
-          <li key={row.title}>
-            {row.href
-              ? <a className="dsp-row" href={row.href}>{content}</a>
-              : <button type="button" className="dsp-row" onClick={row.onClick}>{content}</button>}
-          </li>
-        );
-      })}
-    </ul>
   );
 }
 

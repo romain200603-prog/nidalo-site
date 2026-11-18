@@ -29,8 +29,9 @@ vi.mock('./supabase', () => ({
 
 import { sessionStore } from './account/session';
 import {
-  loadNotifications, markAllNotificationsRead, markNotificationRead, NOTIFICATION_COLUMNS, notificationsFromRows, notificationsStore,
-  notificationTarget, relativeDate, unreadNotificationCount, type NotificationRow,
+  loadNotifications, markAllNotificationsRead, markNotificationRead, NOTIFICATION_COLUMNS, NOTIFICATION_DAY_TITLES, notificationGroups,
+  notificationsFromRows, notificationsStore, notificationTarget, notificationTimeLabel, notificationTone, relativeDate, unreadNotificationCount,
+  type NidaloNotification, type NotificationRow,
 } from './notifications';
 
 function row(overrides: Partial<NotificationRow>): NotificationRow {
@@ -71,6 +72,46 @@ describe('notifications : lecture des lignes du serveur, comme l’app', () => {
     expect(relativeDate('2026-10-28T10:00:00Z', now)).toBe('la semaine dernière');
     expect(relativeDate('2026-08-30T10:00:00Z', now)).toBe('il y a 2 mois');
     expect(relativeDate('2026-11-06T14:30:00Z', now)).toBe('dans 2 heures');
+  });
+});
+
+// Mêmes cas que NotificationCenterLayoutTests : jeudi 19 novembre 2026, 15 h (heure locale).
+describe('centre de notifications : jours, heures et teintes de l’app (NotificationCenterLayout)', () => {
+  const now = new Date(2026, 10, 19, 15, 0);
+  const on = (day: number, hour: number, minute = 0) => new Date(2026, 10, day, hour, minute).toISOString();
+  const item = (id: string, date: string): NidaloNotification => ({
+    id, kind: 'searchMatch', requestId: null, listingId: null, conversationId: null, offerId: null, title: id, body: '', date, isRead: false,
+  });
+
+  it('groupes par jour, les plus récentes d’abord', () => {
+    const items = [item('ancienne', on(2, 9)), item('hier', on(18, 20)), item('matin', on(19, 9)), item('lundi', on(16, 8)), item('midi', on(19, 11, 2))];
+    const groups = notificationGroups(items, now);
+    expect(groups.map((group) => group.day)).toEqual(['today', 'yesterday', 'thisWeek', 'older']);
+    expect(groups[0].items.map((entry) => entry.id)).toEqual(['midi', 'matin']);
+    expect(groups.map((group) => NOTIFICATION_DAY_TITLES[group.day])).toEqual(['Aujourd\'hui', 'Hier', 'Cette semaine', 'Plus anciennes']);
+  });
+
+  it('heure affichée : « 11:02 », « Hier », « Lun. », « 3 nov. »', () => {
+    expect(notificationTimeLabel(on(19, 11, 2), now)).toBe('11:02');
+    expect(notificationTimeLabel(on(18, 9), now)).toBe('Hier');
+    expect(notificationTimeLabel(on(16, 9), now)).toBe('Lun.');
+    expect(notificationTimeLabel(on(3, 9), now)).toBe('3 nov.');
+  });
+
+  it('teintes : annonce et visite en bleu, offre en vert, à confirmer en ambre, refus et annulation en rouge', () => {
+    expect(notificationTone('searchMatch')).toBe('blue');
+    expect(notificationTone('accepted')).toBe('blue');
+    expect(notificationTone('visitSlotsOpened')).toBe('blue');
+    expect(notificationTone('offerReceived')).toBe('green');
+    expect(notificationTone('proposed')).toBe('amber');
+    expect(notificationTone('cancelled')).toBe('red');
+    expect(notificationTone('offerDeclined')).toBe('red');
+  });
+
+  it('créneaux ouverts par le vendeur (visitSlotsOpened) : une sorte connue, qui ouvre l’annonce', () => {
+    const [opened] = notificationsFromRows([row({ kind: 'visitSlotsOpened', listing_id: 'l1' })]);
+    expect(opened?.kind).toBe('visitSlotsOpened');
+    expect(notificationTarget(opened)).toBe('/annonce/?id=l1');
   });
 });
 

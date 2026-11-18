@@ -270,8 +270,10 @@ export function ListingPage() {
     document.body.classList.toggle('page-listing-ready', ready);
   }, [ready]);
 
+  // Annonce introuvable ou indisponible, sur téléphone : retour et titre en haut, comme un écran poussé.
+  const stateTitle = state.status === 'notFound' ? 'Annonce introuvable' : state.status === 'error' ? 'Annonce indisponible' : null;
   return (
-    <Page section="search">
+    <Page section="search" phoneHeader={stateTitle ? { title: stateTitle, back: PATHS.search } : undefined}>
       {state.status === 'ready' && (desktop ? <DesktopListing row={state.row} mode={mode} /> : <ListingView row={state.row} mode={mode} />)}
       {state.status === 'loading' && <Loading />}
       {state.status === 'notFound' && (

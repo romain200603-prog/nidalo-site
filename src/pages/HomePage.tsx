@@ -776,7 +776,7 @@ export function HomePage() {
   const openFilters = () => setFiltersOpen(true);
 
   return (
-    <Page section="home" appTop={!desktop}>
+    <Page section="home">
       {desktop ? (
         <DesktopHome greeting={greeting} mode={mode} draft={draft} drafts={drafts} tiles={homeTiles(draft)} feed={feed} extras={extras}
           update={update} changeMode={changeMode} choosePlace={choosePlace} startSearch={startSearch} openFilters={openFilters} />

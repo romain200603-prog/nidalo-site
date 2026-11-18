@@ -56,13 +56,27 @@ img { max-width: 100%; }
 /* En-tête bleu, comme le bandeau de l'accueil */
 .topbar { background: var(--blue); color: #FFFFFF; position: relative; z-index: 20; }
 .topbar .wrap { display: flex; align-items: center; gap: 24px; min-height: var(--topbar-height); }
-/* `appTop` de Page (accueil, Votre recherche) : sous 761 px, la barre du haut de l'app à la place de l'en-tête bleu ;
-   sous 1024 px, le fond de page de l'app. */
+/* Sous 761 px, plus d'en-tête bleu : chaque page commence comme son écran de l'app (grand titre d'un onglet, retour et
+   titre d'un écran poussé, et pour une page que l'app n'a pas, le retour et le titre de PhonePageHeader) ; la barre du
+   bas sert de menu. Entre 761 et 1023 px, l'en-tête bleu reste, seul menu de ces largeurs. Sous 1024 px, le fond de
+   page de l'app. */
 @media (max-width: 760px) {
-  .page-app-top > .topbar { display: none; }
+  :root { --topbar-height: 0px; }
+  .topbar { display: none; }
 }
 @media (max-width: 1023px) {
-  .page-app-top { background: var(--app-page); }
+  body { background: var(--app-page); }
+}
+.phone-page-head { display: none; }
+@media (max-width: 760px) {
+  .phone-page-head { display: block; padding-top: 6px; }
+  /* Le titre est dans l'en-tête : le h1 de la page (ou de sa carte) reste pour les lecteurs d'écran seulement. */
+  body:has(.phone-page-head) :is(.doc > h1, .card.state > h1) {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  /* Pages d'information : le texte commence sous l'en-tête (ses 10 du bas), comme un écran poussé de l'app. */
+  body:has(.phone-page-head) .doc { padding-top: 0; }
+  body:has(.phone-page-head) .doc > h1 + * { margin-top: 0; }
 }
 .brand { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; }
 .brand-tile { width: 36px; height: 36px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14); }

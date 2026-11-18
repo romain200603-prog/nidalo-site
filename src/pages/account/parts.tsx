@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import type { IconName } from '../../components/iconPaths';
 import { avatarUrl, initials } from '../../lib/account/profile';
@@ -84,41 +84,32 @@ export function Avatar({ name, path, size = 58 }: { name: string; path: string |
   );
 }
 
-/** Carte du profil en haut de l'espace : photo, nom, deuxième ligne, pastille du type de compte. */
-export function SpaceProfileCard({ name, line, badge, photo, href }: { name: string; line: string; badge: string; photo: string | null; href: string }) {
+/**
+ * Carte du profil en haut de Mon compte (SpaceProfileCard de l'app) : photo ronde de 64 px, sinon l'initiale sur le
+ * dégradé bleu de Nidalo ; nom, deuxième ligne, pastille du type de compte, et le bouton « Modifier » (ou « Voir »).
+ */
+export function SpaceProfileCard({ name, line, badge, photo, href, action = 'Modifier' }: {
+  name: string;
+  line: string;
+  badge: string;
+  photo: string | null;
+  href: string;
+  action?: string;
+}) {
+  const url = avatarUrl(photo);
+  const [failed, setFailed] = useState<string | null>(null);
+  const initial = Array.from(name.trim())[0]?.toUpperCase() ?? '';
   return (
-    <a className="space-profile space-card" href={href}>
-      <Avatar name={name} path={photo} />
+    <a className="space-profile" href={href}>
+      <span className="space-profile-photo" aria-hidden="true">
+        {url && failed !== url ? <img src={url} alt="" width={64} height={64} onError={() => setFailed(url)} /> : initial}
+      </span>
       <span className="space-profile-text">
         <span className="space-profile-name">{name}</span>
-        <span className="space-profile-line">{line}</span>
+        {line && <span className="space-profile-line">{line}</span>}
         <span className="space-profile-badge">{badge}</span>
       </span>
-      <Icon name="chevronRight" className="icon row-chevron" />
-    </a>
-  );
-}
-
-/**
- * Tuile de « Mes activités », comme l'app (ActivityTile.split) : un nombre en tête du détail passe en grand
- * (« 1 recherche active » → « 1 », puis « recherche active ») ; un détail sans nombre (« Aucune recherche »,
- * « Bientôt sur le site ») reste en petit, juste sous le titre.
- */
-export function ActivityTile({ title, detail, href }: { title: string; detail: string; href: string }) {
-  const space = detail.indexOf(' ');
-  const first = space < 0 ? detail : detail.slice(0, space);
-  if (!/^\d+$/.test(first)) {
-    return (
-      <a className="activity-tile activity-tile-text space-card" href={href}>
-        <span className="activity-title">{title}</span>
-        <span className="activity-detail">{detail}</span>
-      </a>
-    );
-  }
-  return (
-    <a className="activity-tile space-card" href={href}>
-      <span className="activity-title">{title}</span>
-      <span className="activity-detail"><strong>{first}</strong> {space < 0 ? '' : detail.slice(space + 1)}</span>
+      <span className="space-profile-action">{action}</span>
     </a>
   );
 }

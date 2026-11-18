@@ -1,0 +1,103 @@
+/* « Quel est votre profil ? », comme l'app (Features/Account/AccountTypeView.swift) : sans barre du bas sur téléphone
+   (hidesTabBar) ; sous 1024 px, le bas de l'écran (réassurance et bouton) reste en bas de l'écran pendant que la page
+   défile. Ordinateur : la même page dans la colonne de 672 px, le bouton à la suite. Fond de page de l'app sous
+   1024 px (app.css). Pièces communes (bouton rond, barre d'étapes, petit titre, carte de groupe, lignes) dans
+   pieces-app.css. */
+
+/* 6 au-dessus du retour, comme l'app. */
+.account-wrap:has(> .app-profile-step) { padding-top: 6px; }
+@media (max-width: 760px) {
+  body:has(.app-profile-step) { padding-bottom: 0; }
+  body:has(.app-profile-step) .tabbar { display: none; }
+}
+
+.app-profile-step { display: flex; flex-direction: column; color: var(--app-navy); font-family: var(--app-font); }
+.app-profile-step :where(h1, p) { margin: 0; }
+.app-profile-content { display: flex; flex-direction: column; padding-bottom: 16px; }
+.app-profile-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.app-profile-step-text { color: var(--app-text-secondary); font-size: 13px; font-weight: 600; line-height: 18px; }
+.app-profile-bar { margin-top: 6px; }
+.app-profile-title { margin-top: 20px; color: var(--app-navy); font-size: 26px; font-weight: 800; line-height: 32px; }
+.app-profile-subtitle { margin-top: 6px; color: var(--app-text-secondary); font-size: 15px; font-weight: 500; line-height: 20px; }
+
+/* Cartes de choix : 12 entre elles, 20 sous le texte. Choisie : bordure bleue de 2, ombre bleue (rayon 10 de l'app :
+   flou CSS de 20, comme sur l'accueil), rond coché de 24 (10 du bord) qui grandit en apparaissant ; le changement suit
+   le mouvement de l'app. */
+.app-type-cards { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+.app-type-card {
+  position: relative; display: flex; align-items: flex-start; gap: 13px; width: 100%; margin: 0; padding: 16px; border: 0; border-radius: 22px;
+  background: #FFFFFF; box-shadow: inset 0 0 0 1px var(--app-border), 0 4px 20px rgba(60, 92, 176, 0); color: var(--app-navy);
+  font-family: var(--app-font); text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: box-shadow var(--app-duration) var(--app-ease);
+}
+.app-type-card.is-selected { box-shadow: inset 0 0 0 2px var(--app-brand), 0 4px 20px rgba(60, 92, 176, 0.18); }
+.app-type-card:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+.app-type-icon {
+  display: inline-flex; flex: none; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 14px;
+  background: var(--app-brand-soft); color: var(--app-brand);
+}
+.app-type-icon .icon { width: 22px; height: 22px; }
+/* 28 à droite du texte : il ne passe pas sous le rond coché. */
+.app-type-text { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; padding-right: 28px; }
+.app-type-title { color: var(--app-navy); font-size: 17px; font-weight: 700; line-height: 22px; }
+.app-type-detail { color: var(--app-text-secondary); font-size: 13.5px; line-height: 18px; }
+.app-type-check {
+  position: absolute; top: 10px; right: 10px; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
+  border-radius: 50%; background: var(--app-brand); color: #FFFFFF; opacity: 0; transform: scale(0);
+  transition: opacity var(--app-duration) var(--app-ease), transform var(--app-duration) var(--app-ease);
+}
+.app-type-card.is-selected .app-type-check { opacity: 1; transform: none; }
+.app-type-check .icon { width: 14px; height: 14px; }
+@media (hover: hover) {
+  .app-type-card:not(.is-selected):hover { background: #FCFBF9; }
+}
+
+/* « Avec ce compte » : 24 au-dessus du petit titre, 8 sous lui. La liste quittée s'efface (0,16 s), l'autre arrive en
+   fondu en montant de 8 ; les deux se superposent le temps du changement. */
+.app-profile-label { margin-top: 24px; }
+.app-profile-benefits { display: grid; margin-top: 8px; }
+.app-profile-benefits > * { grid-area: 1 / 1; min-width: 0; }
+.app-profile-benefits-list.is-changed { animation: app-profile-in var(--app-duration) var(--app-ease) both; }
+.app-profile-benefits-list.is-leaving { pointer-events: none; animation: app-fade-out 0.16s ease-out both; }
+@keyframes app-profile-in { from { opacity: 0; transform: translateY(8px); } }
+.app-profile-fading.is-changed { animation: app-fade-in var(--app-duration) var(--app-ease) both; }
+
+/* Justificatifs : icône de 14 posée sur la ligne du texte (12,5, gris), 10 sous la liste. */
+.app-profile-papers { display: flex; align-items: baseline; gap: 6px; margin-top: 10px; color: var(--app-text-secondary); font-size: 12.5px; line-height: 17px; }
+.app-profile-papers .icon { width: 14px; height: 14px; }
+
+/* Bas de l'écran : réassurance centrée (bouclier bleu de 16, 13 gris), 14 plus bas le bouton bleu de 52 (coins 12),
+   libellé de 15 et flèche de 18 ; le libellé se resserre jusqu'à 80 % pour tenir sur une ligne. */
+.app-profile-bottom { display: flex; flex-direction: column; gap: 14px; padding: 8px 0; }
+@media (max-width: 1023.98px) {
+  .app-profile-bottom {
+    position: sticky; bottom: 0; z-index: 5; margin: 0 -16px; padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+    background: var(--app-page);
+  }
+}
+.app-profile-note {
+  display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--app-text-secondary); font-size: 13px; font-weight: 500;
+  line-height: 18px;
+}
+.app-profile-note .icon { width: 16px; height: 16px; color: var(--app-brand); }
+.app-profile-error { margin: 0; text-align: center; }
+.app-profile-continue {
+  display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 52px; margin: 0; padding: 0 16px; border: 0;
+  border-radius: 12px; background: var(--app-brand); color: #FFFFFF; font: 600 15px/20px var(--app-font); cursor: pointer;
+  -webkit-tap-highlight-color: transparent; container-type: inline-size;
+}
+.app-profile-continue-text { min-width: 0; overflow: hidden; font-size: clamp(12px, 5cqi, 15px); text-overflow: ellipsis; white-space: nowrap; }
+.app-profile-continue .icon { width: 18px; height: 18px; }
+.app-profile-continue:active:not(:disabled) { background: #2F4A92; }
+.app-profile-continue:disabled { cursor: default; }
+.app-profile-continue:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+@media (hover: hover) {
+  .app-profile-continue:hover:not(:disabled) { background: #2F4A92; }
+}
+
+/* « Réduire les animations » : des fondus de 0,3 s, comme l'app (easeInOut(duration: 0.3)). */
+@media (prefers-reduced-motion: reduce) {
+  .app-type-card { transition: box-shadow 0.3s ease-in-out; }
+  .app-type-check { transform: none; transition: opacity 0.3s ease-in-out; }
+  .app-profile-benefits-list.is-changed, .app-profile-fading.is-changed { animation: app-fade-in 0.3s ease-in-out both; }
+}

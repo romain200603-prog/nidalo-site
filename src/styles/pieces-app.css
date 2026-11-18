@@ -179,3 +179,109 @@ span.criterion-chip-label { cursor: default; }
 /* Le nom se resserre jusqu'à 80 % pour tenir sur une ligne, comme minimumScaleFactor(0.8) de l'app. */
 .mode-tabs-all .mode-tab { container-type: inline-size; }
 .mode-tabs-all .mode-name { font-size: clamp(10.4px, 18cqi, 13px); }
+
+/* ——— Pièces des pages de Mon compte (NidaloMenuComponents.swift), les mêmes sur téléphone et sur ordinateur ———
+   Bouton rond (NidaloRoundButton) : rond blanc de 42 bordé, icône de 19, zone d'appui de 44 ; point rouge de 8 cerclé
+   de blanc (2) en haut à droite de l'icône. */
+.app-round {
+  position: relative; display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px;
+  margin: 0; padding: 0; border: 0; background: none; color: var(--app-navy); text-decoration: none; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.app-round-circle {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px;
+  border: 1px solid var(--app-border); border-radius: 50%; background: #FFFFFF;
+}
+.app-round .icon { width: 19px; height: 19px; }
+.app-round-dot { position: absolute; left: 22.5px; top: 8.5px; width: 8px; height: 8px; border-radius: 50%; background: #E5484D; box-shadow: 0 0 0 2px #FFFFFF; }
+.app-round:focus-visible { outline: none; }
+.app-round:focus-visible .app-round-circle { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+@media (hover: hover) {
+  .app-round:hover .app-round-circle { background: #F7F6F3; }
+}
+
+/* Grand titre (NidaloLargeHeader) : 30 très gras sur une ligne, sous-titre de 15 medium gris, 4 d'écart ; 32 au moins
+   avant l'élément de droite (12 + l'espace de 8 + 12). */
+.app-large-header { display: flex; align-items: center; gap: 32px; font-family: var(--app-font); }
+.app-large-titles { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; }
+.app-large-titles h1 { margin: 0; overflow: hidden; color: var(--app-navy); font-size: 30px; font-weight: 800; line-height: 36px; white-space: nowrap; }
+.app-large-titles p { margin: 0; color: var(--app-text-secondary); font-size: 15px; font-weight: 500; line-height: 20px; }
+
+/* Petit titre de groupe (NidaloSectionLabel) : 12 gras en capitales, espacé de 0,6, gris clair, 4 du bord. */
+.app-section-label {
+  margin: 0; padding-left: 4px; color: var(--app-text-muted); font: 700 12px/16px var(--app-font); letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+/* Carte de groupe (NidaloGroupCard) : blanche, coins 22, bordure fine ; trait de 1 entre les lignes, retiré de 68
+   (après le carré d'icône) ou de --app-separator-inset. */
+.app-group { margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--app-border); border-radius: 22px; background: #FFFFFF; list-style: none; }
+.app-group > li + li::before { content: ''; display: block; height: 1px; margin-left: var(--app-separator-inset, 68px); background: #F2F0EC; }
+
+/* Ligne de menu (NidaloMenuRow) : carré teinté de 40 (coins 13, icône 19), titre 15 semibold, sous-titre 12,5 medium
+   gris, pastille de 22, chevron de 16 ; 14 d'écart, marges 14 · 16 et 12 en hauteur, 64 au moins. */
+.app-row {
+  display: flex; align-items: center; gap: 14px; width: 100%; min-height: 64px; margin: 0; padding: 12px 16px 12px 14px; border: 0;
+  background: transparent; color: var(--app-navy); font-family: var(--app-font); text-align: left; text-decoration: none; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.app-row.is-info { cursor: default; }
+.app-row-tile {
+  --tint-soft: #F1F0EC; --tint-ink: #5D6470;
+  display: inline-flex; flex: none; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 13px;
+  background: var(--tint-soft); color: var(--tint-ink);
+}
+.app-row-tile.is-blue { --tint-soft: #EEF2FA; --tint-ink: #3C5CB0; }
+.app-row-tile.is-green { --tint-soft: #E6F0EA; --tint-ink: #2F7A4E; }
+.app-row-tile.is-teal { --tint-soft: #E3F1EF; --tint-ink: #2C7A72; }
+.app-row-tile.is-amber { --tint-soft: #F8EED8; --tint-ink: #946B1E; }
+.app-row-tile .icon { width: 19px; height: 19px; }
+.app-row-text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.app-row-title { overflow: hidden; font-size: 15px; font-weight: 600; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+.app-row-subtitle { overflow: hidden; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 500; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.app-row-badge {
+  display: inline-flex; flex: none; align-items: center; justify-content: center; min-width: 22px; height: 22px; margin-right: 4px; padding: 0;
+  border-radius: 11px; background: #E5383B; color: #FFFFFF; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.app-row-badge.is-brand { background: var(--app-brand); }
+.app-row-chevron { flex: none; width: 16px; height: 16px; color: #A7AEB5; }
+.app-row:focus-visible { outline: 3px solid var(--app-brand); outline-offset: -3px; border-radius: 22px; }
+@media (hover: hover) {
+  a.app-row:hover, button.app-row:hover { background: #FAF9F7; }
+}
+
+/* En-tête d'une page poussée (NidaloPageHeader) : retour rond à gauche, titre de 17 gras centré sur toute la largeur
+   (56 de chaque côté), élément à droite ; 10 sous l'en-tête. */
+.app-page-header {
+  position: relative; display: flex; align-items: center; justify-content: space-between; min-height: 44px; padding-bottom: 10px;
+  color: var(--app-navy); font-family: var(--app-font);
+}
+.app-page-header-title {
+  position: absolute; top: 0; right: 56px; left: 56px; height: 44px; margin: 0; overflow: hidden; color: var(--app-navy);
+  font: 700 17px/44px var(--app-font); text-align: center; text-overflow: ellipsis; white-space: nowrap; pointer-events: none;
+}
+.app-page-header-trailing { position: relative; display: flex; align-items: center; margin-left: auto; }
+
+/* Écran vide ou indisponible (ContentUnavailableView) : icône de 44 gris clair, titre de 17 gras, texte de 14 gris. */
+.app-unavailable {
+  display: flex; flex-direction: column; align-items: center; padding: 40px 24px; color: var(--app-navy); font-family: var(--app-font);
+  text-align: center;
+}
+.app-unavailable-icon { width: 44px; height: 44px; margin-bottom: 14px; color: var(--app-text-muted); }
+.app-unavailable h2 { margin: 0; color: var(--app-navy); font: 700 17px/22px var(--app-font); }
+.app-unavailable p { max-width: 340px; margin: 6px 0 0; color: var(--app-text-secondary); font: 400 14px/20px var(--app-font); }
+.app-unavailable > :is(a, button) { margin-top: 16px; }
+
+/* Teintes des pastilles d'état (NidaloPill.Tone) : fond et encre, pour les pastilles, le bloc date des visites et le
+   carré d'icône des notifications. */
+.app-tone-green { --tone-bg: #E3F2E8; --tone-ink: #2F7A4E; }
+.app-tone-amber { --tone-bg: #FBF0D9; --tone-ink: #946B1E; }
+.app-tone-blue { --tone-bg: #EFF2F9; --tone-ink: #435BAA; }
+.app-tone-red { --tone-bg: #FCE9E9; --tone-ink: #C2413E; }
+.app-tone-gray { --tone-bg: #F1F0EC; --tone-ink: #5D6470; }
+
+/* Barre d'étapes (StepProgressBar) : un segment arrondi de 4 par étape, 4 entre eux ; bleu jusqu'à l'étape en cours,
+   piste #F2F0EC ensuite. */
+.app-step-bar { display: flex; gap: 4px; }
+.app-step-bar > span { flex: 1; height: 4px; border-radius: 2px; background: var(--app-segment); transition: background-color var(--app-duration) var(--app-ease); }
+.app-step-bar > span.is-done { background: var(--app-brand); }

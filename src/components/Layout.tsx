@@ -8,6 +8,7 @@ import { DesktopFooter } from './DesktopFooter';
 import { DesktopHeader } from './DesktopHeader';
 import { Icon } from './Icon';
 import type { IconName } from './iconPaths';
+import { PageHeader } from './PageHeader';
 import { SignInSheet } from './account/SignInSheet';
 import { CONTACT_EMAIL } from '../lib/config';
 import { useDesktop } from '../lib/desktop';
@@ -137,25 +138,40 @@ export function SiteFooter() {
 }
 
 /**
- * `fill` : la page occupe l'écran sous la barre du haut, sans pied de page (Messages sur ordinateur).
- * `appTop` : accueil du téléphone, sa propre barre du haut (celle de l'app) à la place de l'en-tête bleu sous 761 px,
- * sur le fond de page de l'app.
+ * Retour et titre d'une page que l'app n'a pas (aide, 404, « bientôt »…), en haut de la page sous 761 px, là où il n'y
+ * a plus d'en-tête bleu : le retour ramène à la page précédente du site, sinon à `back`. Le titre de la page reste
+ * son h1 (masqué à l'écran sous 761 px, lu par les lecteurs d'écran).
  */
-export function Page({ section, children, wide = false, fill = false, appTop = false }: {
+export function PhonePageHeader({ title, back }: { title: string; back: string }) {
+  const desktop = useDesktop();
+  if (desktop) return null;
+  return (
+    <div className="wrap phone-page-head">
+      <PageHeader title={title} back={back} history decorative />
+    </div>
+  );
+}
+
+/**
+ * `fill` : la page occupe l'écran sous la barre du haut, sans pied de page (Messages sur ordinateur).
+ * `phoneHeader` : page que l'app n'a pas, avec son retour et son titre sur téléphone (PhonePageHeader).
+ */
+export function Page({ section, children, wide = false, fill = false, phoneHeader }: {
   section: Section;
   children: ReactNode;
   wide?: boolean;
   fill?: boolean;
-  appTop?: boolean;
+  phoneHeader?: { title: string; back: string };
 }) {
   if (isFramed()) return <Framed />;
   return (
-    <div className={`${fill ? 'page page-fill' : wide ? 'page page-wide' : 'page'}${appTop ? ' page-app-top' : ''}`}>
+    <div className={fill ? 'page page-fill' : wide ? 'page page-wide' : 'page'}>
       <a className="skip-link" href="#contenu">
         Aller au contenu
       </a>
       <SiteHeader section={section} />
       <main id="contenu" tabIndex={-1}>
+        {phoneHeader && <PhonePageHeader title={phoneHeader.title} back={phoneHeader.back} />}
         {children}
       </main>
       {!fill && <SiteFooter />}

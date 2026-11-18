@@ -1384,11 +1384,11 @@ try {
     const context = await phone();
     await mock(context, state);
     const page = await open(context, '/compte/', N);
-    const row = page.locator('a.row', { hasText: 'Mes contacts' });
-    await page.waitForFunction(() => /4 contacts/.test(document.querySelector('a.row[href*="vue=contacts"]')?.textContent ?? ''), null, { timeout: 8000 })
+    const row = page.locator('a.app-row', { hasText: 'Mes contacts' });
+    await page.waitForFunction(() => /4 contacts/.test(document.querySelector('a.app-row[href*="vue=contacts"]')?.textContent ?? ''), null, { timeout: 8000 })
       .catch(() => problems.push(`${N} : compteur de Mon compte jamais mis à jour`));
     expectSame(N, 'ligne de Mon compte', [
-      tidy(await row.locator('.row-subtitle').textContent()), tidy(await row.locator('.row-badge').textContent()), await row.getAttribute('href'),
+      tidy(await row.locator('.app-row-subtitle').textContent()), tidy(await row.locator('.app-row-badge').textContent()), await row.getAttribute('href'),
       tidy(await page.locator('.pro-stats > div').nth(1).textContent()),
     ], ['4 contacts · 1 nouveau', '1', '/compte/?vue=contacts', '4Contacts']);
 
@@ -1599,8 +1599,8 @@ try {
     const context = await phone();
     await mock(context, state);
     const page = await open(context, '/compte/', N);
-    const row = page.locator('a.row', { hasText: 'Statistiques' });
-    expectSame(N, 'ligne de Mon compte', [await row.locator('.row-subtitle').count(), await row.getAttribute('href')],
+    const row = page.locator('a.app-row', { hasText: 'Statistiques' });
+    expectSame(N, 'ligne de Mon compte', [await row.locator('.app-row-subtitle').count(), await row.getAttribute('href')],
       [0, '/compte/?vue=statistiques']);
     await row.click();
     await page.waitForURL('**/compte/?vue=statistiques');
@@ -1712,11 +1712,11 @@ try {
     const context = await phone();
     await mock(context, state);
     const page = await open(context, '/compte/', N);
-    const row = page.locator('a.row', { hasText: 'Mes ventes' });
-    await page.waitForFunction(() => /1 en cours/.test(document.querySelector('a.row[href*="vue=ventes"]')?.textContent ?? ''), null, { timeout: 8000 })
+    const row = page.locator('a.app-row', { hasText: 'Mes ventes' });
+    await page.waitForFunction(() => /1 en cours/.test(document.querySelector('a.app-row[href*="vue=ventes"]')?.textContent ?? ''), null, { timeout: 8000 })
       .catch(() => problems.push(`${N} : ligne de Mon compte jamais mise à jour`));
     expectSame(N, 'ligne de Mon compte', [
-      tidy(await row.locator('.row-subtitle').textContent()), await row.getAttribute('href'), tidy(await page.locator('.pro-stats > div').nth(2).textContent()),
+      tidy(await row.locator('.app-row-subtitle').textContent()), await row.getAttribute('href'), tidy(await page.locator('.pro-stats > div').nth(2).textContent()),
     ], ['1 en cours · 1 compromis signé', '/compte/?vue=ventes', '1Ventes en cours']);
 
     await row.click();
@@ -1955,11 +1955,11 @@ try {
     const context = await phone();
     await mock(context, state);
     const page = await open(context, '/compte/', N);
-    const row = page.locator('a.row', { hasText: 'Mes mandats' });
-    await page.waitForFunction(() => /1 mandat actif/.test(document.querySelector('a.row[href*="vue=mandats"]')?.textContent ?? ''), null, { timeout: 8000 })
+    const row = page.locator('a.app-row', { hasText: 'Mes mandats' });
+    await page.waitForFunction(() => /1 mandat actif/.test(document.querySelector('a.app-row[href*="vue=mandats"]')?.textContent ?? ''), null, { timeout: 8000 })
       .catch(() => problems.push(`${N} : ligne de Mon compte jamais mise à jour`));
-    expectSame(N, 'ligne de Mon compte', [tidy(await row.locator('.row-subtitle').textContent()), await row.getAttribute('href')],
-      ['1 mandat actif, vente et location', '/compte/?vue=mandats']);
+    expectSame(N, 'ligne de Mon compte', [tidy(await row.locator('.app-row-subtitle').textContent()), await row.getAttribute('href')],
+      ['1 mandat actif', '/compte/?vue=mandats']);
 
     await row.click();
     await page.waitForURL('**/compte/?vue=mandats');
@@ -2211,10 +2211,10 @@ try {
     const context = await phone();
     await mock(context, state);
     const page = await open(context, '/compte/', N);
-    const row = page.locator('a.row', { hasText: 'Mes opportunités' });
-    await page.waitForFunction(() => /2 opportunités actives/.test(document.querySelector('a.row[href*="vue=opportunites"]')?.textContent ?? ''), null, { timeout: 8000 })
+    const row = page.locator('a.app-row', { hasText: 'Mes opportunités' });
+    await page.waitForFunction(() => /2 opportunités actives/.test(document.querySelector('a.app-row[href*="vue=opportunites"]')?.textContent ?? ''), null, { timeout: 8000 })
       .catch(() => problems.push(`${N} : ligne de Mon compte jamais mise à jour`));
-    expectSame(N, 'ligne de Mon compte', [tidy(await row.locator('.row-subtitle').textContent()), await row.getAttribute('href')],
+    expectSame(N, 'ligne de Mon compte', [tidy(await row.locator('.app-row-subtitle').textContent()), await row.getAttribute('href')],
       ['2 opportunités actives', '/compte/?vue=opportunites']);
 
     await row.click();
@@ -2490,12 +2490,12 @@ try {
     await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base });
     await mock(context, state);
     const page = await open(context, '/compte/', N);
-    const row = page.locator('a.row', { hasText: 'Gestion des équipes' });
-    await page.waitForFunction(() => /3 membres/.test(document.querySelector('a.row[href="/compte/?vue=equipes"]')?.textContent ?? ''), null, { timeout: 8000 })
+    const row = page.locator('a.app-row', { hasText: 'Gestion des équipes' });
+    await page.waitForFunction(() => /3 membres/.test(document.querySelector('a.app-row[href="/compte/?vue=equipes"]')?.textContent ?? ''), null, { timeout: 8000 })
       .catch(() => problems.push(`${N} : ligne de Mon compte jamais mise à jour`));
     expectSame(N, 'Mon compte', [
-      tidy(await row.locator('.row-subtitle').textContent()), await row.getAttribute('href'), await page.locator('.space-profile').getAttribute('href'),
-      await page.locator('a.row', { hasText: 'Informations de l\'agence' }).count(),
+      tidy(await row.locator('.app-row-subtitle').textContent()), await row.getAttribute('href'), await page.locator('.space-profile').getAttribute('href'),
+      await page.locator('a.app-row', { hasText: 'Informations de l\'agence' }).count(),
     ], ['3 membres', '/compte/?vue=equipes', '/compte/?vue=agence', 1]);
 
     await row.click();
@@ -2642,9 +2642,9 @@ try {
       .catch(() => problems.push(`${N} : carte de l'agence jamais montrée`));
     expectSame(N, 'Mon compte', [
       tidy(await page.locator('.space-profile-line').textContent()), await page.locator('.space-profile').getAttribute('href'),
-      tidy(await page.locator('a.row', { hasText: 'Gestion des équipes' }).locator('.row-subtitle').textContent()),
-      await page.locator('a.row', { hasText: 'Profil agence' }).locator('.row-subtitle').count(),
-      await page.locator('a.row', { hasText: 'Informations de l\'agence' }).count(),
+      tidy(await page.locator('a.app-row', { hasText: 'Gestion des équipes' }).locator('.app-row-subtitle').textContent()),
+      await page.locator('a.app-row', { hasText: 'Profil agence' }).locator('.app-row-subtitle').count(),
+      await page.locator('a.app-row', { hasText: 'Informations de l\'agence' }).count(),
     ], ['Agent de l\'équipe', '/compte/?vue=equipes', '3 membres', 0, 0]);
     await shot(page, 'equipes-telephone-agent-compte.png');
 
@@ -2849,9 +2849,9 @@ try {
     const missingContext = await phone();
     await mock(missingContext, missingState);
     const missing = await open(missingContext, '/compte/', N);
-    const row = missing.locator('a.row', { hasText: 'Gestion des équipes' });
+    const row = missing.locator('a.app-row', { hasText: 'Gestion des équipes' });
     await row.waitFor();
-    expectSame(N, 'Mon compte sans les fonctions', [tidy(await row.locator('.row-subtitle').textContent()), await row.getAttribute('href'), await missing.locator('a.row', { hasText: 'Informations de l\'agence' }).count()],
+    expectSame(N, 'Mon compte sans les fonctions', [tidy(await row.locator('.app-row-subtitle').textContent()), await row.getAttribute('href'), await missing.locator('a.app-row', { hasText: 'Informations de l\'agence' }).count()],
       ['Inviter des collaborateurs', '/compte/?vue=equipes', 1]);
     await row.click();
     await missing.locator('.signin-error').waitFor();
@@ -2992,9 +2992,9 @@ try {
 
     // Mon compte : ses seuls mandats (celui d'Inès n'y est pas compté).
     await page.goto(`${base}/compte/`, { waitUntil: 'networkidle' });
-    const mandatesRow = page.locator('a.row', { hasText: 'Mes mandats' });
+    const mandatesRow = page.locator('a.app-row', { hasText: 'Mes mandats' });
     await mandatesRow.waitFor();
-    expectSame(N, 'Mon compte', tidy(await mandatesRow.locator('.row-subtitle').textContent()), '1 mandat actif, vente et location');
+    expectSame(N, 'Mon compte', tidy(await mandatesRow.locator('.app-row-subtitle').textContent()), '1 mandat actif');
     await context.close();
   }
 

@@ -4,7 +4,7 @@ import { PATHS } from '../lib/paths';
 import { mount } from './mount';
 
 mount(
-  <Page section="other">
+  <Page section="other" phoneHeader={{ title: 'Page introuvable', back: PATHS.home }}>
     <div className="wrap wrap-narrow">
       <div className="card state">
         <Icon name="home" />

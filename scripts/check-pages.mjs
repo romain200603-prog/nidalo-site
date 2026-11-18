@@ -212,7 +212,7 @@ const CONVERSATION_PREFERENCES = [
 ];
 /** Sortes de notification connues de l'app (NidaloNotification.Kind) : les autres sont ignorées. */
 const NOTIFICATION_KINDS = ['newRequest', 'accepted', 'declined', 'proposed', 'rescheduleProposed', 'rescheduled', 'rescheduleDeclined', 'cancelled',
-  'reminder', 'searchMatch', 'offerReceived', 'offerCountered', 'offerAccepted', 'offerDeclined', 'offerWithdrawn'];
+  'reminder', 'searchMatch', 'offerReceived', 'offerCountered', 'offerAccepted', 'offerDeclined', 'offerWithdrawn', 'visitSlotsOpened'];
 const notificationId = (n) => `d0000000-0000-4000-8000-00000000000${n}`;
 /** Table notifications, écrite par le serveur avec les textes de ses fonctions (visites, offres). */
 function notificationRows(now) {
@@ -300,6 +300,12 @@ async function mock(context, { signedIn = false, listingRows = listings, account
   // Accueil du téléphone (celui de l'app, novembre 2026) : la cloche de sa barre du haut lit les notifications pour son
   // point rouge, sans temps réel ni « lu ».
   const homeBell = (request, table) => signedIn && pagePath(request) === '/' && table === 'notifications' && request.method() === 'GET';
+  // Mon compte du téléphone (celui de l'app, étape 3) : la cloche de son grand titre lit les notifications pour son
+  // point rouge, sans temps réel ni « lu » ; la ligne « Mon agenda » lit l'agenda pour son sous-titre.
+  const accountBell = (request, table) => signedIn && pagePath(request) === '/compte/' && pageView(request) === null && table === 'notifications'
+    && request.method() === 'GET';
+  const accountAgenda = (request, table) => signedIn && pagePath(request) === '/compte/' && pageView(request) === null
+    && ['agenda_visits', 'rpc/my_visit_requests'].includes(table);
   const requests = [];
   const json = (route, status, body) =>
     route.fulfill({ status, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: body === undefined ? '' : JSON.stringify(body) });
@@ -316,7 +322,7 @@ async function mock(context, { signedIn = false, listingRows = listings, account
       const width = pageWidth(request);
       badgeRequests.push({ table, method: request.method(), search: url.search, body, width, signedIn });
       if (width !== null && width < 1024 && !contactsRead(request, table) && !messagesPage(request) && !notificationsScreen(request, table)
-        && !homeBell(request, table)) {
+        && !homeBell(request, table) && !accountBell(request, table)) {
         problems.push(`téléphone : ${table} demandé (rien ne doit changer sous 1024 px)`);
       }
       if (!signedIn) {
@@ -340,7 +346,9 @@ async function mock(context, { signedIn = false, listingRows = listings, account
       // Fiche d'une annonce sur ordinateur : offres, demandes de visite et agenda du compte (vides ici ; les actions
       // sont vérifiées par scripts/check-listing.mjs). Rien de cela sans compte, ni sous 1024 px.
       const width = pageWidth(request);
-      if (width !== null && width < 1024 && !contactsRead(request, table) && !messagesPage(request)) problems.push(`téléphone : ${table} demandé (rien ne doit changer sous 1024 px)`);
+      if (width !== null && width < 1024 && !contactsRead(request, table) && !messagesPage(request) && !accountAgenda(request, table)) {
+        problems.push(`téléphone : ${table} demandé (rien ne doit changer sous 1024 px)`);
+      }
       if (!signedIn) problems.push(`sans compte : ${table} demandé`);
       else if (!['rpc/my_offers', 'rpc/my_visit_requests', 'agenda_visits'].includes(table)) problems.push(`${table} appelé sans action de la personne`);
       return json(route, 200, []);
@@ -1527,7 +1535,7 @@ async function phoneFits(page, name) {
       if (box.width === 0 && box.height === 0) continue;
       if (box.left < -0.5 || box.right > width + 0.5) found.push(`${label(element)} de ${Math.round(box.left)} à ${Math.round(box.right)} px`);
     }
-    for (const card of document.querySelectorAll('.dsc-visit, .dsc-card, .notification-row, dialog[open], .dsc-menu-list')) {
+    for (const card of document.querySelectorAll('.app-visit, .dsc-card, .notification-row, dialog[open], .dsc-menu-list')) {
       if (card.scrollWidth > card.clientWidth + 1) found.push(`${label(card)} : contenu de ${card.scrollWidth} px pour ${card.clientWidth}`);
     }
     return found;
@@ -1695,10 +1703,9 @@ async function oneSpaceCall(space, table, method, mark, what) {
   return calls[0] ?? null;
 }
 
-/** Carte du projet de Mon espace, telle qu'affichée : sous-titre, anneau, étapes [libellé, franchie]. */
-async function spaceProjectCard(page) {
-  return [await textOf(page, '.dsp-project-subtitle'), await textOf(page, '.dsp-project .dsp-ring-label'),
-    await page.$$eval('.dsp-steps li', (items) => items.map((item) => [item.querySelector('.dsp-step-label')?.textContent.trim() ?? null, item.classList.contains('is-done')]))];
+/** Ligne « Mon projet » de Mon espace, telle qu'affichée : titre, sous-titre (usage ou catégorie, puis ville), lien. */
+async function spaceProjectRow(page) {
+  return (await spaceRows(page, '.dsp-space-rows')).find((row) => row[0] === 'Mon projet') ?? null;
 }
 
 /** Textes de `selector` (les espaces des icônes retirés), ou de `inner` dans chacun. */
@@ -1709,27 +1716,81 @@ function textsOf(page, selector, inner = null) {
   }), inner);
 }
 
-/** Lignes d'une carte de lignes (Compte et sécurité, Paramètres…) : titre, sous-titre, lien. */
+/** Lignes d'un groupe de Mon compte (Mon espace, Compte et sécurité, Paramètres…), celles de l'app : titre, sous-titre, lien. */
 function spaceRows(page, selector) {
-  return page.$$eval(`${selector} .dsp-row`, (rows) => rows.map((row) => [row.querySelector('.dsp-row-title')?.textContent.trim() ?? null,
-    row.querySelector('.dsp-row-subtitle')?.textContent.trim() ?? null, row.getAttribute('href')]));
+  return page.$$eval(`${selector} .app-row`, (rows) => rows.map((row) => [row.querySelector('.app-row-title')?.textContent.trim() ?? null,
+    row.querySelector('.app-row-subtitle')?.textContent.trim() ?? null, row.getAttribute('href')]));
 }
 
-/** Cartes de visite de l'onglet affiché, par groupe de dates (VisitsAgendaView). */
+/**
+ * Cartes de visite de l'onglet affiché, par période (VisitsAgendaView, VisitCard) : bloc date (texte et libellé lu),
+ * horaire (barré si annulée), état, teintes [bloc date, état], bien, personne et compte rendu, liens et boutons.
+ */
 function agendaCards(page) {
-  return page.$$eval('.dsc-visit-group', (groups) => groups.map((group) => {
+  return page.$$eval('.app-visit-group', (groups) => groups.map((group) => {
     const text = (element) => (element ? element.textContent.replace(/\s+/g, ' ').trim() : null);
-    return [text(group.querySelector('.dsc-group-title')), [...group.querySelectorAll('.dsc-visit')].map((card) => ({
-      date: text(card.querySelector('.dsc-visit-date > span[aria-hidden="true"]')),
-      status: text(card.querySelector('.dsc-status')),
-      title: text(card.querySelector('.dsc-visit-title')),
-      lines: [...card.querySelectorAll('.dsc-visit-lines > span')].map(text),
-      route: card.querySelector('a.dsc-visit-action')?.getAttribute('href') ?? null,
-      request: card.querySelector('a.dsc-visit-open')?.getAttribute('href') ?? null,
-      contact: [...card.querySelectorAll('.dsc-visit-action')].find((action) => text(action) === 'Contacter')?.disabled === false,
+    const tone = (element) => [...(element?.classList ?? [])].find((name) => name.startsWith('app-tone-'))?.slice(9) ?? null;
+    return [text(group.querySelector('.app-section-label')), [...group.querySelectorAll('.app-visit')].map((card) => ({
+      block: [...card.querySelectorAll('.app-visit-date > span')].map(text).join(' '),
+      date: card.querySelector('.app-visit-date')?.getAttribute('aria-label') ?? null,
+      time: text(card.querySelector('.app-visit-time')),
+      cancelled: Boolean(card.querySelector('.app-visit-time.is-cancelled')),
+      status: text(card.querySelector('.app-visit-pill')),
+      tones: [tone(card.querySelector('.app-visit-date')), tone(card.querySelector('.app-visit-pill'))],
+      title: text(card.querySelector('.app-visit-title')),
+      lines: [...card.querySelectorAll('.app-visit-person, .app-visit-report')].map(text),
+      route: card.querySelector('a.app-visit-route')?.getAttribute('href') ?? null,
+      request: card.querySelector('a.app-visit-open')?.getAttribute('href') ?? null,
+      slots: [...card.querySelectorAll('a.app-visit-button')].find((link) => text(link) === 'Voir les créneaux')?.getAttribute('href') ?? null,
+      contact: [...card.querySelectorAll('.app-visit-button')].find((action) => text(action) === 'Message')?.disabled === false,
       menu: Boolean(card.querySelector('.dsc-menu-button')),
     }))];
   }));
+}
+
+/**
+ * Centre de notifications affiché (NotificationsView) : [petit titre du jour, [[teinte du carré d'icône, photo du bien
+ * (« photo », « cadre » sans photo, null sans annonce), heure]]].
+ */
+function notificationLayout(page) {
+  return page.$$eval('.notification-group', (groups) => groups.map((group) => [group.querySelector('.app-section-label')?.textContent ?? null,
+    [...group.querySelectorAll('.notification-row')].map((row) => [
+      [...(row.querySelector('.notification-icon')?.classList ?? [])].find((name) => name.startsWith('app-tone-'))?.slice(9) ?? null,
+      row.querySelector('.notification-photo img') ? 'photo' : row.querySelector('.notification-photo') ? 'cadre' : null,
+      row.querySelector('.notification-date')?.textContent ?? '',
+    ])]));
+}
+
+/** Teinte de chaque sorte de notification (NotificationCenterLayout.tone). */
+const NOTIFICATION_TONES = {
+  searchMatch: 'blue', accepted: 'blue', rescheduled: 'blue', reminder: 'blue', visitSlotsOpened: 'blue', offerReceived: 'green', offerCountered: 'green',
+  offerAccepted: 'green', newRequest: 'amber', proposed: 'amber', rescheduleProposed: 'amber', declined: 'red', rescheduleDeclined: 'red', cancelled: 'red',
+  offerDeclined: 'red', offerWithdrawn: 'red',
+};
+/** Forme de l'heure de chaque jour : « 11:02 », « Hier », « Lun. », « 3 nov. ». */
+const NOTIFICATION_TIMES = { 'Aujourd\'hui': /^\d\d:\d\d$/, Hier: /^Hier$/, 'Cette semaine': /^[A-Z][a-zé]+\.$/, 'Plus anciennes': /^\d{1,2} [a-zéû]+\.?$/ };
+
+/**
+ * Vérifie le centre de notifications contre les lignes du serveur (`known`, les plus récentes d'abord) : jours dans
+ * l'ordre de l'app (selon l'heure de la machine, celle du navigateur), teinte de la sorte, photo du bien, forme de l'heure.
+ */
+async function checkNotificationLayout(page, name, known) {
+  const photos = known.filter((row) => (listings.find((listing) => listing.id === row.listing_id)?.listing_photos?.length ?? 0) > 0).length;
+  await page.waitForFunction((count) => document.querySelectorAll('.notification-photo img').length === count, photos, { timeout: 8000 }).catch(() => undefined);
+  const start = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const wanted = [];
+  for (const row of known) {
+    const days = Math.round((start(new Date()) - start(new Date(row.created_at))) / (24 * HOUR));
+    const day = days <= 0 ? 'Aujourd\'hui' : days === 1 ? 'Hier' : days < 7 ? 'Cette semaine' : 'Plus anciennes';
+    const listing = listings.find((item) => item.id === row.listing_id);
+    const photo = row.listing_id === null ? null : listing?.listing_photos?.length ? 'photo' : 'cadre';
+    if (wanted.at(-1)?.[0] !== day) wanted.push([day, []]);
+    wanted.at(-1)[1].push([NOTIFICATION_TONES[row.kind], photo]);
+  }
+  const shown = await notificationLayout(page);
+  expectSame(name, 'jours, teintes et photos', shown.map(([day, rows]) => [day, rows.map(([tone, photo]) => [tone, photo])]), wanted);
+  const times = shown.flatMap(([day, rows]) => rows.filter(([, , time]) => !NOTIFICATION_TIMES[day]?.test(time)).map(([, , time]) => `${day} « ${time} »`));
+  if (times.length) problems.push(`${name} : heures ${times.join(', ')}`);
 }
 
 /** Biens consultés affichés : titre, ville et surface, prix, statut. */
@@ -1931,10 +1992,10 @@ try {
   // Sur ordinateur, « Mon espace » de la maquette 5 (.dsp, voir « Mon espace sur ordinateur » plus bas).
   page = await open(signed, '/compte/', 'compte-espace');
   await page.waitForSelector('.dsp-profile');
-  await page.waitForSelector('.dsp-project');
-  await page.waitForFunction(() => /1\s+en ligne · 1 brouillon/.test(document.querySelector('.dsp-tiles')?.innerText ?? ''), null, { timeout: 8000 }).catch(() => undefined);
+  await page.waitForSelector('.dsp-space-rows .app-row');
+  await page.waitForFunction(() => /1 en ligne/.test(document.querySelector('.dsp-space-rows')?.innerText ?? ''), null, { timeout: 8000 }).catch(() => undefined);
   const space = (await textOf(page, '.dsp')) ?? '';
-  for (const expected of ['Claire Martin', USER_EMAIL, 'Particulier', 'Votre projet immobilier', '2 recherches actives', '1 en ligne · 1 brouillon']) {
+  for (const expected of ['Claire Martin', USER_EMAIL, 'Particulier', 'Mon projet', 'Résidence principale · Lyon', '2 recherches enregistrées', '1 en ligne']) {
     if (!space.includes(expected)) problems.push(`Mon compte : « ${expected} » absent`);
   }
   await page.screenshot({ path: join(out, 'compte-espace-ordinateur.png'), fullPage: true });
@@ -2092,7 +2153,7 @@ try {
     }
     // Notifications sans compte : l'écran de l'app, avec son message (la cloche de l'app s'ouvre aussi sans compte).
     page = await open(guest, '/compte/?vue=notifications', `notifications-${width}-sans-compte`);
-    await page.waitForSelector('.notifications-screen .account-empty');
+    await page.waitForSelector('.notifications-screen .app-unavailable');
     const guestText = (await page.textContent('.notifications-screen'))?.replace(/\s+/g, ' ') ?? '';
     for (const text of ['Notifications', 'Aucune notification pour l’instant', 'Connectez-vous pour recevoir les réponses à vos demandes de visite et les rappels.']) {
       if (!guestText.includes(text)) problems.push(`notifications sans compte ${width} : « ${text} » absent`);
@@ -2151,6 +2212,7 @@ try {
     for (const href of [`/messages/?c=${conversationId(1)}`, `/annonce/?id=${listings[0].id}`, '/compte/?vue=demande-visite&id=e0000000-0000-4000-8000-000000000003']) {
       if (!hrefs.includes(href)) problems.push(`notifications ${width} : aucun lien vers ${href} (${JSON.stringify(hrefs)})`);
     }
+    await checkNotificationLayout(page, `notifications ${width}`, known);
     const current = await page.evaluate(() => [document.querySelector('.dtop-round[href="/compte/?vue=notifications"]')?.getAttribute('aria-current'), document.querySelector('.dtop-space')?.getAttribute('aria-current')]);
     if (current[0] !== 'page' || current[1] !== null) problems.push(`notifications ${width} : bouton actif ${JSON.stringify(current)}`);
     if ((await contentWidth(page, '.account-wrap')) !== 640) problems.push(`notifications ${width} : colonne de ${await contentWidth(page, '.account-wrap')} px au lieu de 640`);
@@ -2188,7 +2250,7 @@ try {
     await page.close();
     // Mon espace (maquette 5) : contenu de 1200 px (960 à 1024 px), colonne de gauche de 280 px ; « Mon espace » mis en avant.
     page = await open(member, '/compte/', `compte-espace-${width}`);
-    await page.waitForSelector('.dsp-project');
+    await page.waitForSelector('.dsp-space-rows');
     expectSame(`Mon espace ${width}`, 'largeurs et bouton actif', await page.evaluate(() => [Math.round(document.querySelector('.dsp').getBoundingClientRect().width),
       Math.round(document.querySelector('.dsp-aside').getBoundingClientRect().width), document.querySelector('.dtop-space')?.getAttribute('aria-current') ?? null]),
     [width === 1440 ? 1200 : 960, 280, 'page']);
@@ -4268,38 +4330,36 @@ try {
     /** Cartes « À venir » de Mon agenda sur ordinateur : le téléphone doit montrer les mêmes. */
     let desktopAgenda = null;
 
-    // La page au plus près de la maquette : projet Investissement à 57 %, agenda libre, 2 recherches, 4 biens consultés,
-    // aucune annonce. Mesures de la maquette à 1440 px (contenu de 1200, colonne de 280, projet 544, agenda 320).
+    // La page au plus près de la maquette : projet Investissement, agenda libre, 2 recherches, 4 biens consultés, aucune
+    // annonce. Mesures de la maquette à 1440 px (contenu de 1200, colonne de 280) ; sous le titre, les lignes de « Mon
+    // espace » de l'app (étape 3 du site comme l'app), sans sous-titre à zéro comme dans l'app.
     for (const [width, height] of [[1440, 900], [1024, 768]]) {
       const E = `Mon espace ${width}`;
       const space = spaceState({ project: structuredClone(SPACE_PROJECTS.invest), visits: [], requests: [], myListings: [] });
       const { context } = await spaceContext(width, height, space);
       page = await open(context, '/compte/', E);
-      await page.waitForFunction(() => document.querySelector('.dsp-project-subtitle')?.textContent === 'Investissement'
-        && /2\s+recherches actives/.test(document.querySelector('.dsp-tiles')?.innerText ?? '') && /0\s+en ligne/.test(document.querySelector('.dsp-tiles')?.innerText ?? '')
-        && document.querySelector('.dsp-agenda-title')?.textContent === 'Votre agenda est libre', null, { timeout: 8000 })
+      await page.waitForFunction(() => /Investissement/.test(document.querySelector('.dsp-space-rows')?.innerText ?? '')
+        && /2 recherches enregistrées/.test(document.querySelector('.dsp-space-rows')?.innerText ?? ''), null, { timeout: 8000 })
         .catch(() => problems.push(`${E} : page incomplète`));
-      expectSame(E, 'projet', await spaceProjectCard(page), SPACE_PROJECT_CARDS.invest);
-      expectSame(E, 'agenda libre', [await textOf(page, '.dsp-agenda-title'), await textOf(page, '.dsp-agenda-text > p:last-child')],
-        ['Votre agenda est libre', 'Aucune visite prévue pour l\'instant.']);
-      expectSame(E, 'activités', await page.$$eval('.dsp-tile', (tiles) => tiles.map((tile) => [tile.querySelector('.dsp-tile-title')?.textContent ?? null,
-        tile.querySelector('.dsp-tile-number')?.textContent ?? null, tile.querySelector('.dsp-tile-rest')?.textContent ?? null])),
-      [['Mes recherches', '2', 'recherches actives'], ['Biens consultés', '4', 'annonces'], ['Mes annonces', '0', 'en ligne']]);
+      expectSame(E, 'projet', await spaceProjectRow(page), ['Mon projet', SPACE_PROJECT_CARDS.invest[0], '/compte/?vue=projet']);
+      expectSame(E, 'lignes de Mon espace (agenda libre, aucune annonce)', await spaceRows(page, '.dsp-space-rows'),
+        [['Mon agenda', null, '/compte/?vue=agenda'], ['Mes recherches', '2 recherches enregistrées', '/compte/?vue=recherches'],
+          ['Biens consultés', '4 biens', '/compte/?vue=consultes'], ['Mon projet', 'Investissement', '/compte/?vue=projet'], ['Mes annonces', null, '/compte/?vue=annonces']]);
       const spaceLayout = await page.evaluate(() => {
         const box = (selector) => document.querySelector(selector).getBoundingClientRect();
         return {
           content: Math.round(box('.dsp').width), aside: Math.round(box('.dsp-aside').width), gap: Math.round(box('.dsp-main').left - box('.dsp-aside').right),
-          sticky: getComputedStyle(document.querySelector('.dsp-aside')).position, project: Math.round(box('.dsp-project').width), agenda: Math.round(box('.dsp-agenda').width),
-          tiles: [...document.querySelectorAll('.dsp-tile')].map((tile) => Math.round(tile.getBoundingClientRect().width)), dossier: Math.round(box('.dsp-dossier').width),
-          overflowX: document.documentElement.scrollWidth - innerWidth, footer: Boolean(document.querySelector('.dfoot')),
+          sticky: getComputedStyle(document.querySelector('.dsp-aside')).position, lignes: Math.round(box('.dsp-space-rows').width),
+          hauteurs: [...document.querySelectorAll('.dsp-space-rows .app-row')].map((row) => Math.round(row.getBoundingClientRect().height)),
+          dossier: Math.round(box('.dsp-dossier').width), overflowX: document.documentElement.scrollWidth - innerWidth, footer: Boolean(document.querySelector('.dfoot')),
           current: document.querySelector('.dtop-space')?.getAttribute('aria-current') ?? null,
         };
       });
       expectSame(E, 'mise en page', spaceLayout, width === 1440
-        ? { content: 1200, aside: 280, gap: 32, sticky: 'sticky', project: 544, agenda: 320, tiles: [280, 280, 280], dossier: 384, overflowX: 0, footer: true, current: 'page' }
-        : { content: 960, aside: 280, gap: 32, sticky: 'sticky', project: 648, agenda: 648, tiles: [200, 200, 200], dossier: 648, overflowX: 0, footer: true, current: 'page' });
-      // Tailles mesurées sur la maquette (titre 36/700, sections 24/700, cartes 20/700, nom 17/700, menu 15, lignes 15,5/600)
-      // et police Inter partout, boutons compris.
+        ? { content: 1200, aside: 280, gap: 32, sticky: 'sticky', lignes: 888, hauteurs: [64, 64, 64, 64, 64], dossier: 384, overflowX: 0, footer: true, current: 'page' }
+        : { content: 960, aside: 280, gap: 32, sticky: 'sticky', lignes: 648, hauteurs: [64, 64, 64, 64, 64], dossier: 648, overflowX: 0, footer: true, current: 'page' });
+      // Tailles mesurées sur la maquette (titre 36/700, sections 24/700, nom 17/700, menu 15) ; lignes de l'app (titre
+      // 15/600, sous-titre 12,5/500), carte du dossier (18/700) ; police Inter partout, boutons compris.
       const spaceFonts = await page.evaluate(() => {
         const font = (selector) => {
           const element = document.querySelector(selector);
@@ -4308,14 +4368,14 @@ try {
           return `${style.fontSize} ${style.fontWeight}${style.fontFamily.startsWith('"Nidalo Inter"') ? '' : ` ${style.fontFamily}`}`;
         };
         return {
-          titre: font('.dsp-title'), nom: font('.dsp-profile-name'), section: font('.dsp-section-title'), carte: font('.dsp-card-title'), menu: font('.dsp-nav a:not(.is-current)'),
-          'menu actif': font('.dsp-nav a.is-current'), bouton: font('.dsp-project-button'), 'Se déconnecter': font('.dsp-logout'), nombre: font('.dsp-tile-number'),
-          ligne: font('.dsp-row-title'),
+          titre: font('.dsp-title'), nom: font('.dsp-profile-name'), section: font('.dsp-section-title'), carte: font('.dsp-dossier h3'), menu: font('.dsp-nav a:not(.is-current)'),
+          'menu actif': font('.dsp-nav a.is-current'), bouton: font('.dsp-dossier-button'), 'Se déconnecter': font('.dsp-logout'), 'sous-titre': font('.app-row-subtitle'),
+          ligne: font('.app-row-title'),
         };
       });
       expectSame(E, 'polices', spaceFonts, {
-        titre: '36px 700', nom: '17px 700', section: '24px 700', carte: '20px 700', menu: '15px 500', 'menu actif': '15px 600', bouton: '15px 600',
-        'Se déconnecter': '15px 600', nombre: '34px 700', ligne: '15.5px 600',
+        titre: '36px 700', nom: '17px 700', section: '24px 700', carte: '18px 700', menu: '15px 500', 'menu actif': '15px 600', bouton: '15px 600',
+        'Se déconnecter': '15px 600', 'sous-titre': '12.5px 500', ligne: '15px 600',
       });
       await favShot(page, `5-mon-espace-${width}.png`);
       await page.close();
@@ -4329,29 +4389,27 @@ try {
       const space = spaceState({ conversations: SPACE_CONVERSATIONS });
       const { context } = await spaceContext(1440, 900, space);
       page = await open(context, '/compte/', E);
-      await page.waitForFunction(() => document.querySelector('.dsp-agenda-title')?.textContent?.startsWith('3 visites')
-        && /1\s+en ligne · 1 brouillon/.test(document.querySelector('.dsp-tiles')?.innerText ?? '')
-        && document.querySelector('.dsp-project-subtitle')?.textContent === 'Résidence principale · Lyon', null, { timeout: 8000 })
+      await page.waitForFunction(() => /3 visites à venir/.test(document.querySelector('.dsp-space-rows')?.innerText ?? '')
+        && /1 en ligne/.test(document.querySelector('.dsp-space-rows')?.innerText ?? '')
+        && /Résidence principale · Lyon/.test(document.querySelector('.dsp-space-rows')?.innerText ?? ''), null, { timeout: 8000 })
         .catch(() => problems.push(`${E} : page incomplète`));
       expectSame(E, 'profil', [await textOf(page, '.dsp-profile-name'), await textOf(page, '.dsp-profile-email'), await page.getAttribute('.dsp-profile', 'href'),
         await textOf(page, '.dsp-badge'), await textOf(page, '.dsp-profile .avatar')], ['Claire Martin', USER_EMAIL, '/compte/?vue=informations', 'Particulier', 'CM']);
       // Sections dans l'ordre de l'app, la première mise en avant.
       expectSame(E, 'menu des sections', await page.$$eval('.dsp-nav a', (links) => links.map((link) => [link.textContent.trim(), link.getAttribute('href'), link.getAttribute('aria-current')])),
-        [['Mon espace', '#mon-espace', 'location'], ['Mon agenda', '#mon-agenda', null], ['Mes activités', '#mes-activites', null],
-          ['Contrats et location', '#contrats-et-location', null], ['Compte et sécurité', '#compte-et-securite', null], ['Paramètres et assistance', '#parametres-et-assistance', null]]);
+        [['Mon espace', '#mon-espace', 'location'], ['Contrats et location', '#contrats-et-location', null], ['Compte et sécurité', '#compte-et-securite', null],
+          ['Paramètres et assistance', '#parametres-et-assistance', null]]);
       expectSame(E, 'titres', [await textOf(page, '.dsp-title'), await page.$$eval('.dsp-section-title', (titles) => titles.map((title) => title.textContent))],
-        ['Mon espace', ['Mes activités', 'Contrats et location', 'Compte et sécurité', 'Paramètres et assistance']]);
-      expectSame(E, 'projet', await spaceProjectCard(page), SPACE_PROJECT_CARDS.buy);
-      expectSame(E, 'bouton du projet', [await textOf(page, '.dsp-project-button'), await page.getAttribute('.dsp-project-button', 'href')], ['Voir mon avancement', '/compte/?vue=projet']);
-      // Mon agenda : trois visites à venir (la demande comprise), la prochaine aujourd'hui à 14h30 ; ses deux boutons.
-      expectSame(E, 'agenda', [await textOf(page, '.dsp-agenda-title'), await page.$$eval('.dsp-agenda-text > p:not(.dsp-agenda-title)', (lines) => lines.map((line) => line.textContent)),
-        await page.$$eval('.dsp-agenda-actions a', (links) => links.map((link) => [link.textContent.trim(), link.getAttribute('href')]))],
-      ['3 visites à venir', ['Prochaine : Ven. 6 nov. · 14h30', 'Appartement lumineux avec balcon · Lyon 3e'],
-        [['Voir mon agenda', '/compte/?vue=agenda'], ['Ajouter une visite', '/compte/?vue=ajouter-visite']]]);
-      expectSame(E, 'activités', await page.$$eval('.dsp-tile', (tiles) => tiles.map((tile) => [tile.querySelector('.dsp-tile-title')?.textContent ?? null,
-        tile.querySelector('.dsp-tile-number')?.textContent ?? null, tile.querySelector('.dsp-tile-rest')?.textContent ?? null, tile.getAttribute('href')])),
-      [['Mes recherches', '2', 'recherches actives', '/compte/?vue=recherches'], ['Biens consultés', '4', 'annonces', '/compte/?vue=consultes'],
-        ['Mes annonces', '1', 'en ligne · 1 brouillon', '/compte/?vue=annonces']]);
+        ['Mon espace', ['Contrats et location', 'Compte et sécurité', 'Paramètres et assistance']]);
+      expectSame(E, 'projet', await spaceProjectRow(page), ['Mon projet', SPACE_PROJECT_CARDS.buy[0], '/compte/?vue=projet']);
+      // Mon espace, les lignes de l'app : trois visites à venir (la demande comprise), une annonce en ligne (le brouillon
+      // n'est pas compté, comme dans l'app).
+      expectSame(E, 'lignes de Mon espace', await spaceRows(page, '.dsp-space-rows'),
+        [['Mon agenda', '3 visites à venir', '/compte/?vue=agenda'], ['Mes recherches', '2 recherches enregistrées', '/compte/?vue=recherches'],
+          ['Biens consultés', '4 biens', '/compte/?vue=consultes'], ['Mon projet', 'Résidence principale · Lyon', '/compte/?vue=projet'],
+          ['Mes annonces', '1 en ligne', '/compte/?vue=annonces']]);
+      expectSame(E, 'icônes et teintes', await page.$$eval('.dsp-space-rows .app-row-tile', (tiles) => tiles.map((tile) => tile.className)),
+        ['app-row-tile is-blue', 'app-row-tile is-blue', 'app-row-tile is-blue', 'app-row-tile is-green', 'app-row-tile is-blue']);
       // Contrats et location : les documents restent dans l'app iPhone.
       expectSame(E, 'dossier', [await textOf(page, '.dsp-dossier h3'), await textOf(page, '.dsp-dossier p'), await textOf(page, '.dsp-dossier-button')],
         ['Mon dossier immobilier', 'Dans l’app iPhone pour l’instant', 'Compléter mon dossier']);
@@ -4362,11 +4420,11 @@ try {
           ['Documents à signer', null, null]]);
       expectSame(E, 'compte et sécurité', await spaceRows(page, '#compte-et-securite'),
         [['Connexion et sécurité', null, '/compte/?vue=securite'], ['Confidentialité et données', null, '/compte/?vue=confidentialite'],
-          ['Type de compte', null, null]]);
+          ['Type de compte', 'Particulier', null]]);
+      // Dans l'ordre de l'app ; « Notifications » est la ligne du site, gardée.
       expectSame(E, 'paramètres et assistance', await spaceRows(page, '#parametres-et-assistance'),
         [['Notifications', null, '/compte/?vue=notifications'], ['Alertes sur cet iPhone', null, null], ['Préférences', null, null],
-          ['Aide et assistance', null, '/aide/'], ['Donner mon avis', null, null],
-          ['Informations légales', null, '/compte/?vue=legal']]);
+          ['Aide et assistance', null, '/aide/'], ['Informations légales', null, '/compte/?vue=legal'], ['Donner mon avis', null, null]]);
       expectSame(E, 'bas de la colonne', [await textOf(page, '.dsp-logout'), await textOf(page, '.dsp-delete'), await page.getAttribute('.dsp-delete', 'href')],
         ['Se déconnecter', 'Supprimer mon compte', '/compte/?vue=supprimer']);
       // Ce que l'app garde sur l'iPhone : « Dans l'app iPhone pour l'instant », sans rien envoyer.
@@ -4375,11 +4433,11 @@ try {
       await page.click('.dsp-dossier-button');
       await iphoneOnly(page, E, 'Mon dossier immobilier');
       for (const title of ['Mon bail de location', 'Quittances de loyer', 'États des lieux', 'Offres et compromis', 'Documents à signer', 'Alertes sur cet iPhone', 'Préférences']) {
-        await page.locator('.dsp-row', { hasText: title }).click();
+        await page.locator('.dsp .app-row', { hasText: title }).click();
         await iphoneOnly(page, E, title);
       }
       // Type de compte : la confirmation de l'app ; « Annuler » ne change rien.
-      await page.locator('.dsp-row', { hasText: 'Type de compte' }).click();
+      await page.locator('.dsp .app-row', { hasText: 'Type de compte' }).click();
       expectSame(E, 'type de compte', [await dialogTitle(page), await textOf(page, 'dialog.alert-dialog[open] .alert-body p'),
         await page.$$eval('dialog.alert-dialog[open] .alert-actions button', (buttons) => buttons.map((button) => button.textContent))],
       ['Passer en professionnel ?', 'Vous pourrez revenir en arrière à tout moment depuis Type de compte.', ['Passer en professionnel', 'Annuler']]);
@@ -4394,50 +4452,56 @@ try {
         .catch(async () => problems.push(`${E} : après « Compte et sécurité », section mise en avant « ${await textOf(page, '.dsp-nav a[aria-current="location"]')} »`));
       await page.evaluate(() => window.scrollTo(0, 0));
 
-      // Projet de chaque sorte : sous-titre, anneau (part des critères renseignés) et étapes de l'app ; sans projet, celui par défaut.
+      // Projet de chaque sorte : le sous-titre de la ligne « Mon projet » (usage ou catégorie, puis ville) ; sans projet,
+      // celui par défaut de l'app.
       for (const kind of ['invest', 'rent', 'hotel', 'none', 'buy']) {
         space.project = kind === 'none' ? null : structuredClone(SPACE_PROJECTS[kind]);
         await page.reload({ waitUntil: 'networkidle' });
         const [subtitle] = SPACE_PROJECT_CARDS[kind];
-        await page.waitForFunction((wanted) => document.querySelector('.dsp-project-subtitle')?.textContent === wanted, subtitle, { timeout: 8000 }).catch(() => undefined);
+        await page.waitForFunction((wanted) => [...document.querySelectorAll('.dsp-space-rows .app-row-subtitle')].some((line) => line.textContent === wanted), subtitle,
+          { timeout: 8000 }).catch(() => undefined);
         await page.waitForTimeout(200);
-        expectSame(E, `projet ${kind}`, await spaceProjectCard(page), SPACE_PROJECT_CARDS[kind]);
+        expectSame(E, `projet ${kind}`, await spaceProjectRow(page), ['Mon projet', subtitle, '/compte/?vue=projet']);
       }
 
-      // « Voir mon agenda » ouvre Mon agenda.
-      await page.click('.dsp-agenda-actions a[href="/compte/?vue=agenda"]');
-      await page.waitForURL(`${base}/compte/?vue=agenda`, { timeout: 8000 }).catch(() => problems.push(`${E} : « Voir mon agenda » ouvre ${page.url()}`));
-      await page.waitForSelector('.dsc-agenda-screen .dsc-visit', { timeout: 8000 }).catch(() => problems.push(`${E} : Mon agenda ne s'affiche pas`));
+      // « Mon agenda » ouvre Mon agenda.
+      await page.click('.dsp-space-rows a.app-row[href="/compte/?vue=agenda"]');
+      await page.waitForURL(`${base}/compte/?vue=agenda`, { timeout: 8000 }).catch(() => problems.push(`${E} : « Mon agenda » ouvre ${page.url()}`));
+      await page.waitForSelector('.app-agenda .app-visit', { timeout: 8000 }).catch(() => problems.push(`${E} : Mon agenda ne s'affiche pas`));
 
-      // Mon agenda : onglets dans l'ordre de l'app avec leur nombre, cartes groupées par date, Itinéraire vers Plans.
+      // Mon agenda (étape 3 : les pièces de l'app dans la mise en page du site) : onglets de l'app dans l'ordre de l'app
+      // avec leur nombre, « + », cartes de l'app groupées par période, Itinéraire vers Plans.
       const A = 'Mon agenda';
+      const addVisitPath = '/compte/?vue=ajouter-visite&depuis=agenda';
       expectSame(A, 'en-tête', [await textOf(page, '.dsc-head h1'), await textOf(page, '.dsc-head p'), await page.getAttribute('.dsc-back', 'href'),
-        await page.getAttribute('.dsc-square', 'href'), await page.getAttribute('.dsc-square', 'aria-label'), await textOf(page, '.dsc-add-visit'),
-        await page.getAttribute('.dsc-add-visit', 'href')],
-      ['Agenda des visites', 'Toutes vos visites à venir et passées.', '/compte/', '/compte/?vue=ajouter-visite&depuis=agenda', 'Programmer une visite',
-        'Ajouter une visite manuellement', '/compte/?vue=ajouter-visite&depuis=agenda']);
-      const agendaTabs = () => page.$$eval('.dsc-tab', (tabs) => tabs.map((tab) => [tab.childNodes[0]?.textContent ?? null, tab.querySelector('.dsc-tab-count')?.textContent ?? null,
-        tab.getAttribute('aria-selected')]));
-      expectSame(A, 'onglets', await agendaTabs(), [['À venir', '3', 'true'], ['Passées', '1', 'false'], ['Annulées', '1', 'false']]);
+        await page.getAttribute('.app-agenda-plus', 'href'), await page.getAttribute('.app-agenda-plus', 'aria-label'), await textOf(page, '.app-agenda-add-link'),
+        await page.getAttribute('.app-agenda-add-link', 'href')],
+      ['Agenda des visites', 'Toutes vos visites à venir et passées.', '/compte/', addVisitPath, 'Ajouter une visite', 'Ajouter une visite manuellement', addVisitPath]);
+      const agendaTabs = () => page.$$eval('.app-agenda-tab', (tabs) => tabs.map((tab) => [tab.querySelector('.app-agenda-tab-title')?.textContent ?? null,
+        tab.querySelector('.app-agenda-tab-count')?.textContent ?? null, tab.getAttribute('aria-selected'), tab.getAttribute('aria-label')]));
+      expectSame(A, 'onglets', await agendaTabs(), [['À venir', '3', 'true', 'À venir, 3'], ['Passées', '1', 'false', 'Passées, 1'], ['Annulées', '1', 'false', 'Annulées, 1']]);
       const plans = (address) => `https://maps.apple.com/?daddr=${encodeURIComponent(address)}`;
-      const card = (fields) => ({ route: null, request: null, contact: true, menu: true, ...fields });
+      const card = (fields) => ({ cancelled: false, route: null, request: null, slots: null, contact: true, menu: true, ...fields });
+      const requestPath = `/compte/?vue=demande-visite&id=${SPACE_REQUEST_ID}`;
       expectSame(A, 'À venir', await agendaCards(page), [
-        ['Aujourd\'hui', [card({ date: 'Ven. 6 nov. · 14h30', status: 'Confirmée', title: 'Appartement lumineux avec balcon', lines: ['Lyon 3e (69003)', 'Avec Agence du Parc'],
-          route: plans('Lyon 3e (69003)') })]],
         ['Cette semaine', [
-          card({ date: 'Lun. 9 nov. · 9h00', status: 'En attente', title: 'Studio meublé', lines: ['12 Rue de test, 69007 Lyon 7e', 'Avec Julien Moreau'],
-            route: plans('12 Rue de test, 69007 Lyon 7e') }),
-          // Demande envoyée, pas encore acceptée : son écran « Demande de visite » réunit ses actions (pas de menu « … »).
-          card({ date: 'Mar. 10 nov. · 10h00', status: 'En attente', title: 'T2 vendu loué près du métro', lines: ['Villeurbanne', 'Avec Marc Petit', '3 créneaux proposés'],
-            route: plans('Villeurbanne'), request: `/compte/?vue=demande-visite&id=${SPACE_REQUEST_ID}`, menu: false }),
+          card({ block: 'VEN 6 NOV', date: 'Vendredi 6 novembre · 14h30', time: '14 h 30 – 15 h 15', status: 'Confirmée', tones: ['blue', 'green'],
+            title: 'Appartement lumineux avec balcon · Lyon 3e', lines: ['Avec Agence du Parc'], route: plans('Lyon 3e (69003)') }),
+          card({ block: 'LUN 9 NOV', date: 'Lundi 9 novembre · 9h00', time: '9 h 00 – 9 h 30', status: 'En attente', tones: ['amber', 'amber'],
+            title: 'Studio meublé · Lyon 7e', lines: ['Avec Julien Moreau'], route: plans('12 Rue de test, 69007 Lyon 7e') }),
+          // Demande envoyée à trois créneaux, pas encore acceptée : « Voir les créneaux » et la carte ouvrent l'écran « Demande
+          // de visite », qui réunit ses actions (pas de menu « … »).
+          card({ block: 'MAR 10 NOV', date: 'Mardi 10 novembre · 10h00', time: '3 créneaux proposés', status: 'En attente', tones: ['amber', 'amber'],
+            title: 'T2 vendu loué près du métro · Villeurbanne', lines: ['Avec Marc Petit · en attente de sa réponse'], request: requestPath, slots: requestPath,
+            menu: false }),
         ]],
       ]);
       desktopAgenda = await agendaCards(page);
-      expectSame(A, 'lien Itinéraire', await page.$eval('.dsc-visit a.dsc-visit-action', (link) => [link.textContent, link.getAttribute('target'), link.getAttribute('rel')]),
+      expectSame(A, 'lien Itinéraire', await page.$eval('.app-visit a.app-visit-route', (link) => [link.textContent, link.getAttribute('target'), link.getAttribute('rel')]),
         ['Itinéraire', '_blank', 'noopener noreferrer']);
       // Menu « … » d'une visite à venir : les actions de l'app, toutes dans l'app iPhone.
       const visitMenu = async (index) => {
-        await page.locator('.dsc-visit').nth(index).locator('.dsc-menu-button').click();
+        await page.locator('.app-visit').nth(index).locator('.dsc-menu-button').click();
         await page.waitForSelector('.dsc-menu-list');
         return textsOf(page, '.dsc-menu-list [role="menuitem"]');
       };
@@ -4445,40 +4509,55 @@ try {
         ['Modifier la visite', 'Reprogrammer', 'Ajouter une note', 'Ajouter à mon calendrier', 'Annuler la visite', 'Supprimer']);
       await page.locator('.dsc-menu-list').getByRole('menuitem', { name: 'Ajouter à mon calendrier', exact: true }).click();
       await iphoneOnly(page, A, 'Ajouter à mon calendrier');
-      // Contacter : la conversation liée à la visite.
+      // Message : la conversation liée à la visite.
       await page.route(new RegExp(`^${base}/messages/`), (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Messages</title>' }));
-      await page.locator('.dsc-visit').nth(0).getByRole('button', { name: 'Contacter' }).click();
+      await page.locator('.app-visit').nth(0).getByRole('button', { name: 'Message' }).click();
       await page.waitForURL(`${base}/messages/?c=E0000000-0000-4000-8000-000000000001`, { timeout: 8000 })
-        .catch(() => problems.push(`${A} : « Contacter » ouvre ${page.url()} au lieu de la conversation liée`));
+        .catch(() => problems.push(`${A} : « Message » ouvre ${page.url()} au lieu de la conversation liée`));
       await page.goBack({ waitUntil: 'networkidle' });
-      await page.waitForSelector('.dsc-visit');
+      await page.waitForSelector('.app-visit');
       await favShot(page, '5-mon-espace-agenda-1440.png');
-      await page.click('.dsc-tab >> nth=1');
+      await page.click('.app-agenda-tab >> nth=1');
       expectSame(A, 'Passées', await agendaCards(page), [
-        ['Ces 7 derniers jours', [card({ date: 'Lun. 2 nov. · 15h00', status: 'Terminée', title: 'T2 vendu loué près du métro',
-          lines: ['Villeurbanne (69100)', 'Avec Camille Roux', 'Intéressant · À revoir'], route: plans('Villeurbanne (69100)') })]],
+        ['Ce mois-ci', [card({ block: 'LUN 2 NOV', date: 'Lundi 2 novembre · 15h00', time: '15 h 00 – 16 h 00', status: 'Terminée', tones: ['blue', 'gray'],
+          title: 'T2 vendu loué près du métro · Villeurbanne', lines: ['Avec Camille Roux', 'Intéressant · À revoir'], route: plans('Villeurbanne (69100)') })]],
       ]);
       expectSame(A, 'menu d\'une visite terminée', await visitMenu(0), ['Ajouter une note', 'Ajouter à mon calendrier', 'Supprimer']);
       await page.keyboard.press('Escape');
-      await page.click('.dsc-tab >> nth=2');
+      await page.click('.app-agenda-tab >> nth=2');
       expectSame(A, 'Annulées', await agendaCards(page), [
-        ['Ces 7 derniers jours', [card({ date: 'Mer. 4 nov. · 17h00', status: 'Annulée', title: 'T2 vendu loué près du métro', lines: ['Adresse non renseignée', 'Avec Camille Roux'] })]],
+        ['Ce mois-ci', [card({ block: 'MER 4 NOV', date: 'Mercredi 4 novembre · 17h00', time: '17 h 00 – 17 h 45', cancelled: true, status: 'Annulée',
+          tones: ['gray', 'red'], title: 'T2 vendu loué près du métro · Villeurbanne', lines: ['Avec Camille Roux'] })]],
       ]);
-      expectSame(A, 'onglet choisi', await agendaTabs(), [['À venir', '3', 'false'], ['Passées', '1', 'false'], ['Annulées', '1', 'true']]);
+      expectSame(A, 'onglet choisi', (await agendaTabs()).map((tab) => tab.slice(0, 3)), [['À venir', '3', 'false'], ['Passées', '1', 'false'], ['Annulées', '1', 'true']]);
       expectSame(A, 'menu d\'une visite annulée', await visitMenu(0), ['Reprogrammer', 'Ajouter une note', 'Ajouter à mon calendrier', 'Supprimer']);
       await page.keyboard.press('Escape');
       // Sans adresse : l'avis de l'app au lieu de l'itinéraire.
-      await page.locator('.dsc-visit').nth(0).getByRole('button', { name: 'Itinéraire' }).click();
+      await page.locator('.app-visit').nth(0).getByRole('button', { name: 'Itinéraire' }).click();
       expectSame(A, 'itinéraire sans adresse', await noticeText(page, A), 'Adresse non renseignée : l\'itinéraire sera disponible quand le vendeur l\'aura communiquée.');
       const agendaReads = space.calls.filter((call) => call.path === '/compte/' && ['agenda_visits', 'rpc/my_visit_requests'].includes(call.table));
       expectSame(A, 'lectures de l\'agenda', [...new Set(agendaReads.map((call) => `${call.method} ${call.table} ${call.search}`))].sort(),
         ['GET agenda_visits ?select=id,start_at,status,request_id,listing_id,visit', 'POST rpc/my_visit_requests ']);
+      // Agence de chaque bien visité (retouche de l'app 7452fd9) : la fiche de chaque annonce, lue une fois, puis les
+      // profils publics de leurs auteurs, comme « Ajouter une visite ».
+      const agencyReads = space.calls.filter((call) => call.path === '/compte/' && (call.table === 'rpc/public_profiles' || (call.table === 'listings' && call.search.includes('id=eq.'))));
+      expectSame(A, 'lectures des agences', [...new Set(agencyReads.map((call) => `${call.method} ${call.table} ${call.table === 'listings' ? call.search : JSON.stringify(call.body)}`))].sort(),
+        [...[0, 1, 2].map((n) => `GET listings ?select=id,owner_id,city,postal_code,location_precision,public_street&id=eq.${listings[n].id}&limit=1`),
+          `POST rpc/public_profiles ${JSON.stringify({ user_ids: [0, 1, 2].map((n) => listings[n].owner_id.toUpperCase()) })}`].sort());
+      // « Avec <personne> · <agence> » : une personne de l'agence qui publie le bien ; le nom de l'agence seul quand c'est
+      // aussi le contact (plus haut).
+      space.visits[0].visit.contactName = 'Camille Roux';
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.waitForFunction(() => document.querySelector('.app-visit .app-visit-person')?.textContent.includes('Agence du Parc'), null, { timeout: 8000 }).catch(() => undefined);
+      expectSame(A, 'personne et agence', (await agendaCards(page))[0]?.[1][0]?.lines ?? null, ['Avec Camille Roux · Agence du Parc']);
+      space.visits[0].visit.contactName = 'Agence du Parc';
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.waitForSelector('.app-visit');
 
       // Ajouter une visite (depuis l'agenda) : le bien d'une conversation, la date, la durée, le contact, deux participants,
       // les rappels et « Confirmée » ; « Enregistrer » insère dans agenda_visits la ligne que l'app insère.
       const V = 'Ajouter une visite';
-      await page.click('.dsc-tab >> nth=0');
-      await page.click('.dsc-add-visit');
+      await page.click('.app-agenda-add-link');
       await page.waitForURL(`${base}/compte/?vue=ajouter-visite&depuis=agenda`, { timeout: 8000 }).catch(() => problems.push(`${V} : ouvert à ${page.url()}`));
       await page.waitForSelector('.dsc-form-screen .dsc-choose');
       const dateField = page.getByLabel('Date', { exact: true });
@@ -4559,19 +4638,21 @@ try {
       expectSame(V, 'message', await textOf(page, '.dsc-saved'), 'Visite enregistrée · rappels la veille et 1 h avant');
       // Retour à l'agenda, où la visite s'ajoute à « Cette semaine ».
       await page.waitForURL(`${base}/compte/?vue=agenda`, { timeout: 8000 }).catch(() => problems.push(`${V} : après l'enregistrement, ${page.url()} au lieu de Mon agenda`));
-      await page.waitForFunction(() => document.querySelector('.dsc-tab .dsc-tab-count')?.textContent === '4', null, { timeout: 8000 })
+      await page.waitForFunction(() => document.querySelector('.app-agenda-tab .app-agenda-tab-count')?.textContent === '4', null, { timeout: 8000 })
         .catch(() => problems.push(`${V} : la visite enregistrée n'apparaît pas dans Mon agenda`));
-      const added = (await agendaCards(page)).flatMap(([, cards]) => cards).find((item) => item.date === 'Mar. 10 nov. · 14h30');
-      expectSame(V, 'visite dans l\'agenda', added, card({ date: 'Mar. 10 nov. · 14h30', status: 'Confirmée', title: 'Appartement lumineux avec balcon',
-        lines: ['Lyon 3e (69003)', 'Avec Agence du Parc'], route: plans('Lyon 3e (69003)') }));
+      const added = (await agendaCards(page)).flatMap(([group, cards]) => cards.map((item) => ({ group, ...item })))
+        .find((item) => item.date === 'Mardi 10 novembre · 14h30' && item.time !== '3 créneaux proposés');
+      expectSame(V, 'visite dans l\'agenda', added, { group: 'Cette semaine', ...card({ block: 'MAR 10 NOV', date: 'Mardi 10 novembre · 14h30', time: '14 h 30 – 15 h 30',
+        status: 'Confirmée', tones: ['blue', 'green'], title: 'Appartement lumineux avec balcon · Lyon 3e', lines: ['Avec Agence du Parc'],
+        route: plans('Lyon 3e (69003)') }) });
 
       // Mon projet : la sorte, le résumé et l'anneau ; une étape cochée et le partage, puis « Enregistrer mon projet »
       // envoie l'upsert de l'app (ProjectServerRow, sur user_id).
       const P = 'Mon projet';
       space.project = structuredClone(SPACE_PROJECTS.buy);
       await page.goto(`${base}/compte/`, { waitUntil: 'networkidle' });
-      await page.click('.dsp-project-button');
-      await page.waitForURL(`${base}/compte/?vue=projet`, { timeout: 8000 }).catch(() => problems.push(`${P} : « Voir mon avancement » ouvre ${page.url()}`));
+      await page.click('.dsp-space-rows a.app-row[href="/compte/?vue=projet"]');
+      await page.waitForURL(`${base}/compte/?vue=projet`, { timeout: 8000 }).catch(() => problems.push(`${P} : « Mon projet » ouvre ${page.url()}`));
       await page.waitForSelector('.dsc-project-screen .dsc-kinds', { timeout: 8000 });
       expectSame(P, 'en-tête et sortes', [await textOf(page, '.dsc-head h1'), await textOf(page, '.dsc-head p'), await textOf(page, '.dsc-active'),
         await page.$$eval('.dsc-kind', (kinds) => kinds.map((kind) => [kind.querySelector('.dsc-kind-title')?.textContent ?? null, kind.querySelector('.dsc-kind-subtitle')?.textContent ?? null,
@@ -4609,14 +4690,21 @@ try {
       }
       if (writes.length !== before) problems.push(`${P} : écritures en plus de l'upsert (${JSON.stringify(writes.slice(before))})`);
       await page.waitForURL(`${base}/compte/`, { timeout: 8000 }).catch(() => problems.push(`${P} : après l'enregistrement, ${page.url()} au lieu de Mon espace`));
-      await page.waitForFunction(() => document.querySelectorAll('.dsp-steps li.is-done').length === 3, null, { timeout: 8000 })
-        .catch(() => problems.push(`${P} : l'étape cochée n'apparaît pas sur Mon espace`));
-      expectSame(P, 'carte après l\'enregistrement', await spaceProjectCard(page),
-        ['Résidence principale · Lyon', '43 %', [['Recherche', true], ['Visites', true], ['Sélection', true], ['Offre', false], ['Signature', false]]]);
+      await page.waitForSelector('.dsp-space-rows .app-row', { timeout: 8000 }).catch(() => problems.push(`${P} : Mon espace ne s'affiche pas après l'enregistrement`));
+      expectSame(P, 'ligne après l\'enregistrement', await spaceProjectRow(page), ['Mon projet', 'Résidence principale · Lyon', '/compte/?vue=projet']);
+      // L'étape cochée est gardée : Mon projet, rouvert depuis sa ligne, la compte.
+      await page.click('.dsp-space-rows a.app-row[href="/compte/?vue=projet"]');
+      await page.waitForSelector('.dsc-project-screen .dsc-steps-count', { timeout: 8000 }).catch(() => undefined);
+      await page.waitForFunction(() => document.querySelector('.dsc-steps-count')?.textContent === '3 étapes sur 5', null, { timeout: 8000 })
+        .catch(() => problems.push(`${P} : l'étape cochée n'apparaît pas en rouvrant Mon projet`));
+      expectSame(P, 'projet rouvert après l\'enregistrement', [await textOf(page, '.dsc-summary-ring .dsp-ring-label'), await textOf(page, '.dsc-steps-count')],
+        ['43 %', '3 étapes sur 5']);
+      await page.goto(`${base}/compte/`, { waitUntil: 'networkidle' });
+      await page.waitForSelector('.dsp-space-rows .app-row');
 
       // Biens consultés : du plus récent au plus ancien, « Retirer » puis « Vider l'historique » (rien n'est envoyé au serveur).
       const C = 'Biens consultés';
-      await page.click('.dsp-tile[href="/compte/?vue=consultes"]');
+      await page.click('.dsp-space-rows a.app-row[href="/compte/?vue=consultes"]');
       await page.waitForSelector('.dsc-viewed', { timeout: 8000 });
       expectSame(C, 'liste', [await textOf(page, '.dsc-head h1'), await textOf(page, '.dsc-head-action button'), await viewedRows(page),
         await page.$$eval('.dsc-viewed-remove', (buttons) => buttons.map((button) => [button.textContent.trim(), button.getAttribute('aria-label')]))],
@@ -4649,8 +4737,10 @@ try {
         problems.push(`${C} : écriture envoyée au serveur (${JSON.stringify(space.calls.slice(viewedMark).filter((call) => call.method !== 'GET'))})`);
       }
       await page.goto(`${base}/compte/`, { waitUntil: 'networkidle' });
-      await page.waitForSelector('.dsp-tile');
-      expectSame(C, 'tuile de Mon espace', await textOf(page, '.dsp-tile[href="/compte/?vue=consultes"]'), 'Biens consultés Aucun historique');
+      await page.waitForSelector('.dsp-space-rows .app-row');
+      // Historique vide : la ligne n'a plus de sous-titre, comme dans l'app (rien à zéro).
+      expectSame(C, 'ligne de Mon espace', (await spaceRows(page, '.dsp-space-rows')).find((row) => row[0] === 'Biens consultés'),
+        ['Biens consultés', null, '/compte/?vue=consultes']);
 
       // Supprimer mon compte : l'écran existant (rien n'est supprimé sans « Supprimer définitivement »).
       await page.click('.dsp-delete');
@@ -4704,9 +4794,9 @@ try {
       const context = await browser.newContext({ viewport: { width, height: 900 }, locale: 'fr-FR' });
       await mock(context, { signedIn: true, account: { profiles: [{ ...ACCOUNT.profiles[0], account_type: 'professional', professional_profile_id: 'b2000000-0000-4000-8000-000000000001' }] } });
       page = await open(context, '/compte/', `espace pro ${width}`);
-      await page.waitForSelector('.row-title');
+      await page.waitForSelector('.app-row-title');
       expectSame(`espace pro ${width}`, 'Agenda des visites', [await page.locator('.dsp').count(),
-        await page.$$eval('a.row', (rows) => rows.filter((row) => row.querySelector('.row-title')?.textContent === 'Agenda des visites').map((row) => row.getAttribute('href')))], [0, [href]]);
+        await page.$$eval('a.app-row', (rows) => rows.filter((row) => row.querySelector('.app-row-title')?.textContent === 'Agenda des visites').map((row) => row.getAttribute('href')))], [0, [href]]);
       await page.close();
       await context.close();
     }
@@ -4717,9 +4807,9 @@ try {
       const context = await browser.newContext({ viewport: { width: 1023, height: 768 }, locale: 'fr-FR' });
       await mock(context, { signedIn: true });
       page = await open(context, '/compte/', 'Mon espace 1023');
-      await page.waitForSelector('.project-card');
+      await page.waitForSelector('.app-space .app-row');
       expectSame('Mon espace 1023', 'page du téléphone', [await page.locator('.dsp, .dsc, .dtop, .dfoot').count(), await page.locator('.space-profile').count()], [0, 1]);
-      expectSame('Mon espace 1023', 'lien Mon agenda', await page.$$eval('a.row', (rows) => rows.filter((row) => row.querySelector('.row-title')?.textContent === 'Mon agenda')
+      expectSame('Mon espace 1023', 'lien Mon agenda', await page.$$eval('a.app-row', (rows) => rows.filter((row) => row.querySelector('.app-row-title')?.textContent === 'Mon agenda')
         .map((row) => row.getAttribute('href'))), ['/compte/?vue=agenda']);
       await page.close();
       for (const [view, title] of [['projet', 'Mon projet immobilier'], ['consultes', 'Biens consultés']]) {
@@ -4747,10 +4837,10 @@ try {
       await context.close();
     }
 
-    // Téléphone (demande de Romain du 14 novembre) : Mon agenda et Ajouter une visite, les écrans de l'ordinateur, à
-    // 390 px (iPhone 13) et 320 px (iPhone SE), ouverts depuis Mon compte : les cartes de l'ordinateur, rien ne dépasse,
-    // la feuille « Bien concerné » tient dans l'écran et « Enregistrer » insère la visite. Captures :
-    // agenda-telephone*.png, ajouter-visite-telephone*.png, ajouter-visite-feuille-telephone*.png.
+    // Téléphone : Mon agenda, l'écran de l'app (retour rond, « + », grand titre, onglets sur la piste grise, mêmes cartes
+    // que l'ordinateur, mesures de l'app), et Ajouter une visite, à 390 px (iPhone 13) et 320 px (iPhone SE), ouverts
+    // depuis Mon compte : rien ne dépasse, la feuille « Bien concerné » tient dans l'écran et « Enregistrer » insère la
+    // visite. Captures : agenda-telephone*.png, ajouter-visite-telephone*.png, ajouter-visite-feuille-telephone*.png.
     for (const device of ['iPhone 13', 'iPhone SE']) {
       const A = `Mon agenda ${device}`;
       const V = `Ajouter une visite ${device}`;
@@ -4762,19 +4852,33 @@ try {
       await mock(context, { signedIn: true, listingRows: SPACE_LISTING_ROWS });
       await mockSpace(context, space);
       page = await open(context, '/compte/', A);
-      await page.waitForSelector('.project-card');
-      await page.click('a.row[href="/compte/?vue=agenda"]');
+      await page.waitForSelector('.app-space .app-row');
+      await page.click('a.app-row[href="/compte/?vue=agenda"]');
       await page.waitForURL(`${base}/compte/?vue=agenda`, { timeout: 8000 }).catch(() => problems.push(`${A} : « Mon agenda » ouvre ${page.url()}`));
-      await page.waitForSelector('.dsc-agenda-screen .dsc-visit', { timeout: 8000 }).catch(() => problems.push(`${A} : Mon agenda ne s'affiche pas`));
-      expectSame(A, 'en-tête', [await textOf(page, '.dsc-head h1'), await page.getAttribute('.dsc-back', 'href'), await textOf(page, '.dsc-add-visit'),
-        await page.$$eval('.dsc-tab', (tabs) => tabs.map((tab) => [tab.childNodes[0]?.textContent ?? null, tab.querySelector('.dsc-tab-count')?.textContent ?? null]))],
-      ['Agenda des visites', '/compte/', 'Ajouter une visite manuellement', [['À venir', '3'], ['Passées', '1'], ['Annulées', '1']]]);
+      await page.waitForSelector('.app-agenda .app-visit', { timeout: 8000 }).catch(() => problems.push(`${A} : Mon agenda ne s'affiche pas`));
+      expectSame(A, 'en-tête', [await page.getAttribute('.app-agenda-top .app-round', 'href'), await page.getAttribute('.app-agenda-top .app-round', 'aria-label'),
+        await page.getAttribute('.app-agenda-top .app-agenda-plus', 'href'), await page.getAttribute('.app-agenda-top .app-agenda-plus', 'aria-label'),
+        await textOf(page, '.app-agenda-header h1'), await textOf(page, '.app-agenda-header p'), await textOf(page, '.app-agenda-add-link'),
+        await page.$$eval('.app-agenda-tab', (tabs) => tabs.map((tab) => [tab.querySelector('.app-agenda-tab-title')?.textContent ?? null,
+          tab.querySelector('.app-agenda-tab-count')?.textContent ?? null]))],
+      ['/compte/', 'Retour', '/compte/?vue=ajouter-visite&depuis=agenda', 'Ajouter une visite', 'Agenda des visites', 'Toutes vos visites à venir et passées.',
+        'Ajouter une visite manuellement', [['À venir', '3'], ['Passées', '1'], ['Annulées', '1']]]);
       expectSame(A, 'cartes À venir, celles de l\'ordinateur', await agendaCards(page), desktopAgenda);
-      expectSame(A, 'bouton calendrier', await page.locator('.dsc-square').isVisible(), screenWidth >= 360);
+      // Mesures de l'app : retour et « + » de 44 (ronds de 42), titre de 30, piste de 46 et onglets de 38 (coins 16 et
+      // 12), bloc date de 52 × 60, carte aux coins de 22, boutons de 38 ; 12 entre les cartes.
+      expectSame(A, 'mesures', await page.evaluate(() => {
+        const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+        const style = (selector) => getComputedStyle(document.querySelector(selector));
+        const cards = [...document.querySelectorAll('.app-visit')].map((card) => card.getBoundingClientRect());
+        return [Math.round(box('.app-agenda-top .app-round').width), Math.round(box('.app-agenda-plus-circle').width), style('.app-agenda-header h1').fontSize,
+          Math.round(box('.app-agenda-tabs').height), style('.app-agenda-tabs').borderRadius, Math.round(box('.app-agenda-tab').height),
+          style('.app-agenda-tab[aria-selected="true"]').borderRadius, [Math.round(box('.app-visit-date').width), Math.round(box('.app-visit-date').height)],
+          style('.app-visit').borderRadius, Math.round(box('.app-visit-button').height), Math.round(cards[1].top - cards[0].bottom)];
+      }), [44, 42, '30px', 46, '16px', 38, '12px', [52, 60], '22px', 38, 12]);
       await phoneFits(page, A);
       await tallShot(page, `agenda-telephone${suffix}.png`);
       // Menu « … » d'une visite : entier dans l'écran, au-dessus de la barre du bas (la page défile juste assez).
-      await page.locator('.dsc-visit').nth(0).locator('.dsc-menu-button').click();
+      await page.locator('.app-visit').nth(0).locator('.dsc-menu-button').click();
       await page.waitForSelector('.dsc-menu-list');
       await page.waitForTimeout(300);
       expectSame(A, 'menu « … » entier au-dessus de la barre du bas', await page.evaluate(() => {
@@ -4787,15 +4891,15 @@ try {
       await page.waitForSelector('.dsc-menu-list', { state: 'detached', timeout: 4000 }).catch(() => problems.push(`${A} : Échap ne referme pas le menu « … »`));
       // Passées et Annulées : leurs cartes, dans l'écran.
       for (const [index, tab] of [[1, 'Passées'], [2, 'Annulées']]) {
-        await page.click(`.dsc-tab >> nth=${index}`);
-        await page.waitForFunction((i) => document.querySelectorAll('.dsc-tab')[i]?.getAttribute('aria-selected') === 'true', index, { timeout: 4000 }).catch(() => undefined);
-        expectSame(A, `onglet ${tab}`, (await agendaCards(page)).map(([group, cards]) => [group, cards.length]), [['Ces 7 derniers jours', 1]]);
+        await page.click(`.app-agenda-tab >> nth=${index}`);
+        await page.waitForFunction((i) => document.querySelectorAll('.app-agenda-tab')[i]?.getAttribute('aria-selected') === 'true', index, { timeout: 4000 }).catch(() => undefined);
+        expectSame(A, `onglet ${tab}`, (await agendaCards(page)).map(([group, cards]) => [group, cards.length]), [['Ce mois-ci', 1]]);
         await phoneFits(page, `${A}, ${tab}`);
       }
-      await page.click('.dsc-tab >> nth=0');
+      await page.click('.app-agenda-tab >> nth=0');
 
       // Ajouter une visite, depuis l'agenda.
-      await page.click('.dsc-add-visit');
+      await page.click('.app-agenda-add-link');
       await page.waitForURL(`${base}/compte/?vue=ajouter-visite&depuis=agenda`, { timeout: 8000 }).catch(() => problems.push(`${V} : ouvert à ${page.url()}`));
       await page.waitForSelector('.dsc-form-screen .dsc-choose');
       expectSame(V, 'formulaire vide', [await textOf(page, '.dsc-head h1'), await page.isDisabled('.dsc-head-action .dsc-button-primary'),
@@ -4829,7 +4933,7 @@ try {
         inserted?.body?.visit?.address ?? null, inserted?.body?.visit?.contactName ?? null],
       ['2026-11-10T13:30:00.000', listings[0].id.toUpperCase(), 'Lyon 3e (69003)', 'Agence du Parc']);
       await page.waitForURL(`${base}/compte/?vue=agenda`, { timeout: 8000 }).catch(() => problems.push(`${V} : après l'enregistrement, ${page.url()} au lieu de Mon agenda`));
-      await page.waitForFunction(() => document.querySelector('.dsc-tab .dsc-tab-count')?.textContent === '4', null, { timeout: 8000 })
+      await page.waitForFunction(() => document.querySelector('.app-agenda-tab .app-agenda-tab-count')?.textContent === '4', null, { timeout: 8000 })
         .catch(() => problems.push(`${V} : la visite enregistrée n'apparaît pas dans Mon agenda`));
       await page.close();
       await context.close();
@@ -5045,9 +5149,45 @@ try {
 
   // Téléphone, avec le compte de test.
   const signedPhone = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
-  await mock(signedPhone, { signedIn: true });
+  const signedPhoneServer = await mock(signedPhone, { signedIn: true });
   page = await open(signedPhone, '/compte/', 'compte-espace-telephone');
-  await page.waitForSelector('.project-card');
+  await page.waitForSelector('.app-space .app-row');
+  // Mon compte comme l'app (étape 3) : grand titre et cloche (point rouge des non-lues), carte du profil, puis les groupes
+  // de l'app avec leurs lignes, leurs teintes et leurs sous-titres (rien à zéro) ; chaque ligne mène à l'écran du site.
+  {
+    const M = 'Mon compte téléphone';
+    const unread = expectedBadges(signedPhoneServer.state).notifications;
+    await page.waitForFunction(() => /1 en ligne/.test(document.querySelector('.app-space')?.innerText ?? '')
+      && Boolean(document.querySelector('.app-space-header .app-round-dot')), null, { timeout: 8000 }).catch(() => undefined);
+    expectSame(M, 'en-tête et profil', [await textOf(page, '.app-space-header h1'), await page.getAttribute('.app-space-header .app-round', 'href'),
+      await page.getAttribute('.app-space-header .app-round', 'aria-label'), await page.locator('.app-space-header .app-round-dot').count(),
+      await textOf(page, '.space-profile-name'), await textOf(page, '.space-profile-line'), await textOf(page, '.space-profile-badge'),
+      await textOf(page, '.space-profile-action'), await textOf(page, '.space-profile-photo'), await page.getAttribute('.space-profile', 'href')],
+    ['Mon espace', '/compte/?vue=notifications', `Notifications, ${unread} non lues`, 1, 'Claire Martin', USER_EMAIL, 'Particulier', 'Modifier', 'C',
+      '/compte/?vue=informations']);
+    const soon = (key) => `/compte/?vue=bientot&ecran=${key}`;
+    expectSame(M, 'groupes et lignes', await page.$$eval('.app-menu-group', (groups) => groups.map((group) => [group.querySelector('.app-section-label')?.textContent ?? null,
+      [...group.querySelectorAll('.app-row')].map((row) => [row.querySelector('.app-row-title')?.textContent ?? null, row.querySelector('.app-row-subtitle')?.textContent ?? null,
+        row.getAttribute('href'), row.querySelector('.app-row-tile')?.className.replace('app-row-tile is-', '') ?? null])])), [
+      ['Mon espace', [['Mon agenda', null, '/compte/?vue=agenda', 'blue'], ['Mes recherches', '2 recherches enregistrées', '/compte/?vue=recherches', 'blue'],
+        ['Biens consultés', null, '/compte/?vue=consultes', 'blue'], ['Mon projet', 'Résidence principale · Lyon', '/compte/?vue=projet', 'green'],
+        ['Mes annonces', '1 en ligne', '/compte/?vue=annonces', 'blue']]],
+      ['Contrats et location', [['Mon bail de location', null, soon('bail'), 'teal'], ['Quittances de loyer', null, soon('quittances'), 'teal'],
+        ['États des lieux', null, soon('etats'), 'teal'], ['Offres et compromis', null, soon('offres'), 'amber'], ['Documents à signer', null, soon('signature'), 'amber'],
+        ['Mon dossier immobilier', null, soon('dossier'), 'teal']]],
+      ['Compte et sécurité', [['Connexion et sécurité', null, '/compte/?vue=securite', 'gray'], ['Confidentialité et données', null, '/compte/?vue=confidentialite', 'gray'],
+        ['Type de compte', 'Particulier', null, 'gray']]],
+      ['Paramètres et assistance', [['Notifications', null, '/compte/?vue=notifications', 'gray'], ['Préférences', null, soon('preferences'), 'gray'],
+        ['Aide et assistance', null, '/aide/', 'gray'], ['Informations légales', null, '/compte/?vue=legal', 'gray'], ['Donner mon avis', null, null, 'gray']]],
+    ]);
+    // Mesures de l'app : lignes de 64 px au moins, carré d'icône de 40, carte du profil de 105 (nom, e-mail et pastille,
+    // plus hauts que la photo de 64, marges de 16 et bord), « Se déconnecter » de 52, rien ne dépasse de l'écran.
+    expectSame(M, 'mesures', await page.evaluate(() => {
+      const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+      return [Math.round(box('.app-row').height), Math.round(box('.app-row-tile').width), Math.round(box('.space-profile').height), Math.round(box('.logout-button').height),
+        Math.round(box('.app-space-header .app-round').width), document.documentElement.scrollWidth - innerWidth];
+    }), [64, 40, 105, 52, 44, 0]);
+  }
   await page.waitForTimeout(400);
   await page.screenshot({ path: join(out, 'compte-espace-telephone.png') });
   await page.screenshot({ path: join(out, 'compte-espace-telephone-long.png'), fullPage: true });
@@ -5062,6 +5202,196 @@ try {
   await page.screenshot({ path: join(out, 'mes-informations-telephone-long.png'), fullPage: true });
   await signedPhone.close();
 
+  // « Quel est votre profil ? » comme l'app (étape 3), pour un compte tout neuf : « Étape 2 sur 2 » et sa barre, les deux
+  // cartes de choix, « Avec ce compte » (trois lignes du type choisi), les justificatifs, la réassurance et « Continuer en
+  // tant que… » ; sur téléphone, sans barre du bas et le bouton toujours en bas de l'écran. « Continuer » enregistre le
+  // type comme avant (profiles.account_type) ; le retour déconnecte. À 390 et 320 px, et à 1440 px.
+  for (const [device, size] of [['iPhone 13', null], ['iPhone SE', null], [null, [1440, 900]]]) {
+    const P = `profil ${device ?? `${size[0]} px`}`;
+    const suffix = device === 'iPhone SE' ? '-320' : device === null ? `-${size[0]}` : '';
+    const context = await browser.newContext(device ? { ...devices[device], locale: 'fr-FR' } : { viewport: { width: size[0], height: size[1] }, locale: 'fr-FR' });
+    await context.addInitScript(() => { try { localStorage.setItem('nidalo.newAccount', '1'); } catch { /* stockage indisponible */ } });
+    await mock(context, { signedIn: true });
+    page = await open(context, '/compte/', P);
+    await page.getByRole('heading', { name: 'Quel est votre profil ?' }).waitFor({ timeout: 8000 }).catch(() => problems.push(`${P} : écran absent`));
+    const screen = async () => page.evaluate(() => {
+      const text = (element) => element?.textContent.replace(/\s+/g, ' ').trim() ?? null;
+      return {
+        top: [text(document.querySelector('.app-profile-top .app-round')) === '' ? document.querySelector('.app-profile-top .app-round').getAttribute('aria-label') : null,
+          text(document.querySelector('.app-profile-step-text')),
+          [...document.querySelectorAll('.app-step-bar > span')].map((segment) => segment.classList.contains('is-done'))],
+        titles: [text(document.querySelector('.app-profile-title')), text(document.querySelector('.app-profile-subtitle'))],
+        cards: [...document.querySelectorAll('.app-type-cards [role="radio"]')].map((card) => [text(card.querySelector('.app-type-title')),
+          text(card.querySelector('.app-type-detail')), card.getAttribute('aria-checked')]),
+        rows: [text(document.querySelector('.app-profile-label')), [...document.querySelectorAll('.app-profile-benefits-list:not(.is-leaving) .app-row')]
+          .map((row) => [text(row.querySelector('.app-row-title')), text(row.querySelector('.app-row-subtitle')), row.querySelector('.app-row-tile').className.replace('app-row-tile is-', ''),
+            row.tagName, row.querySelector('.app-row-chevron') !== null])],
+        bottom: [text(document.querySelector('.app-profile-papers')), text(document.querySelector('.app-profile-note')), text(document.querySelector('.app-profile-continue'))],
+      };
+    });
+    const wanted = (type) => ({
+      top: ['Retour', 'Étape 2 sur 2', [true, true]],
+      titles: ['Quel est votre profil ?', 'Choisissez le type de compte qui correspond à votre situation.'],
+      cards: [['Particulier', 'Je recherche un bien, je loue, je vends ou je souhaite investir.', String(type === 'individual')],
+        ['Professionnel', 'Agence, promoteur, mandataire ou gestionnaire immobilier.', String(type === 'professional')]],
+      rows: ['Avec ce compte', type === 'individual'
+        ? [['Mon projet immobilier', 'Critères, budget et dossier', 'green', 'DIV', false], ['Mon agenda de visites', 'Demandes, rappels et comptes rendus', 'blue', 'DIV', false],
+          ['Contrats et location', 'Bail, quittances, états des lieux, offres', 'teal', 'DIV', false]]
+        : [['Annonces et mandats', 'Diffusion, suivi et statistiques', 'blue', 'DIV', false], ['Contacts et ventes', 'Acquéreurs, vendeurs, compromis signés', 'blue', 'DIV', false],
+          ['Équipe et profil agence', 'Collaborateurs et page de l\'agence', 'blue', 'DIV', false]]],
+      bottom: [type === 'individual' ? 'Aucun justificatif à fournir' : 'À fournir ensuite : Kbis, carte professionnelle, RCP', 'Modifiable à tout moment depuis Mon compte',
+        type === 'individual' ? 'Continuer en tant que particulier' : 'Continuer en tant que professionnel'],
+    });
+    expectSame(P, 'particulier', await screen(), wanted('individual'));
+    // Téléphone : pas de barre du bas, le bouton en bas de l'écran (même la page défilée) ; ordinateur : à la suite.
+    const place = () => page.evaluate(() => [getComputedStyle(document.querySelector('.tabbar')).display,
+      Math.round(document.querySelector('.app-profile-bottom').getBoundingClientRect().bottom) - innerHeight, getComputedStyle(document.querySelector('.app-profile-bottom')).position]);
+    if (device) {
+      expectSame(P, 'bas de l\'écran', await place(), ['none', 0, 'sticky']);
+      await phoneFits(page, P);
+    } else {
+      expectSame(P, 'bas de la page', (await place()).slice(2), ['static']);
+      if ((await contentWidth(page, '.account-wrap')) !== 640) problems.push(`${P} : colonne de ${await contentWidth(page, '.account-wrap')} px au lieu de 640`);
+    }
+    if (device === 'iPhone 13') {
+      // Mesures de l'app : retour de 44, barre de 4, cartes aux coins de 22, carré d'icône de 42, rond coché de 24, bouton de 52 (coins 12).
+      expectSame(P, 'mesures', await page.evaluate(() => {
+        const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+        const style = (selector) => getComputedStyle(document.querySelector(selector));
+        return [Math.round(box('.app-profile-top .app-round').width), Math.round(box('.app-step-bar > span').height), style('.app-type-card').borderRadius,
+          Math.round(box('.app-type-icon').width), Math.round(box('.app-type-card.is-selected .app-type-check').width), Math.round(box('.app-profile-continue').height),
+          style('.app-profile-continue').borderRadius];
+      }), [44, 4, '22px', 42, 24, 52, '12px']);
+    }
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: join(out, `profil-particulier${suffix}.png`) });
+    await page.getByRole('radio', { name: /Professionnel/ }).click();
+    await page.waitForFunction(() => !document.querySelector('.app-profile-benefits-list.is-leaving'), null, { timeout: 4000 }).catch(() => problems.push(`${P} : liste quittée restée`));
+    expectSame(P, 'professionnel', await screen(), wanted('professional'));
+    if (device) {
+      // Tout en bas de la page : le bas de l'écran reste visible en entier, posé au-dessus du pied de page du site.
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await page.waitForTimeout(300);
+      expectSame(P, 'bas de l\'écran, page défilée', await page.evaluate(() => {
+        const bar = document.querySelector('.app-profile-bottom').getBoundingClientRect();
+        return [getComputedStyle(document.querySelector('.tabbar')).display, bar.top >= 0 && bar.bottom <= innerHeight,
+          bar.bottom <= document.querySelector('footer.footer').getBoundingClientRect().top];
+      }), ['none', true, true]);
+      await phoneFits(page, `${P} (professionnel)`);
+      await page.evaluate(() => window.scrollTo(0, 0));
+    }
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: join(out, `profil-professionnel${suffix}.png`) });
+    // « Continuer en tant que professionnel » : le type enregistré, comme avant, puis Mon compte.
+    const before = writes.length;
+    await page.getByRole('button', { name: /Continuer/ }).click();
+    await page.getByRole('heading', { name: 'Quel est votre profil ?' }).waitFor({ state: 'detached', timeout: 8000 }).catch(() => problems.push(`${P} : l'écran ne se ferme pas`));
+    expectSame(P, 'type enregistré', writes.slice(before).map((write) => [write.method, write.table, write.search, write.body]),
+      [['PATCH', 'profiles', `?id=eq.${USER_ID}`, { account_type: 'professional' }]]);
+    expectSame(P, 'compte tout neuf', await page.evaluate(() => localStorage.getItem('nidalo.newAccount')), null);
+    await page.close();
+    // Retour : déconnexion, comme l'app ; l'écran de connexion revient.
+    if (device === 'iPhone 13') {
+      page = await open(context, '/compte/', `${P} retour`);
+      await page.getByRole('heading', { name: 'Quel est votre profil ?' }).waitFor({ timeout: 8000 }).catch(() => problems.push(`${P} : écran absent au retour`));
+      await page.getByRole('button', { name: 'Retour', exact: true }).click();
+      await page.waitForSelector('.signin-card', { timeout: 8000 }).catch(() => problems.push(`${P} : le retour ne déconnecte pas`));
+      expectSame(P, 'retour', [await page.locator('.app-profile-step').count(), await page.evaluate(() => localStorage.getItem('nidalo.newAccount'))], [0, null]);
+      await page.close();
+    }
+    await context.close();
+  }
+
+  // Haut des pages du téléphone (étape 3) : plus d'en-tête bleu sous 761 px. Chaque page commence comme son écran de
+  // l'app : grand titre d'un onglet (Favoris, Messages, Mon compte), retour et titre d'un écran poussé ; les pages que
+  // l'app n'a pas (aide, pages légales, 404, « bientôt », annonce introuvable) ont le retour rond et le titre, leur h1
+  // restant pour les lecteurs d'écran ; le retour ramène à la page précédente du site, sinon à sa page. Une conversation
+  // ouverte garde sa barre et toute la hauteur. Fond de page et barre du navigateur aux couleurs de l'app. Entre 761 et
+  // 1023 px, l'en-tête bleu reste (seul menu de ces largeurs). Captures : haut-telephone-*.png.
+  {
+    const T = 'haut du téléphone';
+    const context = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
+    await mock(context, { signedIn: true });
+    const topOf = (p) => p.evaluate(() => {
+      const header = document.querySelector('.phone-page-head .app-page-header');
+      const title = header?.querySelector('.app-page-header-title');
+      return {
+        band: [...document.querySelectorAll('.topbar')].every((bar) => getComputedStyle(bar).display === 'none'),
+        background: getComputedStyle(document.body).backgroundColor,
+        header: header ? [Math.round(header.getBoundingClientRect().top), header.querySelector('.app-round')?.getAttribute('href') ?? null,
+          header.querySelector('.app-round')?.getAttribute('aria-label') ?? null, title?.textContent ?? null, title?.tagName ?? null, title?.getAttribute('aria-hidden') ?? null] : null,
+        // h1 de la page : son texte, et masqué à l'écran (1 px), lu par les lecteurs d'écran.
+        h1: [...document.querySelectorAll('main h1')].map((heading) => [heading.textContent.trim(), Math.round(heading.getBoundingClientRect().width) <= 1]),
+      };
+    });
+    page = await open(context, '/aide/', `${T} aide`);
+    expectSame(T, 'couleur de la barre du navigateur', await page.$$eval('meta[name="theme-color"]', (metas) => metas.map((meta) => [meta.getAttribute('content'), meta.getAttribute('media')])),
+      [['#FAF9F6', '(max-width: 760px)'], ['#1F5BC6', '(min-width: 761px)']]);
+    await page.close();
+    const unknownListing = '6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1aff';
+    for (const [path, title, back, file] of [['/aide/', 'Aide', '/', 'aide'], ['/conditions/', 'Conditions d’utilisation', '/', 'conditions'],
+      ['/confidentialite/', 'Politique de confidentialité', '/', 'confidentialite'], ['/mentions-legales/', 'Mentions légales', '/', 'mentions-legales'],
+      ['/page-inexistante/', 'Page introuvable', '/', '404'], ['/publier/', 'Publier une annonce', '/', 'publier'], ['/comparer/', 'Comparer', '/favoris/', 'comparer'],
+      [`/annonce/?id=${unknownListing}`, 'Annonce introuvable', '/recherche/', 'annonce-introuvable']]) {
+      // La page 404 répond avec le code 404 (signalé par Chrome, voir open()).
+      const name = file === '404' ? `404 ${T}` : `${T} ${file}`;
+      page = await open(context, path, name);
+      await page.waitForSelector('.phone-page-head .app-page-header', { timeout: 8000 }).catch(() => problems.push(`${name} : ni retour ni titre`));
+      expectSame(name, 'haut de la page', await topOf(page), { band: true, background: 'rgb(250, 249, 246)', header: [6, back, 'Retour', title, 'P', 'true'], h1: [[title, true]] });
+      await phoneFits(page, name);
+      await page.screenshot({ path: join(out, `haut-telephone-${file}.png`) });
+      await page.close();
+    }
+    // Onglets : leur grand titre en haut, sans en-tête bleu ; conversation ouverte : sa barre en haut, toute la hauteur.
+    // Messages avec ses conversations simulées (chatContext).
+    const { context: chatPhone } = await chatContext({ phone: true });
+    for (const [tabContext, path, selector, file] of [[context, '/favoris/', '.favorites-head h1', 'favoris'], [chatPhone, '/messages/', '.dm-side-title h1', 'messages'],
+      [context, '/compte/', '.app-space-header h1', 'compte']]) {
+      page = await open(tabContext, path, `${T} ${file}`);
+      await page.waitForSelector(selector, { timeout: 8000 }).catch(() => problems.push(`${T} ${file} : grand titre absent`));
+      const facts = await page.evaluate((sel) => [[...document.querySelectorAll('.topbar')].every((bar) => getComputedStyle(bar).display === 'none'),
+        getComputedStyle(document.body).backgroundColor, Math.round(document.querySelector(sel).getBoundingClientRect().top) <= 16, document.querySelectorAll('.phone-page-head').length], selector);
+      expectSame(`${T} ${file}`, '[sans en-tête bleu, fond, grand titre en haut, sans retour]', facts, [true, 'rgb(250, 249, 246)', true, 0]);
+      await page.screenshot({ path: join(out, `haut-telephone-${file}.png`) });
+      await page.close();
+    }
+    {
+      page = await open(chatPhone, `/messages/?c=${chatId(1)}`, `${T} conversation`);
+      await page.waitForSelector('.dm.is-thread .dm-composer', { timeout: 8000 }).catch(() => problems.push(`${T} : conversation absente`));
+      expectSame(`${T} conversation`, '[haut, hauteur, barre du bas, en-tête bleu]', await page.evaluate(() => {
+        const box = document.querySelector('.dm.is-thread').getBoundingClientRect();
+        return [Math.round(box.top), Math.round(box.height) === innerHeight, getComputedStyle(document.querySelector('.tabbar')).display,
+          getComputedStyle(document.querySelector('.topbar')).display];
+      }), [0, true, 'none', 'none']);
+      await page.screenshot({ path: join(out, 'haut-telephone-conversation.png') });
+      await chatPhone.close();
+    }
+    // Retour d'une page que l'app n'a pas : la page précédente du site (Informations légales), sinon l'accueil.
+    page = await open(context, '/compte/?vue=legal', `${T} retour`);
+    await page.click('a[href="/conditions/"]');
+    await page.waitForURL(`${base}/conditions/`, { timeout: 8000 }).catch(() => problems.push(`${T} : « Conditions » ne s'ouvre pas`));
+    await page.click('.phone-page-head .app-round');
+    await page.waitForURL(`${base}/compte/?vue=legal`, { timeout: 8000 }).catch(() => problems.push(`${T} : le retour des conditions mène à ${page.url()}`));
+    await page.close();
+    page = await open(context, '/aide/', `${T} retour sans page précédente`);
+    await page.click('.phone-page-head .app-round');
+    await page.waitForURL(`${base}/`, { timeout: 8000 }).catch(() => problems.push(`${T} : le retour de l'aide ouverte seule mène à ${page.url()}`));
+    await page.close();
+    await context.close();
+    // Entre 761 et 1023 px : l'en-tête bleu reste, sans le retour ni le titre du téléphone ; le titre de la page est visible.
+    const tablet = await browser.newContext({ viewport: { width: 800, height: 1000 }, locale: 'fr-FR' });
+    await mock(tablet);
+    for (const path of ['/aide/', '/publier/', '/page-inexistante/']) {
+      const name = path === '/page-inexistante/' ? `404 ${T} 800 px` : `${T} 800 px ${path}`;
+      page = await open(tablet, path, name);
+      await page.waitForSelector('main h1');
+      expectSame(name, '[en-tête bleu, retour du téléphone, h1 visible]', [await page.locator('.topbar').isVisible(), await page.locator('.phone-page-head').isVisible(),
+        await page.locator('main h1').first().isVisible()], [true, false, true]);
+      await page.close();
+    }
+    await tablet.close();
+  }
+
   // Notifications sur téléphone (demande de Romain du 14 novembre) : l'écran de l'ordinateur, ouvert depuis Mon compte,
   // à 390 px (iPhone 13) et 320 px (iPhone SE). Sans compte, son message et aucune demande ; avec le compte, les lignes
   // et leurs liens, un clic marque la notification lue, « Tout lire » toutes, et une nouvelle notification arrive en
@@ -5072,7 +5402,7 @@ try {
     await mock(guestPhone);
     const asked = badgeRequests.length;
     page = await open(guestPhone, '/compte/?vue=notifications', 'notifications-telephone-sans-compte');
-    await page.waitForSelector('.notifications-screen .account-empty');
+    await page.waitForSelector('.notifications-screen .app-unavailable');
     const guestText = (await page.textContent('.notifications-screen'))?.replace(/\s+/g, ' ') ?? '';
     for (const text of ['Notifications', 'Aucune notification pour l’instant', 'Connectez-vous pour recevoir les réponses à vos demandes de visite et les rappels.']) {
       if (!guestText.includes(text)) problems.push(`notifications téléphone sans compte : « ${text} » absent`);
@@ -5091,8 +5421,8 @@ try {
     const live = await mock(member, { signedIn: true });
     const asked = badgeRequests.length;
     page = await open(member, '/compte/', N);
-    await page.waitForSelector('.project-card');
-    await page.click('a.row[href="/compte/?vue=notifications"]');
+    await page.waitForSelector('.app-space .app-row');
+    await page.click('a.app-row[href="/compte/?vue=notifications"]');
     await page.waitForURL(`${base}/compte/?vue=notifications`, { timeout: 8000 }).catch(() => problems.push(`${N} : la ligne Notifications ouvre ${page.url()}`));
     await page.waitForSelector('.notification-row');
     const rowsOf = () => page.$$eval('.notification-row', (links) => links.map((link) => [link.getAttribute('href'), Boolean(link.querySelector('.notification-dot'))]));
@@ -5102,6 +5432,18 @@ try {
       [known.length, expectedBadges(live.state).notifications, 1]);
     expectSame(N, 'liens', rows.map((row) => row[0]), [`/messages/?c=${conversationId(1)}`, `/annonce/?id=${listings[0].id}`, `/annonce/?id=${listings[2].id}`,
       '/compte/?vue=demande-visite&id=e0000000-0000-4000-8000-000000000003']);
+    // Écran de l'app : en-tête de page poussée (retour rond, titre centré, « Tout lire »), jours, teintes, photos, heures.
+    expectSame(N, 'en-tête', [await page.getAttribute('.app-page-header .app-round', 'href'), await textOf(page, '.app-page-header-title'),
+      await textOf(page, '.app-page-header-trailing')], ['/compte/', 'Notifications', 'Tout lire']);
+    await checkNotificationLayout(page, N, known);
+    // Mesures de l'app : carré de 40 (coins 13), point de 7, photo de 46 (coins 12), traits retirés de 76.
+    expectSame(N, 'mesures', await page.evaluate(() => {
+      const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+      const style = (selector) => getComputedStyle(document.querySelector(selector));
+      return [Math.round(box('.notification-icon').width), style('.notification-icon').borderRadius, Math.round(box('.notification-dot').width),
+        Math.round(box('.notification-photo').width), style('.notification-photo').borderRadius,
+        getComputedStyle(document.querySelector('.notification-group .app-group')).getPropertyValue('--app-separator-inset').trim()];
+    }), [40, '13px', 7, 46, '12px', '76px']);
     await waitFor(() => live.followed().includes('notifications'), `${N} : temps réel`);
     expectSame(N, 'tables suivies en direct', [...new Set(live.followed())].sort(), ['notifications']);
     expectSame(N, 'lectures', [...new Set(badgeRequests.slice(asked).map((request) => request.table))], ['notifications']);

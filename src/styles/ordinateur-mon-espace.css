@@ -2,8 +2,8 @@
    et sous .dsp (DesktopSpace) : en dessous de 1024 px, la page du téléphone ne change pas. Les écrans de la colonne de
    640 px (.dsc : Mon agenda, Ajouter une visite, Mon projet, Biens consultés) sont dans ecrans-compte.css, communs avec
    le téléphone. Mesures de la maquette à 1440 px :
-   contenu de 1200 px, colonne de gauche de 280 px collante, 32 px d'écart, cartes projet (544 px) et agenda (320 px),
-   trois tuiles d'activités, dossier (384 px) et lignes (480 px). Contenu de l'app (ProfileView.swift). */
+   contenu de 1200 px, colonne de gauche de 280 px collante, 32 px d'écart, dossier (384 px) et lignes (480 px).
+   Contenu de l'app (ProfileView.swift) : ses groupes et ses lignes (pieces-app.css), Mon espace sous le titre. */
 
 @media (min-width: 1024px) {
   /* ——— Page : la colonne de 640 px ne s'applique pas à Mon espace ——— */
@@ -38,9 +38,8 @@
   /* ——— Partie droite ——— */
   .dsp-main { min-width: 0; container-type: inline-size; }
   .dsp-title { color: var(--d-text); font-size: 36px; font-weight: 700; letter-spacing: -0.02em; line-height: 44px; }
-  .dsp :is(#mon-espace, .dsp-section, #mon-agenda) { scroll-margin-top: 24px; }
+  .dsp :is(#mon-espace, .dsp-section) { scroll-margin-top: 24px; }
   .dsp-card { border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; }
-  .dsp-card-title { color: var(--d-text); font-size: 20px; font-weight: 700; line-height: 24px; }
   .dsp-section { margin-top: 35px; }
   .dsp-section-title { margin-bottom: 15px; color: var(--d-text); font-size: 24px; font-weight: 700; letter-spacing: -0.01em; line-height: 32px; }
   .dsp-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: var(--d-button-height); padding: 0 20px; border: 0; border-radius: var(--d-button-radius); font-size: 15px; font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer; }
@@ -50,50 +49,15 @@
   .dsp-button-light { background: var(--d-blue-light); color: var(--d-blue); }
   .dsp-button-light:hover { background: #E2E8F6; }
 
-  /* Projet immobilier : titre, usage, anneau de 60 px, étapes reliées, « Voir mon avancement » */
-  .dsp-top { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; margin-top: 20px; }
-  .dsp-project { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; padding: 25px 24px 24px; }
-  .dsp-project-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; width: 100%; }
-  .dsp-project-titles { min-width: 0; }
-  .dsp-project-subtitle { margin-top: 4px; color: var(--d-grey); font-size: 15px; line-height: 22px; }
+  /* ——— Mon espace : les lignes de l'app sous le titre ——— */
+  .dsp-space-rows { margin-top: 20px; }
+
+  /* Anneau de progression (ProgressRing) de Mon projet */
   .dsp-ring { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; margin-top: 1px; }
   .dsp-ring svg { position: absolute; inset: 0; }
   .dsp-ring-track { stroke: #EEEBE6; }
   .dsp-ring-value { stroke: var(--d-blue); }
   .dsp-ring-label { position: relative; color: var(--d-text); font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .dsp-steps { display: flex; width: 100%; margin: 26px 0 0; padding: 0; list-style: none; }
-  .dsp-steps li { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 7px; }
-  .dsp-step-track { display: flex; align-items: center; width: 100%; height: 20px; }
-  .dsp-step-line { flex: 1; height: 2px; background: #E8E5DF; }
-  .dsp-step-line.is-done { background: var(--d-blue); }
-  .dsp-step-line.is-hidden { visibility: hidden; }
-  .dsp-step-dot { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: 2px solid #D3D0CA; border-radius: 50%; background: #FFFFFF; color: #FFFFFF; }
-  .dsp-steps li.is-done .dsp-step-dot { border-color: var(--d-blue); background: var(--d-blue); }
-  .dsp-step-dot .icon { width: 12px; height: 12px; stroke-width: 3; }
-  .dsp-step-label { max-width: 100%; overflow: hidden; color: var(--d-grey); font-size: 13px; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }
-  .dsp-steps li.is-done .dsp-step-label { color: var(--d-text); font-weight: 600; }
-  .dsp-project-button { height: 48px; margin-top: 23px; padding: 0 22px; }
-
-  /* Mon agenda : icône, résumé, prochaine visite, deux boutons pleine largeur */
-  .dsp-agenda { display: flex; flex-direction: column; min-width: 0; padding: 25px 24px 24px; }
-  .dsp-agenda-summary { display: flex; align-items: center; gap: 12px; min-height: 68px; margin-top: 19px; }
-  .dsp-agenda-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; color: var(--d-icon); }
-  .dsp-agenda-icon .icon { width: 22px; height: 22px; }
-  .dsp-agenda-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; color: var(--d-grey); font-size: 14.5px; line-height: 18px; }
-  .dsp-agenda-title { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; color: var(--d-text); font-size: 17px; font-weight: 700; line-height: 22px; }
-  .dsp-agenda-listing { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dsp-pill { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; background: var(--d-blue-light); color: var(--d-blue); font-size: 12px; font-weight: 600; white-space: nowrap; }
-  .dsp-agenda-actions { display: flex; flex-direction: column; gap: 10px; margin-top: auto; padding-top: 20px; }
-  .dsp-agenda-actions .dsp-button { width: 100%; }
-
-  /* Mes activités : trois tuiles */
-  .dsp-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
-  .dsp-tile { display: flex; flex-direction: column; min-height: 128px; padding: 20px 20px 17px; color: var(--d-text); text-decoration: none; transition: box-shadow 0.15s ease, transform 0.15s ease; }
-  .dsp-tile:hover { box-shadow: var(--d-card-hover-shadow); transform: translateY(-2px); }
-  .dsp-tile-title { color: var(--d-grey); font-size: 14.5px; font-weight: 600; line-height: 18px; }
-  .dsp-tile-number { margin-top: 8px; color: var(--d-text); font-size: 34px; font-weight: 700; line-height: 40px; font-variant-numeric: tabular-nums; }
-  .dsp-tile-rest { margin-top: 2px; color: var(--d-grey); font-size: 14px; line-height: 20px; }
-  .dsp-tile-title + .dsp-tile-rest { margin-top: 8px; }
 
   /* Contrats et location : carte du dossier et cinq lignes */
   .dsp-contracts { display: grid; grid-template-columns: 384px minmax(0, 1fr); gap: 24px; align-items: start; }
@@ -106,29 +70,10 @@
   .dsp-dossier p { margin-top: 2px; color: var(--d-grey); font-size: 15px; line-height: 20px; }
   .dsp-dossier-button { width: 100%; height: 48px; }
 
-  /* Lignes (RowGroup) : icône de 22 px, titre, sous-titre, chevron ; filets entre les lignes */
-  .dsp-rows { margin: 0; padding: 0; list-style: none; overflow: hidden; border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; }
-  .dsp-rows li + li { border-top: 1px solid var(--d-separator); }
-  .dsp-row { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 66px; padding: 12px 20px; border: 0; background: transparent; color: var(--d-text); text-align: left; text-decoration: none; cursor: pointer; }
-  .dsp-row:hover { background: var(--d-hover); }
-  .dsp-rows li + li .dsp-row { min-height: 65px; }
-  .dsp-row-icon { flex: none; display: inline-flex; color: var(--d-icon); }
-  .dsp-row-icon .icon { width: 22px; height: 22px; }
-  .dsp-row-text { display: flex; flex: 1; min-width: 0; flex-direction: column; }
-  .dsp-row-title { font-size: 15.5px; font-weight: 600; line-height: 21px; }
-  .dsp-row-subtitle { overflow: hidden; color: var(--d-grey); font-size: 13.5px; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
-  .dsp-row-chevron { flex: none; width: 18px; height: 18px; color: var(--d-chevron); }
   .dsp-section > .field-error { margin-top: 8px; }
 
-  /* Partie droite étroite (de 1024 à environ 1300 px) : projet et agenda, dossier et lignes l'un sous l'autre */
+  /* Partie droite étroite (de 1024 à environ 1300 px) : dossier et lignes l'un sous l'autre */
   @container (max-width: 760px) {
-    .dsp-top, .dsp-contracts { grid-template-columns: minmax(0, 1fr); }
-    .dsp-agenda-actions { flex-direction: row; }
-    .dsp-agenda-actions .dsp-button { flex: 1 1 0; width: auto; min-width: 0; }
+    .dsp-contracts { grid-template-columns: minmax(0, 1fr); }
   }
-}
-
-@media (min-width: 1024px) and (prefers-reduced-motion: reduce) {
-  .dsp-tile { transition: none; }
-  .dsp-tile:hover { transform: none; }
 }

@@ -1,0 +1,146 @@
+/* Mon agenda, comme l'app (Features/Visits/VisitsAgendaView.swift). Téléphone : retour rond et « + » rond bleu clair,
+   12 au-dessus du grand titre, onglets 16 plus bas, visites par période ; ordinateur : l'en-tête du site (.dsc-head),
+   les onglets et le « + » sur une ligne, puis les mêmes cartes. Pièces communes dans pieces-app.css. */
+
+.app-agenda { display: flex; flex-direction: column; padding-bottom: 24px; color: var(--app-navy); font-family: var(--app-font); }
+.app-agenda.is-desktop { padding-bottom: 48px; }
+.app-agenda :where(h1, h2, h3, p) { margin: 0; }
+.app-agenda-top { display: flex; align-items: center; justify-content: space-between; }
+.app-agenda-header { margin-top: 12px; }
+.app-agenda-bar { display: flex; align-items: center; gap: 12px; }
+.app-agenda-bar .app-agenda-tabs { flex: 1; min-width: 0; margin-top: 0; }
+
+/* « + » (menu Ajouter de l'app) : rond bleu clair de 42, plus de 20 en bleu, zone d'appui de 44. */
+.app-agenda-plus {
+  display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px; color: var(--app-brand);
+  text-decoration: none; -webkit-tap-highlight-color: transparent;
+}
+.app-agenda-plus-circle {
+  display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 50%;
+  background: var(--app-brand-soft);
+}
+.app-agenda-plus .icon { width: 20px; height: 20px; }
+.app-agenda-plus:focus-visible { outline: none; }
+.app-agenda-plus:focus-visible .app-agenda-plus-circle { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+@media (hover: hover) {
+  .app-agenda-plus:hover .app-agenda-plus-circle { background: #E2E8F6; }
+}
+
+/* Onglets : piste #F2F0EC (coins 16, 4 de marge), onglets de 38 ; le choisi sur fond blanc (coins 12, ombre légère :
+   flou CSS = 2 × le rayon de l'app, comme sur l'accueil), en gras ; le nombre dans un rond de 20, bleu sur l'onglet
+   choisi. Changement d'onglet en 0,25 s, comme l'app. */
+.app-agenda-tabs { display: flex; margin-top: 16px; padding: 4px; border-radius: 16px; background: var(--app-segment); }
+.app-agenda-tab {
+  display: inline-flex; flex: 1 1 0; align-items: center; justify-content: center; gap: 7px; min-width: 0; height: 38px; margin: 0;
+  padding: 0 6px; border: 0; border-radius: 12px; background: transparent; color: var(--app-text-secondary);
+  font: 600 14.5px/20px var(--app-font); white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.25s ease, box-shadow 0.25s ease, color 0.25s ease;
+}
+.app-agenda-tab-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.app-agenda-tab[aria-selected="true"] { background: #FFFFFF; color: var(--app-navy); font-weight: 700; box-shadow: 0 1px 8px rgba(36, 45, 56, 0.08); }
+.app-agenda-tab-count {
+  display: inline-flex; flex: none; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 4px;
+  border-radius: 10px; background: rgba(255, 255, 255, 0.7); color: var(--app-text-secondary); font: 700 11.5px/1 var(--app-font);
+  font-variant-numeric: tabular-nums; transition: background-color 0.25s ease, color 0.25s ease;
+}
+.app-agenda-tab[aria-selected="true"] .app-agenda-tab-count { background: var(--app-brand-soft); color: var(--app-brand); }
+.app-agenda-tab:focus-visible { outline: 3px solid var(--app-brand); outline-offset: -1px; }
+
+/* Liste : 12 entre les éléments, 18 au-dessus du premier petit titre, 10 de plus avant les suivants, 8 de plus avant
+   « Ajouter une visite manuellement ». */
+.app-agenda-list { display: flex; flex-direction: column; gap: 12px; padding-top: 18px; }
+.app-visit-group { display: flex; flex-direction: column; gap: 12px; }
+.app-visit-group + .app-visit-group { margin-top: 10px; }
+.app-agenda-list > .app-agenda-add-link { margin-top: 8px; }
+.app-agenda-add-link {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 48px; border-radius: 14px;
+  color: var(--app-brand); font: 600 15px/1 var(--app-font); text-decoration: none; -webkit-tap-highlight-color: transparent;
+}
+.app-agenda-add-link .icon { width: 18px; height: 18px; }
+.app-agenda-add-link:focus-visible { outline: 3px solid var(--app-brand); outline-offset: -3px; }
+@media (hover: hover) {
+  .app-agenda-add-link:hover { background: var(--app-brand-soft); }
+}
+.app-agenda-panel > .app-unavailable { padding-top: 56px; }
+.app-agenda-retry {
+  height: 44px; padding: 0 20px; border: 0; border-radius: 12px; background: var(--app-brand); color: #FFFFFF;
+  font: 600 15px/1 var(--app-font); cursor: pointer;
+}
+.app-agenda-retry:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+
+/* Carte d'une visite : blanche, coins 22, bordure fine et ombre très légère (nidaloShadowCard : rayon 8, flou CSS de
+   16), 16 de marge ; 12 entre le haut, le trait et les boutons. */
+.app-visit {
+  position: relative; display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--app-border);
+  border-radius: 22px; background: #FFFFFF; box-shadow: 0 2px 16px rgba(36, 45, 56, 0.04);
+}
+/* Demande : toute la carte ouvre son écran ; les boutons restent au-dessus. */
+.app-visit-open { position: absolute; inset: 0; z-index: 0; border-radius: 22px; -webkit-tap-highlight-color: transparent; }
+.app-visit-open:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+.app-visit-actions { position: relative; z-index: 1; }
+/* Menu « … » ouvert : sa carte passe au-dessus des suivantes (leurs boutons ne couvrent pas le menu). */
+.app-visit:has(.dsc-menu-list), .app-visit:focus-within { z-index: 2; }
+.app-visit-main { display: flex; align-items: flex-start; gap: 14px; }
+
+/* Bloc date de 52 × 60 (coins 14) : jour abrégé, numéro en grand, mois, très gras, aux couleurs de l'état. */
+.app-visit-date {
+  display: flex; flex: none; flex-direction: column; align-items: center; justify-content: center; width: 52px; height: 60px;
+  border-radius: 14px; background: var(--tone-bg); color: var(--tone-ink); font-weight: 800;
+}
+.app-visit-weekday { font-size: 11px; line-height: 14px; }
+.app-visit-day { font-size: 22px; line-height: 27px; font-variant-numeric: tabular-nums; }
+.app-visit-month { font-size: 10.5px; line-height: 13px; }
+
+.app-visit-text { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
+/* L'horaire, puis l'état à droite ; quand la place manque (téléphone étroit), l'état passe dessous, à gauche. */
+.app-visit-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 16px; }
+.app-visit-time {
+  min-width: 0; overflow: hidden; color: var(--app-navy); font-size: 15.5px; font-weight: 800; line-height: 20px; font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.app-visit-time.is-cancelled { text-decoration: line-through; text-decoration-color: rgba(36, 45, 56, 0.6); }
+.app-visit-pill {
+  display: inline-flex; flex: none; align-items: center; gap: 4px; height: 24px; padding: 0 9px; border-radius: 12px;
+  background: var(--tone-bg); color: var(--tone-ink); font-size: 11.5px; font-weight: 700; white-space: nowrap;
+}
+.app-visit-pill .icon { width: 11px; height: 11px; }
+.app-visit-title, .app-visit-person { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-visit-title { color: var(--app-navy); font-size: 14px; font-weight: 600; line-height: 19px; }
+.app-visit-person { color: var(--app-text-secondary); font-size: 12.5px; line-height: 17px; }
+.app-visit-report {
+  display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; color: var(--app-brand); font-size: 12.5px; font-weight: 600;
+  line-height: 17px; white-space: nowrap;
+}
+.app-visit-report .icon { flex: none; width: 13px; height: 13px; }
+
+.app-visit-line { height: 1px; background: #F2F0EC; }
+
+/* Boutons en capsule de 38 : bleu clair (Itinéraire) ou blanc bordé (Message, Voir les créneaux) ; « … » rond de 38. */
+.app-visit-actions { display: flex; align-items: center; gap: 8px; }
+.app-visit-button {
+  display: inline-flex; flex: none; align-items: center; gap: 6px; height: 38px; margin: 0; padding: 0 14px; border: 0; border-radius: 19px;
+  font: 700 13.5px/1 var(--app-font); text-decoration: none; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.app-visit-button .icon { width: 14px; height: 14px; }
+.app-visit-button.is-soft { background: var(--app-brand-soft); color: var(--app-brand); }
+.app-visit-button.is-outline { background: #FFFFFF; box-shadow: inset 0 0 0 1px var(--app-border); color: var(--app-navy); }
+.app-visit-button:disabled { opacity: 0.45; cursor: default; }
+.app-visit-button:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+.app-visit-actions > .dsc-menu { margin-left: auto; }
+.dsc-menu-button.app-visit-more { width: 38px; height: 38px; background: #FFFFFF; box-shadow: inset 0 0 0 1px var(--app-border); color: var(--app-navy); }
+.dsc-menu-button.app-visit-more .icon { width: 18px; height: 18px; }
+@media (hover: hover) {
+  .app-visit-button.is-soft:hover { background: #E2E8F6; }
+  .app-visit-button.is-outline:hover:not(:disabled), .dsc-menu-button.app-visit-more:hover { background: #F7F6F3; }
+}
+
+/* Très petit téléphone (moins de 360 px) : onglets et boutons plus serrés, pour que leur ligne tienne. */
+@media (max-width: 359.98px) {
+  .app-agenda-tab { gap: 5px; padding: 0 4px; font-size: 12.5px; }
+  .app-visit-actions { gap: 6px; }
+  .app-visit-button { gap: 5px; padding: 0 11px; font-size: 12.5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-agenda-tab, .app-agenda-tab-count { transition: none; }
+}
