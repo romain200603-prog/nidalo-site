@@ -1,8 +1,9 @@
 import { appDate, appDateString } from '../appDates';
 import { requestDisplayStatus, type AgendaRow, type VisitRequestRow, type VisitSlot } from '../listing/visits';
 import { photoUrl } from '../listings';
+import { fetchProfiles } from '../messages/api';
 import { normalizedPhoneNumber } from '../messages/format';
-import { sameId } from '../messages/inbox';
+import { sameId, type ProfileRow } from '../messages/inbox';
 import type { PlaceSuggestion } from '../places';
 import { supabase } from '../supabase';
 import { createStore, currentUserId, sessionStore } from './session';
@@ -275,6 +276,114 @@ export function groupsIn(items: AgendaItem[], tab: VisitTab, now: Date): { kind:
     else groups.push({ kind, items: [item] });
   }
   return groups;
+}
+
+// MARK: - Périodes de l'agenda (VisitPeriod, VisitAgenda.periodGroups)
+
+/** « Cette semaine » (les 7 prochains jours, aujourd'hui compris) puis « Plus tard » ; avant, « Ce mois-ci » puis « Plus anciennes ». */
+export type VisitPeriod = 'thisWeek' | 'later' | 'thisMonth' | 'older';
+
+export const PERIOD_TITLES: Record<VisitPeriod, string> = {
+  thisWeek: 'Cette semaine', later: 'Plus tard', thisMonth: 'Ce mois-ci', older: 'Plus anciennes',
+};
+
+/**
+ * Période d'une date (period(for:in:)) : à partir d'aujourd'hui, la semaine qui vient ou plus tard ; avant, ce mois-ci
+ * ou avant. L'onglet « Passées » range toujours par mois (une visite terminée ce matin est de ce mois-ci).
+ */
+export function periodOf(date: Date, now: Date, tab: VisitTab | null = null): VisitPeriod {
+  const today = startOfDay(now);
+  if (tab !== 'past' && (tab === 'upcoming' || date.getTime() >= today)) {
+    const days = Math.round((startOfDay(date) - today) / 86_400_000);
+    return days < 7 ? 'thisWeek' : 'later';
+  }
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() ? 'thisMonth' : 'older';
+}
+
+/** Visites de l'onglet, dans leur ordre, réunies par période (periodGroups(in:)). */
+export function periodGroupsIn(items: AgendaItem[], tab: VisitTab, now: Date): { period: VisitPeriod; items: AgendaItem[] }[] {
+  const groups: { period: VisitPeriod; items: AgendaItem[] }[] = [];
+  for (const item of itemsIn(items, tab, now)) {
+    const period = periodOf(item.start, now, tab);
+    const group = groups.find((other) => other.period === period);
+    if (group) group.items.push(item);
+    else groups.push({ period, items: [item] });
+  }
+  return groups;
+}
+
+// MARK: - Carte d'une visite (VisitCard, VisitsAgendaView.swift)
+
+/** « 14 h 30 » : l'heure sans zéro devant, les minutes sur deux chiffres. */
+const cardHour = (date: Date): string => `${date.getHours()} h ${String(date.getMinutes()).padStart(2, '0')}`;
+
+/** « 18 h 00 – 18 h 45 » ; l'heure de début seule sans durée (VisitCard.timeRange). */
+export function visitTimeRange(item: Pick<AgendaItem, 'start' | 'durationMinutes'>): string {
+  const start = cardHour(item.start);
+  return item.durationMinutes === null ? start : `${start} – ${cardHour(new Date(visitEnd(item)))}`;
+}
+
+/** Bloc date de la carte : jour abrégé, numéro, mois abrégé, sans point et en capitales (« VEN », « 6 », « NOV »). */
+export function visitDateBlock(date: Date): { weekday: string; day: string; month: string } {
+  const part = (options: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat('fr-FR', options).format(date).replace(/\./g, '').toLocaleUpperCase('fr-FR');
+  return { weekday: part({ weekday: 'short' }), day: String(date.getDate()), month: part({ month: 'short' }) };
+}
+
+/** Bien de la carte : « Appartement lumineux · Lyon 3e » (« Visite » sans bien). */
+export function visitCardTitle(item: Pick<AgendaItem, 'listing'>): string {
+  return [item.listing?.title ?? 'Visite', item.listing?.city].filter((part): part is string => !!part).join(' · ');
+}
+
+/**
+ * Personne de la carte (VisitCard.personLine) : « Avec <personne> », le nom de l'agence s'il diffère
+ * (« Avec <personne> · <agence> »), et « en attente de sa réponse » pour une demande envoyée.
+ */
+export function visitPersonLine(item: Pick<AgendaItem, 'id' | 'requestId' | 'contactName'>, status: VisitDisplayStatus,
+  slotCount: number | null, agencyName: string | null): string | null {
+  const contact = item.contactName || null;
+  const waiting = slotCount !== null || (isRequestEntry(item) && status === 'awaitingOther');
+  const agency = agencyName && agencyName !== contact ? agencyName : null;
+  const parts = [contact ? `Avec ${contact}` : agency ? `Avec ${agency}` : null, contact ? agency : null, waiting ? 'en attente de sa réponse' : null];
+  const line = parts.filter((part): part is string => part !== null).join(' · ');
+  return line || null;
+}
+
+/** Demande à plusieurs créneaux proposés : leur nombre ; `null` sinon (slotCount(for:)). */
+export function visitSlotCount(item: AgendaItem, requests: AgendaRequestRow[]): number | null {
+  if (!isRequestEntry(item) || item.status === 'cancelled') return null;
+  const request = requests.find((other) => sameId(other.id, item.id));
+  const count = request ? openSlotCount(request) : 0;
+  return count > 1 ? count : null;
+}
+
+/**
+ * Agence qui publie chaque annonce visitée (loadAgencyNames) : la fiche de chaque annonce, lue une fois, puis le profil
+ * public de son auteur ; seulement un compte d'agence. Les clés sont les identifiants d'annonce en minuscules. Mêmes
+ * lectures que « Ajouter une visite » (listings par identifiant, public_profiles) ; une lecture refusée ne montre rien.
+ */
+export async function fetchAgencyNames(listingIds: string[]): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  const ids = [...new Set(listingIds.map((id) => id.toLowerCase()))];
+  if (!ids.length) return names;
+  const rows = await Promise.all(ids.map(async (id) => {
+    try {
+      const { data, error } = await supabase.from('listings')
+        .select('id, owner_id, city, postal_code, location_precision, public_street').eq('id', id).limit(1);
+      const row = (data as { id: string; owner_id: string }[] | null)?.[0];
+      return error || !row ? null : { id, owner: row.owner_id };
+    } catch {
+      return null;
+    }
+  }));
+  const found = rows.filter((row): row is { id: string; owner: string } => row !== null);
+  if (!found.length) return names;
+  const profiles = await fetchProfiles(found.map((row) => row.owner)).catch(() => new Map<string, ProfileRow>());
+  for (const { id, owner } of found) {
+    const profile = profiles.get(owner.toLowerCase());
+    if (profile?.account_type === 'professional' && profile.agency_id && profile.agency_name) names.set(id, profile.agency_name);
+  }
+  return names;
 }
 
 export const TAB_TITLES: Record<VisitTab, string> = { upcoming: 'À venir', past: 'Passées', cancelled: 'Annulées' };

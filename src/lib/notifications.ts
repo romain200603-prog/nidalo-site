@@ -1,14 +1,18 @@
 import { supabase } from './supabase';
 import { createStore, currentUserId, sessionStore } from './account/session';
+import { fetchListing, photoUrl, sortedPhotos } from './listings';
 import { conversationPath, listingPath, visitRequestPath } from './paths';
 
 // Centre de notifications du compte, comme Data/NotificationStore.swift : seulement les notifications écrites par
 // le serveur (table notifications). Les rappels et les exemples gardés sur l'iPhone ne viennent pas sur le site.
 
-/** Sortes connues de l'app (NidaloNotification.Kind, ImmoDomain/Messaging/VisitRequest.swift:302-308). */
+/**
+ * Sortes connues de l'app (NidaloNotification.Kind, ImmoDomain/Messaging/VisitRequest.swift) ; visitSlotsOpened : le
+ * vendeur a ouvert des créneaux de visite sur une annonce, la notification ouvre l'annonce.
+ */
 export const NOTIFICATION_KINDS = [
   'newRequest', 'accepted', 'declined', 'proposed', 'rescheduleProposed', 'rescheduled', 'rescheduleDeclined', 'cancelled',
-  'reminder', 'searchMatch', 'offerReceived', 'offerCountered', 'offerAccepted', 'offerDeclined', 'offerWithdrawn',
+  'reminder', 'searchMatch', 'offerReceived', 'offerCountered', 'offerAccepted', 'offerDeclined', 'offerWithdrawn', 'visitSlotsOpened',
 ] as const;
 
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
@@ -84,6 +88,80 @@ export function notificationTarget(item: Pick<NidaloNotification, 'conversationI
   if (item.listingId) return listingPath(item.listingId);
   if (item.requestId) return visitRequestPath(item.requestId);
   return null;
+}
+
+// MARK: - Centre de notifications (NotificationCenterLayout, ImmoDomain/Messaging/NotificationCenterLayout.swift)
+
+export type NotificationDay = 'today' | 'yesterday' | 'thisWeek' | 'older';
+
+export const NOTIFICATION_DAY_TITLES: Record<NotificationDay, string> = {
+  today: 'Aujourd\'hui', yesterday: 'Hier', thisWeek: 'Cette semaine', older: 'Plus anciennes',
+};
+
+const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+
+/** Jour d'une notification : aujourd'hui (ou plus tard), hier, les 7 derniers jours, puis avant. */
+export function notificationDay(date: Date, now: Date): NotificationDay {
+  const days = Math.round((startOfDay(now) - startOfDay(date)) / 86_400_000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  return days < 7 ? 'thisWeek' : 'older';
+}
+
+/** Notifications de la plus récente à la plus ancienne, réunies par jour (groups). */
+export function notificationGroups(items: NidaloNotification[], now: Date): { day: NotificationDay; items: NidaloNotification[] }[] {
+  const groups: { day: NotificationDay; items: NidaloNotification[] }[] = [];
+  for (const item of [...items].sort((a, b) => Date.parse(b.date) - Date.parse(a.date))) {
+    const day = notificationDay(new Date(item.date), now);
+    const group = groups.find((other) => other.day === day);
+    if (group) group.items.push(item);
+    else groups.push({ day, items: [item] });
+  }
+  return groups;
+}
+
+/** « 11:02 » aujourd'hui, « Hier », « Lun. » cette semaine, puis « 3 nov. » (timeLabel). */
+export function notificationTimeLabel(iso: string, now: Date): string {
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return '';
+  switch (notificationDay(date, now)) {
+    case 'today':
+      return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    case 'yesterday':
+      return 'Hier';
+    case 'thisWeek': {
+      const text = new Intl.DateTimeFormat('fr-FR', { weekday: 'short' }).format(date);
+      return text.charAt(0).toLocaleUpperCase('fr-FR') + text.slice(1);
+    }
+    case 'older':
+      return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' }).format(date);
+  }
+}
+
+export type NotificationTone = 'blue' | 'green' | 'amber' | 'red';
+
+/** Teinte : nouvelle annonce et visite en bleu, offre en vert, visite à confirmer en ambre, refus et annulation en rouge. */
+export function notificationTone(kind: NotificationKind): NotificationTone {
+  switch (kind) {
+    case 'searchMatch': case 'accepted': case 'rescheduled': case 'reminder': case 'visitSlotsOpened':
+      return 'blue';
+    case 'offerReceived': case 'offerCountered': case 'offerAccepted':
+      return 'green';
+    case 'newRequest': case 'proposed': case 'rescheduleProposed':
+      return 'amber';
+    case 'declined': case 'rescheduleDeclined': case 'cancelled': case 'offerDeclined': case 'offerWithdrawn':
+      return 'red';
+  }
+}
+
+/** Première photo du bien d'une notification (loadPhoto) : la fiche de l'annonce, comme sa page ; `null` sans photo. */
+export async function notificationPhoto(listingId: string): Promise<string | null> {
+  try {
+    const first = sortedPhotos(await fetchListing(listingId))[0];
+    return first ? photoUrl(first.storage_path) : null;
+  } catch {
+    return null;
+  }
 }
 
 const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
