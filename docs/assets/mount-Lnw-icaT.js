@@ -1,0 +1,1 @@
+import{$t as e,t,tn as n}from"./client-AEULNoO-.js";var r=e(),i=t(),a=n();function o(e){let t=document.getElementById(`root`);if(!t)throw Error(`Élément #root absent`);(0,i.createRoot)(t).render((0,a.jsx)(r.StrictMode,{children:e}))}export{o as t};
