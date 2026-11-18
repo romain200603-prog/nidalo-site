@@ -209,6 +209,9 @@ describe('Textes de la fiche', () => {
       ['Durée du bail', '1 an'],
       ['Honoraires', `300${nb}€ à la charge du locataire`],
     ]);
+    // Date du jour ou passée : « Disponible de suite », comme l'app (ListingCardFormatting.availability).
+    const now = testRow({ transaction: 'rent', price: 650, rental_info: { availableFrom: '2026-11-04T23:00:00.000Z' } });
+    expect(rentalRows(now, true, new Date('2026-11-05T08:00:00Z')).find(([title]) => title === 'Disponibilité')).toEqual(['Disponibilité', 'Disponible de suite']);
   });
 
   it('charges au forfait et loyer des murs d’un fonds de commerce', () => {

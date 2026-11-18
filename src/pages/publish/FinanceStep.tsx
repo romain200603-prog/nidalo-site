@@ -1,12 +1,13 @@
-import { ChoiceChip, DateChoice, InfoLine, PERCENT_ISSUE } from '../../components/FilterControls';
+import { useId, useState } from 'react';
+import { ChoiceChip, DateChoice, inOneMonth, InfoLine, isoDay, PERCENT_ISSUE } from '../../components/FilterControls';
 import { formatFraction, formatPrice } from '../../lib/format';
 import { scopeLabel } from '../../lib/listingJson';
 import {
   buildingOfDraft, CHARGES_MODES, coOwnershipLotsIssue, coOwnershipNeedsProcedure, currentAnnualRent, depositWarning, emptyBuilding, emptyHotel, emptyRental, FEE_PAYERS, feesNeedPayer,
   flatRateWarning, grossYield, hotelOfDraft, HOTEL_AMENITIES, HOTEL_STATUSES, inventoryFeeIssue, isDwelling, LEASE_TYPES, potentialGrossYield,
-  pricePerSquareMeter, rentalChargesLabel, rentIncludingCharges, saleChargesLabel, showsCoOwnership, showsInventoryFee, showsRentControl,
+  pricePerSquareMeter, rentalAvailability, rentalChargesLabel, rentIncludingCharges, saleChargesLabel, showsCoOwnership, showsInventoryFee, showsRentControl,
   syncBuildingRent, tenantShareWarning,
-  type BuildingDraft, type FeePayer, type HotelDraft, type LeaseType, type PublishDraft, type RentalDraft,
+  type BuildingDraft, type Day, type FeePayer, type HotelDraft, type LeaseType, type PublishDraft, type RentalDraft,
 } from '../../lib/publish/draft';
 import { CHARGES_MODE_LABELS, HOTEL_AMENITY_LABELS, HOTEL_STATUS_LABELS, LEASE_LABELS } from '../../lib/publish/labels';
 import { Amount, BoolChoices, Card, Choices, ErrorLine, IndicatorsCard, type StepProps, type Update } from './controls';
@@ -190,7 +191,7 @@ function RentalCards({ draft, update }: StepProps) {
             onChange={(isFurnished) => setRental({ isFurnished })} />
         )}
         {business && <LeaseTypeChoice value={leaseOf(draft).leaseType} onChange={(leaseType) => setLease({ leaseType })} />}
-        <DateChoice title="Disponible à partir du" value={rental.availableFrom} onChange={(availableFrom) => setRental({ availableFrom })} />
+        <RentalAvailabilityChoice value={rental.availableFrom} onChange={(availableFrom) => setRental({ availableFrom })} />
         <Amount label="Durée du bail" value={rental.leaseDurationMonths} unit="mois" integer
           onChange={(leaseDurationMonths) => setRental({ leaseDurationMonths })} />
         {dwelling && (
@@ -198,6 +199,52 @@ function RentalCards({ draft, update }: StepProps) {
         )}
       </Card>
     </>
+  );
+}
+
+/**
+ * « Disponibilité » d'une location (RentalAvailabilityChoice), présentée comme « Ameublement » : « Tout de suite »
+ * enregistre la date du jour ; « À partir du… » montre la date juste dessous, dans un mois par défaut et jamais avant
+ * aujourd'hui. Sans choix, la disponibilité n'est pas précisée et l'annonce se publie quand même. Retoucher le choix
+ * l'enlève. Une annonce rouverte retrouve son choix : date du jour ou passée, « Tout de suite » ; date à venir,
+ * « À partir du… » avec sa date.
+ */
+function RentalAvailabilityChoice({ value, onChange }: { value: Day | null; onChange: (value: Day | null) => void }) {
+  const today = isoDay(new Date());
+  const availability = rentalAvailability(value, today);
+  const [choosesDate, setChoosesDate] = useState(availability === 'from');
+  const dateId = useId();
+  const immediately = availability === 'immediately' && !choosesDate;
+  return (
+    <div className="dpub-availability">
+      <Choices label="Disponibilité">
+        <ChoiceChip title="Tout de suite" selected={immediately} expands onClick={() => {
+          if (immediately) {
+            onChange(null);
+            return;
+          }
+          setChoosesDate(false);
+          onChange(today);
+        }} />
+        <ChoiceChip title="À partir du…" selected={choosesDate} expands onClick={() => {
+          if (choosesDate) {
+            setChoosesDate(false);
+            onChange(null);
+            return;
+          }
+          setChoosesDate(true);
+          if (availability !== 'from') onChange(isoDay(inOneMonth(new Date())));
+        }} />
+      </Choices>
+      {choosesDate && value !== null && (
+        <div className="dpub-availability-date">
+          <label htmlFor={dateId}>Disponible à partir du</label>
+          {/* Une date effacée au clavier ne change rien : la dernière date complète reste choisie. */}
+          <input id={dateId} type="date" className="date-input" min={today} value={value}
+            onChange={(event) => { if (event.currentTarget.value) onChange(event.currentTarget.value); }} />
+        </div>
+      )}
+    </div>
   );
 }
 

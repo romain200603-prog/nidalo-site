@@ -9,10 +9,32 @@
   .dpub-progress { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin: -19.5px 0 -15.5px; }
   .dpub-progress > * { display: flex; align-items: center; height: 44px; padding: 0; border: 0; background: none; }
   .dpub-progress > button { cursor: pointer; }
-  .dpub-progress > * > span { flex: 1; height: 5px; border-radius: 999px; background: var(--d-card-border); }
+  .dpub-progress > * > span {
+    flex: 1; height: 5px; border-radius: 999px; background: var(--d-card-border);
+    /* Se remplit ou se vide en douceur, avec le mouvement des étapes (StepProgressBar). */
+    transition: background-color var(--app-duration) var(--app-ease), height var(--app-duration) var(--app-ease);
+  }
   .dpub-progress > .is-done > span { background: var(--d-blue); }
   .dpub-progress > .is-current > span { height: 8px; }
   .dpub-progress > button:hover > span { background: var(--d-blue-hover); }
+
+  /* Passage d'une étape à l'autre (StepSlide.tsx, PublishFlowView.stepTransition) : l'étape arrive par la droite en
+     avançant, par la gauche en revenant, en apparaissant ; la copie de l'étape quittée part de l'autre côté en
+     s'estompant, à sa place à l'écran, dans un calque fixe entre le haut de l'étape et la barre d'actions. Le mouvement
+     reste dans la colonne et 24 px autour (marges négatives compensées), sans faire défiler la page de côté. Le
+     sous-titre « Étape 2 sur 7 · … » apparaît en fondu. */
+  .dpub-steps { margin: 0 -24px; padding: 0 24px; }
+  .dpub-steps.is-sliding { overflow-x: clip; }
+  .dpub-step, .dpub-step-copy { display: flex; flex-direction: column; gap: 16px; }
+  .dpub-step-exit { position: fixed; z-index: 4; overflow: hidden; pointer-events: none; }
+  .dpub-step-exit:empty { display: none; }
+  .dpub-step-copy { position: absolute; margin: 0; }
+  .dpub-step-copy * { animation: none !important; transition: none !important; }
+  .dpub-step.is-entering.is-forward { animation: dpub-step-from-right var(--app-duration) var(--app-ease) both; }
+  .dpub-step.is-entering.is-back { animation: dpub-step-from-left var(--app-duration) var(--app-ease) both; }
+  .dpub-step-copy.is-forward { animation: dpub-step-to-left var(--app-duration) var(--app-ease) both; }
+  .dpub-step-copy.is-back { animation: dpub-step-to-right var(--app-duration) var(--app-ease) both; }
+  .dpub:has(> .dpub-steps.is-sliding) > .dsc-head .dsc-titles p { animation: app-fade-in var(--app-duration) var(--app-ease) both; }
 
   /* En-tête : « Brouillon » (ou « Enregistrer ») puis « Fermer », le même rond que la flèche. */
   .dpub-head-actions { display: flex; align-items: center; gap: 10px; }
@@ -22,10 +44,86 @@
   .dpub-progress-text { color: var(--d-grey); font-size: 14px; font-weight: 600; text-align: center; }
   .dpub .dsc-action-buttons.is-single { grid-template-columns: minmax(0, 1fr); }
 
+  /* ——— Étape 1, catégorie et type de bien (PublishFlowView.categoryStep, PublishCategoryTile, PublishTypeTile) ———
+     Sans carte autour : titre de 26 gras et sous-titre de 15 medium gris (6 d'écart), puis les quatre catégories en
+     grille de deux colonnes (10 d'écart, 20 au-dessus) ; « Type de bien » 22 plus bas : petit titre gris en capitales,
+     tuiles en grille de deux colonnes (8 d'écart). Un choix change les couleurs avec le mouvement de l'app ; les
+     bordures sont dessinées dedans (ombre intérieure), pour s'épaissir sans décaler le contenu. */
+  .dpub-category { display: flex; flex-direction: column; font-family: var(--app-font); }
+  .dpub-category-head { display: flex; flex-direction: column; gap: 6px; }
+  .dpub-category-head h2 { color: var(--app-navy); font-size: 26px; font-weight: 700; line-height: 1.21; }
+  .dpub-category-head p { color: var(--app-text-secondary); font-size: 15px; font-weight: 500; line-height: 1.21; }
+  .dpub-nowrap { white-space: nowrap; }
+  .dpub-category-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 20px; }
+  .dpub-category-tile {
+    --tile-soft: var(--app-brand-soft); --tile-ink: var(--app-brand); --tile-shadow: rgba(60, 92, 176, 0.18);
+    position: relative; display: flex; flex-direction: column; align-items: flex-start; min-width: 0; height: 112px; margin: 0;
+    padding: 14px; border: 0; border-radius: 22px; background: #FFFFFF; box-shadow: 0 4px 20px transparent; color: var(--app-navy);
+    font-family: inherit; text-align: left; cursor: pointer;
+    transition: background-color var(--app-duration) var(--app-ease), box-shadow var(--app-duration) var(--app-ease);
+  }
+  .dpub-category-tile.is-rental { --tile-soft: #E3F1EF; --tile-ink: #2C7A72; --tile-shadow: rgba(44, 122, 114, 0.18); }
+  .dpub-category-tile.is-investment { --tile-soft: #E6F0EA; --tile-ink: #2F7A4E; --tile-shadow: rgba(47, 122, 78, 0.18); }
+  .dpub-category-tile.is-hotel { --tile-soft: #F8EED8; --tile-ink: #946B1E; --tile-shadow: rgba(148, 107, 30, 0.18); }
+  .dpub-category-tile::before, .dpub-type-tile::before {
+    content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px var(--app-border); pointer-events: none;
+    transition: box-shadow var(--app-duration) var(--app-ease);
+  }
+  .dpub-category-tile[aria-pressed="true"] { box-shadow: 0 4px 20px var(--tile-shadow); }
+  .dpub-category-tile[aria-pressed="true"]::before { box-shadow: inset 0 0 0 2px var(--tile-ink); }
+  .dpub-category-icon {
+    display: inline-flex; flex: none; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 14px;
+    background: var(--tile-soft); color: var(--tile-ink);
+  }
+  .dpub-category-icon .icon { width: 22px; height: 22px; }
+  .dpub-category-title, .dpub-category-subtitle { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dpub-category-title { margin-top: auto; font-size: 15px; font-weight: 700; line-height: 1.21; }
+  .dpub-category-subtitle { padding-top: 2px; color: var(--app-text-secondary); font-size: 12px; font-weight: 500; line-height: 1.21; }
+  .dpub-category-check {
+    position: absolute; top: 10px; right: 10px; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
+    border-radius: 50%; background: var(--tile-ink); color: #FFFFFF; opacity: 0; transform: scale(0);
+    transition: opacity var(--app-duration) var(--app-ease), transform var(--app-duration) var(--app-ease);
+  }
+  .dpub-category-check .icon { width: 14px; height: 14px; }
+  .dpub-category-tile[aria-pressed="true"] .dpub-category-check { opacity: 1; transform: none; }
+  .dpub-types { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; animation: app-fade-in var(--app-duration) var(--app-ease) both; }
+  .dpub-types-title { color: var(--app-text-muted); font-size: 12px; font-weight: 700; letter-spacing: 0.6px; line-height: 1.21; text-transform: uppercase; }
+  .dpub-types-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .dpub-type-tile {
+    position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 54px; margin: 0; padding: 8px 11px;
+    border: 0; border-radius: 16px; background: #FFFFFF; color: var(--app-navy); font-family: inherit; text-align: left; cursor: pointer;
+    transition: background-color var(--app-duration) var(--app-ease), color var(--app-duration) var(--app-ease);
+  }
+  .dpub-type-tile[aria-pressed="true"] { background: var(--app-brand-soft); color: var(--app-brand); }
+  .dpub-type-tile[aria-pressed="true"]::before { box-shadow: inset 0 0 0 2px var(--app-brand); }
+  .dpub-type-icon {
+    display: inline-flex; flex: none; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 10px;
+    background: #F5F4F0; color: var(--app-text-dark);
+    transition: background-color var(--app-duration) var(--app-ease), color var(--app-duration) var(--app-ease);
+  }
+  .dpub-type-icon .icon { width: 18px; height: 18px; }
+  .dpub-type-tile[aria-pressed="true"] .dpub-type-icon { background: #FFFFFF; color: var(--app-brand); }
+  .dpub-type-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .dpub-type-title, .dpub-type-detail { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+  .dpub-type-title { font-size: 14px; font-weight: 600; line-height: 1.21; }
+  .dpub-type-detail { color: var(--app-text-secondary); font-size: 11px; font-weight: 500; line-height: 1.21; transition: color var(--app-duration) var(--app-ease); }
+  .dpub-type-tile[aria-pressed="true"] .dpub-type-detail { color: var(--app-brand); }
+  .dpub-category-info { margin-top: 14px; animation: app-fade-in var(--app-duration) var(--app-ease) both; }
+  @media (hover: hover) {
+    .dpub-category-tile:not([aria-pressed="true"]):hover, .dpub-type-tile:not([aria-pressed="true"]):hover { background: #FAF9F7; }
+  }
+
   /* Choix : grilles de pastilles (stationnement, équipements, état). */
   .dpub-choices-wide { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
   .dpub-choices-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .dpub .dpub-error { margin: 0; }
+
+  /* « Disponibilité » d'une location (RentalAvailabilityChoice) : les deux pastilles, puis la date sur une ligne, son
+     libellé de 14 semi-gras à gauche, le calendrier à droite (8 d'écart, comme l'app). */
+  .dpub-availability { display: flex; flex-direction: column; gap: 8px; }
+  .dpub-availability-date { display: flex; align-items: center; justify-content: space-between; gap: 12px; animation: app-fade-in var(--app-duration) var(--app-ease) both; }
+  .dpub-availability-date label { color: var(--d-text); font-size: 14px; font-weight: 600; cursor: pointer; }
+  .dpub-availability-date .date-input { flex: none; width: 200px; }
 
   /* Adresse : code postal et ville côte à côte. */
   .dpub-postal-row { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; align-items: start; }
@@ -85,4 +183,23 @@
 
   /* « Votre prénom » avant la première publication. */
   .dpub-name-input { margin-top: 4px; }
+}
+
+@keyframes dpub-step-from-right { from { opacity: 0; transform: translateX(100%); } }
+@keyframes dpub-step-from-left { from { opacity: 0; transform: translateX(-100%); } }
+@keyframes dpub-step-to-left { to { opacity: 0; transform: translateX(-100%); } }
+@keyframes dpub-step-to-right { to { opacity: 0; transform: translateX(100%); } }
+
+/* « Réduire les animations » : des fondus seulement, comme l'app (NidaloMotion.fade, 0,25 s) ; les étapes se
+   remplacent en fondu, sans glisser, et la pastille cochée apparaît sans grandir. */
+@media (min-width: 1024px) and (prefers-reduced-motion: reduce) {
+  .dpub-step.is-entering.is-forward, .dpub-step.is-entering.is-back { animation: app-fade-in 0.25s ease-in-out both; }
+  .dpub-step-copy.is-forward, .dpub-step-copy.is-back { animation: app-fade-out 0.25s ease-in-out both; }
+  .dpub:has(> .dpub-steps.is-sliding) > .dsc-head .dsc-titles p { animation: app-fade-in 0.25s ease-in-out both; }
+  .dpub-progress > * > span { transition: background-color 0.25s ease-in-out; }
+  .dpub-category-tile, .dpub-category-tile::before, .dpub-type-tile, .dpub-type-tile::before, .dpub-type-icon, .dpub-type-detail {
+    transition: background-color 0.25s ease-in-out, color 0.25s ease-in-out, box-shadow 0.25s ease-in-out;
+  }
+  .dpub-category-check { transform: none; transition: opacity 0.25s ease-in-out; }
+  .dpub-types, .dpub-category-info, .dpub-availability-date { animation: app-fade-in 0.25s ease-in-out both; }
 }
