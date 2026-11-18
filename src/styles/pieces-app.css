@@ -285,3 +285,61 @@ span.criterion-chip-label { cursor: default; }
 .app-step-bar { display: flex; gap: 4px; }
 .app-step-bar > span { flex: 1; height: 4px; border-radius: 2px; background: var(--app-segment); transition: background-color var(--app-duration) var(--app-ease); }
 .app-step-bar > span.is-done { background: var(--app-brand); }
+
+/* ——— « Autour de moi » et « Recherches récentes » (PlaceSuggestionList.shortcuts) ———
+   Sous un champ de lieu de recherche vide, à la place des suggestions : carte blanche (rayon 16, bordure, ombre),
+   lignes de 52 au moins (12 sur les côtés, 8 en haut et en bas), pavé de 34 (rayon 10) à l'icône de 17, 12 entre le
+   pavé et le texte ; nom 14,5 (gras pour « Autour de moi »), précision 12 ; séparateurs à 58 du bord (12 avant
+   « Recherches récentes »). À l'appui, la ligne prend le bleu pâle de l'app (PressableRowStyle). */
+.place-list.place-shortcuts {
+  padding: 0; border: 1px solid var(--app-border); border-radius: 16px; background: #FFFFFF;
+  box-shadow: 0 4px 20px rgba(36, 45, 56, 0.06); color: var(--app-navy); font-family: var(--app-font); max-height: 420px;
+}
+.place-shortcuts ul { margin: 0; padding: 0; list-style: none; }
+.place-list.place-shortcuts li { display: block; padding: 0; border-radius: 0; cursor: default; }
+.place-list.place-shortcuts li:hover { background: none; }
+.place-shortcuts li + li::before { content: ""; display: block; height: 1px; margin-left: 58px; background: rgba(236, 234, 230, 0.8); }
+.place-shortcut {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 8px 12px; border: 0; border-radius: 0;
+  background: none; color: var(--app-navy); font: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.place-shortcut:active { background: rgba(238, 242, 250, 0.6); }
+@media (hover: hover) { .place-shortcut:hover { background: rgba(238, 242, 250, 0.6); } }
+.place-shortcut:focus-visible, .place-recents-head button:focus-visible, .place-nearby-retry:focus-visible {
+  outline: 2px solid var(--app-brand); outline-offset: -2px;
+}
+.place-shortcut-tile { display: flex; flex: none; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 10px; }
+.place-shortcut-tile .icon { width: 17px; height: 17px; }
+.place-shortcut-tile.is-nearby { background: var(--app-brand-soft); color: var(--app-brand); }
+.place-shortcut-tile.is-recent { background: var(--app-page); color: var(--app-text-secondary); }
+.place-shortcut-text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.place-shortcut-name, .place-shortcut-sub { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.place-shortcut-name { color: var(--app-navy); font: 500 14.5px/1.25 var(--app-font); }
+.place-shortcut-name.is-nearby { flex: 1; min-width: 0; font-weight: 700; }
+.place-shortcut-sub { color: var(--app-text-secondary); font: 400 12px/1.3 var(--app-font); }
+/* Position en cours : l'indicateur gris de l'app (ProgressView, petite taille) ; mouvement réduit : il pulse. */
+.place-shortcut-spinner {
+  flex: none; width: 18px; height: 18px; border: 2px solid rgba(117, 128, 139, 0.25); border-top-color: var(--app-text-secondary);
+  border-radius: 50%; animation: place-spin 0.8s linear infinite;
+}
+@keyframes place-spin { to { transform: rotate(360deg); } }
+@keyframes place-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .place-shortcut-spinner { animation: place-pulse 1.6s ease-in-out infinite; } }
+/* Position refusée ou introuvable : icône 16 et texte 12,5 gris, 14 sur les côtés ; « Réessayer » 13 gras bleu à 26. */
+.place-nearby-problem { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; padding: 0 14px 8px; }
+.place-nearby-problem:empty { padding: 0; }
+.place-nearby-problem p { display: flex; gap: 10px; align-items: flex-start; margin: 0; color: var(--app-text-secondary); font: 400 12.5px/1.4 var(--app-font); }
+.place-nearby-problem p .icon { flex: none; width: 16px; height: 16px; margin-top: 1px; }
+.place-nearby-retry {
+  min-height: 44px; margin-left: 26px; padding: 0; border: 0; background: none; color: var(--app-brand);
+  font: 700 13px/1.2 var(--app-font); cursor: pointer;
+}
+.place-recents-head {
+  display: flex; align-items: center; justify-content: space-between; margin-left: 12px; padding: 0 14px 0 2px;
+  border-top: 1px solid rgba(236, 234, 230, 0.8);
+}
+.place-recents-head > span { color: var(--app-text-secondary); font: 600 12px/1.3 var(--app-font); }
+.place-recents-head button {
+  min-width: 44px; min-height: 44px; padding: 0; border: 0; background: none; color: var(--app-brand);
+  font: 600 12.5px/1.2 var(--app-font); text-align: right; cursor: pointer;
+}

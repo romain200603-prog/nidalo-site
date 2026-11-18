@@ -4,6 +4,7 @@ import { isNetworkError, NETWORK_MESSAGE, setNewAccount, setPendingLink } from '
 import { MANDATE_BUCKET } from './mandates';
 import { listFiles, removeFiles } from './myListings';
 import { currentUserId } from './session';
+import { removeRecentPlaces } from '../recentPlaces';
 
 // « Supprimer mon compte » (SupabaseAccountRepositories.swift 432–448) : les fichiers du compte, puis le compte
 // lui-même (fonction delete_my_account : tout le reste suit). Renvoie le message d'erreur, ou `null`.
@@ -20,6 +21,8 @@ export async function deleteMyAccount(): Promise<string | null> {
     }
     const { error } = await supabase.rpc('delete_my_account');
     if (error) throw error;
+    // Comme l'app : les lieux récents du compte (gardés dans ce navigateur) partent avec lui.
+    removeRecentPlaces(userId);
     setPendingLink(null);
     setNewAccount(false);
     await signOutDeletedAccount();

@@ -239,7 +239,7 @@ function LocationCard({ location, onChange }: { location: ProjectLocation; onCha
       <div className="dsc-field-block">
         <span id={labelId} className="field-label" aria-hidden="true">Ville, quartier ou code postal</span>
         <PlaceField value={location.place} label="Ville, quartier ou code postal" placeholder="Ex. : Lyon 2e, Villeurbanne, Annecy"
-          className="dsc-place" fetcher={areaFetcher}
+          className="dsc-place" fetcher={areaFetcher} shortcuts
           // Texte modifié à la main : la commune choisie (et son centre) est oubliée.
           onChange={(text) => { if (text !== location.place) onChange({ ...location, place: text, center: null }); }}
           // Un arrondissement se cherche par son nom ; une commune ou un quartier, autour de son centre.

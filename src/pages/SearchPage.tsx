@@ -24,11 +24,11 @@ import { highlightsFor } from '../lib/highlights';
 import type { SearchMode } from '../lib/labels';
 import { sortedPhotos } from '../lib/listings';
 import { listingPath, PATHS } from '../lib/paths';
-import { placeShortName, type PlaceSuggestion } from '../lib/places';
+import type { PlaceSuggestion } from '../lib/places';
 import { recentlyViewedIds } from '../lib/recentlyViewed';
 import {
-  activeFilterCount, boxAround, defaultDraft, draftFromParams, effectiveSort, filterChips, locationFor, paramsFromDraft,
-  placeLabel, search, SORT_LABELS, sortOptions, type Result, type SearchDraft, type SortOrder,
+  activeFilterCount, boxAround, chosenFromSuggestion, defaultDraft, draftFromParams, effectiveSort, filterChips, locationFor,
+  paramsFromDraft, placeLabel, search, SORT_LABELS, sortOptions, type Result, type SearchDraft, type SortOrder,
   switchMode,
 } from '../lib/search';
 import { GOOD_YIELD, grossYieldText } from '../lib/cardContent';
@@ -184,7 +184,8 @@ export function SearchPage() {
   }, [key, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    document.title = `${draft.place ? `${placeLabel(draft)} · ` : ''}Rechercher un bien · Nidalo`;
+    const label = placeLabel(draft);
+    document.title = `${label ? `${label} · ` : ''}Rechercher un bien · Nidalo`;
   }, [draft]);
 
   // L'adresse suit la carte ouverte (sans nouvelle entrée d'historique), pour la retrouver au retour d'une annonce.
@@ -222,14 +223,18 @@ export function SearchPage() {
   /** Bouton « Carte » : avec des annonces, hors saisie du lieu et sans message en bas de l'écran. */
   const showsMapButton = results.length > 0 && !editingPlace && !toastShown;
 
+  // Un lieu choisi ou saisi remplace la zone dessinée (comme l'app) ; un champ vidé la garde.
   function choosePlace(place: PlaceSuggestion) {
-    const name = placeShortName(place);
-    apply({ ...draft, place: name, area: null, chosen: { kind: place.kind, name, postalCode: place.postalCode, inseeCode: place.inseeCode, coordinate: place.coordinate } });
+    const chosen = chosenFromSuggestion(place);
+    apply({ ...draft, place: chosen.name, area: null, drawnZone: null, chosen });
   }
 
   function submitPlace() {
     const text = placeText.trim();
-    apply({ ...draft, place: text, area: null, chosen: draft.chosen && draft.chosen.name === text ? draft.chosen : null });
+    apply({
+      ...draft, place: text, area: null, drawnZone: text ? null : draft.drawnZone,
+      chosen: draft.chosen && draft.chosen.name === text ? draft.chosen : null,
+    });
   }
 
   const openSave = () => void requireAccount(() => setSaveOpen(true));
@@ -240,9 +245,11 @@ export function SearchPage() {
       label="Lieu de la recherche"
       placeholder={app ? 'Ville, quartier, code postal…' : undefined}
       clearLabel={app ? 'Effacer la localisation' : undefined}
-      // Une grande ville est cherchée avec ses alentours : le champ le dit hors saisie (« Lyon et alentours »).
-      idleText={app && draft.place && placeText.trim() === draft.place.trim() ? placeLabel(draft) : undefined}
+      // Une grande ville est cherchée avec ses alentours : le champ le dit hors saisie (« Lyon et alentours »), comme
+      // « Zone dessinée » quand une zone remplace le lieu.
+      idleText={app && placeText.trim() === draft.place.trim() ? placeLabel(draft) || undefined : undefined}
       onFocusChange={app ? setEditingPlace : undefined}
+      shortcuts
       value={placeText}
       onChange={(text) => {
         setPlaceText(text);
@@ -284,7 +291,7 @@ export function SearchPage() {
                     {filterCount > 0 && <span className="filters-count" aria-hidden="true">{filterCount}</span>}
                   </button>
                 </div>
-                {draft.place && <p className="search-place-label"><Icon name="pin" />{placeLabel(draft)}</p>}
+                {placeLabel(draft) && <p className="search-place-label"><Icon name="pin" />{placeLabel(draft)}</p>}
               </>
             )}
             {/* Critères actifs : le libellé ouvre les filtres, la croix retire le critère. */}

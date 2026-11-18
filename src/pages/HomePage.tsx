@@ -19,8 +19,8 @@ import type { SearchMode } from '../lib/labels';
 import type { ListingRow } from '../lib/listings';
 import { loadNotifications, notificationsStore, unreadNotificationCount } from '../lib/notifications';
 import { accountPath, listingPath, PATHS } from '../lib/paths';
-import { placeShortName, type PlaceSuggestion } from '../lib/places';
-import { defaultDraft, paramsFromDraft, search, switchMode, type Result, type SearchDraft } from '../lib/search';
+import type { PlaceSuggestion } from '../lib/places';
+import { chosenFromSuggestion, defaultDraft, paramsFromDraft, search, switchMode, type Result, type SearchDraft } from '../lib/search';
 import { useDesktop } from '../lib/desktop';
 import { loadProjectSearch, loadViewedListings, SIMILAR_LIMIT } from '../lib/homeDesktop';
 import { recentlyViewedIds } from '../lib/recentlyViewed';
@@ -306,6 +306,7 @@ function HomeCategoryCard({ mode, draft, changeMode, update, choosePlace, startS
             onChange={(text) => update((d) => ({ ...d, place: text }))}
             onChoose={choosePlace}
             onSubmit={() => startSearch()}
+            shortcuts
           />
           <div className="home-category-fields">
             {fields.map((tile) => (
@@ -631,6 +632,7 @@ function DesktopHome({ greeting, mode, draft, drafts, tiles, feed, extras, updat
             onChange={(text) => update((d) => ({ ...d, place: text }))}
             onChoose={choosePlace}
             onSubmit={() => startSearch()}
+            shortcuts
           />
           <div className="dhome-tiles">
             {tiles.map((tile) => (
@@ -760,8 +762,8 @@ export function HomePage() {
   }
 
   function choosePlace(place: PlaceSuggestion) {
-    const name = placeShortName(place);
-    update((d) => ({ ...d, place: name, area: null, chosen: { kind: place.kind, name, postalCode: place.postalCode, inseeCode: place.inseeCode, coordinate: place.coordinate } }));
+    const chosen = chosenFromSuggestion(place);
+    update((d) => ({ ...d, place: chosen.name, area: null, drawnZone: null, chosen }));
   }
 
   function startSearch(event?: FormEvent) {

@@ -162,6 +162,10 @@ export const ICON_PATHS = {
   pictoBaisses: "<path d=\"M11.414 2.586A2 2 0 0 1 12.828 2H20a2 2 0 0 1 2 2v7.172a2 2 0 0 1-.586 1.414l-8.704 8.704a2.426 2.426 0 0 1-3.42 0l-6.58-6.58a2.426 2.426 0 0 1 0-3.42z\"/><circle cx=\"17\" cy=\"7\" r=\"1.2\"/><path d=\"M11.6 8.7v7.4m-2.6-2.6 2.6 2.6 2.6-2.6\"/>",
   // Mégaphone d'« Opportunités du moment » : agrandi de 15 % autour du centre, trait ramené à 1,25 (même fichier que l'app).
   pictoOpportunites: "<g transform=\"translate(12 12) scale(1.15) translate(-12 -12) translate(-0.7 1.2)\" stroke-width=\"1.087\"><rect x=\"14.3\" y=\"4.6\" width=\"1.6\" height=\"9.6\" rx=\"0.8\" transform=\"rotate(-12 15.1 9.4)\"/><path d=\"M6.2 8.6c3-.5 5.6-1.6 8.2-3.4\"/><path d=\"M6.9 13.4c2.9-.3 5.6.1 8.4 1.2\"/><path d=\"M6.2 8.6 4.9 8.85a2.43 2.43 0 0 0 .75 4.75l1.25-.2\"/><path d=\"m6.2 8.6.7 4.8\"/><path d=\"m5.65 13.6 1.05 4.6a1 1 0 0 0 1.95-.45l-.95-4.45\"/><path d=\"m17.6 4.9 1.8-2\"/><path d=\"m17.9 8.9 2.6-.4\"/><path d=\"m17.8 11.9 2.3 1.3\"/></g>",
+  // Étape 5 (zone dessinée de la carte) : « minus », « circle » et « trash-2 » de l'app, mêmes fichiers.
+  minus: "<path d=\"M5 12h14\"/>",
+  circle: "<circle cx=\"12\" cy=\"12\" r=\"10\"/>",
+  trash2: "<path d=\"M10 11v6\"/> <path d=\"M14 11v6\"/> <path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\"/> <path d=\"M3 6h18\"/> <path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/>",
 } as const;
 
 export type IconName = keyof typeof ICON_PATHS;
