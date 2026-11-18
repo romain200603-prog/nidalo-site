@@ -8,6 +8,7 @@ import {
 import {
   canSaveDraft, firstIssue, furthestAtStart, guideForRequired, hasChanges, initialStep, previewRow, recapRows, sameDraft, stepOfIssue,
 } from './flow';
+import { CATEGORY_DISPLAY_ORDER, CATEGORY_SUBTITLES, CATEGORY_TITLES } from './labels';
 import { appDecodingProblems, assetJson, dayToDate, draftFromRow, listingWrite } from './serialize';
 import { proposedDescription, proposedTitle } from './writing';
 
@@ -39,6 +40,17 @@ describe('catégorie et champs obligatoires', () => {
     expect([hotel.transaction, hotel.propertyType, hotel.assetDetails?.kind]).toEqual(['sale', 'hotel', 'hotel']);
     const mixed = selectSubtype(selectCategory(newDraft('x'), 'investment'), subtypes('investment')[3]);
     expect([mixed.propertyType, mixed.isMixedBuilding, mixed.assetDetails?.kind]).toEqual(['building', true, 'building']);
+  });
+
+  it('étape 1 comme l’app : ordre des catégories, sous-titres courts, immeuble mixte avec sa précision', () => {
+    expect(CATEGORY_DISPLAY_ORDER.map((category) => [CATEGORY_TITLES[category], CATEGORY_SUBTITLES[category]])).toEqual([
+      ['Résidentiel', 'Logement ou terrain'], ['Location', 'Bien à louer'], ['Investissement', 'Bien loué, immeuble'], ['Hôtels', 'Hôtel à vendre'],
+    ]);
+    expect([...CATEGORY_DISPLAY_ORDER].sort()).toEqual([...PUBLISH_CATEGORIES].sort());
+    expect(subtypes('investment').map((option) => [option.title, option.detail ?? null])).toEqual([
+      ['Appartement loué', null], ['Maison locative', null], ['Immeuble de rapport', null], ['Immeuble mixte', 'logements et commerces'],
+      ['Local commercial', null], ['Bureaux', null],
+    ]);
   });
 
   it('manquants au départ, aucun une fois tout rempli', () => {

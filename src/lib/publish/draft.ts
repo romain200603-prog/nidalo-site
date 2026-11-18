@@ -224,8 +224,11 @@ export function categoryTypes(category: PublishCategory): PropertyType[] {
   }
 }
 
-/** Sous-types proposés à l'étape « Catégorie » (PublishFlowView.subtypes). */
-export type Subtype = { title: string; type: PropertyType; isMixed: boolean };
+/**
+ * Sous-types proposés à l'étape « Catégorie » (PublishFlowView.subtypes) ; `detail` : la précision en petit sous le
+ * libellé de la tuile (« logements et commerces »).
+ */
+export type Subtype = { title: string; type: PropertyType; isMixed: boolean; detail?: string };
 
 export function subtypes(category: PublishCategory): Subtype[] {
   const s = (title: string, type: PropertyType, isMixed = false): Subtype => ({ title, type, isMixed });
@@ -233,7 +236,7 @@ export function subtypes(category: PublishCategory): Subtype[] {
     case 'residential': return [s('Appartement', 'apartment'), s('Maison', 'house'), s('Terrain', 'land')];
     case 'investment': return [
       s('Appartement loué', 'apartment'), s('Maison locative', 'house'), s('Immeuble de rapport', 'building'),
-      s('Immeuble mixte (logements et commerces)', 'building', true), s('Local commercial', 'commercial'), s('Bureaux', 'office'),
+      { ...s('Immeuble mixte', 'building', true), detail: 'logements et commerces' }, s('Local commercial', 'commercial'), s('Bureaux', 'office'),
     ];
     case 'rental': return [
       s('Appartement', 'apartment'), s('Maison', 'house'), s('Parking ou box', 'parking'), s('Terrain', 'land'),
