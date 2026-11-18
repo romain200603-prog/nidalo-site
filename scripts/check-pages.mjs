@@ -1821,17 +1821,30 @@ try {
     return hearts.length > 0 && hearts.every((heart) => heart.getAttribute('aria-pressed') === 'true');
   }, null, { timeout: 8000 })
     .catch(async () => problems.push(`recherche connectée : ${await page.locator('.listing-card .heart-button[aria-pressed="true"]').count()} cœurs remplis sur ${await page.locator('.listing-card').count()} cartes`));
+  // « Enregistrer » compact (SearchView de l'app) : la feuille (nom proposé, alerte activée), puis le message du bas
+  // « Recherche enregistrée · Voir » et le bouton « Enregistrée ».
+  expectSame('enregistrer', 'bouton', await page.textContent('.save-search-button'), 'Enregistrer');
   await page.click('.save-search-button');
-  await page.waitForSelector('dialog[open] .alert-body .text-input');
-  const proposed = await page.inputValue('dialog[open] .alert-body .text-input');
+  await page.waitForSelector('dialog.save-search-sheet[open] .save-search-name');
+  const proposed = await page.inputValue('dialog[open] .save-search-name');
+  expectSame('enregistrer', 'feuille', [await page.textContent('dialog[open] h2'), await page.textContent('dialog[open] .save-search-titles p'),
+    await page.textContent('dialog[open] .save-search-alert-title'), await page.textContent('dialog[open] .save-search-alert-sub'),
+    await page.isChecked('dialog[open] .save-search-alert .switch'), await page.textContent('dialog[open] .save-search-submit')],
+  ['Enregistrer cette recherche', 'Vous la retrouverez dans Favoris, onglet Recherches.', "M'alerter des nouveautés", "Dès qu'une annonce correspond", true, 'Enregistrer']);
   await page.screenshot({ path: join(out, 'enregistrer-recherche-ordinateur.png') });
-  await page.click('dialog[open] .alert-actions .btn-primary');
+  await page.click('dialog[open] .save-search-submit');
   await page.waitForSelector('.save-search-button.is-saved');
+  await page.waitForSelector('.app-toast');
+  expectSame('enregistrer', 'message et bouton', [await page.textContent('.app-toast-text'), await page.textContent('.app-toast-action'),
+    await page.textContent('.save-search-button'), await page.locator('dialog.save-search-sheet[open]').count()],
+  ['Recherche enregistrée', 'Voir', 'Enregistrée', 0]);
+  await page.screenshot({ path: join(out, 'enregistrer-recherche-message-ordinateur.png') });
   const saved = writes.find((w) => w.table === 'saved_searches' && w.method === 'POST');
   if (!saved) problems.push('enregistrer : aucune recherche envoyée au serveur');
   else {
     const query = saved.body?.query ?? {};
     if (saved.body?.name !== proposed) problems.push(`enregistrer : nom « ${saved.body?.name} » au lieu de « ${proposed} »`);
+    if (saved.body?.alerts_enabled !== true) problems.push(`enregistrer : alerte ${saved.body?.alerts_enabled} au lieu de true`);
     if (query.transaction !== 'sale' || !query.location?.around || query.location.around.radiusMeters !== 10000) {
       problems.push(`enregistrer : requête ${JSON.stringify(query)}`);
     }
@@ -4168,6 +4181,40 @@ try {
   await page.waitForSelector('.listing-card');
   await page.screenshot({ path: join(out, 'recherche-telephone.png') });
   await page.screenshot({ path: join(out, 'recherche-telephone-long.png'), fullPage: true });
+  // Votre recherche de l'app (SearchView) : une seule ligne en haut (retour de 44, lieu de 48, filtres de 48, 8 entre
+  // eux), les pavés à 27 des bords, l'en-tête des résultats (nombre, tri, « Enregistrer » de 40), « Carte » 14 au-dessus
+  // de la barre d'onglets ; ni en-tête bleu ni « + Filtres ».
+  const searchTop = await page.evaluate(() => {
+    const box = (selector) => {
+      const r = document.querySelector(selector)?.getBoundingClientRect();
+      return r ? [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)] : null;
+    };
+    const tiles = document.querySelector('.mode-tabs-search').getBoundingClientRect();
+    const map = document.querySelector('.map-open');
+    return {
+      back: box('.search-back'), field: box('.search-app-top .place-field-app input'), filters: box('.search-app-top .filters-button'),
+      tiles: [Math.round(tiles.left), Math.round(innerWidth - tiles.right)],
+      head: [document.querySelector('.results-head h2')?.textContent, document.querySelector('.sort-select > span')?.textContent,
+        document.querySelector('.save-search-button')?.textContent, box('.save-search-button')?.[3]],
+      blueBar: getComputedStyle(document.querySelector('.topbar')).display,
+      plusFilters: [...document.querySelectorAll('button')].filter((button) => button.textContent.includes('+ Filtres')).length,
+      map: [map.className, getComputedStyle(map).opacity, Math.round(document.querySelector('.tabbar').getBoundingClientRect().top - map.getBoundingClientRect().bottom)],
+    };
+  });
+  expectSame('recherche téléphone', 'ligne du haut, pavés, en-tête, Carte', searchTop, {
+    back: [16, 10, 44, 44], field: [68, 8, 250, 48], filters: [326, 8, 48, 48], tiles: [27, 27],
+    head: ['1 annonce', 'Triées par pertinence', 'Enregistrer', 40], blueBar: 'none', plusFilters: 0, map: ['map-open', '1', 14],
+  });
+  // Pendant la saisie du lieu, « Carte » s'efface ; sans compte, « Enregistrer » demande la connexion.
+  await page.click('.search-app-top .place-field-app input');
+  await page.waitForTimeout(300);
+  expectSame('recherche téléphone', 'Carte pendant la saisie', await page.$eval('.map-open', (el) => [el.className, el.getAttribute('aria-hidden')]), ['map-open is-hidden', 'true']);
+  await page.click('.results-head h2');
+  await page.click('.save-search-button');
+  await page.waitForSelector('dialog.signin-sheet[open]', { timeout: 4000 })
+    .catch(() => problems.push('recherche téléphone : « Enregistrer » sans compte n\'ouvre pas la connexion'));
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('dialog.signin-sheet[open]', { state: 'detached', timeout: 4000 }).catch(() => undefined);
   await page.click('.map-open');
   await page.waitForSelector('.map-marker', { timeout: 15000 });
   await page.waitForTimeout(400);
@@ -4203,6 +4250,43 @@ try {
   await page.screenshot({ path: join(out, 'filtres-location-telephone.png') });
   const rentChips = await page.locator('dialog[open] .criterion-chip:not(.is-leaving)').allTextContents();
   if (!rentChips.some((c) => /^Dispo\. avant le /.test(c))) problems.push(`location : pastilles « ${rentChips.join(' | ')} »`);
+  // Liste de la recherche : « Baisse de prix · avant 195 000 € » sous le rendement (ListingBadgePill), « Déjà vue » sur
+  // une fiche déjà ouverte dans l'onglet (AlreadySeenTag).
+  page = await open(phone, '/recherche/?mode=invest', 'recherche-badges-telephone');
+  await page.waitForSelector('.listing-card');
+  await page.evaluate((id) => sessionStorage.setItem('nidalo.consultes', JSON.stringify([id])), listings[1].id);
+  await page.reload();
+  await page.waitForSelector('.listing-card .already-seen-tag', { timeout: 8000 }).catch(() => undefined);
+  expectSame('recherche téléphone', 'pastilles des cartes', await page.$$eval('.listing-card', (cards) => cards.map((card) => [
+    [...card.querySelectorAll('.listing-card-badges > *')].map((el) => el.textContent.replace(/\s+/g, ' ').trim()),
+    card.querySelector('.already-seen-tag')?.textContent.trim() ?? null])),
+  [[['5,5 % de rendement brut', 'Baisse de prix · avant 195 000 €'], 'Déjà vue']]);
+  await page.screenshot({ path: join(out, 'recherche-badges-telephone.png') });
+  // Aucune annonce (SearchNoResults) : les pistes comptées par de vraies recherches, l'alerte, « Effacer tous les
+  // critères » ; ni en-tête des résultats ni « Carte ». Une piste applique la recherche qu'elle a comptée.
+  page = await open(phone, '/recherche/?mode=buy&lieu=Lyon&prixMax=50000&piecesMin=2', 'recherche-vide-telephone');
+  await page.waitForSelector('.no-results-hints', { timeout: 8000 }).catch(() => undefined);
+  expectSame('recherche téléphone', 'aucune annonce', [await textOf(page, '.no-results-title'), await textOf(page, '.no-results-text'),
+    await page.$$eval('.no-results-hint', (rows) => rows.map((row) => [row.querySelector('.no-results-hint-label').textContent.replace(/\s+/g, ' '),
+      row.querySelector('.no-results-hint-count').textContent.replace(/\s+/g, ' ')])),
+    await textOf(page, '.no-results-alert'), await textOf(page, '.no-results-clear'), await page.locator('.results-head').count(),
+    await page.$eval('.map-open', (el) => el.className)],
+  ['Aucune annonce trouvée', 'Voici ce qui en ferait apparaître :', [['Sans « Budget : 50 k€ »', '1 annonce']],
+    "M'alerter dès qu'une annonce arrive", 'Effacer tous les critères', 0, 'map-open is-hidden']);
+  await page.screenshot({ path: join(out, 'recherche-vide-telephone.png'), fullPage: true });
+  await page.click('.no-results-hint');
+  await page.waitForSelector('.listing-card');
+  if (page.url().includes('prixMax') || !page.url().includes('piecesMin=2')) problems.push(`recherche téléphone : piste appliquée ${page.url()}`);
+  // « Retour » de la ligne du haut : la page d'avant la recherche (l'accueil ici), même après des critères changés.
+  page = await open(phone, '/', 'retour-recherche-telephone');
+  await page.waitForSelector('#villes');
+  await page.click('.home-city >> nth=0');
+  await page.waitForSelector('.search-app-top');
+  await page.click('.mode-tabs-search .mode-tab >> nth=1');
+  await page.waitForFunction(() => location.search.includes('mode=rent'));
+  await page.click('.search-back');
+  await page.waitForFunction(() => location.pathname === '/', null, { timeout: 4000 })
+    .catch(() => problems.push(`recherche téléphone : « Retour » mène à ${page.url()} au lieu de l'accueil`));
   page = await open(phone, '/compte/', 'compte-connexion-telephone');
   await page.waitForSelector('.signin-card');
   await page.screenshot({ path: join(out, 'compte-connexion-telephone.png') });

@@ -1,0 +1,140 @@
+/* Votre recherche de l'app (Features/Search : SearchView.swift, SaveSearchSheet.swift, SearchNoResults.swift), sous
+   1024 px ; la feuille « Enregistrer cette recherche » et « Aucune annonce trouvée » aussi sur ordinateur.
+   1 pt de l'app = 1 px ici ; ombres : flou CSS = 2 × le rayon SwiftUI ; « manrope » de l'app = --app-font. */
+
+/* ——— Téléphone et tablette ——— */
+@media (max-width: 1023px) {
+  .search-column { padding: 0 16px 32px; color: var(--app-navy); }
+
+  /* Une seule ligne en haut, qui ne défile pas : retour (zone de 44), lieu (48), filtres (48), 8 entre eux ; 8 au-dessus,
+     4 dessous, sur le fond de page. */
+  .search-app-top {
+    position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 8px;
+    margin: 0 -16px; padding: calc(8px + env(safe-area-inset-top)) 16px 4px; background: var(--app-page);
+  }
+  .search-back { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px; color: var(--app-navy); -webkit-tap-highlight-color: transparent; }
+  .search-back-circle { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: var(--app-segment); }
+  .search-back-circle .icon { width: 18px; height: 18px; }
+  .search-back:focus-visible { outline: none; }
+  .search-back:focus-visible .search-back-circle { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+
+  /* Champ blanc de 48 (rayon 16, bordure), loupe de 20 à 14 du bord, lieu 16 medium (15 dans l'app : 16 évite le zoom de
+     l'iPhone) ; hors saisie, « Lyon et alentours » à la place du lieu ; effacement : croix dans un rond gris. */
+  .place-field-app { flex: 1; min-width: 0; }
+  .place-field-app input {
+    height: 48px; padding: 0 40px 0 44px; border: 1px solid var(--app-border); border-radius: 16px; background: #FFFFFF;
+    color: var(--app-navy); font: 500 16px/1.2 var(--app-font);
+  }
+  .place-field-app input::placeholder { color: var(--app-text-muted); }
+  .place-field-app input:focus { border-color: var(--app-brand); box-shadow: 0 0 0 3px rgba(60, 92, 176, 0.15); }
+  .place-field-app input.is-idle { color: transparent; }
+  .place-field-app .place-field-icon { left: 14px; top: 14px; width: 20px; height: 20px; color: var(--app-navy); }
+  .place-field-idle {
+    position: absolute; left: 45px; right: 40px; top: 0; overflow: hidden; color: var(--app-navy); font: 500 16px/48px var(--app-font);
+    white-space: nowrap; text-overflow: ellipsis; pointer-events: none;
+  }
+  .place-field-app .place-field-clear { right: 5px; top: 5px; width: 38px; height: 38px; border-radius: 50%; color: #FFFFFF; }
+  .place-field-app .place-field-clear .icon { width: 18px; height: 18px; padding: 4px; border-radius: 50%; background: var(--app-placeholder); stroke-width: 3.2; }
+  /* Suggestions de lieu sous toute la ligne (6 sous le champ). */
+  .place-field-app .place-list { top: 54px; left: -52px; right: -56px; }
+
+  /* Les pavés des catégories à 27 des bords de l'écran, 12 sous la ligne du haut ; les critères 12 dessous. */
+  .search-head .mode-tabs-search { margin: 12px 11px 0; }
+  .search-head .chips-row { margin-top: 12px; padding: 0; }
+  .chips-row:empty { display: none; }
+
+  /* En-tête des résultats, 14 sous les critères : nombre 18 gras, « Triées par … » 13 medium dessous (3 entre eux),
+     « Enregistrer » à droite. */
+  .search-column .results-head { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding-top: 0; border-top: 0; }
+  .search-column .results-head h2 { color: var(--app-navy); font: 700 18px/1.25 var(--app-font); }
+  .search-column .results-count { gap: 3px; }
+  .search-column .sort-select { margin-top: 0; color: var(--app-text-secondary); font: 500 13px/1.3 var(--app-font); }
+  .search-column .sort-select .icon { width: 12px; height: 12px; }
+  .search-column .sort-select:has(select:focus-visible) { outline-color: var(--app-brand); }
+
+  /* Les cartes 12 sous l'en-tête, 12 entre elles. */
+  .search-column .results-list { gap: 12px; margin-top: 12px; }
+}
+
+/* ——— « Enregistrer cette recherche » (SaveSearchSheet) : 20 de marge, 14 entre les éléments ——— */
+.save-search-sheet { width: min(420px, calc(100vw - 32px)); border-radius: 20px; background: #FFFFFF; box-shadow: 0 24px 60px rgba(10, 26, 68, 0.3); }
+.save-search-form { display: flex; flex-direction: column; gap: 14px; padding: 20px; color: var(--app-navy); font-family: var(--app-font); text-align: left; }
+.save-search-titles { display: flex; flex-direction: column; gap: 2px; }
+.save-search-titles h2 { color: var(--app-navy); font: 700 19px/1.3 var(--app-font); }
+.save-search-titles p { margin: 0; color: var(--app-text-secondary); font: 400 13px/1.35 var(--app-font); }
+.save-search-name {
+  width: 100%; height: 48px; padding: 0 14px; border: 1px solid var(--app-field-border); border-radius: 12px; background: var(--app-field);
+  color: var(--app-navy); font: 400 16px/1.2 var(--app-font);
+}
+.save-search-name::placeholder { color: var(--app-text-muted); }
+.save-search-name:focus { outline: none; border-color: var(--app-brand); box-shadow: 0 0 0 3px rgba(60, 92, 176, 0.15); }
+/* Interrupteur « M'alerter des nouveautés » (FeatureToggle) : cloche de 17, titre 14 medium, précision 12,5. */
+.save-search-alert { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
+.save-search-alert > .icon { flex: none; width: 17px; height: 17px; color: var(--app-navy); }
+.save-search-alert-text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.save-search-alert-title { color: var(--app-navy); font: 500 14px/1.3 var(--app-font); }
+.save-search-alert-sub { color: var(--app-text-secondary); font: 500 12.5px/1.3 var(--app-font); }
+.save-search-alert .switch:checked { background-color: var(--app-brand); }
+.save-search-error { margin: 0; color: var(--red); font: 500 13px/1.35 var(--app-font); }
+.save-search-submit {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 52px; border: 0; border-radius: 12px;
+  background: var(--app-brand); color: #FFFFFF; font: 600 15px/1 var(--app-font); cursor: pointer;
+}
+.save-search-submit:active { background: var(--app-brand-pressed); }
+.save-search-submit[disabled] { cursor: default; }
+.save-search-submit:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+/* Téléphone : feuille posée en bas, comme dans l'app. */
+@media (max-width: 759px) {
+  .save-search-sheet { width: 100vw; max-width: 100vw; margin: auto 0 0; border-radius: 32px 32px 0 0; }
+  .save-search-form { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+}
+
+/* ——— Aucune annonce (SearchNoResults) : dessin, titre 16 gras, pistes, alerte, « Effacer tous les critères » ——— */
+.no-results { display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 420px; margin: 0 auto; color: var(--app-navy); font-family: var(--app-font); text-align: center; }
+/* Carte d'annonce vide de 150 (coins 14) et rond bleu de 36 à la loupe, cerclé du fond de page, qui dépasse du coin. */
+.no-results-drawing { position: relative; margin-top: 30px; }
+.no-results-card { width: 150px; overflow: hidden; border: 1px solid var(--app-border); border-radius: 14px; background: #FFFFFF; }
+.no-results-photo { display: flex; align-items: center; justify-content: center; height: 58px; background: var(--app-segment); color: var(--app-placeholder); }
+.no-results-photo .icon { width: 24px; height: 24px; }
+.no-results-lines { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 10px 12px 12px; }
+.no-results-lines span { display: block; width: 70px; height: 8px; border-radius: 999px; background: var(--app-border); }
+.no-results-lines span + span { width: 100px; height: 6px; background: var(--app-segment); }
+.no-results-loupe {
+  position: absolute; top: -13px; right: -14px; display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px;
+  border: 3px solid var(--app-page); border-radius: 50%; background: var(--app-brand); color: #FFFFFF;
+}
+.no-results-loupe .icon { width: 17px; height: 17px; }
+.no-results-title { margin-top: 18px; color: var(--app-navy); font: 700 16px/1.3 var(--app-font); }
+.no-results-text { margin: 6px 0 0; color: var(--app-text-secondary); font: 400 13px/1.4 var(--app-font); }
+/* Les pistes apparaissent en fondu une fois comptées (0,25 s). */
+.no-results-text, .no-results-hints { animation: app-fade-in 0.25s ease-out both; }
+/* Pistes : carte blanche (coins 16), lignes de 54 : libellé 14,5 semibold, nombre 14 semibold bleu, chevron de 16. */
+.no-results-hints { width: 100%; margin: 14px 0 0; padding: 0; overflow: hidden; border: 1px solid var(--app-border); border-radius: 16px; background: #FFFFFF; list-style: none; }
+.no-results-hints li { position: relative; }
+.no-results-hints li + li::before { content: ''; position: absolute; left: 16px; right: 0; top: 0; height: 1px; background: var(--app-segment); }
+.no-results-hint {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 54px; padding: 0 16px; border: 0; background: none;
+  color: var(--app-navy); text-align: left; cursor: pointer;
+}
+.no-results-hint-label { flex: 1; min-width: 0; overflow: hidden; font: 600 14.5px/1.3 var(--app-font); white-space: nowrap; text-overflow: ellipsis; }
+.no-results-hint-count { flex: none; margin-left: 8px; color: var(--app-brand); font: 600 14px/1.3 var(--app-font); }
+.no-results-hint .icon { flex: none; width: 16px; height: 16px; color: var(--app-text-secondary); }
+.no-results-hint:focus-visible { outline: 3px solid var(--app-brand); outline-offset: -3px; border-radius: 16px; }
+/* Alerte : bouton secondaire bleu pâle de 52 (rayon 12), ou « Alerte active pour cette recherche ». */
+.no-results-alert {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 52px; margin-top: 12px;
+  border: 0; border-radius: 12px; background: var(--app-brand-soft); color: var(--app-brand); font: 600 15px/1.2 var(--app-font); cursor: pointer;
+}
+.no-results-alert .icon { width: 18px; height: 18px; }
+.no-results-alert:active { opacity: 0.85; }
+.no-results-alert:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+.no-results-alert-on { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin: 12px 0 0; color: var(--app-text-secondary); font: 500 13px/1.3 var(--app-font); }
+.no-results-alert-on .icon { width: 15px; height: 15px; }
+.no-results-clear {
+  width: 100%; min-height: 44px; margin-top: 2px; border: 0; background: none; color: var(--app-brand); font: 600 14px/1.2 var(--app-font);
+  cursor: pointer;
+}
+.no-results-clear:focus-visible { outline: 3px solid var(--app-brand); outline-offset: -3px; border-radius: 12px; }
+@media (prefers-reduced-motion: reduce) {
+  .map-open { transition: none; }
+}

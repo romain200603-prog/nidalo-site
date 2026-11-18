@@ -14,9 +14,16 @@ type Props = {
   className?: string;
   /**
    * `home` : champ « Où cherchez-vous ? » de l'accueil (épingle, libellé visible, chevron) ;
-   * `search` : champ de la page de recherche (loupe, libellé lu par les lecteurs d'écran).
+   * `search` : champ de la page de recherche (loupe, libellé lu par les lecteurs d'écran) ;
+   * `app` : champ blanc de la ligne du haut de Votre recherche sur téléphone (SearchPlaceField de l'app).
    */
-  variant?: 'search' | 'home';
+  variant?: 'search' | 'home' | 'app';
+  /** Hors saisie, texte montré à la place du lieu (« Lyon et alentours »), comme le champ de l'app. */
+  idleText?: string;
+  /** Saisie en cours ou finie (Votre recherche efface son bouton « Carte » pendant la saisie). */
+  onFocusChange?: (focused: boolean) => void;
+  /** Nom du bouton qui efface le lieu. */
+  clearLabel?: string;
   /** Pour les tests : remplace l'appel aux services publics. */
   fetcher?: typeof placeSuggestions;
 };
@@ -36,13 +43,17 @@ function Highlighted({ text, query }: { text: string; query: string }) {
 }
 
 /** Champ « Ville, code postal » avec suggestions, comme le champ de recherche de l'app. */
-export function PlaceField({ value, onChange, onChoose, onSubmit, label, placeholder = 'Ville, code postal, quartier…', className, variant = 'search', fetcher = placeSuggestions }: Props) {
+export function PlaceField({
+  value, onChange, onChoose, onSubmit, label, placeholder = 'Ville, code postal, quartier…', className, variant = 'search', idleText,
+  onFocusChange, clearLabel = 'Effacer le lieu', fetcher = placeSuggestions,
+}: Props) {
   const id = useId();
   const listId = `${id}-liste`;
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const [error, setError] = useState<string | null>(null);
+  const [focused, setFocused] = useState(false);
   const typed = useRef(false);
   const blurTimer = useRef<number | undefined>(undefined);
   const input = useRef<HTMLInputElement>(null);
@@ -81,6 +92,8 @@ export function PlaceField({ value, onChange, onChoose, onSubmit, label, placeho
     setSuggestions([]);
     setActive(-1);
     onChoose(place);
+    // Champ du haut de Votre recherche : le lieu choisi, le clavier se ferme (comme l'app).
+    if (variant === 'app') input.current?.blur();
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -100,6 +113,7 @@ export function PlaceField({ value, onChange, onChoose, onSubmit, label, placeho
         event.preventDefault();
         setOpen(false);
         onSubmit();
+        if (variant === 'app') input.current?.blur();
       }
     } else if (event.key === 'Escape' && open) {
       event.preventDefault();
@@ -107,8 +121,9 @@ export function PlaceField({ value, onChange, onChoose, onSubmit, label, placeho
     }
   }
 
+  const showsIdle = !focused && Boolean(idleText) && idleText !== value.trim();
   return (
-    <div className={`place-field${variant === 'home' ? ' place-field-home' : ''} ${className ?? ''}`}>
+    <div className={`place-field${variant === 'home' ? ' place-field-home' : variant === 'app' ? ' place-field-app' : ''} ${className ?? ''}`}>
       <label className={variant === 'home' ? 'place-field-caption' : 'visually-hidden'} htmlFor={id}>{label}</label>
       <Icon name={variant === 'home' ? 'pin' : 'search'} className="icon place-field-icon" />
       <input
@@ -134,17 +149,25 @@ export function PlaceField({ value, onChange, onChoose, onSubmit, label, placeho
           onChange(event.target.value);
         }}
         onKeyDown={onKeyDown}
-        onFocus={() => suggestions.length && setOpen(true)}
+        onFocus={() => {
+          setFocused(true);
+          onFocusChange?.(true);
+          if (suggestions.length) setOpen(true);
+        }}
         onBlur={() => {
+          setFocused(false);
+          onFocusChange?.(false);
           blurTimer.current = window.setTimeout(() => setOpen(false), 120);
         }}
+        className={showsIdle ? 'is-idle' : undefined}
       />
+      {showsIdle && <span className="place-field-idle" aria-hidden="true">{idleText}</span>}
       {variant === 'home' && !value && <Icon name="chevronRight" className="icon place-field-chevron" />}
       {value && (
         <button
           type="button"
           className="place-field-clear"
-          aria-label="Effacer le lieu"
+          aria-label={clearLabel}
           onClick={() => {
             typed.current = false;
             setSuggestions([]);

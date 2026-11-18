@@ -2,7 +2,7 @@ import { Icon } from './Icon';
 import { PhotoPager } from './PhotoPager';
 import { HeartButton } from './account/HeartButton';
 import {
-  cardLocation, formatCardPrice, formatFacts, yieldTone, type CardContent, type CardKind, type FormattedFact,
+  badgeText, cardLocation, formatCardPrice, formatFacts, yieldTone, type CardContent, type CardKind, type FormattedFact,
 } from '../lib/cardContent';
 import { formatFraction } from '../lib/format';
 import { sortedPhotos, type ListingRow } from '../lib/listings';
@@ -56,10 +56,14 @@ type Props = {
   selected?: boolean;
   onHover?: (id: string | null) => void;
   headingLevel?: 'h2' | 'h3';
+  /** Liste de la recherche seulement : « Nouveau » ou « Baisse de prix · avant … » sur la photo (ListingBadgePill). */
+  showsBadge?: boolean;
+  /** Liste de la recherche seulement : « Déjà vue » sur la photo d'une annonce déjà ouverte (AlreadySeenTag). */
+  alreadySeen?: boolean;
 };
 
 /** Fiche d'une annonce dans les résultats : photo sur toute la largeur, puis étiquette, titre, lieu, prix, indicateurs. */
-export function ListingCard({ row, content, selected = false, onHover, headingLevel = 'h2' }: Props) {
+export function ListingCard({ row, content, selected = false, onHover, headingLevel = 'h2', showsBadge = false, alreadySeen = false }: Props) {
   const photos = sortedPhotos(row).slice(0, 10);
   const price = formatCardPrice(content.price);
   const facts = formatFacts(content.panelFacts);
@@ -68,6 +72,7 @@ export function ListingCard({ row, content, selected = false, onHover, headingLe
   const Heading = headingLevel;
   const href = listingPath(row.id, content.kind === 'investment' ? 'invest' : null);
   const isLeased = (row.rental_info as { isLeased?: boolean } | null)?.isLeased === true;
+  const badge = showsBadge && content.badge ? badgeText(content.badge) : null;
   return (
     <article
       className={`listing-card card${selected ? ' is-selected' : ''}`}
@@ -80,12 +85,21 @@ export function ListingCard({ row, content, selected = false, onHover, headingLe
         window.location.assign(href);
       }}>
         <PhotoPager photos={photos} label={row.title} />
-        {grossValue !== null && (
-          <span className={`yield-chip tone-${yieldTone(grossValue)}`}>
-            <Icon name="trend" />
-            {formatFraction(grossValue)}
-            <span className="visually-hidden"> de rendement brut</span>
-          </span>
+        {/* En haut à gauche : le rendement brut, puis « Nouveau » ou la baisse de prix dessous (6 entre les deux). */}
+        {(grossValue !== null || badge) && (
+          <div className="listing-card-badges">
+            {grossValue !== null && (
+              <span className={`yield-chip tone-${yieldTone(grossValue)}`}>
+                <Icon name="trend" />
+                {formatFraction(grossValue)}
+                <span className="visually-hidden"> de rendement brut</span>
+              </span>
+            )}
+            {badge && <span className={`listing-badge-pill${badge.tone === 'positive' ? ' is-positive' : ''}`}>{badge.text}</span>}
+          </div>
+        )}
+        {alreadySeen && (
+          <span className="already-seen-tag"><Icon name="eye" />Déjà vue</span>
         )}
         <HeartButton listingId={row.id} />
       </div>

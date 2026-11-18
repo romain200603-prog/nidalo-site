@@ -1,31 +1,38 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useToastShown } from '../components/AppToast';
 import { Icon } from '../components/Icon';
 import { Page } from '../components/Layout';
 import { cardTag, ListingCard } from '../components/ListingCard';
-import { CriterionChipsRow } from '../components/CriterionChips';
+import { CriterionChipsRow, FiltersButton } from '../components/CriterionChips';
 import { ModeTabs } from '../components/ModeTabs';
 import { PlaceField } from '../components/PlaceField';
 import { ListingPhoto } from '../components/PhotoPager';
+import { SearchNoResults } from '../components/SearchNoResults';
 import { HeartButton } from '../components/account/HeartButton';
-import { SaveSearchButton } from '../components/account/SaveSearchButton';
+import { SaveSearchButton, SaveSearchSheet, useSavedSearchFor } from '../components/account/SaveSearchButton';
 import type { MapFrame } from '../components/ResultsMap';
 
 // Le moteur de carte est lourd : chargé à part, la liste s'affiche sans l'attendre.
 const ResultsMap = lazy(() => import('../components/ResultsMap').then((m) => ({ default: m.ResultsMap })));
 import { FiltersDialog } from './FiltersDialog';
+import { requireAccount } from '../lib/account/gate';
+import { saveSearch } from '../lib/account/savedSearches';
 import { cardContent, formatCardPrice } from '../lib/cardContent';
+import { useDesktop } from '../lib/desktop';
 import { formatArea } from '../lib/format';
 import { highlightsFor } from '../lib/highlights';
 import type { SearchMode } from '../lib/labels';
 import { sortedPhotos } from '../lib/listings';
-import { listingPath } from '../lib/paths';
+import { listingPath, PATHS } from '../lib/paths';
 import { placeShortName, type PlaceSuggestion } from '../lib/places';
+import { recentlyViewedIds } from '../lib/recentlyViewed';
 import {
   activeFilterCount, boxAround, defaultDraft, draftFromParams, effectiveSort, filterChips, locationFor, paramsFromDraft,
   placeLabel, search, SORT_LABELS, sortOptions, type Result, type SearchDraft, type SortOrder,
   switchMode,
 } from '../lib/search';
 import { GOOD_YIELD, grossYieldText } from '../lib/cardContent';
+import '../styles/recherche-app.css';
 
 type Status = { kind: 'loading' } | { kind: 'ready'; results: Result[] } | { kind: 'error' };
 
@@ -42,6 +49,29 @@ function pageQuery(draft: SearchDraft, mapOpen: boolean): string {
   const params = paramsFromDraft(draft);
   if (mapOpen) params.set('vue', 'carte');
   return params.toString();
+}
+
+/** Entrées d'historique ajoutées par la page (critères appliqués) : « Retour » les saute toutes. */
+function addedEntries(): number {
+  const state = window.history.state as { searchDepth?: unknown } | null;
+  return typeof state?.searchDepth === 'number' ? state.searchDepth : 0;
+}
+
+/**
+ * « Retour » de la ligne du haut (BackButton de l'app, qui referme Votre recherche) : la page d'où l'on vient sur le
+ * site, avant les critères changés ici ; arrivé d'ailleurs, le lien mène à l'accueil.
+ */
+function leaveSearch(event: MouseEvent<HTMLAnchorElement>) {
+  try {
+    const referrer = document.referrer ? new URL(document.referrer) : null;
+    const steps = addedEntries() + 1;
+    if (referrer && referrer.origin === window.location.origin && window.history.length > steps) {
+      event.preventDefault();
+      window.history.go(-steps);
+    }
+  } catch {
+    // Adresse précédente illisible : l'accueil.
+  }
 }
 
 function countLabel(count: number, mode: SearchMode): string {
@@ -85,6 +115,7 @@ function MapPreview({ result, mode, onClose }: { result: Result; mode: SearchMod
 }
 
 export function SearchPage() {
+  const desktop = useDesktop();
   const [draft, setDraft] = useState<SearchDraft>(readDraft);
   const [placeText, setPlaceText] = useState(draft.place);
   const [status, setStatus] = useState<Status>({ kind: 'loading' });
@@ -94,9 +125,15 @@ export function SearchPage() {
   const mapOpenRef = useRef(mapOpen);
   mapOpenRef.current = mapOpen;
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [saveOpen, setSaveOpen] = useState(false);
+  /** Saisie du lieu en cours (téléphone) : le bouton « Carte » s'efface. */
+  const [editingPlace, setEditingPlace] = useState(false);
+  /** Fiches déjà ouvertes (« Déjà vue »), relues au retour sur la page. */
+  const [seen, setSeen] = useState<Set<string>>(() => new Set(recentlyViewedIds()));
   const [frame, setFrame] = useState<MapFrame>({ token: 0, box: null, points: [] });
   const [attempt, setAttempt] = useState(0);
-  const resultsHeading = useRef<HTMLHeadingElement>(null);
+  const toastShown = useToastShown();
+  const savedSearch = useSavedSearchFor(draft);
   /** Derniers critères de chaque mode, repris quand on y revient (comme l'app). */
   const byMode = useRef<Partial<Record<SearchMode, SearchDraft>>>({});
   const key = paramsFromDraft(draft).toString();
@@ -106,7 +143,7 @@ export function SearchPage() {
     setDraft(next);
     setPlaceText(next.place);
     const query = pageQuery(next, mapOpenRef.current);
-    if (query !== window.location.search.slice(1)) window.history.pushState(null, '', `?${query}`);
+    if (query !== window.location.search.slice(1)) window.history.pushState({ searchDepth: addedEntries() + 1 }, '', `?${query}`);
   }, []);
 
   useEffect(() => {
@@ -118,6 +155,13 @@ export function SearchPage() {
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  // Retour d'une fiche par « Précédent » (page gardée par le navigateur) : « Déjà vue » sur la fiche qu'on vient d'ouvrir.
+  useEffect(() => {
+    const onShow = (event: PageTransitionEvent) => { if (event.persisted) setSeen(new Set(recentlyViewedIds())); };
+    window.addEventListener('pageshow', onShow);
+    return () => window.removeEventListener('pageshow', onShow);
   }, []);
 
   useEffect(() => {
@@ -150,7 +194,7 @@ export function SearchPage() {
     if (mapOpen) params.set('vue', 'carte');
     else params.delete('vue');
     const query = params.toString();
-    window.history.replaceState(null, '', query ? `?${query}` : window.location.pathname);
+    window.history.replaceState(window.history.state, '', query ? `?${query}` : window.location.pathname);
   }, [mapOpen]);
 
   // La carte en plein écran se ferme avec Échap.
@@ -170,6 +214,11 @@ export function SearchPage() {
   const chips = filterChips(draft);
   const filterCount = activeFilterCount(draft);
   const sort = effectiveSort(draft);
+  /** En-tête des résultats (nombre, tri, « Enregistrer ») : pendant la recherche et avec des annonces, comme l'app. */
+  const showsHeader = status.kind === 'loading' || results.length > 0;
+  const statusText = status.kind === 'loading' ? 'Recherche…' : status.kind === 'error' ? 'Recherche impossible' : countLabel(results.length, draft.mode);
+  /** Bouton « Carte » : avec des annonces, hors saisie du lieu et sans message en bas de l'écran. */
+  const showsMapButton = results.length > 0 && !editingPlace && !toastShown;
 
   function choosePlace(place: PlaceSuggestion) {
     const name = placeShortName(place);
@@ -181,70 +230,98 @@ export function SearchPage() {
     apply({ ...draft, place: text, area: null, chosen: draft.chosen && draft.chosen.name === text ? draft.chosen : null });
   }
 
+  const openSave = () => void requireAccount(() => setSaveOpen(true));
+
+  const placeField = (app: boolean) => (
+    <PlaceField
+      variant={app ? 'app' : 'search'}
+      label="Lieu de la recherche"
+      placeholder={app ? 'Ville, quartier, code postal…' : undefined}
+      clearLabel={app ? 'Effacer la localisation' : undefined}
+      // Une grande ville est cherchée avec ses alentours : le champ le dit hors saisie (« Lyon et alentours »).
+      idleText={app && draft.place && placeText.trim() === draft.place.trim() ? placeLabel(draft) : undefined}
+      onFocusChange={app ? setEditingPlace : undefined}
+      value={placeText}
+      onChange={(text) => {
+        setPlaceText(text);
+        if (!text.trim() && draft.place) apply({ ...draft, place: '', chosen: null, area: null });
+      }}
+      onChoose={choosePlace}
+      onSubmit={submitPlace}
+    />
+  );
+
   return (
-    <Page section="search" wide>
+    <Page section="search" wide appTop={!desktop}>
       <div className="search-layout">
         <div className="search-column">
+          {/* Téléphone : une seule ligne en haut, qui ne défile pas : retour, lieu, filtres (SearchPlaceField). */}
+          {!desktop && (
+            <div className="search-app-top">
+              <a className="search-back" href={PATHS.home} onClick={leaveSearch} aria-label="Retour">
+                <span className="search-back-circle"><Icon name="arrowLeft" /></span>
+              </a>
+              {placeField(true)}
+              <FiltersButton count={filterCount} onClick={() => setFiltersOpen(true)} />
+            </div>
+          )}
           <div className="search-head">
-            <h1>Votre recherche</h1>
-            <p className="search-sub">Trouvez le bien adapté à votre projet</p>
+            <h1 className={desktop ? undefined : 'visually-hidden'}>Votre recherche</h1>
+            {desktop && <p className="search-sub">Trouvez le bien adapté à votre projet</p>}
             <ModeTabs mode={draft.mode} onChange={(mode) => {
               if (mode === draft.mode) return;
               byMode.current[draft.mode] = draft;
               apply(switchMode(draft, mode, byMode.current[mode]));
             }} className="mode-tabs-search" />
-            <div className="search-place-row">
-              <PlaceField
-                label="Lieu de la recherche"
-                value={placeText}
-                onChange={(text) => {
-                  setPlaceText(text);
-                  if (!text.trim() && draft.place) apply({ ...draft, place: '', chosen: null, area: null });
-                }}
-                onChoose={choosePlace}
-                onSubmit={submitPlace}
-              />
-              <button type="button" className="filters-button" onClick={() => setFiltersOpen(true)} aria-label={`Filtres${filterCount ? `, ${filterCount} actifs` : ''}`}>
-                <Icon name="sliders" />
-                {filterCount > 0 && <span className="filters-count" aria-hidden="true">{filterCount}</span>}
-              </button>
-            </div>
-            {draft.place && <p className="search-place-label"><Icon name="pin" />{placeLabel(draft)}</p>}
+            {desktop && (
+              <>
+                <div className="search-place-row">
+                  {placeField(false)}
+                  <button type="button" className="filters-button" onClick={() => setFiltersOpen(true)} aria-label={`Filtres${filterCount ? `, ${filterCount} actifs` : ''}`}>
+                    <Icon name="sliders" />
+                    {filterCount > 0 && <span className="filters-count" aria-hidden="true">{filterCount}</span>}
+                  </button>
+                </div>
+                {draft.place && <p className="search-place-label"><Icon name="pin" />{placeLabel(draft)}</p>}
+              </>
+            )}
+            {/* Critères actifs : le libellé ouvre les filtres, la croix retire le critère. */}
             <div className="chips-row">
               <CriterionChipsRow chips={chips} onOpen={() => setFiltersOpen(true)}
                 onRemove={(id) => {
                   const chip = chips.find((c) => c.id === id);
                   if (chip) apply(chip.remove(draft));
                 }} />
-              <button type="button" className="filter-chip accent" onClick={() => setFiltersOpen(true)}>+ Filtres</button>
             </div>
           </div>
 
-          <div className="results-head">
-            <div>
-              <h2 ref={resultsHeading} aria-live="polite">
-                {status.kind === 'loading' ? 'Recherche…' : status.kind === 'error' ? 'Recherche impossible' : countLabel(results.length, draft.mode)}
-              </h2>
-              <label className="sort-select">
-                <span>Triées par</span>
-                <select value={sort} onChange={(event) => apply({ ...draft, sort: event.target.value as SortOrder })}>
-                  {sortOptions(draft.mode).map((option) => <option key={option} value={option}>{SORT_LABELS[option].toLowerCase()}</option>)}
-                </select>
-                <Icon name="chevronDown" />
-              </label>
+          <p className="visually-hidden" aria-live="polite">{statusText}</p>
+          {showsHeader && (
+            <div className="results-head">
+              <div className="results-count">
+                <h2>{statusText}</h2>
+                {/* « Triées par pertinence » et son chevron ; le menu natif, transparent, les couvre. */}
+                <label className="sort-select">
+                  <span aria-hidden="true">Triées par {SORT_LABELS[sort].toLowerCase()}</span>
+                  <Icon name="chevronDown" />
+                  <select aria-label="Tri" value={sort} onChange={(event) => apply({ ...draft, sort: event.target.value as SortOrder })}>
+                    {sortOptions(draft.mode).map((option) => <option key={option} value={option}>{SORT_LABELS[option]}</option>)}
+                  </select>
+                </label>
+              </div>
+              <SaveSearchButton saved={savedSearch !== null} onOpen={openSave} />
+              {/* Ordinateur : la bascule « liste / carte » de l'app (ViewModeToggle de SearchView) ; la carte s'ouvre en
+                  plein écran, comme le bouton « Carte » du téléphone (masquée sur téléphone). */}
+              <div className="view-toggle" role="group" aria-label="Affichage des résultats">
+                <span className="view-toggle-item is-current">
+                  <Icon name="layoutGrid" title="Liste, sélectionnée" />
+                </span>
+                <button type="button" className="view-toggle-item" onClick={() => setMapOpen(true)} aria-label="Afficher sur la carte" title="Afficher sur la carte">
+                  <Icon name="map" />
+                </button>
+              </div>
             </div>
-            {/* Ordinateur : la bascule « liste / carte » de l'app (ViewModeToggle de SearchView) ; la carte s'ouvre en
-                plein écran, comme le bouton « Carte » du téléphone (masquée sur téléphone). */}
-            <div className="view-toggle" role="group" aria-label="Affichage des résultats">
-              <span className="view-toggle-item is-current">
-                <Icon name="layoutGrid" title="Liste, sélectionnée" />
-              </span>
-              <button type="button" className="view-toggle-item" onClick={() => setMapOpen(true)} aria-label="Afficher sur la carte" title="Afficher sur la carte">
-                <Icon name="map" />
-              </button>
-            </div>
-          </div>
-          <SaveSearchButton draft={draft} />
+          )}
 
           {status.kind === 'loading' && (
             <div className="results-list" aria-hidden="true">
@@ -260,20 +337,20 @@ export function SearchPage() {
             </div>
           )}
           {status.kind === 'ready' && results.length === 0 && (
-            <div className="card state">
-              <Icon name="search" />
-              <h3>Aucun bien ne correspond à vos critères</h3>
-              <p>Élargissez la zone ou retirez un critère pour voir plus d’annonces.</p>
-              {(chips.length > 0 || draft.place) && (
-                <button type="button" className="btn btn-light" onClick={() => apply(defaultDraft(draft.mode))}>Effacer les critères</button>
-              )}
-            </div>
+            <SearchNoResults
+              draft={draft}
+              savedSearch={savedSearch}
+              onApply={apply}
+              onAlert={openSave}
+              onEnableAlert={(item) => { void saveSearch({ ...item, alerts_enabled: true }); }}
+              onClear={() => apply(defaultDraft(draft.mode))}
+            />
           )}
           {status.kind === 'ready' && results.length > 0 && (
             <div className="results-list">
               {results.slice(0, LIST_LIMIT).map(({ row, highlights }) => (
                 <ListingCard key={row.id} row={row} content={cardContent(row, draft.mode, highlights)}
-                  selected={row.id === selectedId} onHover={setHoveredId} headingLevel="h3" />
+                  selected={row.id === selectedId} onHover={setHoveredId} headingLevel="h3" showsBadge alreadySeen={seen.has(row.id)} />
               ))}
             </div>
           )}
@@ -298,10 +375,14 @@ export function SearchPage() {
         </div>
       </div>
 
-      <button type="button" className="map-open btn btn-primary" onClick={() => setMapOpen(true)}>
+      {/* Téléphone : capsule bleu marine flottante, 14 au-dessus de la barre d'onglets. */}
+      <button type="button" className={`map-open${showsMapButton ? '' : ' is-hidden'}`} onClick={() => setMapOpen(true)}
+        aria-label="Afficher sur la carte" aria-hidden={showsMapButton ? undefined : true} tabIndex={showsMapButton ? undefined : -1}>
         <Icon name="map" />
         Carte
       </button>
+
+      <SaveSearchSheet open={saveOpen} draft={draft} onClose={() => setSaveOpen(false)} />
 
       <FiltersDialog
         open={filtersOpen}

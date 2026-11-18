@@ -2,13 +2,7 @@
    carte d'annonce de l'accueil (HomeListingCard), aussi sur ordinateur. 1 pt de l'app = 1 px ici ; ombres : flou CSS =
    2 × le rayon SwiftUI ; « systemApp » de l'app = police système (--app-font-system), « manrope » = --app-font. */
 
-/* ——— Page ——— */
-@media (max-width: 760px) {
-  .page-app-top > .topbar { display: none; }
-}
-@media (max-width: 1023px) {
-  .page-app-top { background: var(--app-page); }
-}
+/* ——— Page (sa barre du haut à la place de l'en-tête bleu : `appTop` de Page, règles dans app.css) ——— */
 .home-app { padding-bottom: 28px; color: var(--app-navy); }
 
 /* ——— Barre du haut, sans fond (44) : logo maison, « NIDΛLO », cloche dans un rond blanc ——— */

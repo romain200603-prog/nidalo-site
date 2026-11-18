@@ -1059,3 +1059,27 @@ export function filterChips(draft: SearchDraft): FilterChip[] {
   if (draft.requiresParking) add('parking', 'Parking', (d) => ({ ...d, requiresParking: false }));
   return chips;
 }
+
+/** Rayons proposés autour d'une ville quand rien ne correspond, en km (SearchNoResults.radii de l'app). */
+export const NO_RESULTS_RADII = [5, 10, 20, 50, 100];
+
+export type NoResultsHint = { id: string; label: string; draft: SearchDraft };
+
+/**
+ * Aucune annonce : les pistes à compter (computeHints de SearchNoResults.swift) : le rayon suivant s'il y a un centre
+ * (10 km par défaut), puis chaque critère en moins (« Sans « Budget : 300 k€ » »), le rayon excepté autour d'un centre.
+ */
+export function noResultsHints(draft: SearchDraft): NoResultsHint[] {
+  const hints: NoResultsHint[] = [];
+  const hasCenter = locationFor(draft).kind === 'around';
+  if (hasCenter) {
+    const current = draft.radiusKm ?? DEFAULT_RADIUS_METERS / 1000;
+    const next = NO_RESULTS_RADII.find((radius) => radius > current);
+    if (next !== undefined) hints.push({ id: `radius-${next}`, label: `Élargir à ${next} km`, draft: { ...draft, radiusKm: next } });
+  }
+  for (const chip of filterChips(draft)) {
+    if (hasCenter && chip.id === 'radius') continue;
+    hints.push({ id: chip.id, label: `Sans « ${chip.label} »`, draft: chip.remove(draft) });
+  }
+  return hints;
+}

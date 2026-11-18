@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   boxAround, compactPrice, defaultDraft, distanceMeters, effectiveSort, filterChips, sortOptions, draftFromParams, locationFor, matches, paramsFromDraft, placeLabel,
-  propertyTypesFor, sortResults, type Highlights, type SearchDraft,
+  noResultsHints, propertyTypesFor, sortResults, type Highlights, type SearchDraft,
 } from './search';
 import { testRow } from './testRows';
 
@@ -110,6 +110,32 @@ describe('recherche', () => {
     const again = draftFromParams(paramsFromDraft(draft));
     expect(again).toEqual(draft);
     expect(draftFromParams(new URLSearchParams('mode=pirate&prixMin=-5&tri=x&zone=1,2,3'))).toEqual(defaultDraft('buy'));
+  });
+});
+
+describe('aucune annonce : pistes', () => {
+  const plain = (s: string) => s.replace(/[\u00a0\u202f]/g, ' ');
+  it('propose le rayon suivant autour d’une ville, puis chaque critère en moins (SearchNoResults de l’app)', () => {
+    const lyon: SearchDraft = { ...defaultDraft('buy'), place: 'Lyon', priceMax: 50000, roomsMin: 2 };
+    const hints = noResultsHints(lyon);
+    expect(hints.map((hint) => [hint.id, plain(hint.label)])).toEqual([
+      ['radius-20', 'Élargir à 20 km'], ['budget', 'Sans « Budget : 50 k€ »'], ['rooms', 'Sans « 2 pièces min »'],
+    ]);
+    expect(hints[0].draft.radiusKm).toBe(20);
+    expect(hints[1].draft).toMatchObject({ priceMax: null, roomsMin: 2, place: 'Lyon' });
+    expect(hints[2].draft).toMatchObject({ priceMax: 50000, roomsMin: null });
+  });
+
+  it('autour d’un centre, le rayon n’est pas une piste « Sans » ; à 100 km, plus de rayon plus large', () => {
+    const wide: SearchDraft = { ...defaultDraft('buy'), place: 'Lyon', radiusKm: 100, priceMax: 50000 };
+    expect(noResultsHints(wide).map((hint) => hint.id)).toEqual(['budget']);
+    const five: SearchDraft = { ...defaultDraft('buy'), place: 'Lyon', radiusKm: 5 };
+    expect(noResultsHints(five).map((hint) => plain(hint.label))).toEqual(['Élargir à 10 km']);
+  });
+
+  it('sans centre (commune saisie, partout) : seulement les critères', () => {
+    expect(noResultsHints({ ...defaultDraft('rent'), place: 'Lyon 3e', priceMax: 900 }).map((hint) => plain(hint.label))).toEqual(['Sans « Loyer : 900 € »']);
+    expect(noResultsHints(defaultDraft('invest'))).toEqual([]);
   });
 });
 

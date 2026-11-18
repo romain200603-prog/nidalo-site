@@ -411,12 +411,19 @@
 .heart-inline .icon { width: 16px; height: 16px; }
 .heart-inline.is-active { color: var(--blue); }
 
-/* « Enregistrer cette recherche » (recherche) */
-.save-search-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 42px; margin-top: 12px; border: 0; border-radius: 12px; background: var(--blue-soft); color: var(--blue); font-size: 14px; font-weight: 600; cursor: pointer; }
-.save-search-button .icon { width: 17px; height: 17px; }
+/* « Enregistrer » de Votre recherche (saveSearchButton de SearchView.swift), compact, à droite du nombre d'annonces :
+   signet et 14 semibold bleus, 7 entre eux, 11 à gauche et 14 à droite, 40 de haut, rayon 12, fond bleu pâle ;
+   zone d'appui de 44. « Enregistrée » : signet plein, inactif. */
+.save-search-button {
+  position: relative; display: inline-flex; flex: none; align-items: center; gap: 7px; height: 40px; margin: 2px 0; padding: 0 14px 0 11px;
+  border: 0; border-radius: 12px; background: var(--app-brand-soft); color: var(--app-brand); font: 600 14px/1 var(--app-font);
+  white-space: nowrap; cursor: pointer;
+}
+.save-search-button::after { content: ''; position: absolute; left: 0; right: 0; top: -2px; bottom: -2px; }
+.save-search-button .icon { width: 16px; height: 16px; }
 .save-search-button.is-saved { cursor: default; }
 .save-search-button.is-saved .icon { fill: currentColor; }
-.save-search-button[disabled]:not(.is-saved) { opacity: 0.6; cursor: default; }
+.save-search-button:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
 .alert-body .text-input { margin-top: 4px; text-align: left; }
 
 

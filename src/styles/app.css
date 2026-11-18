@@ -56,6 +56,14 @@ img { max-width: 100%; }
 /* En-tête bleu, comme le bandeau de l'accueil */
 .topbar { background: var(--blue); color: #FFFFFF; position: relative; z-index: 20; }
 .topbar .wrap { display: flex; align-items: center; gap: 24px; min-height: var(--topbar-height); }
+/* `appTop` de Page (accueil, Votre recherche) : sous 761 px, la barre du haut de l'app à la place de l'en-tête bleu ;
+   sous 1024 px, le fond de page de l'app. */
+@media (max-width: 760px) {
+  .page-app-top > .topbar { display: none; }
+}
+@media (max-width: 1023px) {
+  .page-app-top { background: var(--app-page); }
+}
 .brand { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; }
 .brand-tile { width: 36px; height: 36px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14); }
 .brand-word { height: 13px; width: auto; }
@@ -180,9 +188,6 @@ main:focus { outline: none; }
 .chips-row { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 4px; scrollbar-width: none; }
 .chips-row::-webkit-scrollbar { display: none; }
 .chips-row > .criterion-chips { flex: none; overflow: visible; }
-.filter-chip { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); color: rgba(10, 26, 68, 0.8); font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap; }
-.filter-chip .icon { width: 14px; height: 14px; color: var(--text-muted); }
-.filter-chip.accent { border-color: var(--blue); color: var(--blue); font-weight: 700; }
 
 /* ——— Recherche ——— */
 .page-wide .footer { margin-top: 0; }
@@ -199,9 +204,12 @@ main:focus { outline: none; }
 .search-head .chips-row { margin-top: 12px; }
 .results-head { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
 .results-head h2 { font-size: 19px; font-weight: 700; }
-.sort-select { position: relative; display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; color: var(--text-secondary); font-size: 14px; font-weight: 500; }
-.sort-select select { appearance: none; border: 0; background: transparent; color: var(--text-secondary); font: inherit; padding: 2px 20px 2px 0; cursor: pointer; }
-.sort-select .icon { position: absolute; right: 0; width: 14px; height: 14px; pointer-events: none; }
+.results-count { display: flex; flex: 1; flex-direction: column; align-items: flex-start; min-width: 0; }
+.sort-select { position: relative; display: inline-flex; align-items: center; align-self: flex-start; gap: 4px; margin-top: 2px; color: var(--text-secondary); font-size: 14px; font-weight: 500; }
+.sort-select .icon { flex: none; width: 14px; height: 14px; pointer-events: none; }
+/* Le menu natif, transparent, couvre « Triées par … » : 16 px pour que l'iPhone ne zoome pas en l'ouvrant. */
+.sort-select select { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; font-size: 16px; cursor: pointer; appearance: none; }
+.sort-select:has(select:focus-visible) { outline: 3px solid var(--blue); outline-offset: 2px; border-radius: 6px; }
 .results-list { display: grid; gap: 16px; margin-top: 14px; }
 .results-list .state { margin: 14px 0; }
 
@@ -216,6 +224,15 @@ main:focus { outline: none; }
 .yield-chip.tone-positive { background: var(--green); color: #FFFFFF; }
 .yield-chip.tone-caution { background: var(--orange); color: #FFFFFF; }
 .yield-chip .icon { width: 13px; height: 13px; }
+/* Liste de la recherche : « Nouveau » ou « Baisse de prix · avant … » sous le rendement (ListingBadgePill : capsule de
+   22, 11 gras blanc, vert pour une baisse, bleu pour « Nouveau »), « Déjà vue » en bas à gauche (AlreadySeenTag : 24 de
+   haut, coins 8, bleu marine à 62 %). */
+.listing-card-badges { position: absolute; z-index: 2; left: 8px; top: 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; pointer-events: none; }
+.listing-card-badges .yield-chip { position: static; }
+.listing-badge-pill { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; background: var(--app-brand); color: #FFFFFF; font: 700 11px/1 var(--app-font); white-space: nowrap; }
+.listing-badge-pill.is-positive { background: #577965; }
+.already-seen-tag { position: absolute; z-index: 2; left: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 8px; background: rgba(36, 45, 56, 0.62); color: #FFFFFF; font: 600 12px/1 var(--app-font); pointer-events: none; }
+.already-seen-tag .icon { width: 13px; height: 13px; }
 .listing-card-body { position: relative; padding: 10px 12px 12px; display: grid; gap: 5px; }
 .listing-card-top { display: flex; align-items: center; justify-content: space-between; }
 .listing-card-top .chevron { width: 16px; height: 16px; color: var(--ink); }
@@ -306,7 +323,17 @@ main:focus { outline: none; }
 .map-preview-price small { color: var(--text-secondary); font-size: 12px; font-weight: 600; margin-left: 2px; }
 .map-preview-close { flex: none; width: 40px; border: 0; background: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: flex-start; justify-content: center; padding-top: 10px; }
 .map-preview-close .icon { width: 18px; height: 18px; }
-.map-open { position: fixed; z-index: 28; left: 50%; transform: translateX(-50%); bottom: 24px; box-shadow: 0 8px 18px rgba(10, 26, 68, 0.24); border-radius: 999px; padding: 0 22px; }
+/* « Carte » (téléphone) : capsule bleu marine de 46, carte de 18 et 15 semibold, 16 à gauche et 19 à droite ; effacée
+   (fondu de 0,2 s) sans annonce, pendant la saisie du lieu et tant qu'un message est affiché en bas de l'écran. */
+.map-open {
+  position: fixed; z-index: 28; left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom));
+  display: inline-flex; align-items: center; gap: 8px; height: 46px; padding: 0 19px 0 16px; border: 0; border-radius: 999px;
+  background: var(--app-navy); color: #FFFFFF; font: 600 15px/1 var(--app-font); box-shadow: 0 6px 18px rgba(36, 45, 56, 0.26);
+  cursor: pointer; transition: opacity 0.2s ease-in-out;
+}
+.map-open .icon { width: 18px; height: 18px; }
+.map-open.is-hidden { opacity: 0; pointer-events: none; }
+.map-open:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 3px; }
 .map-close { display: none; }
 /* Bascule « liste / carte » : sur ordinateur seulement (le téléphone garde le bouton « Carte »). */
 .view-toggle { display: none; }
@@ -321,7 +348,7 @@ main:focus { outline: none; }
   body.map-is-open { overflow: hidden; }
 }
 @media (max-width: 760px) {
-  .map-open { bottom: calc(var(--tabbar-height) + 18px + env(safe-area-inset-bottom)); }
+  .map-open { bottom: calc(var(--tabbar-height) + 14px + env(safe-area-inset-bottom)); }
 }
 
 /* Ordinateur (demande de Romain du 7 novembre) : la liste sur toute la largeur, la carte fermée au départ. La bascule
@@ -330,7 +357,7 @@ main:focus { outline: none; }
   .page-wide .topbar { position: sticky; top: 0; }
   .page-wide .footer .wrap { max-width: none; }
   .search-column { width: 100%; max-width: calc(var(--d-content) + 2 * var(--d-margin)); margin: 0 auto; padding: 28px var(--d-margin) 48px; }
-  .search-head, .search-column > .save-search-button, .search-column > .state { max-width: 600px; }
+  .search-head, .search-column > .state { max-width: 600px; }
   .results-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
   .view-toggle { flex: none; display: inline-flex; gap: 2px; padding: 3px; border-radius: 13px; background: var(--chip); }
   .view-toggle-item { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 38px; padding: 0; border: 0; border-radius: 10px; background: none; color: rgba(36, 45, 56, 0.7); }
