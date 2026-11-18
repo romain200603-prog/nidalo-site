@@ -35,6 +35,18 @@ export type Day = string;
 export type Address = { street: string | null; postalCode: string; city: string; inseeCode: string | null };
 export type Coordinate = { latitude: number; longitude: number };
 
+/**
+ * « Disponibilité » d'une location (RentalAvailability) : non précisée, tout de suite (la date enregistrée est celle du
+ * jour, ou une date passée) ou à partir d'une date à venir. Une annonce rouverte retrouve ainsi son choix ; les jours
+ * se comparent comme des textes « 2026-12-01 ».
+ */
+export type RentalAvailability = 'unspecified' | 'immediately' | 'from';
+
+export function rentalAvailability(availableFrom: Day | null, today: Day): RentalAvailability {
+  if (availableFrom === null) return 'unspecified';
+  return availableFrom <= today ? 'immediately' : 'from';
+}
+
 /** Informations locatives (RentalInfo) : `isLeased` existe toujours, comme dans l'app. */
 export type RentalDraft = {
   currentMonthlyRent: number | null;

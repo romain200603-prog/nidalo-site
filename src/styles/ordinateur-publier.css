@@ -96,6 +96,13 @@
   .dpub-choices-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .dpub .dpub-error { margin: 0; }
 
+  /* « Disponibilité » d'une location (RentalAvailabilityChoice) : les deux pastilles, puis la date sur une ligne, son
+     libellé de 14 semi-gras à gauche, le calendrier à droite (8 d'écart, comme l'app). */
+  .dpub-availability { display: flex; flex-direction: column; gap: 8px; }
+  .dpub-availability-date { display: flex; align-items: center; justify-content: space-between; gap: 12px; animation: app-fade-in var(--app-duration) var(--app-ease) both; }
+  .dpub-availability-date label { color: var(--d-text); font-size: 14px; font-weight: 600; cursor: pointer; }
+  .dpub-availability-date .date-input { flex: none; width: 200px; }
+
   /* Adresse : code postal et ville côte à côte. */
   .dpub-postal-row { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; align-items: start; }
   .dpub .dpub-place.has-error .place-field input { border-color: var(--d-red); }
@@ -163,5 +170,5 @@
     transition: background-color 0.25s ease-in-out, color 0.25s ease-in-out, box-shadow 0.25s ease-in-out;
   }
   .dpub-category-check { transform: none; transition: opacity 0.25s ease-in-out; }
-  .dpub-types, .dpub-category-info { animation: app-fade-in 0.25s ease-in-out both; }
+  .dpub-types, .dpub-category-info, .dpub-availability-date { animation: app-fade-in 0.25s ease-in-out both; }
 }

@@ -43,7 +43,7 @@ const fixtures = join(root, 'scripts/fixtures');
 const PHOTO = await readFile(join(fixtures, 'photo0.jpg'));
 /** 2400 × 1200 px avec une orientation EXIF (à tourner d'un quart de tour), une position GPS, un appareil, un commentaire. */
 const PHOTO_GPS = await readFile(join(fixtures, 'photo-gps.jpg'));
-const [LISTED] = JSON.parse(await readFile(join(fixtures, 'listings.json'), 'utf8'));
+const [LISTED, , RENTAL_LISTED] = JSON.parse(await readFile(join(fixtures, 'listings.json'), 'utf8'));
 
 const SUPABASE = 'https://izzsoitqtzzswkpvdozd.supabase.co';
 const USER_ID = 'a0000000-0000-4000-8000-0000000000c1';
@@ -68,6 +68,12 @@ const ONLINE_PHOTOS = [
   { id: 'a1000000-0000-4000-8000-000000000002', listing_id: ONLINE_ID, owner_id: USER_ID, storage_path: `${USER_ID}/${ONLINE_ID}/seconde.jpg`, position: 1, width: 1400, height: 800 },
 ];
 const ONLINE_LOCATION = { listing_id: ONLINE_ID, owner_id: USER_ID, street: '8 rue Paul Bert', latitude: 45.7597, longitude: 4.8491 };
+/** Location en ligne du compte de test (appartement meublé), pour « Disponibilité ». */
+const RENTAL_ID = '6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1b54';
+const { listing_photos: _rentalPhotos, ...rentalRow } = RENTAL_LISTED;
+const RENTAL = { ...rentalRow, id: RENTAL_ID, owner_id: USER_ID };
+const RENTAL_PHOTOS = [{ ...ONLINE_PHOTOS[0], id: 'a1000000-0000-4000-8000-000000000004', listing_id: RENTAL_ID, storage_path: `${USER_ID}/${RENTAL_ID}/premiere.jpg` }];
+const RENTAL_LOCATION = { ...ONLINE_LOCATION, listing_id: RENTAL_ID };
 /**
  * Partage dans l'agence : Claire est responsable de l'équipe de Rhône Immobilier, Inès y est agente. Claire modifie
  * l'annonce d'Inès : l'adresse et les photos restent au nom d'Inès, dans son dossier.
@@ -1169,6 +1175,91 @@ try {
       type: ['rgb(238, 242, 250)', 'rgb(60, 92, 176) 0px 0px 0px 2px inset', 'rgb(255, 255, 255)', 'rgb(60, 92, 176)'],
     });
     await shot(page, `publier-categorie-${width}.png`);
+    await context.close();
+  }
+
+  // 9. « Disponibilité » d'une location (RentalAvailabilityChoice), comme « Ameublement » : « Tout de suite » enregistre
+  //    la date du jour, au début du jour comme l'app (les cartes disent « Disponible de suite » dès le matin) ;
+  //    « À partir du… » montre la date juste dessous (dans un mois par défaut) ; sans choix, rien n'est enregistré.
+  //    Une annonce rouverte retrouve son choix : date du jour ou passée, « Tout de suite » ; date à venir, « À partir
+  //    du… » avec sa date.
+  {
+    const N = 'disponibilité';
+    const parisDay = (offset = 0) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date(Date.now() + offset * 86400000));
+    const later = parisDay(20);
+    const state = newState({
+      listings: [{ ...RENTAL, rental_info: { isLeased: false, isFurnished: true, availableFrom: `${later}T12:00:00.000Z` } }],
+      photos: RENTAL_PHOTOS, locations: [RENTAL_LOCATION],
+    });
+    const context = await desktop();
+    await mock(context, state);
+    /** Annonce rouverte sur « Prix et finances » : [« Tout de suite », « À partir du… », date montrée]. */
+    const reopen = async (what) => {
+      const page = await open(context, `/publier/?annonce=${RENTAL_ID}`, `${N} ${what}`);
+      await waitStep(page, 2, 'Informations principales', `${N} ${what}`);
+      await page.locator('.dpub-progress button[aria-label^="Étape 4 sur 7,"]').click();
+      await waitStep(page, 4, 'Prix et finances', `${N} ${what}`);
+      return page;
+    };
+    const choice = async (page) => [await chip(page, 'Disponibilité', 'Tout de suite').getAttribute('aria-pressed'),
+      await chip(page, 'Disponibilité', 'À partir du…').getAttribute('aria-pressed'),
+      (await page.getByLabel('Disponible à partir du', { exact: true }).count()) ? await page.getByLabel('Disponible à partir du', { exact: true }).inputValue() : null];
+    /** « Enregistrer les modifications », puis l'information locative envoyée. */
+    const save = async (page) => {
+      const mark = state.calls.length;
+      await page.click('.dsc-head-action button[aria-label="Enregistrer les modifications"]');
+      await page.waitForSelector('.dpub-success', { timeout: 15000 }).catch(() => problems.push(`${N} : confirmation absente`));
+      const sent = writesSince(state, mark).find((call) => call.table === 'listings' && call.method === 'PATCH')?.body?.rental_info;
+      await page.close();
+      return sent;
+    };
+
+    let page = await reopen('date à venir');
+    expectSame(N, 'date à venir', await choice(page), ['false', 'true', later]);
+    const card = page.locator('.dpub .dsc-card').filter({ has: page.getByRole('heading', { name: 'Conditions de location', exact: true }) });
+    expectSame(N, 'place dans la carte', await card.locator('.field-label, label').allTextContents(),
+      ['Ameublement', 'Disponibilité', 'Disponible à partir du', 'Durée du bail']);
+    await card.scrollIntoViewIfNeeded();
+    await shot(page, 'publier-disponibilite-a-partir-du.png');
+    await chip(page, 'Disponibilité', 'Tout de suite').click();
+    expectSame(N, 'Tout de suite', await choice(page), ['true', 'false', null]);
+    const startOfToday = await page.evaluate(() => { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString(); });
+    let sent = await save(page);
+    expectSame(N, 'Tout de suite enregistré', [sent?.availableFrom, new Date(sent?.availableFrom) <= new Date(), sent?.isFurnished], [startOfToday, true, true]);
+
+    page = await reopen('tout de suite');
+    expectSame(N, 'Tout de suite retrouvé', await choice(page), ['true', 'false', null]);
+    // Retoucher le choix l'enlève : la disponibilité n'est plus précisée, et l'annonce s'enregistre quand même.
+    await chip(page, 'Disponibilité', 'Tout de suite').click();
+    expectSame(N, 'sans choix', await choice(page), ['false', 'false', null]);
+    sent = await save(page);
+    expectSame(N, 'sans choix enregistré', [sent && 'availableFrom' in sent, sent?.isFurnished], [false, true]);
+
+    page = await reopen('sans choix');
+    expectSame(N, 'sans choix retrouvé', await choice(page), ['false', 'false', null]);
+    await chip(page, 'Disponibilité', 'À partir du…').click();
+    const inOneMonth = await page.evaluate(() => {
+      const now = new Date();
+      const last = new Date(now.getFullYear(), now.getMonth() + 2, 0).getDate();
+      const d = new Date(now.getFullYear(), now.getMonth() + 1, Math.min(now.getDate(), last));
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    });
+    expectSame(N, 'À partir du… : dans un mois', [...await choice(page), await page.getByLabel('Disponible à partir du', { exact: true }).getAttribute('min')],
+      ['false', 'true', inOneMonth, parisDay()]);
+    const chosenDay = parisDay(40);
+    await page.getByLabel('Disponible à partir du', { exact: true }).fill(chosenDay);
+    expectSame(N, 'date choisie', await choice(page), ['false', 'true', chosenDay]);
+    sent = await save(page);
+    expectSame(N, 'date enregistrée', sent?.availableFrom, `${chosenDay}T12:00:00.000Z`);
+
+    page = await reopen('date choisie');
+    expectSame(N, 'date retrouvée', await choice(page), ['false', 'true', chosenDay]);
+    await page.close();
+    // Date passée : « Tout de suite ».
+    state.listings[0].rental_info = { ...state.listings[0].rental_info, availableFrom: '2026-10-01T12:00:00.000Z' };
+    page = await reopen('date passée');
+    expectSame(N, 'date passée', await choice(page), ['true', 'false', null]);
+    await page.close();
     await context.close();
   }
 } finally {
