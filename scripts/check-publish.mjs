@@ -486,10 +486,19 @@ async function open(context, path, name) {
 
 const CONTINUE = '.dpub .dsc-action-buttons .dsc-button-primary';
 const head = async (page) => [await textOf(page, '.dsc-head h1'), await textOf(page, '.dsc-head .dsc-titles p')];
-/** Étape affichée, par son sous-titre (« Étape 3 sur 7 · Caractéristiques »). */
+/**
+ * Étape affichée, par son sous-titre (« Étape 3 sur 7 · Caractéristiques »), une fois arrivée : le glissement d'une
+ * étape à l'autre terminé (la copie de l'étape quittée retirée).
+ */
 async function waitStep(page, number, title, name) {
   await page.waitForFunction(([n, t]) => document.querySelector('.dsc-head .dsc-titles p')?.textContent === `Étape ${n} sur 7 · ${t}`, [number, title], { timeout: 8000 })
     .catch(async () => problems.push(`${name} : étape « ${(await head(page))[1]} » au lieu de « Étape ${number} sur 7 · ${title} »`));
+  await slideEnd(page, name);
+}
+/** Fin du glissement entre deux étapes (StepSlide) : plus de copie de l'étape quittée, plus de mouvement. */
+async function slideEnd(page, name) {
+  await page.waitForFunction(() => !document.querySelector('.dpub-steps.is-sliding, .dpub-step-exit > *'), null, { timeout: 5000 })
+    .catch(() => problems.push(`${name} : le glissement entre deux étapes ne se termine pas`));
 }
 const errorsOf = (page) => page.$$eval('.dpub .field-error', (els) => els.map((el) => el.textContent.trim()));
 const card = (page, title) => page.locator('.dpub .dsc-card').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
@@ -1089,7 +1098,10 @@ try {
   // 8. Étape 1 comme l'app (PublishFlowView.categoryStep), à 1440 et 1024 px : « Que souhaitez-vous publier ? » sans carte
   //    autour, les quatre catégories en cartes de 112 px (deux colonnes, 10 px d'écart), la catégorie choisie bordée de
   //    2 px à sa couleur avec sa pastille cochée ; « Type de bien » (« Type d'actif ») en tuiles de 54 px au moins, avec
-  //    les icônes de l'app ; Hôtels : le texte d'information, sans types.
+  //    les icônes de l'app ; Hôtels : le texte d'information, sans types. Puis le glissement d'une étape à l'autre :
+  //    l'étape arrive par la droite en avançant (par la gauche en revenant) pendant que la copie de l'étape quittée part
+  //    de l'autre côté, sans débordement de la page ; un double clic sur « Continuer » n'avance que d'une étape ; avec
+  //    « Réduire les animations », un fondu seul.
   for (const width of [1440, 1024]) {
     const N = `étape 1 à ${width} px`;
     const state = newState();
@@ -1175,7 +1187,64 @@ try {
       type: ['rgb(238, 242, 250)', 'rgb(60, 92, 176) 0px 0px 0px 2px inset', 'rgb(255, 255, 255)', 'rgb(60, 92, 176)'],
     });
     await shot(page, `publier-categorie-${width}.png`);
+    if (width !== 1440) {
+      await context.close();
+      continue;
+    }
+
+    // Le glissement vers l'étape 2 : pris juste après le clic, pendant le mouvement.
+    const motion = () => page.evaluate(() => {
+      const steps = document.querySelector('.dpub-steps');
+      const box = document.querySelector('.dpub-step');
+      const exit = document.querySelector('.dpub-step-exit');
+      const copy = exit.firstElementChild;
+      return {
+        sliding: steps.classList.contains('is-sliding'),
+        box: box.className,
+        copy: copy ? [copy.className, copy.querySelector('h2, .dsc-card-title')?.textContent ?? null, copy.querySelectorAll('[id], [data-guide], [name]').length] : null,
+        exit: [exit.getAttribute('aria-hidden'), exit.inert, getComputedStyle(exit).position],
+        animations: [getComputedStyle(box).animationName, copy ? getComputedStyle(copy).animationName : null,
+          getComputedStyle(document.querySelector('.dsc-head .dsc-titles p')).animationName],
+        overflow: document.documentElement.scrollWidth - innerWidth,
+      };
+    });
+    await page.click(CONTINUE);
+    expectSame(N, 'glissement en avançant', await motion(), {
+      sliding: true, box: 'dpub-step is-entering is-forward', copy: ['dpub-step-copy is-forward', 'Que souhaitez-vous publier ?', 0],
+      exit: ['true', true, 'fixed'], animations: ['dpub-step-from-right', 'dpub-step-to-left', 'app-fade-in'], overflow: 0,
+    });
+    await waitStep(page, 2, 'Informations principales', N);
+    expectSame(N, 'après le glissement', [await page.locator('.dpub-step').getAttribute('class'), await page.locator('.dpub-step-exit > *').count(),
+      await page.locator('.dpub-steps').getAttribute('class')], ['dpub-step', 0, 'dpub-steps']);
+    await page.click('.dpub .dsc-action-buttons .dsc-button-light');
+    expectSame(N, 'glissement en revenant', await motion(), {
+      sliding: true, box: 'dpub-step is-entering is-back', copy: ['dpub-step-copy is-back', 'Adresse du bien', 0],
+      exit: ['true', true, 'fixed'], animations: ['dpub-step-from-left', 'dpub-step-to-right', 'app-fade-in'], overflow: 0,
+    });
+    await waitStep(page, 1, 'Catégorie', N);
+    // Deux clics rapides : une seule étape (le second attend la fin du changement, sans vérifier l'étape 2).
+    await page.dblclick(CONTINUE);
+    await waitStep(page, 2, 'Informations principales', N);
+    await page.waitForTimeout(300);
+    expectSame(N, 'double clic', [(await head(page))[1], await errorsOf(page)], ['Étape 2 sur 7 · Informations principales', []]);
     await context.close();
+
+    // « Réduire les animations » : l'étape apparaît en fondu, la copie de l'étape quittée s'efface sur place.
+    const reduced = await browser.newContext({ viewport: { width, height: 900 }, deviceScaleFactor: 2, locale: 'fr-FR', timezoneId: 'Europe/Paris', reducedMotion: 'reduce' });
+    await mock(reduced, newState());
+    const calm = await open(reduced, '/publier/', `${N} réduit`);
+    await calm.waitForSelector('.dpub .dpub-category-grid');
+    await calm.getByRole('button', { name: /^Résidentiel,/ }).click();
+    await calm.getByRole('button', { name: 'Appartement', exact: true }).click();
+    await calm.click(CONTINUE);
+    expectSame(`${N} réduit`, 'fondu seul', await calm.evaluate(() => {
+      const box = document.querySelector('.dpub-step');
+      const copy = document.querySelector('.dpub-step-exit > *');
+      return [getComputedStyle(box).animationName, getComputedStyle(box).animationDuration, copy ? getComputedStyle(copy).animationName : null,
+        getComputedStyle(document.querySelector('.dpub-category-check')).transform];
+    }), ['app-fade-in', '0.25s', 'app-fade-out', 'none']);
+    await waitStep(calm, 2, 'Informations principales', `${N} réduit`);
+    await reduced.close();
   }
 
   // 9. « Disponibilité » d'une location (RentalAvailabilityChoice), comme « Ameublement » : « Tout de suite » enregistre

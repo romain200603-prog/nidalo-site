@@ -9,10 +9,32 @@
   .dpub-progress { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin: -19.5px 0 -15.5px; }
   .dpub-progress > * { display: flex; align-items: center; height: 44px; padding: 0; border: 0; background: none; }
   .dpub-progress > button { cursor: pointer; }
-  .dpub-progress > * > span { flex: 1; height: 5px; border-radius: 999px; background: var(--d-card-border); }
+  .dpub-progress > * > span {
+    flex: 1; height: 5px; border-radius: 999px; background: var(--d-card-border);
+    /* Se remplit ou se vide en douceur, avec le mouvement des étapes (StepProgressBar). */
+    transition: background-color var(--app-duration) var(--app-ease), height var(--app-duration) var(--app-ease);
+  }
   .dpub-progress > .is-done > span { background: var(--d-blue); }
   .dpub-progress > .is-current > span { height: 8px; }
   .dpub-progress > button:hover > span { background: var(--d-blue-hover); }
+
+  /* Passage d'une étape à l'autre (StepSlide.tsx, PublishFlowView.stepTransition) : l'étape arrive par la droite en
+     avançant, par la gauche en revenant, en apparaissant ; la copie de l'étape quittée part de l'autre côté en
+     s'estompant, à sa place à l'écran, dans un calque fixe entre le haut de l'étape et la barre d'actions. Le mouvement
+     reste dans la colonne et 24 px autour (marges négatives compensées), sans faire défiler la page de côté. Le
+     sous-titre « Étape 2 sur 7 · … » apparaît en fondu. */
+  .dpub-steps { margin: 0 -24px; padding: 0 24px; }
+  .dpub-steps.is-sliding { overflow-x: clip; }
+  .dpub-step, .dpub-step-copy { display: flex; flex-direction: column; gap: 16px; }
+  .dpub-step-exit { position: fixed; z-index: 4; overflow: hidden; pointer-events: none; }
+  .dpub-step-exit:empty { display: none; }
+  .dpub-step-copy { position: absolute; margin: 0; }
+  .dpub-step-copy * { animation: none !important; transition: none !important; }
+  .dpub-step.is-entering.is-forward { animation: dpub-step-from-right var(--app-duration) var(--app-ease) both; }
+  .dpub-step.is-entering.is-back { animation: dpub-step-from-left var(--app-duration) var(--app-ease) both; }
+  .dpub-step-copy.is-forward { animation: dpub-step-to-left var(--app-duration) var(--app-ease) both; }
+  .dpub-step-copy.is-back { animation: dpub-step-to-right var(--app-duration) var(--app-ease) both; }
+  .dpub:has(> .dpub-steps.is-sliding) > .dsc-head .dsc-titles p { animation: app-fade-in var(--app-duration) var(--app-ease) both; }
 
   /* En-tête : « Brouillon » (ou « Enregistrer ») puis « Fermer », le même rond que la flèche. */
   .dpub-head-actions { display: flex; align-items: center; gap: 10px; }
@@ -163,9 +185,18 @@
   .dpub-name-input { margin-top: 4px; }
 }
 
-/* « Réduire les animations » : des fondus seulement, comme l'app (NidaloMotion.fade, 0,25 s) ; la pastille cochée
-   apparaît sans grandir. */
+@keyframes dpub-step-from-right { from { opacity: 0; transform: translateX(100%); } }
+@keyframes dpub-step-from-left { from { opacity: 0; transform: translateX(-100%); } }
+@keyframes dpub-step-to-left { to { opacity: 0; transform: translateX(-100%); } }
+@keyframes dpub-step-to-right { to { opacity: 0; transform: translateX(100%); } }
+
+/* « Réduire les animations » : des fondus seulement, comme l'app (NidaloMotion.fade, 0,25 s) ; les étapes se
+   remplacent en fondu, sans glisser, et la pastille cochée apparaît sans grandir. */
 @media (min-width: 1024px) and (prefers-reduced-motion: reduce) {
+  .dpub-step.is-entering.is-forward, .dpub-step.is-entering.is-back { animation: app-fade-in 0.25s ease-in-out both; }
+  .dpub-step-copy.is-forward, .dpub-step-copy.is-back { animation: app-fade-out 0.25s ease-in-out both; }
+  .dpub:has(> .dpub-steps.is-sliding) > .dsc-head .dsc-titles p { animation: app-fade-in 0.25s ease-in-out both; }
+  .dpub-progress > * > span { transition: background-color 0.25s ease-in-out; }
   .dpub-category-tile, .dpub-category-tile::before, .dpub-type-tile, .dpub-type-tile::before, .dpub-type-icon, .dpub-type-detail {
     transition: background-color 0.25s ease-in-out, color 0.25s ease-in-out, box-shadow 0.25s ease-in-out;
   }
