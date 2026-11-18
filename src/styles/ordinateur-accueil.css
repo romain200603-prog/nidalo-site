@@ -75,9 +75,10 @@
      restent celles de l'app (8 ou 10 biens) ; « Voir tout » ouvre la liste complète. */
   .dhome .dhome-grid > :nth-child(n+5), .dhome .dhome-list > :nth-child(n+4) { display: none; }
 
-  /* Cartes d'annonce : celles de l'accueil de l'app (HomeListingCard, accueil-app.css), sur toute la colonne. */
+  /* Cartes d'annonce : celles de l'accueil de l'app (HomeListingCard, CompactListingCard, accueil-app.css), sur toute
+     la colonne. */
   .dhome .stretched:focus-visible { outline: none; }
-  .dhome .home-listing-card:has(.stretched:focus-visible), .dhome .home-listing-row:has(.stretched:focus-visible) { outline: 2px solid var(--d-blue); outline-offset: 2px; }
+  .dhome .home-listing-card:has(.stretched:focus-visible), .dhome .compact-card:has(.stretched:focus-visible) { outline: 2px solid var(--d-blue); outline-offset: 2px; }
   .dhome .heart-button:focus-visible { outline: 2px solid var(--d-blue); outline-offset: 2px; }
   .dhome .hlc-heart:hover { color: var(--d-blue); }
 }

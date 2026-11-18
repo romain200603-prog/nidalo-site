@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
-import { HomeListingCard, HomeListingRow } from '../components/HomeListingCard';
+import { CompactListingCard, HomeListingCard, SimilarListingCard } from '../components/HomeListingCard';
 import { Icon } from '../components/Icon';
 import type { IconName } from '../components/iconPaths';
 import { Page } from '../components/Layout';
@@ -29,8 +29,9 @@ import '../styles/accueil-app.css';
 
 // Accueil. Sous 1024 px, celui de l'app (Features/Home : HomeView.swift, HomeCategoryCard.swift, HomeSections.swift) :
 // barre du haut sans fond (logo, nom, cloche), carte des catégories dont les filtres s'ouvrent dans la carte,
-// « Reprendre ma recherche », puis les sections de biens réels, toutes avec la même carte d'annonce. Sur ordinateur,
-// la mise en page de la maquette 1 de Romain, avec la même carte d'annonce.
+// « Reprendre ma recherche », puis les sections de biens réels, chacune avec la carte d'annonce que l'app y montre
+// (HomeListingCard, CompactListingCard, SimilarListingCard). Sur ordinateur, la mise en page de la maquette 1 de
+// Romain, avec les cartes de l'app.
 
 const MODES: SearchMode[] = ['buy', 'rent', 'invest', 'hotel'];
 
@@ -453,7 +454,7 @@ function PhoneHome({ mode, draft, drafts, feed, extras, changeMode, update, choo
             <ul className="home-app-carousel">
               {extras.viewed.map((row) => (
                 <li key={row.id}>
-                  <HomeListingCard row={row} highlights={highlightsOf(row)} badge="none" heart={false} href={listingPath(row.id)} />
+                  <CompactListingCard row={row} highlights={highlightsOf(row)} accessory="none" href={listingPath(row.id)} />
                 </li>
               ))}
             </ul>
@@ -466,7 +467,7 @@ function PhoneHome({ mode, draft, drafts, feed, extras, changeMode, update, choo
             <ul className="home-app-carousel">
               {extras.similar.map(({ row, highlights }) => (
                 <li key={row.id}>
-                  <HomeListingCard row={row} highlights={highlights} badge="yield" heart href={listingPath(row.id)} investment={mode === 'invest'} />
+                  <SimilarListingCard row={row} highlights={highlights} href={listingPath(row.id)} />
                 </li>
               ))}
             </ul>
@@ -480,7 +481,7 @@ function PhoneHome({ mode, draft, drafts, feed, extras, changeMode, update, choo
             <ul className="home-app-carousel">
               {feed.newest.map((row) => (
                 <li key={row.id}>
-                  <HomeListingCard row={row} highlights={highlightsOf(row)} badge="new" heart href={listingPath(row.id)} />
+                  <CompactListingCard row={row} highlights={highlightsOf(row)} accessory="new" href={listingPath(row.id)} />
                 </li>
               ))}
             </ul>
@@ -494,7 +495,7 @@ function PhoneHome({ mode, draft, drafts, feed, extras, changeMode, update, choo
             <ul className="home-app-carousel">
               {feed.priceDrops.map((row) => (
                 <li key={row.id}>
-                  <HomeListingCard row={row} highlights={highlightsOf(row)} badge="priceDrop" heart={false} href={listingPath(row.id)} />
+                  <CompactListingCard row={row} highlights={highlightsOf(row)} accessory="priceDrop" href={listingPath(row.id)} />
                 </li>
               ))}
             </ul>
@@ -570,7 +571,8 @@ function useHomeExtras(mode: SearchMode, draft: SearchDraft, drafts: Record<Sear
 
 // ——— Ordinateur (≥ 1024 px) : mise en page de la maquette 1 de Romain ———
 // Même état, mêmes tuiles, même recherche et mêmes filtres que l'accueil du téléphone ; les cartes d'annonce sont
-// celles de l'accueil de l'app (HomeListingCard), en grille, et en petite carte horizontale pour les listes.
+// celles de l'accueil de l'app : HomeListingCard en grille, et CompactListingCard (la carte compacte du téléphone,
+// de la largeur de sa colonne) pour les listes.
 
 function DesktopSectionHead({ id, title, subtitle, href, picto }: { id: string; title: string; subtitle?: string; href: string; picto?: IconName }) {
   return (
@@ -670,7 +672,7 @@ function DesktopHome({ greeting, mode, draft, drafts, tiles, feed, extras, updat
               <DesktopSectionHead id="consultes" title="Consultés récemment" href={sectionHref} picto="pictoConsultes" />
               <div className="dhome-list">
                 {viewed.map((row) => (
-                  <HomeListingRow key={row.id} row={row} highlights={highlightsFor(row, null)} badge="none" heart={false} href={listingPath(row.id)} />
+                  <CompactListingCard key={row.id} row={row} highlights={highlightsFor(row, null)} accessory="none" href={listingPath(row.id)} />
                 ))}
               </div>
             </div>
@@ -694,7 +696,7 @@ function DesktopHome({ greeting, mode, draft, drafts, tiles, feed, extras, updat
               <DesktopSectionHead id="nouveautes" title="Nouveautés" subtitle="Les dernières annonces publiées sur Nidalo." href={sectionHref} picto="pictoNouveautes" />
               <div className="dhome-list">
                 {feed.newest.map((row) => (
-                  <HomeListingRow key={row.id} row={row} highlights={highlightsFor(row, null)} badge="new" heart href={listingPath(row.id)} />
+                  <CompactListingCard key={row.id} row={row} highlights={highlightsFor(row, null)} accessory="new" href={listingPath(row.id)} />
                 ))}
               </div>
             </div>
@@ -706,7 +708,7 @@ function DesktopHome({ greeting, mode, draft, drafts, tiles, feed, extras, updat
               <DesktopSectionHead id="baisses" title="Baisses de prix" subtitle="Des biens qui ont récemment baissé leur prix." href={sectionHref} picto="pictoBaisses" />
               <div className="dhome-list">
                 {feed.priceDrops.map((row) => (
-                  <HomeListingRow key={row.id} row={row} highlights={highlightsFor(row, null)} badge="priceDrop" heart={false} href={listingPath(row.id)} />
+                  <CompactListingCard key={row.id} row={row} highlights={highlightsFor(row, null)} accessory="priceDrop" href={listingPath(row.id)} />
                 ))}
               </div>
             </div>

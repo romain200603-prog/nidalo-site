@@ -3,18 +3,19 @@ import { Icon } from './Icon';
 import { ListingPhoto } from './PhotoPager';
 import { HeartButton } from './account/HeartButton';
 import {
-  cardContent, formatCardPrice, formatShortFact, GOOD_YIELD, grossYieldText, homeTypeLine, shortFacts, type ShortFactText,
+  cardContent, cardLocation, formatCardPrice, formatShortFact, GOOD_YIELD, grossYieldText, homeTypeLine, shortFacts, type ShortFactText,
 } from '../lib/cardContent';
 import { formatFraction, formatPrice } from '../lib/format';
 import { priceDrop } from '../lib/homeFeed';
 import { DPE_COLORS } from '../lib/labels';
 import { sortedPhotos, type ListingRow } from '../lib/listings';
 import type { Highlights } from '../lib/search';
+import { useFitTexts } from '../pages/listing/fitText';
 import '../styles/accueil-app.css';
 
-// Carte d'annonce de l'accueil de l'app (HomeListingCard, Features/Home/HomeSections.swift), la même dans toutes les
-// sections : photo, une pastille (rendement brut, « Nouveau » ou baisse de prix), cœur seulement là où l'app le montre,
-// prix, petite ligne de faits, type et surface, ville.
+// Cartes d'annonce de l'accueil de l'app (Features/Home/HomeSections.swift), chacune dans les sections où l'app la
+// montre (HomeView.swift) : HomeListingCard (Opportunités du moment), CompactListingCard (Consultés récemment,
+// Nouveautés, Baisses de prix) et SimilarListingCard (Biens similaires à vos recherches).
 
 /** Pastille en haut à gauche de la photo. */
 export type HomeCardBadge = 'yield' | 'new' | 'priceDrop' | 'none';
@@ -175,30 +176,91 @@ export function HomeListingCard({ row, highlights, badge, heart, href, investmen
 }
 
 /**
- * Petite carte horizontale de l'ordinateur (Consultés récemment, Nouveautés, Baisses de prix) : la mise en page du
- * site, avec le contenu et l'apparence de la carte de l'app (rayon, polices, pastille, cœur).
+ * Lignes des cartes compacte et moyenne, les mêmes dans les deux : titre de l'annonce (16 gras, rapetissé jusqu'à
+ * 80 % avant « … »), lieu (« Lyon 2e · 62 m² », 12 gris clair, sans épingle), prix (17 gras, 3 de plus au-dessus ;
+ * baisse de prix : l'ancien prix barré en 12 à gauche), petite ligne de faits.
  */
-export function HomeListingRow({ row, highlights, badge, heart, href, investment = false }: {
+function CardLines({ row, highlights, href, previousPrice = null }: {
   row: ListingRow;
   highlights: Highlights | null;
-  badge: HomeCardBadge;
-  heart: boolean;
   href: string;
-  investment?: boolean;
+  previousPrice?: number | null;
 }) {
+  const content = cardContent(row, null, highlights);
+  const price = formatCardPrice(content.price);
   return (
-    <article className={`home-listing-row${heart ? ' has-heart' : ''}`}>
-      <div className="hlr-photo">
+    <>
+      <h3 className="home-card-title" data-fit="0.8"><a className="stretched" href={href}>{row.title}</a></h3>
+      <p className="home-card-location">{cardLocation(row.city, content)}</p>
+      <p className="home-card-price">
+        {previousPrice !== null && (
+          <s><span className="visually-hidden">Ancien prix </span>{formatPrice(previousPrice)}</s>
+        )}
+        <span className="home-card-now" data-fit="0.8">
+          <span className="home-card-amount">{price.amount}</span>
+          {price.suffix && <span className="home-card-suffix">{price.suffix}</span>}
+        </span>
+      </p>
+      <ShortFactsLine row={row} highlights={highlights} />
+    </>
+  );
+}
+
+/** Ce qui s'ajoute à la carte compacte selon la section (CompactListingCard.Accessory). */
+export type CompactAccessory = 'none' | 'new' | 'priceDrop';
+
+/**
+ * Carte compacte de l'app (CompactListingCard) : 296 × 112, rayon 18, contour de 1, photo de 88 × 80 (rayon 9) à
+ * gauche, puis les lignes. Nouveautés : « Nouveau » en bas à gauche de la photo et le cœur bleu en haut à droite de la
+ * carte ; Baisses de prix : la baisse en rouge, débordant de la photo en haut à gauche, et l'ancien prix barré.
+ * Consultés récemment : ni l'un ni l'autre. Sur ordinateur, la même carte prend la largeur de sa colonne.
+ */
+export function CompactListingCard({ row, highlights, accessory, href }: {
+  row: ListingRow;
+  highlights: Highlights | null;
+  accessory: CompactAccessory;
+  href: string;
+}) {
+  const ref = useFitTexts<HTMLElement>();
+  const drop = accessory === 'priceDrop' ? priceDrop(row) : null;
+  const previous = drop !== null ? Number(row.previous_price) : null;
+  return (
+    <article ref={ref} className={`compact-card${accessory === 'new' ? ' is-new' : ''}`}>
+      <div className="clc-photo">
+        <div className="clc-photo-clip"><HomeCardPhoto row={row} /></div>
+        {accessory === 'new' && <span className="hlc-new">Nouveau</span>}
+        {drop !== null && <span className="hlc-drop">{formatFraction(drop, 0)}</span>}
+      </div>
+      <div className="clc-body">
+        <CardLines row={row} highlights={highlights} href={href} previousPrice={previous} />
+      </div>
+      {accessory === 'new' && <HeartButton listingId={row.id} className="heart-button clc-heart" />}
+    </article>
+  );
+}
+
+/**
+ * Carte moyenne de l'app (SimilarListingCard) : 170 de large, rayon 18, contour de 1, photo de 100 avec le rendement
+ * brut en haut à gauche (« 7,8 % », vert dès 7 %, orange en dessous) et le cœur des favoris (rond blanc de 28) en
+ * haut à droite, puis les lignes.
+ */
+export function SimilarListingCard({ row, highlights, href }: { row: ListingRow; highlights: Highlights | null; href: string }) {
+  const ref = useFitTexts<HTMLElement>();
+  const yieldText = highlights ? grossYieldText(highlights) : null;
+  return (
+    <article ref={ref} className="similar-card">
+      <div className="slc-photo">
         <HomeCardPhoto row={row} />
-        <HomeBadge row={row} highlights={highlights} badge={badge} />
+        {highlights && yieldText && (
+          <span className={`slc-yield ${highlights.grossYield >= GOOD_YIELD ? 'is-good' : 'is-low'}`}>
+            <span className="visually-hidden">Rentabilité brute </span>{yieldText}
+          </span>
+        )}
+        <HeartButton listingId={row.id} className="heart-button slc-heart" />
       </div>
-      <div className="hlc-body">
-        <HomePrice row={row} highlights={highlights} badge={badge} />
-        <ShortFactsLine row={row} highlights={highlights} />
-        <h3 className="hlc-type"><a className="stretched" href={href}>{homeTypeLine(row, investment)}</a></h3>
-        <p className="hlc-city"><Icon name="pin" />{row.city}</p>
+      <div className="slc-body">
+        <CardLines row={row} highlights={highlights} href={href} />
       </div>
-      {heart && <HeartButton listingId={row.id} className="heart-button hlc-heart" />}
     </article>
   );
 }

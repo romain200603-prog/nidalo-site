@@ -2046,7 +2046,7 @@ try {
     real_estate_projects: [{ ...ACCOUNT.real_estate_projects[0], criteria: { residential: { maxBudget: 300000, propertyTypes: ['apartment'], location: { place: 'Lyon' } } } }],
   };
   const homeSections = (p) => p.locator('.dhome-section h2').allTextContents();
-  // Annonces d'une section, par leur identifiant (la carte de l'app montre le type et la surface, pas le titre).
+  // Annonces d'une section, par leur identifiant (les grandes cartes de l'app montrent le type et la surface, pas le titre).
   const sectionCards = (p, id) => p.locator(`section:has(> .dhome-inner #${id}) article a.stretched`)
     .evaluateAll((links) => links.map((link) => new URL(link.href).searchParams.get('id')));
   // Cartes d'une section : lues (dans la page), affichées, et nombre de lignes qu'elles occupent.
@@ -2163,6 +2163,14 @@ try {
     const viewedWanted = [HOME_LISTINGS[2], HOME_LISTINGS[5], HOME_LISTINGS[6], HOME_LISTINGS[0]].map((row) => row.id);
     if (JSON.stringify(viewed) !== JSON.stringify(viewedWanted)) problems.push(`accueil ${width} : consultés ${JSON.stringify(viewed)} au lieu de ${JSON.stringify(viewedWanted)}`);
     await checkOneRow(page, width, 'connecté', ['opportunites', 'consultes', 'similaires', 'nouveautes', 'baisses']);
+    // Listes (Consultés récemment, Nouveautés, Baisses de prix) : la carte compacte de l'app, la même qu'au téléphone,
+    // de la largeur de sa colonne (112 de haut, photo de 88 × 80).
+    expectSame(`accueil ${width} connecté`, 'cartes des listes', await page.$$eval('.dhome-list > article', (articles) => [...new Set(articles
+      .filter((article) => article.getClientRects().length > 0)
+      .map((article) => {
+        const photo = article.querySelector('.clc-photo')?.getBoundingClientRect();
+        return `${article.classList[0]} ${Math.round(article.getBoundingClientRect().height)} ${photo ? `${Math.round(photo.width)}×${Math.round(photo.height)}` : '-'}`;
+      }))]), ['compact-card 112 88×80']);
     await checkChrome(page, `accueil maquette ${width} connecté`, { signedIn: true, margin: width >= 1280 ? 48 : 32 });
     await page.mouse.move(0, 0);
     await page.waitForTimeout(300);
@@ -2207,10 +2215,13 @@ try {
   await samePhone.close();
   if (desktopSearch !== phoneSearch || !desktopSearch.includes('mode=invest')) problems.push(`accueil : recherche ${desktopSearch} sur ordinateur, ${phoneSearch} sur téléphone`);
 
-  // Téléphone : l'accueil de l'app (novembre 2026). Ses sections dans l'ordre de l'app, toutes avec la même carte
-  // (248 px, photo de 156 px), avec les lectures de l'ordinateur (projet du compte, fiches consultées, biens
-  // similaires) ; avec le compte, la cloche (point rouge des non lues) et « Reprendre ma recherche ». Pas d'en-tête
-  // bleu sous 761 px. Captures : accueil-telephone-app-*.png.
+  // Téléphone : l'accueil de l'app (novembre 2026). Ses sections dans l'ordre de l'app, chacune avec la carte de l'app
+  // (HomeView.swift) : Opportunités du moment, la carte de 248 px (photo de 156) ; Consultés récemment, Nouveautés et
+  // Baisses de prix, la carte compacte de 296 × 112 (photo de 88 × 80 à gauche ; « Nouveau » et le cœur, ou la baisse
+  // et l'ancien prix barré) ; Biens similaires, la carte de 170 px (photo de 100, rendement brut si l'annonce a ses
+  // chiffres, cœur). Avec les lectures de l'ordinateur (projet du compte, fiches consultées, biens similaires) ; avec le
+  // compte, la cloche (point rouge des non lues) et « Reprendre ma recherche ». Pas d'en-tête bleu sous 761 px.
+  // Captures : accueil-telephone-app-*.png.
   for (const signedIn of [false, true]) {
     const H = `accueil téléphone ${signedIn ? 'connecté' : 'sans compte'}`;
     const phoneHome = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
@@ -2223,12 +2234,56 @@ try {
     await page.waitForTimeout(600);
     expectSame(H, 'sections', await page.locator('.home-app h2').allTextContents(),
       ['Opportunités du moment', 'Explorer par ville', 'Consultés récemment', 'Biens similaires à vos recherches', 'Nouveautés', 'Baisses de prix']);
-    const cards = await page.$$eval('.home-app article', (articles) => articles.map((article) => [
-      Math.round(article.getBoundingClientRect().width), Math.round(article.querySelector('.hlc-photo').getBoundingClientRect().height),
-    ]));
-    if (!cards.length || cards.some(([cardWidth, photo]) => cardWidth !== 248 || photo !== 156)) problems.push(`${H} : cartes ${JSON.stringify(cards)} au lieu de 248 px, photo de 156 px`);
+    // Par section, les cartes telles qu'affichées : [classe, taille, photo, pastille, cœurs, ancien prix barré].
+    const sectionKinds = await page.evaluate(() => Object.fromEntries(['opportunites', 'consultes', 'similaires', 'nouveautes', 'baisses'].map((id) => {
+      const size = (el) => {
+        const box = el?.getBoundingClientRect();
+        return box ? `${Math.round(box.width)}×${Math.round(box.height)}` : '-';
+      };
+      const articles = [...(document.getElementById(id)?.closest('section')?.querySelectorAll('article') ?? [])];
+      return [id, [...new Set(articles.map((article) => [
+        article.classList[0], article.classList[0] === 'compact-card' ? size(article) : Math.round(article.getBoundingClientRect().width),
+        size(article.querySelector('.hlc-photo, .clc-photo, .slc-photo')),
+        article.classList[0] === 'compact-card' ? (article.querySelector('.hlc-new, .hlc-drop')?.className ?? '-') : '',
+        article.querySelectorAll('.heart-button').length, article.querySelector('.home-card-price s') ? 'barré' : '-',
+      ].join(' ')))]];
+    })));
+    expectSame(H, 'cartes des sections', sectionKinds, {
+      opportunites: ['home-listing-card 248 248×156  1 -'],
+      consultes: ['compact-card 296×112 88×80 - 0 -'],
+      similaires: ['similar-card 170 170×100  1 -'],
+      nouveautes: ['compact-card 296×112 88×80 hlc-new 1 -'],
+      baisses: ['compact-card 296×112 88×80 hlc-drop 0 barré'],
+    });
+    // Carte compacte : la photo à 8 du bord, au milieu de la hauteur ; les quatre lignes tiennent dans la carte.
+    const compactLayout = await page.$$eval('.compact-card', (articles) => [...new Set(articles.map((article) => {
+      const card = article.getBoundingClientRect();
+      const photo = article.querySelector('.clc-photo').getBoundingClientRect();
+      const body = article.querySelector('.clc-body');
+      const lines = [...body.children].map((line) => line.getBoundingClientRect());
+      return [Math.round(photo.left - card.left), Math.round(photo.top - card.top), lines.length,
+        lines.every((line) => line.top >= card.top + 8 && line.bottom <= card.bottom - 8 && line.right <= card.right - 8)].join(' ');
+    }))]);
+    expectSame(H, 'carte compacte [photo à gauche, en haut, lignes, lignes dans la carte]', compactLayout, ['8 16 4 true']);
     const viewedIds = await page.locator('section:has(#consultes) article a.stretched').evaluateAll((links) => links.map((link) => new URL(link.href).searchParams.get('id')));
     expectSame(H, 'consultés', viewedIds, [homeId(7)]);
+    expectSame(H, 'consultés [titre, lieu, prix]', await page.$eval('section:has(#consultes) article', (article) => ['.home-card-title', '.home-card-location', '.home-card-price']
+      .map((selector) => article.querySelector(selector)?.textContent?.replace(/\s/g, ' '))), ['Appartement 2 pièces', 'Lyon 6e · 45 m²', '265 000 €']);
+    // Baisses de prix : la baisse et l'ancien prix de l'annonce. Biens similaires : le rendement brut seulement sur les
+    // annonces qui ont un loyer (les seules à avoir leurs chiffres).
+    const euros = (value) => `${new Intl.NumberFormat('fr-FR').format(value)} €`.replace(/\s/g, ' ');
+    for (const [id, drop, previous] of await page.locator('section:has(#baisses) article').evaluateAll((articles) => articles.map((article) => [
+      new URL(article.querySelector('a.stretched').href).searchParams.get('id'), article.querySelector('.hlc-drop')?.textContent?.replace(/\s/g, ' '),
+      article.querySelector('.home-card-price s')?.textContent?.replace(/\s/g, ' '),
+    ]))) {
+      const row = HOME_LISTINGS.find((listing) => listing.id === id);
+      expectSame(H, `baisse de prix ${id}`, [drop, previous], [`${Math.round(((row.price - row.previous_price) / row.previous_price) * 100)} %`, `Ancien prix ${euros(row.previous_price)}`]);
+    }
+    const withRent = HOME_LISTINGS.filter((row) => row.rental_info?.potentialMonthlyRent || row.rental_info?.currentMonthlyRent).map((row) => row.id);
+    const similarYields = await page.locator('section:has(#similaires) article').evaluateAll((articles) => articles.map((article) => [
+      new URL(article.querySelector('a.stretched').href).searchParams.get('id'), article.querySelector('.slc-yield') !== null,
+    ]));
+    expectSame(H, 'rendement des biens similaires', similarYields, similarYields.map(([id]) => [id, withRent.includes(id)]));
     const projectRead = phoneServer.requests.some((request) => request.path === '/' && request.table === 'real_estate_projects');
     if (projectRead !== signedIn) problems.push(`${H} : projet du compte ${projectRead ? 'lu' : 'non lu'}`);
     const unread = signedIn ? expectedBadges(phoneServer.state).notifications : 0;
