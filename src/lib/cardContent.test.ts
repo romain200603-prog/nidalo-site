@@ -29,6 +29,10 @@ describe('fiches', () => {
     expect(c.price).toEqual({ kind: 'rentIncludingCharges', value: 910 });
     expect(c.facts.slice(0, 3)).toEqual([{ kind: 'monthlyCharges', value: 60 }, { kind: 'furnished', value: false }, { kind: 'availableFrom', value: available }]);
     expect(card(row({ transaction: 'rent', price: 850 }), 'rent').price).toEqual({ kind: 'rentExcludingCharges', value: 850 });
+    // Texte de la disponibilité : date à venir, ou « Disponible de suite » (ListingCardFormatting.availability).
+    const past = new Date(now.getTime() - 3_600_000);
+    expect(formatFacts([{ kind: 'availableFrom', value: past }], now).map((fact) => fact.text)).toEqual(['Disponible de suite']);
+    expect(formatFacts([{ kind: 'availableFrom', value: available }], now)[0].text).toMatch(/^Disponible le \d{1,2} [a-zéû]+$/);
   });
 
   it('investissement : loyer actuel ou potentiel, jamais mélangés ; « à calculer » sans loyer', () => {

@@ -1,18 +1,19 @@
 import { useCallback, useId } from 'react';
 import { ChoiceChip, FeatureToggle, InfoLine } from '../../components/FilterControls';
 import { Icon } from '../../components/Icon';
+import type { IconName } from '../../components/iconPaths';
 import { PlaceField } from '../../components/PlaceField';
 import { scopeLabel } from '../../lib/listingJson';
 import { placeSuggestions, streetSuggestions, type PlaceSuggestion } from '../../lib/places';
 import {
   buildingOfDraft, CONDITIONS, emptyBuilding, emptyHotel, energyCostHint, energyPriceYearIssue, hotelOfDraft, HOTEL_SCOPES, isDwelling, isSubtypeSelected,
-  mixedBuildingIncomplete, OFFICE_EQUIPMENT, PARKING_TYPES, postalCodeOf, cityOf, PUBLISH_CATEGORIES, rentalBanMessage, rentalBanYear,
+  mixedBuildingIncomplete, OFFICE_EQUIPMENT, PARKING_TYPES, postalCodeOf, cityOf, rentalBanMessage, rentalBanYear,
   requiresEnergyDiagnostic, selectCategory, selectSubtype, showsEnergyCosts, subtypes, totalUnits,
   type Address, type BuildingDraft, type CommercialDraft, type EnergyDraft, type HotelDraft, type LandDraft, type OfficeDraft,
-  type PublishCategory, type PublishDraft,
+  type PublishCategory, type PublishDraft, type Subtype,
 } from '../../lib/publish/draft';
 import {
-  CATEGORY_SUBTITLES, CATEGORY_TITLES, CONDITION_LABELS, OFFICE_EQUIPMENT_LABELS, PARKING_LABELS, PLU_ZONES,
+  CATEGORY_DISPLAY_ORDER, CATEGORY_SUBTITLES, CATEGORY_TITLES, CONDITION_LABELS, OFFICE_EQUIPMENT_LABELS, PARKING_LABELS, PLU_ZONES,
 } from '../../lib/publish/labels';
 import { OUTDOOR_LABELS, OUTDOOR_SPACES } from '../../lib/search';
 import {
@@ -22,49 +23,100 @@ import {
 // Étapes « Catégorie », « Informations principales » et « Caractéristiques » de Publier (PublishFlowView.swift).
 
 /** Mêmes icônes que les modes de recherche (PublishCategory.icon). */
-const CATEGORY_ICONS: Record<PublishCategory, 'house' | 'bars' | 'key' | 'bed'> = {
+const CATEGORY_ICONS: Record<PublishCategory, IconName> = {
   residential: 'house',
   investment: 'bars',
   rental: 'key',
   hotel: 'bed',
 };
 
+/** Icône de la tuile d'un type de bien (Subtype.icon) : les mêmes dessins Lucide que l'app. */
+function subtypeIcon(option: Subtype): IconName {
+  if (option.isMixed) return 'layers';
+  switch (option.type) {
+    case 'apartment': return 'building2';
+    case 'building': return 'buildingWindows';
+    case 'commercial': return 'store';
+    case 'office': return 'briefcase';
+    case 'parking': return 'squareParking';
+    case 'land': return 'trees';
+    default: return 'home';
+  }
+}
+
+/**
+ * Étape 1 (categoryStep) : « Que souhaitez-vous publier ? » sans carte autour, les quatre catégories en grille de deux
+ * colonnes, puis « Type de bien » (« Type d'actif » pour Investissement) en tuiles, sauf pour Hôtels.
+ */
 export function CategoryStep({ draft, update, showsErrors }: StepProps) {
   const category = draft.category;
+  const typeTitle = category === 'investment' ? 'Type d\'actif' : 'Type de bien';
+  const titleId = useId();
   return (
-    <>
-      <Card title="Que souhaitez-vous publier ?">
-        <div className="dsc-kinds">
-          {PUBLISH_CATEGORIES.map((option) => {
-            const selected = category === option;
-            return (
-              <button key={option} type="button" className="dsc-kind" aria-pressed={selected}
-                aria-label={`${CATEGORY_TITLES[option]}, ${CATEGORY_SUBTITLES[option]}`}
-                onClick={() => update((current) => selectCategory(current, option))}>
-                <Icon name={CATEGORY_ICONS[option]} />
-                <span className="dsc-kind-title">{CATEGORY_TITLES[option]}</span>
-                <span className="dsc-kind-subtitle">{CATEGORY_SUBTITLES[option]}</span>
-                {selected && <span className="dsc-kind-check" aria-hidden="true"><Icon name="check" /></span>}
-              </button>
-            );
-          })}
-        </div>
-      </Card>
+    <div className="dpub-category">
+      <div className="dpub-category-head">
+        {/* « souhaitez-vous » ne se coupe pas au trait d'union, comme dans l'app. */}
+        <h2>Que <span className="dpub-nowrap">souhaitez-vous</span> publier ?</h2>
+        <p>Choisissez la catégorie, puis le type de bien.</p>
+      </div>
+      <div className="dpub-category-grid">
+        {CATEGORY_DISPLAY_ORDER.map((option) => (
+          <CategoryTile key={option} category={option} selected={category === option}
+            onSelect={() => update((current) => selectCategory(current, option))} />
+        ))}
+      </div>
       {category !== null && category !== 'hotel' && (
-        <Card title={category === 'investment' ? 'Type d\'actif' : 'Type de bien'}>
-          <div className="dsc-choices-stack" role="group" aria-label={category === 'investment' ? 'Type d\'actif' : 'Type de bien'} data-guide="propertyType">
+        // Une autre catégorie : ses types apparaissent en fondu.
+        <div key={category} className="dpub-types">
+          <h3 id={titleId} className="dpub-types-title">{typeTitle}</h3>
+          <div className="dpub-types-grid" role="group" aria-labelledby={titleId} data-guide="propertyType">
             {subtypes(category).map((option) => (
-              <ChoiceChip key={option.title} title={option.title} selected={isSubtypeSelected(draft, option)} expands
-                onClick={() => update((current) => selectSubtype(current, option))} />
+              <TypeTile key={option.title} option={option} selected={isSubtypeSelected(draft, option)}
+                onSelect={() => update((current) => selectSubtype(current, option))} />
             ))}
           </div>
           {showsErrors && draft.propertyType === null && <ErrorLine>Choisissez le type de bien.</ErrorLine>}
-        </Card>
+        </div>
       )}
       {category === 'hotel' && (
-        <InfoLine>Hôtel à vendre : murs et fonds, murs seuls ou fonds seul, à préciser à l'étape « Caractéristiques ».</InfoLine>
+        <div className="dpub-category-info">
+          <InfoLine>Hôtel à vendre : murs et fonds, murs seuls ou fonds seul, à préciser à l'étape « Caractéristiques ».</InfoLine>
+        </div>
       )}
-    </>
+    </div>
+  );
+}
+
+/**
+ * Carte d'une catégorie (PublishCategoryTile) : l'icône dans un carré à la teinte de la catégorie, le titre et le
+ * sous-titre en bas. Choisie : bordure de 2 px et légère ombre à sa couleur, pastille ronde cochée en haut à droite.
+ */
+function CategoryTile({ category, selected, onSelect }: { category: PublishCategory; selected: boolean; onSelect: () => void }) {
+  return (
+    <button type="button" className={`dpub-category-tile is-${category}`} aria-pressed={selected}
+      aria-label={`${CATEGORY_TITLES[category]}, ${CATEGORY_SUBTITLES[category]}`} onClick={onSelect}>
+      <span className="dpub-category-icon"><Icon name={CATEGORY_ICONS[category]} /></span>
+      <span className="dpub-category-title">{CATEGORY_TITLES[category]}</span>
+      <span className="dpub-category-subtitle">{CATEGORY_SUBTITLES[category]}</span>
+      <span className="dpub-category-check" aria-hidden="true"><Icon name="check" /></span>
+    </button>
+  );
+}
+
+/**
+ * Tuile d'un type de bien (PublishTypeTile) : l'icône dans un carré gris, le libellé sur deux lignes au plus et sa
+ * précision dessous. Choisie : fond bleu clair, bordure de 2 px, texte et icône en bleu, carré de l'icône en blanc.
+ */
+function TypeTile({ option, selected, onSelect }: { option: Subtype; selected: boolean; onSelect: () => void }) {
+  return (
+    <button type="button" className="dpub-type-tile" aria-pressed={selected}
+      aria-label={option.detail ? `${option.title}, ${option.detail}` : undefined} onClick={onSelect}>
+      <span className="dpub-type-icon"><Icon name={subtypeIcon(option)} /></span>
+      <span className="dpub-type-text">
+        <span className="dpub-type-title">{option.title}</span>
+        {option.detail && <span className="dpub-type-detail">{option.detail}</span>}
+      </span>
+    </button>
   );
 }
 

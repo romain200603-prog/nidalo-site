@@ -11,12 +11,19 @@ export const CATEGORY_TITLES: Record<PublishCategory, string> = {
   hotel: 'Hôtels',
 };
 
+/** Sous-titres des cartes de l'étape 1, courts pour tenir sur une ligne (PublishCategory.subtitle). */
 export const CATEGORY_SUBTITLES: Record<PublishCategory, string> = {
-  residential: 'Vendre un bien à habiter',
-  investment: 'Vendre un bien de rapport',
-  rental: 'Mettre un bien en location',
-  hotel: 'Vendre un hôtel, murs ou fonds',
+  residential: 'Logement ou terrain',
+  investment: 'Bien loué, immeuble',
+  rental: 'Bien à louer',
+  hotel: 'Hôtel à vendre',
 };
+
+/**
+ * Ordre d'affichage des catégories, le même que dans l'app : Résidentiel, Location, Investissement, Hôtels
+ * (PublishCategory.displayOrder ; les valeurs enregistrées ne changent pas).
+ */
+export const CATEGORY_DISPLAY_ORDER: PublishCategory[] = ['residential', 'rental', 'investment', 'hotel'];
 
 export const PARKING_LABELS: Record<ParkingType, string> = {
   none: 'Aucun',

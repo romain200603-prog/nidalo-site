@@ -28,6 +28,7 @@ import { DescriptionStep, ReviewStep, SuccessView } from './FinalSteps';
 import { FinanceStep } from './FinanceStep';
 import { ADDRESS_NOT_FOUND, CategoryStep, FeaturesStep, MainStep } from './MainSteps';
 import { MediaStep } from './MediaStep';
+import { StepSlide } from './StepSlide';
 
 // « Publier une annonce » sur ordinateur (Features/Publish/PublishFlowView.swift), dans la colonne de 640 px : les
 // sept étapes de l'app, « Brouillon » à chaque étape, la vérification, puis la confirmation. /publier/?annonce=…
@@ -237,6 +238,7 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
   /** Adresse de la page pour l'entrée d'historique remise après un retour (l'enregistrement d'un brouillon la change). */
   const pageUrl = useRef(`${window.location.pathname}${window.location.search}`);
   const onBrowserBack = useRef<() => void>(() => undefined);
+  const slide = useRef<StepSlide>(null);
 
   const update: Update = useCallback((change) => setDraft((current) => change(current)), []);
   const changed = hasChanges(draft, saved);
@@ -277,11 +279,12 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
   // Chaque étape s'ouvre en haut de page.
   useEffect(() => { window.scrollTo({ top: 0 }); }, [step, published]);
 
-  // Après une vérification, l'écran défile une fois jusqu'au premier champ à compléter.
+  // Après une vérification, l'écran défile une fois jusqu'au premier champ à compléter (dans l'étape affichée, jamais
+  // dans la copie de l'étape qui s'en va).
   useEffect(() => {
     if (attempt === 0) return;
     const frame = window.requestAnimationFrame(() => {
-      const root = document.querySelector('.dpub');
+      const root = document.querySelector('.dpub .dpub-step');
       const field = guided.current;
       const anchor = (field ? root?.querySelector<HTMLElement>(`[data-guide="${field}"]`) : null) ?? root?.querySelector<HTMLElement>('.field-error');
       if (anchor) showField(anchor);
@@ -558,7 +561,7 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
       </nav>
       {notice && <div className="dsc-saved" role="status"><Icon name="check" />{notice}</div>}
 
-      {stepView}
+      <StepSlide ref={slide} index={index}>{stepView}</StepSlide>
 
       <div className="dsc-action-bar">
         {message && <p className="dsc-action-message" role="alert">{message}</p>}
@@ -575,7 +578,8 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
               ) : editing ? 'Enregistrer les modifications' : <><Icon name="send" />Publier mon annonce</>}
             </button>
           ) : (
-            <button type="button" className="dsc-button dsc-button-primary" onClick={() => void goForward()}
+            // Deux clics rapides n'avancent que d'une étape : le second attend la fin du changement, comme dans l'app.
+            <button type="button" className="dsc-button dsc-button-primary" onClick={() => { if (!slide.current?.isSliding) void goForward(); }}
               disabled={(draft.category === null && draft.propertyType === null) || resolving}>
               {resolving ? <span className="spinner dsc-button-spinner" role="status" aria-label="Recherche de l'adresse" /> : <>Continuer<Icon name="chevronRight" /></>}
             </button>

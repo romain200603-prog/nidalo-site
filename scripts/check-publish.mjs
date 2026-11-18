@@ -43,7 +43,7 @@ const fixtures = join(root, 'scripts/fixtures');
 const PHOTO = await readFile(join(fixtures, 'photo0.jpg'));
 /** 2400 × 1200 px avec une orientation EXIF (à tourner d'un quart de tour), une position GPS, un appareil, un commentaire. */
 const PHOTO_GPS = await readFile(join(fixtures, 'photo-gps.jpg'));
-const [LISTED] = JSON.parse(await readFile(join(fixtures, 'listings.json'), 'utf8'));
+const [LISTED, , RENTAL_LISTED] = JSON.parse(await readFile(join(fixtures, 'listings.json'), 'utf8'));
 
 const SUPABASE = 'https://izzsoitqtzzswkpvdozd.supabase.co';
 const USER_ID = 'a0000000-0000-4000-8000-0000000000c1';
@@ -68,6 +68,12 @@ const ONLINE_PHOTOS = [
   { id: 'a1000000-0000-4000-8000-000000000002', listing_id: ONLINE_ID, owner_id: USER_ID, storage_path: `${USER_ID}/${ONLINE_ID}/seconde.jpg`, position: 1, width: 1400, height: 800 },
 ];
 const ONLINE_LOCATION = { listing_id: ONLINE_ID, owner_id: USER_ID, street: '8 rue Paul Bert', latitude: 45.7597, longitude: 4.8491 };
+/** Location en ligne du compte de test (appartement meublé), pour « Disponibilité ». */
+const RENTAL_ID = '6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1b54';
+const { listing_photos: _rentalPhotos, ...rentalRow } = RENTAL_LISTED;
+const RENTAL = { ...rentalRow, id: RENTAL_ID, owner_id: USER_ID };
+const RENTAL_PHOTOS = [{ ...ONLINE_PHOTOS[0], id: 'a1000000-0000-4000-8000-000000000004', listing_id: RENTAL_ID, storage_path: `${USER_ID}/${RENTAL_ID}/premiere.jpg` }];
+const RENTAL_LOCATION = { ...ONLINE_LOCATION, listing_id: RENTAL_ID };
 /**
  * Partage dans l'agence : Claire est responsable de l'équipe de Rhône Immobilier, Inès y est agente. Claire modifie
  * l'annonce d'Inès : l'adresse et les photos restent au nom d'Inès, dans son dossier.
@@ -480,10 +486,19 @@ async function open(context, path, name) {
 
 const CONTINUE = '.dpub .dsc-action-buttons .dsc-button-primary';
 const head = async (page) => [await textOf(page, '.dsc-head h1'), await textOf(page, '.dsc-head .dsc-titles p')];
-/** Étape affichée, par son sous-titre (« Étape 3 sur 7 · Caractéristiques »). */
+/**
+ * Étape affichée, par son sous-titre (« Étape 3 sur 7 · Caractéristiques »), une fois arrivée : le glissement d'une
+ * étape à l'autre terminé (la copie de l'étape quittée retirée).
+ */
 async function waitStep(page, number, title, name) {
   await page.waitForFunction(([n, t]) => document.querySelector('.dsc-head .dsc-titles p')?.textContent === `Étape ${n} sur 7 · ${t}`, [number, title], { timeout: 8000 })
     .catch(async () => problems.push(`${name} : étape « ${(await head(page))[1]} » au lieu de « Étape ${number} sur 7 · ${title} »`));
+  await slideEnd(page, name);
+}
+/** Fin du glissement entre deux étapes (StepSlide) : plus de copie de l'étape quittée, plus de mouvement. */
+async function slideEnd(page, name) {
+  await page.waitForFunction(() => !document.querySelector('.dpub-steps.is-sliding, .dpub-step-exit > *'), null, { timeout: 5000 })
+    .catch(() => problems.push(`${name} : le glissement entre deux étapes ne se termine pas`));
 }
 const errorsOf = (page) => page.$$eval('.dpub .field-error', (els) => els.map((el) => el.textContent.trim()));
 const card = (page, title) => page.locator('.dpub .dsc-card').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
@@ -559,10 +574,11 @@ try {
     const context = await desktop();
     await mock(context, state);
     const page = await open(context, '/publier/', N);
-    await page.waitForSelector('.dpub .dsc-kinds');
+    await page.waitForSelector('.dpub .dpub-category-grid');
     expectSame(N, 'en-tête', await head(page), ['Publier une annonce', 'Étape 1 sur 7 · Catégorie']);
+    // Comme l'app : Résidentiel, Location, Investissement, Hôtels, avec leurs sous-titres courts.
     expectSame(N, 'avant le choix', [await page.locator('.dsc-head-action button:not(.dpub-close)').count(), await page.locator(CONTINUE).isDisabled(),
-      await page.$$eval('.dsc-kind .dsc-kind-title', (els) => els.map((el) => el.textContent))], [0, true, ['Résidentiel', 'Investissement', 'Location', 'Hôtels']]);
+      await page.$$eval('.dpub-category-tile .dpub-category-title', (els) => els.map((el) => el.textContent))], [0, true, ['Résidentiel', 'Location', 'Investissement', 'Hôtels']]);
     const layout = await page.evaluate(() => {
       const wrap = document.querySelector('.account-wrap');
       const style = getComputedStyle(wrap);
@@ -571,7 +587,7 @@ try {
     expectSame(N, 'colonne', layout, { column: 640, overflowX: 0 });
     await page.getByRole('button', { name: /^Résidentiel,/ }).click();
     await page.getByRole('button', { name: 'Appartement', exact: true }).click();
-    const chosen = async () => [await textOf(page, '.dsc-kind[aria-pressed="true"] .dsc-kind-title'), await textOf(page, '.dsc-choices-stack [aria-pressed="true"]')];
+    const chosen = async () => [await textOf(page, '.dpub-category-tile[aria-pressed="true"] .dpub-category-title'), await textOf(page, '.dpub-types-grid [aria-pressed="true"]')];
     expectSame(N, 'catégorie choisie', [...await chosen(), await page.locator('.dsc-head-action button[aria-label="Enregistrer en brouillon"]').count(),
       await page.locator(CONTINUE).isDisabled()], ['Résidentiel', 'Appartement', 1, false]);
     // Fenêtre rétrécie un instant sous 1024 px : le message du téléphone à la place, puis la saisie revient telle quelle.
@@ -579,7 +595,7 @@ try {
     await page.waitForSelector('.card.state h1');
     expectSame(N, 'fenêtre étroite', [await page.locator('.dpub-root').isHidden(), await textOf(page, '.card.state h1')], [true, 'Publier une annonce']);
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.waitForSelector('.dpub .dsc-kinds');
+    await page.waitForSelector('.dpub .dpub-category-grid');
     expectSame(N, 'saisie gardée', [...await chosen(), await page.locator('.card.state').count()], ['Résidentiel', 'Appartement', 0]);
     await shot(page, 'publier-1-categorie.png');
     expectSame(N, 'saisie gardée après la capture', await chosen(), ['Résidentiel', 'Appartement']);
@@ -752,7 +768,7 @@ try {
     const context = await desktop();
     await mock(context, state);
     const page = await open(context, '/publier/', N);
-    await page.waitForSelector('.dpub .dsc-kinds');
+    await page.waitForSelector('.dpub .dpub-category-grid');
     await page.getByRole('button', { name: /^Résidentiel,/ }).click();
     await page.getByRole('button', { name: 'Maison', exact: true }).click();
     await page.click('.dsc-head-action button[aria-label="Enregistrer en brouillon"]');
@@ -905,7 +921,7 @@ try {
     const context = await makeContext();
     await mock(context, state);
     const page = await open(context, '/publier/', N);
-    await page.waitForSelector('.dpub .dsc-kinds');
+    await page.waitForSelector('.dpub .dpub-category-grid');
     const subtitle = async () => (await head(page))[1];
     const bar = (n) => page.locator(`.dpub-progress button[aria-label^="Étape ${n} sur 7,"]`);
     const barState = () => page.$$eval('.dpub-progress > *', (els) => els.map((el) => (el.tagName !== 'BUTTON' ? 'à venir' : el.classList.contains('is-current') ? 'en cours' : 'atteinte')));
@@ -960,7 +976,7 @@ try {
     await waitStep(page, 3, 'Caractéristiques', N);
     await bar(1).click();
     await waitStep(page, 1, 'Catégorie', N);
-    expectSame(N, 'barre : étape 1', [await barState(), await textOf(page, '.dsc-kind[aria-pressed="true"] .dsc-kind-title'), await dialogs()],
+    expectSame(N, 'barre : étape 1', [await barState(), await textOf(page, '.dpub-category-tile[aria-pressed="true"] .dpub-category-title'), await dialogs()],
       [['en cours', 'atteinte', 'atteinte', 'à venir', 'à venir', 'à venir', 'à venir'], 'Résidentiel', 0]);
     await bar(3).click();
     await waitStep(page, 3, 'Caractéristiques', N);
@@ -1076,6 +1092,243 @@ try {
     await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached' }).catch(() => undefined);
     expectSame(N, 'rien envoyé', writeNames(writesSince(state, 0)), []);
     if (unloadPrompts.length !== prompts) problems.push(`${N} : « Quitter la page ? » du navigateur inattendu`);
+    await context.close();
+  }
+
+  // 8. Étape 1 comme l'app (PublishFlowView.categoryStep), à 1440 et 1024 px : « Que souhaitez-vous publier ? » sans carte
+  //    autour, les quatre catégories en cartes de 112 px (deux colonnes, 10 px d'écart), la catégorie choisie bordée de
+  //    2 px à sa couleur avec sa pastille cochée ; « Type de bien » (« Type d'actif ») en tuiles de 54 px au moins, avec
+  //    les icônes de l'app ; Hôtels : le texte d'information, sans types. Puis le glissement d'une étape à l'autre :
+  //    l'étape arrive par la droite en avançant (par la gauche en revenant) pendant que la copie de l'étape quittée part
+  //    de l'autre côté, sans débordement de la page ; un double clic sur « Continuer » n'avance que d'une étape ; avec
+  //    « Réduire les animations », un fondu seul.
+  for (const width of [1440, 1024]) {
+    const N = `étape 1 à ${width} px`;
+    const state = newState();
+    const context = await desktop(width, 900);
+    await mock(context, state);
+    const page = await open(context, '/publier/', N);
+    await page.waitForSelector('.dpub .dpub-category-grid');
+    expectSame(N, 'titre et cartes', [await textOf(page, '.dpub-category-head h2'), await textOf(page, '.dpub-category-head p'),
+      await page.getByRole('heading', { name: 'Que souhaitez-vous publier ?', exact: true }).count(),
+      await page.$$eval('.dpub-category-tile', (els) => els.map((el) => [el.getAttribute('aria-label'), el.getAttribute('aria-pressed')])),
+      await page.locator('.dpub .dsc-card').count(), await page.locator('.dpub-types').count()],
+    ['Que souhaitez-vous publier ?', 'Choisissez la catégorie, puis le type de bien.', 1,
+      [['Résidentiel, Logement ou terrain', 'false'], ['Location, Bien à louer', 'false'], ['Investissement, Bien loué, immeuble', 'false'], ['Hôtels, Hôtel à vendre', 'false']],
+      0, 0]);
+    /** Libellés et premiers traits des icônes des types proposés, ou le texte d'information (Hôtels). */
+    const types = () => page.evaluate(() => {
+      const section = document.querySelector('.dpub-types');
+      const info = document.querySelector('.dpub-category-info');
+      if (!section) return { info: info?.textContent ?? null };
+      return {
+        title: section.querySelector('.dpub-types-title').textContent,
+        group: section.querySelector('[role="group"]').getAttribute('aria-labelledby') === section.querySelector('.dpub-types-title').id,
+        tiles: [...section.querySelectorAll('.dpub-type-tile')].map((el) => [el.getAttribute('aria-label') ?? el.textContent, el.querySelector('svg :first-child').getAttribute('d')?.slice(0, 9) ?? 'rect']),
+      };
+    });
+    const HOUSE = 'M15 21v-8';
+    const FLAT = 'M10 12h4';
+    const LAND = 'M10 10v.2';
+    const SHOP = 'M15 21v-5';
+    const OFFICE = 'M12 12h.0';
+    await page.getByRole('button', { name: /^Investissement,/ }).click();
+    expectSame(N, 'Investissement', await types(), {
+      title: 'Type d\'actif', group: true,
+      tiles: [['Appartement loué', FLAT], ['Maison locative', HOUSE], ['Immeuble de rapport', 'M12 10h.0'], ['Immeuble mixte, logements et commerces', 'M12.83 2.'],
+        ['Local commercial', SHOP], ['Bureaux', OFFICE]],
+    });
+    // Un type manque : « Continuer » le signale sous les tuiles et y amène.
+    await page.click(CONTINUE);
+    await page.waitForSelector('.dpub-types .field-error');
+    expectSame(N, 'type manquant', [await errorsOf(page), (await head(page))[1]], [['Choisissez le type de bien.'], 'Étape 1 sur 7 · Catégorie']);
+    await page.getByRole('button', { name: 'Immeuble mixte, logements et commerces', exact: true }).click();
+    expectSame(N, 'immeuble mixte choisi', [await errorsOf(page), await textOf(page, '.dpub-type-tile[aria-pressed="true"] .dpub-type-detail')], [[], 'logements et commerces']);
+    await page.getByRole('button', { name: /^Location,/ }).click();
+    expectSame(N, 'Location', await types(), {
+      title: 'Type de bien', group: true,
+      tiles: [['Appartement', FLAT], ['Maison', HOUSE], ['Parking ou box', 'rect'], ['Terrain', LAND], ['Local commercial', SHOP], ['Bureaux', OFFICE]],
+    });
+    await page.getByRole('button', { name: /^Hôtels,/ }).click();
+    expectSame(N, 'Hôtels', await types(), { info: 'Hôtel à vendre : murs et fonds, murs seuls ou fonds seul, à préciser à l\'étape « Caractéristiques ».' });
+    await page.getByRole('button', { name: /^Résidentiel,/ }).click();
+    expectSame(N, 'Résidentiel', await types(), { title: 'Type de bien', group: true, tiles: [['Appartement', FLAT], ['Maison', HOUSE], ['Terrain', LAND]] });
+    await page.getByRole('button', { name: 'Appartement', exact: true }).click();
+    await page.waitForTimeout(700);
+    const look = await page.evaluate(() => {
+      const rect = (el) => el.getBoundingClientRect();
+      const tiles = [...document.querySelectorAll('.dpub-category-tile')];
+      const chosen = document.querySelector('.dpub-category-tile[aria-pressed="true"]');
+      const other = document.querySelector('.dpub-category-tile:not([aria-pressed="true"])');
+      const type = document.querySelector('.dpub-type-tile[aria-pressed="true"]');
+      const typeTiles = [...document.querySelectorAll('.dpub-type-tile')];
+      const label = document.querySelector('.dpub-types-title');
+      return {
+        tiles: tiles.map((el) => [Math.round(rect(el).width), Math.round(rect(el).height), getComputedStyle(el).borderRadius]),
+        gaps: [Math.round(rect(tiles[1]).left - rect(tiles[0]).right), Math.round(rect(tiles[2]).top - rect(tiles[0]).bottom),
+          Math.round(rect(typeTiles[1]).left - rect(typeTiles[0]).right)],
+        chosen: [getComputedStyle(chosen, '::before').boxShadow, getComputedStyle(chosen).boxShadow, getComputedStyle(chosen.querySelector('.dpub-category-check')).opacity],
+        other: [getComputedStyle(other, '::before').boxShadow, getComputedStyle(other.querySelector('.dpub-category-check')).opacity],
+        icon: [getComputedStyle(chosen.querySelector('.dpub-category-icon')).backgroundColor, getComputedStyle(chosen.querySelector('.dpub-category-icon')).color],
+        types: typeTiles.map((el) => [Math.round(rect(el).height), getComputedStyle(el).borderRadius]),
+        label: [label.textContent, getComputedStyle(label).textTransform, getComputedStyle(label).fontSize, getComputedStyle(label).color],
+        type: [getComputedStyle(type).backgroundColor, getComputedStyle(type, '::before').boxShadow, getComputedStyle(type.querySelector('.dpub-type-icon')).backgroundColor,
+          getComputedStyle(type.querySelector('.dpub-type-title')).color],
+      };
+    });
+    expectSame(N, 'cartes et tuiles', look, {
+      tiles: [[315, 112, '22px'], [315, 112, '22px'], [315, 112, '22px'], [315, 112, '22px']],
+      gaps: [10, 10, 8],
+      chosen: ['rgb(60, 92, 176) 0px 0px 0px 2px inset', 'rgba(60, 92, 176, 0.18) 0px 4px 20px 0px', '1'],
+      other: ['rgb(236, 234, 230) 0px 0px 0px 1px inset', '0'],
+      icon: ['rgb(238, 242, 250)', 'rgb(60, 92, 176)'],
+      types: [[54, '16px'], [54, '16px'], [54, '16px']],
+      label: ['Type de bien', 'uppercase', '12px', 'rgb(154, 162, 170)'],
+      type: ['rgb(238, 242, 250)', 'rgb(60, 92, 176) 0px 0px 0px 2px inset', 'rgb(255, 255, 255)', 'rgb(60, 92, 176)'],
+    });
+    await shot(page, `publier-categorie-${width}.png`);
+    if (width !== 1440) {
+      await context.close();
+      continue;
+    }
+
+    // Le glissement vers l'étape 2 : pris juste après le clic, pendant le mouvement.
+    const motion = () => page.evaluate(() => {
+      const steps = document.querySelector('.dpub-steps');
+      const box = document.querySelector('.dpub-step');
+      const exit = document.querySelector('.dpub-step-exit');
+      const copy = exit.firstElementChild;
+      return {
+        sliding: steps.classList.contains('is-sliding'),
+        box: box.className,
+        copy: copy ? [copy.className, copy.querySelector('h2, .dsc-card-title')?.textContent ?? null, copy.querySelectorAll('[id], [data-guide], [name]').length] : null,
+        exit: [exit.getAttribute('aria-hidden'), exit.inert, getComputedStyle(exit).position],
+        animations: [getComputedStyle(box).animationName, copy ? getComputedStyle(copy).animationName : null,
+          getComputedStyle(document.querySelector('.dsc-head .dsc-titles p')).animationName],
+        overflow: document.documentElement.scrollWidth - innerWidth,
+      };
+    });
+    await page.click(CONTINUE);
+    expectSame(N, 'glissement en avançant', await motion(), {
+      sliding: true, box: 'dpub-step is-entering is-forward', copy: ['dpub-step-copy is-forward', 'Que souhaitez-vous publier ?', 0],
+      exit: ['true', true, 'fixed'], animations: ['dpub-step-from-right', 'dpub-step-to-left', 'app-fade-in'], overflow: 0,
+    });
+    await waitStep(page, 2, 'Informations principales', N);
+    expectSame(N, 'après le glissement', [await page.locator('.dpub-step').getAttribute('class'), await page.locator('.dpub-step-exit > *').count(),
+      await page.locator('.dpub-steps').getAttribute('class')], ['dpub-step', 0, 'dpub-steps']);
+    await page.click('.dpub .dsc-action-buttons .dsc-button-light');
+    expectSame(N, 'glissement en revenant', await motion(), {
+      sliding: true, box: 'dpub-step is-entering is-back', copy: ['dpub-step-copy is-back', 'Adresse du bien', 0],
+      exit: ['true', true, 'fixed'], animations: ['dpub-step-from-left', 'dpub-step-to-right', 'app-fade-in'], overflow: 0,
+    });
+    await waitStep(page, 1, 'Catégorie', N);
+    // Deux clics rapides : une seule étape (le second attend la fin du changement, sans vérifier l'étape 2).
+    await page.dblclick(CONTINUE);
+    await waitStep(page, 2, 'Informations principales', N);
+    await page.waitForTimeout(300);
+    expectSame(N, 'double clic', [(await head(page))[1], await errorsOf(page)], ['Étape 2 sur 7 · Informations principales', []]);
+    await context.close();
+
+    // « Réduire les animations » : l'étape apparaît en fondu, la copie de l'étape quittée s'efface sur place.
+    const reduced = await browser.newContext({ viewport: { width, height: 900 }, deviceScaleFactor: 2, locale: 'fr-FR', timezoneId: 'Europe/Paris', reducedMotion: 'reduce' });
+    await mock(reduced, newState());
+    const calm = await open(reduced, '/publier/', `${N} réduit`);
+    await calm.waitForSelector('.dpub .dpub-category-grid');
+    await calm.getByRole('button', { name: /^Résidentiel,/ }).click();
+    await calm.getByRole('button', { name: 'Appartement', exact: true }).click();
+    await calm.click(CONTINUE);
+    expectSame(`${N} réduit`, 'fondu seul', await calm.evaluate(() => {
+      const box = document.querySelector('.dpub-step');
+      const copy = document.querySelector('.dpub-step-exit > *');
+      return [getComputedStyle(box).animationName, getComputedStyle(box).animationDuration, copy ? getComputedStyle(copy).animationName : null,
+        getComputedStyle(document.querySelector('.dpub-category-check')).transform];
+    }), ['app-fade-in', '0.25s', 'app-fade-out', 'none']);
+    await waitStep(calm, 2, 'Informations principales', `${N} réduit`);
+    await reduced.close();
+  }
+
+  // 9. « Disponibilité » d'une location (RentalAvailabilityChoice), comme « Ameublement » : « Tout de suite » enregistre
+  //    la date du jour, au début du jour comme l'app (les cartes disent « Disponible de suite » dès le matin) ;
+  //    « À partir du… » montre la date juste dessous (dans un mois par défaut) ; sans choix, rien n'est enregistré.
+  //    Une annonce rouverte retrouve son choix : date du jour ou passée, « Tout de suite » ; date à venir, « À partir
+  //    du… » avec sa date.
+  {
+    const N = 'disponibilité';
+    const parisDay = (offset = 0) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date(Date.now() + offset * 86400000));
+    const later = parisDay(20);
+    const state = newState({
+      listings: [{ ...RENTAL, rental_info: { isLeased: false, isFurnished: true, availableFrom: `${later}T12:00:00.000Z` } }],
+      photos: RENTAL_PHOTOS, locations: [RENTAL_LOCATION],
+    });
+    const context = await desktop();
+    await mock(context, state);
+    /** Annonce rouverte sur « Prix et finances » : [« Tout de suite », « À partir du… », date montrée]. */
+    const reopen = async (what) => {
+      const page = await open(context, `/publier/?annonce=${RENTAL_ID}`, `${N} ${what}`);
+      await waitStep(page, 2, 'Informations principales', `${N} ${what}`);
+      await page.locator('.dpub-progress button[aria-label^="Étape 4 sur 7,"]').click();
+      await waitStep(page, 4, 'Prix et finances', `${N} ${what}`);
+      return page;
+    };
+    const choice = async (page) => [await chip(page, 'Disponibilité', 'Tout de suite').getAttribute('aria-pressed'),
+      await chip(page, 'Disponibilité', 'À partir du…').getAttribute('aria-pressed'),
+      (await page.getByLabel('Disponible à partir du', { exact: true }).count()) ? await page.getByLabel('Disponible à partir du', { exact: true }).inputValue() : null];
+    /** « Enregistrer les modifications », puis l'information locative envoyée. */
+    const save = async (page) => {
+      const mark = state.calls.length;
+      await page.click('.dsc-head-action button[aria-label="Enregistrer les modifications"]');
+      await page.waitForSelector('.dpub-success', { timeout: 15000 }).catch(() => problems.push(`${N} : confirmation absente`));
+      const sent = writesSince(state, mark).find((call) => call.table === 'listings' && call.method === 'PATCH')?.body?.rental_info;
+      await page.close();
+      return sent;
+    };
+
+    let page = await reopen('date à venir');
+    expectSame(N, 'date à venir', await choice(page), ['false', 'true', later]);
+    const card = page.locator('.dpub .dsc-card').filter({ has: page.getByRole('heading', { name: 'Conditions de location', exact: true }) });
+    expectSame(N, 'place dans la carte', await card.locator('.field-label, label').allTextContents(),
+      ['Ameublement', 'Disponibilité', 'Disponible à partir du', 'Durée du bail']);
+    await card.scrollIntoViewIfNeeded();
+    await shot(page, 'publier-disponibilite-a-partir-du.png');
+    await chip(page, 'Disponibilité', 'Tout de suite').click();
+    expectSame(N, 'Tout de suite', await choice(page), ['true', 'false', null]);
+    const startOfToday = await page.evaluate(() => { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString(); });
+    let sent = await save(page);
+    expectSame(N, 'Tout de suite enregistré', [sent?.availableFrom, new Date(sent?.availableFrom) <= new Date(), sent?.isFurnished], [startOfToday, true, true]);
+
+    page = await reopen('tout de suite');
+    expectSame(N, 'Tout de suite retrouvé', await choice(page), ['true', 'false', null]);
+    // Retoucher le choix l'enlève : la disponibilité n'est plus précisée, et l'annonce s'enregistre quand même.
+    await chip(page, 'Disponibilité', 'Tout de suite').click();
+    expectSame(N, 'sans choix', await choice(page), ['false', 'false', null]);
+    sent = await save(page);
+    expectSame(N, 'sans choix enregistré', [sent && 'availableFrom' in sent, sent?.isFurnished], [false, true]);
+
+    page = await reopen('sans choix');
+    expectSame(N, 'sans choix retrouvé', await choice(page), ['false', 'false', null]);
+    await chip(page, 'Disponibilité', 'À partir du…').click();
+    const inOneMonth = await page.evaluate(() => {
+      const now = new Date();
+      const last = new Date(now.getFullYear(), now.getMonth() + 2, 0).getDate();
+      const d = new Date(now.getFullYear(), now.getMonth() + 1, Math.min(now.getDate(), last));
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    });
+    expectSame(N, 'À partir du… : dans un mois', [...await choice(page), await page.getByLabel('Disponible à partir du', { exact: true }).getAttribute('min')],
+      ['false', 'true', inOneMonth, parisDay()]);
+    const chosenDay = parisDay(40);
+    await page.getByLabel('Disponible à partir du', { exact: true }).fill(chosenDay);
+    expectSame(N, 'date choisie', await choice(page), ['false', 'true', chosenDay]);
+    sent = await save(page);
+    expectSame(N, 'date enregistrée', sent?.availableFrom, `${chosenDay}T12:00:00.000Z`);
+
+    page = await reopen('date choisie');
+    expectSame(N, 'date retrouvée', await choice(page), ['false', 'true', chosenDay]);
+    await page.close();
+    // Date passée : « Tout de suite ».
+    state.listings[0].rental_info = { ...state.listings[0].rental_info, availableFrom: '2026-10-01T12:00:00.000Z' };
+    page = await reopen('date passée');
+    expectSame(N, 'date passée', await choice(page), ['true', 'false', null]);
+    await page.close();
     await context.close();
   }
 } finally {
