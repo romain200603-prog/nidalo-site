@@ -68,7 +68,6 @@
   /* Cartes de la catégorie : titre 24, sous-titre 15, bandeau #3C5CB0, encadrés blancs. */
   .dl .spec-stack { gap: 20px; }
   .dl .spec-card { padding: 25px 26px 26px; border-color: var(--d-card-border); border-radius: var(--d-card-radius); color: var(--d-text); }
-  .dl .spec-header-icon { display: none; }
   .dl .spec-header-text { gap: 6px; }
   .dl .spec-header h2, .dl .spec-card-title, .dl .spec-simulator-title { color: var(--d-text); font-size: 24px; font-weight: 700; letter-spacing: -0.01em; line-height: 30px; }
   .dl .spec-header p { color: var(--d-grey); font-size: 15px; font-weight: 400; line-height: 20px; }
@@ -85,7 +84,7 @@
   .dl .spec-banner-detail { margin-top: 10px; }
   .dl .spec-banner-hotel .spec-banner-value { height: 44px; font-size: 34px; }
   .dl .spec-banner-hotel .spec-banner-amount { line-height: 44px; }
-  .dl .spec-value-box, .dl .spec-value-box.is-positive, .dl .spec-value-box.is-negative { margin-top: 15px; padding: 16px 20px; border-color: var(--d-card-border); border-radius: 14px; background: #FFFFFF; }
+  .dl .spec-value-box { margin-top: 15px; padding: 16px 20px; border-color: var(--d-card-border); border-radius: 14px; background: #FFFFFF; }
   .dl .spec-value-title { color: var(--d-text); font-size: 16px; font-weight: 700; line-height: 22px; }
   .dl .spec-value-subtitle { color: var(--d-grey); font-size: 14px; font-weight: 400; line-height: 20px; }
   .dl .spec-box-value { font-size: 22px; font-weight: 800; line-height: 28px; }
@@ -100,6 +99,12 @@
   .dl .spec-segment[aria-pressed="true"] { color: var(--d-blue); box-shadow: 0 1px 3px rgba(36, 45, 56, 0.12); }
   .dl .spec-segment:focus-visible { outline: 2px solid var(--d-blue); outline-offset: 1px; }
   .dl .spec-kpi-title, .dl .spec-kpi-value { color: var(--d-text); }
+  /* « Votre mois type » : la barre de l'app, avec les textes de la colonne de l'ordinateur. */
+  .dl .month-bar { margin-top: 16px; gap: 8px; }
+  .dl .month-bar-captions { gap: 8px; font-size: 14px; }
+  .dl .month-bar-flow .icon { width: 14px; height: 14px; }
+  .dl .spec-month-rows { margin-top: 20px; }
+  .dl .spec-row-marker { margin-right: 4px; }
 
   /* Carte « Visite » (agendaCard de l'app). */
   .dl-visit-card { display: flex; align-items: center; gap: 14px; padding: 18px 22px; border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; color: var(--d-text); text-decoration: none; transition: box-shadow 0.15s ease, transform 0.15s ease; }
