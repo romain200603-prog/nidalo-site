@@ -47,7 +47,8 @@ const conversation = (overrides: Partial<ServerInboxRow> = {}, participants = []
 function message(overrides: Partial<Message> = {}): Message {
   return {
     id: 'm1', conversationId: 'c1', senderId: AGENT, clientId: 'm1', content: { kind: 'text', text: 'Bonjour' },
-    createdAt: new Date(2026, 10, 6, 10, 0), expiresAt: null, reaction: null, isRead: false, ...overrides,
+    createdAt: new Date(2026, 10, 6, 10, 0), expiresAt: null, reaction: null, reactions: [], isRead: false, replyToId: null, isForwarded: false, raw: null,
+    ...overrides,
   };
 }
 
@@ -288,7 +289,8 @@ describe('Lignes du serveur (SupabaseMessagingRepository)', () => {
       { user_id: AGENT, emoji: '👍', created_at: '2026-11-06T10:00:00Z' },
       { user_id: ME, emoji: '♥', created_at: '2026-11-06T09:00:00Z' },
     ];
-    expect(messageFrom({ ...base, created_at: '2026-11-06T09:30:00Z', message_reactions: reactions }, ME, null).reaction).toBe('♥');
+    // Un « ♥ » enregistré avant se lit ❤️, comme dans l'app (MessageReactions.normalized).
+    expect(messageFrom({ ...base, created_at: '2026-11-06T09:30:00Z', message_reactions: reactions }, ME, null).reaction).toBe('❤️');
     expect(messageFrom({ ...base, created_at: '2026-11-06T09:30:00Z', message_reactions: reactions.slice(0, 1) }, ME, null)).toMatchObject({ reaction: '👍', clientId: 'm1' });
   });
 

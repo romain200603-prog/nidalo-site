@@ -3,13 +3,14 @@ import { supabase } from '../supabase';
 import { decodeContent, type MessageContent } from './content';
 import type { CommunityRow, Counterpart, ParticipantRow, ProfessionalContactRow, ProfileRow, ServerInboxRow } from './inbox';
 import { sameId, upper } from './inbox';
+import { normalizedEmoji, type Reaction } from './interactions';
 
 // Appels de la messagerie au serveur, avec les mêmes tables, fonctions, colonnes et formats que l'app
 // (Data/Supabase/SupabaseMessagingRepository.swift). Les identifiants partent comme Swift les écrit (`uuidString`,
 // en majuscules) ; le serveur les lit sans tenir compte de la casse.
 
-/** Colonnes lues d'un message, avec ses réactions (messageColumns). */
-export const MESSAGE_COLUMNS = 'id, conversation_id, sender_id, kind, client_id, content, created_at, expires_at, message_reactions(user_id, emoji, created_at)';
+/** Colonnes lues d'un message, avec la réponse, le transfert et ses réactions (messageColumns). */
+export const MESSAGE_COLUMNS = 'id, conversation_id, sender_id, kind, client_id, content, created_at, expires_at, reply_to_id, forwarded, message_reactions(user_id, emoji, created_at)';
 /** Colonnes lues des membres d'une conversation (ParticipantRow). */
 export const PARTICIPANT_COLUMNS = 'conversation_id, user_id, role, left_at, last_read_at';
 /** Messages lus à l'ouverture d'une conversation : les 200 derniers (MessagingStore.loadMessages). */
@@ -27,6 +28,9 @@ export type MessageRow = {
   created_at: string;
   expires_at: string | null;
   message_reactions: ReactionRow[] | null;
+  /** Réponse et transfert (facultatifs : absents = ni réponse, ni transfert). */
+  reply_to_id?: string | null;
+  forwarded?: boolean | null;
 };
 
 export type Message = {
@@ -39,8 +43,16 @@ export type Message = {
   expiresAt: Date | null;
   /** Ma réaction, sinon la plus récente (message(from:)). */
   reaction: string | null;
+  /** Toutes les réactions, une par personne, « ♥ » lu ❤️ (pastille sous la bulle). */
+  reactions: Reaction[];
   /** Coches : « vu » quand tous les autres membres ont lu après ce message. */
   isRead: boolean;
+  /** Message auquel celui-ci répond (même conversation) ; il garde son identifiant si l'original est supprimé. */
+  replyToId: string | null;
+  /** Transféré depuis une autre conversation (« Transféré », sans l'auteur d'origine). */
+  isForwarded: boolean;
+  /** Contenu tel que le serveur l'a rendu, renvoyé tel quel par un transfert (seuls les fichiers sont recopiés). */
+  raw: unknown;
 };
 
 class MessagingError extends Error {
@@ -71,6 +83,8 @@ export function messageFrom(row: MessageRow, me: string | null, readAt: Date | n
   const mine = reactions.find((reaction) => sameId(reaction.user_id, me));
   const latest = [...reactions].sort((a, b) => time(b.created_at) - time(a.created_at))[0];
   const createdAt = new Date(row.created_at);
+  // Une réaction par personne ; un « ♥ » enregistré avant se lit ❤️ (message(from:)).
+  const all = reactions.map((reaction) => ({ userId: reaction.user_id, emoji: normalizedEmoji(reaction.emoji), createdAt: new Date(reaction.created_at) }));
   return {
     id: row.id,
     conversationId: row.conversation_id,
@@ -79,8 +93,12 @@ export function messageFrom(row: MessageRow, me: string | null, readAt: Date | n
     content: decodeContent(row.content),
     createdAt,
     expiresAt: row.expires_at ? new Date(row.expires_at) : null,
-    reaction: (mine ?? latest)?.emoji ?? null,
+    reaction: (mine ?? latest) ? normalizedEmoji((mine ?? latest).emoji) : null,
+    reactions: all,
     isRead: sameId(row.sender_id, me) && readAt !== null && readAt.getTime() >= createdAt.getTime(),
+    replyToId: row.reply_to_id ?? null,
+    isForwarded: row.forwarded === true,
+    raw: row.content,
   };
 }
 
@@ -150,11 +168,31 @@ export async function fetchMessages(conversationId: string, me: string | null): 
   return ((data as MessageRow[] | null) ?? []).reverse().map((row) => messageFrom(row, me, readAt));
 }
 
-/** Nouveau message (insert dans messages), avec exactement les colonnes de l'app (MessageInsert). */
-export type MessageInsert = { id: string; conversation_id: string; client_id: string; content: unknown; preview: string };
+/**
+ * Nouveau message (insert dans messages), avec exactement les colonnes de l'app (MessageInsert) : reply_to_id
+ * seulement pour une réponse, forwarded seulement pour un transfert (sinon ces clés ne partent pas).
+ */
+export type MessageInsert = {
+  id: string; conversation_id: string; client_id: string; content: unknown; preview: string; reply_to_id?: string; forwarded?: true;
+};
 
-export function messageInsert(conversationId: string, clientId: string, content: unknown, preview: string): MessageInsert {
-  return { id: upper(clientId), conversation_id: upper(conversationId), client_id: upper(clientId), content, preview: [...preview].slice(0, 300).join('') };
+export function messageInsert(conversationId: string, clientId: string, content: unknown, preview: string,
+  { replyToId = null, forwarded = false }: { replyToId?: string | null; forwarded?: boolean } = {}): MessageInsert {
+  const insert: MessageInsert = {
+    id: upper(clientId), conversation_id: upper(conversationId), client_id: upper(clientId), content, preview: [...preview].slice(0, 300).join(''),
+  };
+  if (replyToId) insert.reply_to_id = upper(replyToId);
+  if (forwarded) insert.forwarded = true;
+  return insert;
+}
+
+/** Original d'une citation, lu par son identifiant ; `null` s'il a été supprimé, a expiré ou n'est pas lisible (message(id:)). */
+export async function fetchMessage(id: string, me: string | null): Promise<Message | null> {
+  const { data, error } = await supabase.from('messages').select(MESSAGE_COLUMNS).eq('id', upper(id)).limit(1);
+  if (error) throw error;
+  const row = ((data as MessageRow[] | null) ?? [])[0];
+  if (!row || (row.expires_at && new Date(row.expires_at).getTime() <= Date.now())) return null;
+  return messageFrom(row, me, null);
 }
 
 /** Envoie un message ; un envoi rejoué (23505) relit le message déjà enregistré (send(…)). */

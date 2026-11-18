@@ -1,0 +1,207 @@
+/* Messagerie avec les morceaux de l'app iPhone (demande du 17/11) : réponses, transferts et réactions
+   (MessageInteractionViews.swift), liste des conversations (MessagesView.swift) et « Votre activité immobilière »
+   (MessagingSearchView.swift). Sur téléphone, la liste copie l'app ; sur ordinateur, les deux colonnes restent, avec
+   ces morceaux. La police reste celle de la page : celle du téléphone sur téléphone. */
+
+/* ——— Liste ——— */
+.dm-side-title { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.dm-side-sub { margin: 0; color: var(--m-grey); font-size: 13.5px; font-weight: 500; line-height: 19px; }
+.dm-search-line { display: flex; align-items: center; gap: 12px; }
+.dm-search-line .dm-search { flex: 1; min-width: 0; }
+.dm-search-cancel { flex: none; padding: 6px 0; border: 0; background: none; color: var(--m-blue); font-size: 15px; font-weight: 600; cursor: pointer; }
+.dm-search-cancel:hover { text-decoration: underline; }
+/* « Toutes les conversations » : titre de section de l'app, seulement sur téléphone. */
+.dm-list-title { display: none; }
+.dm-account-pill { flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 999px; background: #F1F0EC; color: #5D6470; font-size: 11px; font-weight: 700; line-height: 1; white-space: nowrap; }
+.dm-account-pill.is-pro { background: var(--m-blue-soft); color: var(--m-blue); }
+.dm-row-check { flex: none; display: inline-flex; color: var(--m-time); }
+.dm-row-check.is-read { color: var(--m-blue); }
+.dm-row-check .icon { width: 15px; height: 15px; }
+.dm-row-muted { flex: none; display: inline-flex; color: var(--m-time); }
+.dm-row-muted .icon { width: 14px; height: 14px; }
+
+/* « Votre activité immobilière » : carte blanche de quatre lignes, le nombre en pastille bleue. */
+.dm-activity { margin: 4px 0 18px; }
+.dm-activity h2 { margin: 0 0 10px; padding: 0 10px; font-size: 18px; font-weight: 700; line-height: 24px; }
+.dm-activity-card { margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--m-line); border-radius: 18px; background: #FFFFFF; list-style: none; }
+.dm-activity-card > li + li { border-top: 1px solid #F2F0EC; margin-left: 62px; }
+.dm-activity-card > li + li .dm-activity-row { margin-left: -62px; width: calc(100% + 62px); }
+.dm-activity-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 58px; padding: 9px 14px; border: 0; background: none; color: var(--m-text); text-align: left; text-decoration: none; cursor: pointer; }
+.dm-activity-row:hover { background: var(--m-hover); }
+.dm-activity-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; background: var(--m-blue-soft); color: var(--m-blue); }
+.dm-activity-icon .icon { width: 18px; height: 18px; }
+.dm-activity-title { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; line-height: 20px; }
+.dm-activity-count { flex: none; min-width: 26px; height: 24px; padding: 0 8px; border-radius: 999px; background: var(--m-blue-soft); color: var(--m-blue); font-size: 12.5px; font-weight: 700; line-height: 24px; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* « Discussions liées aux annonces » : retour, titre, puis une carte blanche par conversation. */
+.dm-linked { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.dm-linked-head { flex: none; display: flex; align-items: center; gap: 8px; min-height: 64px; padding: 10px 16px 10px 10px; border-bottom: 1px solid var(--m-line); }
+.dm-linked-head h2 { flex: 1; min-width: 0; margin: 0; font-size: 17px; font-weight: 700; line-height: 22px; }
+.dm-linked-back { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--m-text); cursor: pointer; }
+.dm-linked-back:hover { background: var(--m-hover); }
+.dm-linked-back .icon { width: 22px; height: 22px; }
+.dm-linked-scroll { background: var(--m-thread); padding-top: 12px; }
+.dm-linked-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0 6px; list-style: none; }
+.dm-linked-row { display: flex; align-items: center; gap: 12px; padding: 10px; border: 1px solid var(--m-line); border-radius: 18px; background: #FFFFFF; color: inherit; text-decoration: none; }
+.dm-linked-row:hover { border-color: var(--m-blue-outline); }
+.dm-linked-photo { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 72px; height: 64px; overflow: hidden; border-radius: 9px; background: var(--m-blue-soft); color: var(--m-blue); }
+.dm-linked-photo img { width: 100%; height: 100%; object-fit: cover; }
+.dm-linked-photo .icon { width: 20px; height: 20px; }
+.dm-linked-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.dm-linked-title { overflow: hidden; font-size: 14.5px; font-weight: 700; line-height: 19px; text-overflow: ellipsis; white-space: nowrap; }
+.dm-linked-line { overflow: hidden; color: var(--m-grey); font-size: 12.5px; line-height: 17px; text-overflow: ellipsis; white-space: nowrap; }
+.dm-linked-price { display: inline-flex; align-items: baseline; gap: 3px; font-variant-numeric: tabular-nums; }
+.dm-linked-price strong { font-size: 14px; font-weight: 700; line-height: 19px; }
+.dm-linked-price span { color: var(--m-grey); font-size: 11.5px; }
+.dm-linked-unread { flex: none; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: var(--m-blue); color: #FFFFFF; font-size: 11px; font-weight: 700; line-height: 20px; text-align: center; }
+
+/* ——— Bulle et ses gestes (InteractiveMessage) ——— */
+.dm-interactive { position: relative; min-width: 0; max-width: min(540px, 100%); display: flex; flex-direction: column; align-items: flex-start; }
+.dm-msg.is-out .dm-interactive { align-items: flex-end; }
+/* Pastille dans le cadre de la bulle : 14 px de place dessous, 10 px sur la bulle. */
+.dm-interactive.has-reactions { padding-bottom: 14px; }
+.dm-interactive-body { position: relative; min-width: 0; max-width: 100%; border-radius: 16px; }
+.dm-interactive-body::after { content: ''; position: absolute; inset: 0; border-radius: 16px; background: var(--m-blue); opacity: 0; pointer-events: none; transition: opacity 0.35s ease-in-out; }
+.dm-interactive.is-flashing .dm-interactive-body::after { opacity: 0.22; }
+.dm-reaction-pill { position: absolute; left: 10px; bottom: 0; z-index: 1; display: inline-flex; align-items: center; gap: 1px; height: 24px; padding: 0 6px; border: 0; border-radius: 999px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(36, 45, 56, 0.14), 0 0 0 0.5px rgba(36, 45, 56, 0.06); color: var(--m-text); font-size: 13px; line-height: 1; cursor: pointer; }
+.dm-reaction-count { margin-left: 3px; color: var(--m-grey); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* « … » à côté de la bulle, au survol (ordinateur) : barre d'emojis et menu. */
+.dm-more-button { position: absolute; top: 50%; right: -38px; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; margin-top: -15px; padding: 0; border: 1px solid var(--m-line); border-radius: 50%; background: #FFFFFF; color: var(--d-icon); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
+.dm-interactive.has-reactions .dm-more-button { margin-top: -22px; }
+.dm-msg.is-out .dm-more-button { right: auto; left: -38px; }
+.dm-interactive:hover .dm-more-button, .dm-more-button:focus-visible { opacity: 1; }
+.dm-more-button .icon { width: 16px; height: 16px; }
+@media (hover: none) {
+  .dm-more-button { display: none; }
+  /* Appui long : ni sélection ni bulle du système. */
+  .dm-interactive-body { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+  .dm-interactive-body .dm-bubble { user-select: none; }
+}
+/* Double clic : un cœur grossit au milieu de la bulle, puis file vers la pastille en rapetissant. */
+.dm-burst { position: absolute; left: 50%; top: 50%; z-index: 2; font-size: 40px; line-height: 1; pointer-events: none; animation: dm-burst 0.68s both; }
+@keyframes dm-burst {
+  0% { left: 50%; top: 50%; opacity: 0; transform: translate(-50%, -50%) scale(0.2); }
+  7% { opacity: 1; }
+  38% { transform: translate(-50%, -50%) scale(1.15); animation-timing-function: linear; }
+  56% { left: 50%; top: 50%; transform: translate(-50%, -50%) scale(1); animation-timing-function: cubic-bezier(0.33, 0, 0.67, 1); }
+  88% { opacity: 1; }
+  100% { left: 26px; top: calc(100% + 2px); opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+}
+
+/* ——— Réponse et transfert ——— */
+.dm-msg-context { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: min(540px, 100%); margin: 0 0 6px 36px; }
+.dm-msg.is-out .dm-msg-context { align-items: flex-end; margin-left: 0; }
+.dm-forwarded, .dm-reply-head { display: flex; align-items: center; gap: 4px; margin: 0; color: var(--m-grey); font-size: 12px; font-weight: 500; line-height: 16px; white-space: nowrap; }
+.dm-forwarded .icon, .dm-reply-head .icon { flex: none; width: 11px; height: 11px; stroke-width: 2.4; }
+.dm-reply-head span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.dm-reply { display: flex; flex-direction: column; align-items: inherit; gap: 4px; max-width: 100%; margin-bottom: -16px; }
+/* Citation : petite bulle grise (14 px, 2 lignes au plus), recouverte de 10 px par la réponse. */
+.dm-quote { max-width: min(250px, 100%); padding: 8px 12px 18px; border: 0; border-radius: 16px; background: #EDEFF3; color: var(--m-grey); font-size: 14px; line-height: 19px; text-align: left; cursor: pointer; }
+.dm-quote span { display: -webkit-box; overflow: hidden; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.dm-quote:hover:not(:disabled) { background: #E5E8EE; }
+.dm-quote.is-deleted { font-style: italic; cursor: default; }
+.dm-msg-context + .dm-msg-line { position: relative; z-index: 1; }
+.dm-forwarded + .dm-reply { margin-top: 2px; }
+
+/* Au-dessus du champ : « Réponse à Sophie Martin », l'aperçu et ✕. */
+.dm-reply-bar { display: flex; align-items: center; gap: 12px; min-height: 44px; margin: 0 0 8px; padding: 0 0 0 16px; border-radius: 14px; background: var(--m-thread); }
+.dm-reply-bar > .icon { flex: none; width: 16px; height: 16px; color: var(--m-blue); }
+.dm-reply-bar-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 5px 0; font-size: 13px; line-height: 17px; }
+.dm-reply-bar-title { overflow: hidden; color: var(--m-text); text-overflow: ellipsis; white-space: nowrap; }
+.dm-reply-bar-preview { overflow: hidden; color: var(--m-grey); text-overflow: ellipsis; white-space: nowrap; }
+.dm-reply-bar-cancel { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; background: none; color: var(--m-grey); cursor: pointer; }
+.dm-reply-bar-cancel .icon { box-sizing: content-box; width: 11px; height: 11px; padding: 7.5px; border-radius: 50%; background: #FFFFFF; stroke-width: 3; }
+.dm-reply-bar-cancel:hover .icon { background: var(--m-line); }
+
+/* ——— Barre d'emojis et menu (MessageFocusOverlay) ——— */
+.listing-dialog.dm-focus { position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; overflow: hidden; border: 0; background: transparent; font-family: var(--d-font); }
+.listing-dialog.dm-focus::backdrop { background: rgba(0, 0, 0, 0.22); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.dm-focus-copy { position: fixed; display: flex; flex-direction: column; align-items: flex-start; pointer-events: none; }
+.dm-focus-copy > * { width: 100%; }
+.dm-focus-bar { position: fixed; display: flex; align-items: center; height: 50px; padding: 0 6px; border-radius: 999px; background: #FFFFFF; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14); transform-origin: left center; animation: dm-focus-in 0.28s var(--app-ease, ease-out) both; }
+.dm-focus-bar.is-out { transform-origin: right center; }
+.dm-focus-emoji { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 44px; padding: 0; border: 0; background: none; cursor: pointer; }
+.dm-focus-emoji span { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 50%; font-size: 25px; line-height: 1; transition: transform 0.12s; }
+.dm-focus-emoji:hover span { transform: scale(1.12); }
+.dm-focus-emoji[aria-pressed="true"] span { background: var(--m-blue-soft); }
+.dm-focus-menu { position: fixed; display: flex; flex-direction: column; overflow: hidden; border-radius: 14px; background: #FFFFFF; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12); transform-origin: top center; animation: dm-focus-menu-in 0.28s var(--app-ease, ease-out) both; }
+.dm-focus-menu button { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 46px; padding: 0 16px; border: 0; background: none; color: var(--m-text); font-size: 15.5px; font-weight: 500; text-align: left; cursor: pointer; }
+.dm-focus-menu button + button { box-shadow: inset 16px 0.5px 0 #FFFFFF, inset 0 0.5px 0 #E4E2DD; }
+.dm-focus-menu button:hover, .dm-focus-menu button:focus-visible { background: var(--m-hover); outline: none; }
+.dm-focus-menu button .icon { flex: none; width: 17px; height: 17px; }
+@keyframes dm-focus-in { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
+@keyframes dm-focus-menu-in { from { opacity: 0; transform: scale(0.7); } to { opacity: 1; transform: none; } }
+
+/* ——— Réactions et Transférer (feuilles) ——— */
+.dm-reactions { padding: 0 14px; }
+.dm-reactions > li + li::before { left: 54px; right: 0; }
+.dm-reaction-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; }
+.dm-reaction-who { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.dm-reaction-name { max-width: 100%; overflow: hidden; font-size: 15px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.dm-reaction-who .dm-link-button { font-size: 13px; }
+.dm-reaction-emoji { flex: none; font-size: 26px; line-height: 1; }
+.dm-forward { gap: 14px; }
+.dm-forward-label { margin: 0; color: var(--m-grey); font-size: 12px; font-weight: 700; letter-spacing: 0.06em; line-height: 16px; text-transform: uppercase; }
+.dm-forward-preview { display: flex; padding: 12px; border: 1px solid var(--m-line); border-radius: 22px; background: #FFFFFF; }
+.dm-forward-bubble { display: -webkit-box; max-width: calc(100% - 40px); margin: 0; padding: 9px 14px; overflow: hidden; border-radius: 16px; background: var(--m-thread); color: var(--m-text); font-size: 15px; line-height: 20px; overflow-wrap: anywhere; white-space: pre-wrap; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
+.dm-forward-bubble.is-out { margin-left: auto; background: var(--m-blue); color: #FFFFFF; }
+.dm-forward-search { flex: none; height: 42px; border: 0; border-radius: 12px; background: #EDEFF3; }
+.dm-forward-search:focus-within { box-shadow: 0 0 0 3px rgba(60, 92, 176, 0.18); }
+.dm-forward-list { padding: 0 14px; }
+.dm-forward-list > li + li::before { left: 56px; right: 0; }
+.dm-forward-target { display: flex; align-items: center; gap: 12px; width: 100%; padding: 9px 0; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; }
+.dm-forward-target:disabled { cursor: default; opacity: 0.45; }
+.dm-forward-target[aria-pressed="true"]:disabled { opacity: 1; }
+.dm-forward-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.dm-forward-name { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 15px; font-weight: 700; line-height: 20px; }
+.dm-forward-name > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dm-forward-sub { overflow: hidden; color: var(--m-grey); font-size: 12.5px; line-height: 17px; text-overflow: ellipsis; white-space: nowrap; }
+.dm-forward-check { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: 1.5px solid var(--m-time); border-radius: 50%; color: #FFFFFF; }
+.dm-forward-check.is-on { border-color: var(--m-blue); background: var(--m-blue); }
+.dm-forward-check .icon { width: 13px; height: 13px; stroke-width: 3; }
+.dm-forward-empty { padding: 20px 0; color: var(--m-grey); font-size: 14px; text-align: center; list-style: none; }
+.dm-forward-foot { align-items: center; gap: 8px; }
+.dm-forward-send { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; }
+.dm-forward-send:disabled { opacity: 0.5; }
+.dm-forward-send .icon { width: 16px; height: 16px; }
+.dm-forward-max { margin: 0; color: var(--m-grey); font-size: 12.5px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dm-burst, .dm-focus-bar, .dm-focus-menu { animation: none; }
+  .dm-interactive-body::after { transition: none; }
+}
+
+/* ——— Téléphone : la liste et les bulles de l'app ——— */
+@media (max-width: 1023.98px) {
+  .dm-side { background: var(--m-thread); }
+  .dm-side-top { gap: 0; padding: 8px 16px 10px; }
+  .dm-side-head { align-items: center; }
+  .dm-side-title { gap: 4px; }
+  .dm-side-head h1 { font-size: 30px; font-weight: 800; line-height: 36px; letter-spacing: -0.01em; }
+  .dm-side-sub { font-size: 15px; line-height: 20px; }
+  .dm-search-line { margin-top: 15px; }
+  .dm-search { height: 52px; padding-left: 13px; }
+  .dm-search > .icon { width: 17px; height: 17px; }
+  .dm-tabs { gap: 8px; margin-top: 13px; }
+  .dm-tab { padding: 0 15px; }
+  .dm-list-scroll { padding: 0 16px 20px; }
+  .dm-list-title { display: block; margin: 12px 0 10px; font-size: 18px; font-weight: 800; line-height: 24px; }
+  .dm-list { gap: 0; padding: 4px 0; border: 1px solid var(--m-line); border-radius: 22px; background: #FFFFFF; box-shadow: 0 2px 8px rgba(36, 45, 56, 0.05); }
+  .dm-list > li { position: relative; }
+  /* Trait fin entre deux discussions, aligné sur le nom. */
+  .dm-list > li + li::before { content: ''; position: absolute; top: 0; left: 72px; right: 0; height: 1px; background: #F2F0EC; }
+  .dm-row { border-radius: 0; }
+  .dm-list > li:first-child .dm-row { border-radius: 21px 21px 0 0; }
+  .dm-list > li:last-child .dm-row { border-radius: 0 0 21px 21px; }
+  .dm-list > li:only-child .dm-row { border-radius: 21px; }
+  .dm-activity h2 { padding: 0; }
+  .dm-linked-list { padding: 0; }
+  .dm-linked-scroll { padding: 12px 16px 20px; }
+
+  /* Fil : séries serrées comme l'app (2 px dans une série, 8 px entre deux séries), texte de 16 px. */
+  .dm-msg { margin-top: 2px; }
+  .dm-msg.starts-group { margin-top: 8px; }
+  .dm-bubble { padding: 7px 12px; font-size: 16px; line-height: 21px; }
+  .dm-media-caption, .dm-caption { font-size: 16px; }
+  .dm-reply-bar { margin-bottom: 6px; }
+}

@@ -7,11 +7,13 @@ import {
 import { supabase } from '../supabase';
 import { fetchOffers, type OfferRow } from '../listing/offers';
 import {
-  blockUser, fetchBlockedIds, fetchCommunities, fetchConversationVisits, fetchMessages, fetchParticipants, fetchProfessionalContacts,
-  fetchProfiles, insertMessage, markConversationRead, messageInsert, savePreferences, setReaction, unblockUser,
+  blockUser, fetchBlockedIds, fetchCommunities, fetchConversationVisits, fetchMessage, fetchMessages, fetchParticipants,
+  fetchProfessionalContacts, fetchProfiles, insertMessage, markConversationRead, messageInsert, savePreferences, setReaction, unblockUser,
   type ConversationVisit, type Message, type Preferences,
 } from './api';
 import { attachmentsContent, attachmentsPreview, contentPreview, decodeContent, textContent, type Attachment } from './content';
+import { copyAttachments } from './files';
+import { canForward, HEART, interactionRefusal, MAX_FORWARD_TARGETS, myReaction, toggledReactions } from './interactions';
 import { DISTANT_FUTURE } from './format';
 import {
   conversationFrom, sameId, upper, type CommunityRow, type Conversation, type ParticipantRow, type ProfessionalContactRow,
@@ -166,15 +168,17 @@ function markOpenConversationRead() {
 // MARK: - Envoi (MessagingStore.send)
 
 /**
- * Envoie un contenu, comme l'app : insert dans messages, puis le message rejoint la conversation ouverte, qui remonte
- * en tête de liste et sort des archives (sur place ; le serveur garde son réglage). Lève l'erreur du serveur.
+ * Envoie un contenu, comme l'app : insert dans messages (avec le message cité d'une réponse, ou la marque d'un
+ * transfert), puis le message rejoint la conversation ouverte, qui remonte en tête de liste et sort des archives (sur
+ * place ; le serveur garde son réglage). Lève l'erreur du serveur.
  */
-async function sendContent(conversationId: string, content: Record<string, unknown>): Promise<Message> {
+async function sendContent(conversationId: string, content: Record<string, unknown>,
+  options: { replyToId?: string | null; forwarded?: boolean } = {}): Promise<Message> {
   const me = currentUserId();
   if (!me) throw new Error('Votre session a expiré. Reconnectez-vous.');
   const clientId = crypto.randomUUID();
   const preview = contentPreview(decodeContent(content));
-  const message = await insertMessage(messageInsert(conversationId, clientId, content, preview), me);
+  const message = await insertMessage(messageInsert(conversationId, clientId, content, preview, options), me);
   appendMessage(message);
   patchConversationRow(conversationId, {
     last_message_id: message.id,
@@ -189,19 +193,20 @@ async function sendContent(conversationId: string, content: Record<string, unkno
 }
 
 /**
- * Résultat d'un envoi : `refusal` est le message du serveur quand le texte contient un mot interdit (modération), à
- * montrer tel quel ; `null` pour un autre échec (« n'a pas pu être envoyé »).
+ * Résultat d'un envoi : `refusal` est le message du serveur à montrer tel quel (mot interdit, message cité qui n'est
+ * plus disponible, contenu qui ne se transfère pas) ; `null` pour un autre échec (« n'a pas pu être envoyé »).
  */
 export type SendOutcome = { sent: true } | { sent: false; refusal: string | null };
 
-const notSent = (error: unknown): SendOutcome => ({ sent: false, refusal: bannedWordMessage(error) });
+const refusalOf = (error: unknown): string | null => interactionRefusal(error) ?? bannedWordMessage(error);
+const notSent = (error: unknown): SendOutcome => ({ sent: false, refusal: refusalOf(error) });
 
-/** Texte envoyé (sans espaces autour) ; pas envoyé s'il est vide ou n'a pas pu partir. */
-export async function sendText(conversationId: string, text: string): Promise<SendOutcome> {
+/** Texte envoyé (sans espaces autour), en réponse à `replyToId` s'il y en a un ; pas envoyé s'il est vide ou n'a pas pu partir. */
+export async function sendText(conversationId: string, text: string, replyToId: string | null = null): Promise<SendOutcome> {
   const trimmed = text.trim();
   if (!trimmed) return { sent: false, refusal: null };
   try {
-    await sendContent(conversationId, textContent(trimmed));
+    await sendContent(conversationId, textContent(trimmed), { replyToId });
     return { sent: true };
   } catch (error) {
     return notSent(error);
@@ -209,31 +214,112 @@ export async function sendText(conversationId: string, text: string): Promise<Se
 }
 
 /** Pièces jointes déjà envoyées dans le dossier, et leur message d'accompagnement facultatif. */
-export async function sendAttachments(conversationId: string, items: Attachment[], caption: string): Promise<SendOutcome> {
+export async function sendAttachments(conversationId: string, items: Attachment[], caption: string, replyToId: string | null = null): Promise<SendOutcome> {
   if (!items.length) return { sent: false, refusal: null };
   const text = caption.trim();
   try {
-    await sendContent(conversationId, attachmentsContent(items, text ? text : null));
+    await sendContent(conversationId, attachmentsContent(items, text ? text : null), { replyToId });
     return { sent: true };
   } catch (error) {
     return notSent(error);
   }
 }
 
+/**
+ * Transfère un message vers 5 conversations au plus (MessagingStore.forward) : le même contenu, marqué « transféré »,
+ * avec ses fichiers recopiés dans chaque conversation. Rend le nombre de conversations où il est parti et le premier
+ * refus du serveur.
+ */
+export async function forwardMessage(message: Message, targets: string[]): Promise<{ sent: number; refusal: string | null }> {
+  if (!canForward(message.content)) return { sent: 0, refusal: null };
+  let sent = 0;
+  let refusal: string | null = null;
+  for (const target of targets.slice(0, MAX_FORWARD_TARGETS)) {
+    try {
+      const content = message.content.kind === 'attachments'
+        ? attachmentsContent(await copyAttachments(message.content.items, target), message.content.caption)
+        : message.raw as Record<string, unknown>;
+      await sendContent(target, content, { forwarded: true });
+      sent += 1;
+    } catch (error) {
+      refusal ??= refusalOf(error);
+    }
+  }
+  return { sent, refusal };
+}
+
 /** Aperçu écrit avec un message de pièces jointes (colonne preview), pour les tests. */
 export const attachmentsPreviewText = attachmentsPreview;
 
-/** Appui long : pose ou retire le cœur, d'abord sur place, puis sur le serveur (`try?`). */
-export async function toggleHeart(messageId: string) {
+/**
+ * Réaction (MessagingStore.react) : le même emoji retire la mienne, un autre la remplace, sinon il s'ajoute ; affichée
+ * tout de suite, puis enregistrée (upsert ou suppression dans message_reactions). Refusée : la pastille revient à ce
+ * qu'elle était.
+ */
+export async function react(messageId: string, emoji: string) {
   const me = currentUserId();
   const message = threadStore.get().messages.find((item) => sameId(item.id, messageId));
   if (!me || !message) return;
-  const reaction = message.reaction === null ? '♥' : null;
-  updateMessage(messageId, (item) => ({ ...item, reaction }));
+  const before = { reactions: message.reactions, reaction: message.reaction };
+  const change = toggledReactions(message.reactions, emoji, me);
+  const reactionOf = (reactions: Message['reactions']) => myReaction(reactions, me)
+    ?? [...reactions].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]?.emoji ?? null;
+  updateMessage(messageId, (item) => ({ ...item, reactions: change.reactions, reaction: reactionOf(change.reactions) }));
   try {
-    await setReaction(messageId, reaction, me);
+    await setReaction(messageId, change.written, me);
   } catch {
-    // Comme l'app : le cœur reste affiché ; la prochaine relecture donne l'état du serveur.
+    updateMessage(messageId, (item) => ({ ...item, ...before }));
+  }
+}
+
+/** Double clic ou double toucher sur une bulle : pose ou retire ❤️ (toggleHeart). */
+export function toggleHeart(messageId: string) {
+  return react(messageId, HEART);
+}
+
+/** Retire ma réaction (fenêtre « Réactions »). */
+export async function removeMyReaction(messageId: string) {
+  const me = currentUserId();
+  const message = threadStore.get().messages.find((item) => sameId(item.id, messageId));
+  const mine = message ? myReaction(message.reactions, me) : null;
+  if (mine) await react(messageId, mine);
+}
+
+// MARK: - Messages cités (MessagingStore.quotedOriginal)
+
+/** Original d'une citation : en cours de lecture, trouvé, ou supprimé (« Message supprimé »). */
+export type QuotedOriginal = { status: 'loading' } | { status: 'found'; message: Message } | { status: 'deleted' };
+
+/** Originaux lus hors des messages chargés, par identifiant en minuscules. */
+export const quotedStore = createStore<Map<string, QuotedOriginal>>(new Map());
+
+/** Message cité : d'abord dans les messages chargés, sinon déjà lu ; en cours de lecture tant qu'il n'a pas été cherché. */
+export function quotedOriginal(id: string, messages: Message[], now = new Date()): QuotedOriginal {
+  const loaded = messages.find((message) => sameId(message.id, id));
+  const found = loaded ?? null;
+  if (found) return { status: 'found', message: found };
+  const known = quotedStore.get().get(id.toLowerCase());
+  if (known?.status === 'found' && known.message.expiresAt !== null && known.message.expiresAt.getTime() <= now.getTime()) return { status: 'deleted' };
+  return known ?? { status: 'loading' };
+}
+
+/** Lit l'original d'une citation qui n'est pas dans les messages chargés ; rien en retour : « Message supprimé ». */
+export async function loadQuotedOriginal(id: string, messages: Message[]) {
+  const key = id.toLowerCase();
+  if (quotedOriginal(id, messages).status !== 'loading' || quotedStore.get().has(key)) return;
+  const pending = new Map(quotedStore.get());
+  pending.set(key, { status: 'loading' });
+  quotedStore.set(pending);
+  try {
+    const message = await fetchMessage(id, currentUserId());
+    const next = new Map(quotedStore.get());
+    next.set(key, message ? { status: 'found', message } : { status: 'deleted' });
+    quotedStore.set(next);
+  } catch {
+    // Lecture impossible (hors ligne) : on réessaiera à la prochaine ouverture.
+    const next = new Map(quotedStore.get());
+    next.delete(key);
+    quotedStore.set(next);
   }
 }
 

@@ -78,7 +78,8 @@ describe('Lectures (inbox, messages, agenda)', () => {
       { table: 'messages', chain: [['select', MESSAGE_COLUMNS], ['eq', 'conversation_id', UPPER], ['order', 'created_at', { ascending: false }], ['limit', 200]] },
       { table: 'conversation_participants', chain: [['select', PARTICIPANT_COLUMNS], ['eq', 'conversation_id', UPPER]] },
     ]);
-    expect(MESSAGE_COLUMNS).toBe('id, conversation_id, sender_id, kind, client_id, content, created_at, expires_at, message_reactions(user_id, emoji, created_at)');
+    // Les colonnes de l'app, avec la réponse et le transfert (reply_to_id, forwarded ; demande du 17/11).
+    expect(MESSAGE_COLUMNS).toBe('id, conversation_id, sender_id, kind, client_id, content, created_at, expires_at, reply_to_id, forwarded, message_reactions(user_id, emoji, created_at)');
   });
 
   it('agenda : les colonnes de l’app', async () => {

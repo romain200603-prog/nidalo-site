@@ -80,7 +80,8 @@ export function cardKind(row: ListingRow, mode: SearchMode | null): CardKind {
   }
 }
 
-function cardPrice(row: ListingRow): CardPrice {
+/** Prix d'une carte : vente, loyer charges comprises (« CC ») ou hors charges (« HC »), comme ListingCardContent.price. */
+export function cardPrice(row: ListingRow): CardPrice {
   const price = Number(row.price);
   if (row.transaction !== 'rent') return { kind: 'sale', value: price };
   const charges = num(row.monthly_charges);

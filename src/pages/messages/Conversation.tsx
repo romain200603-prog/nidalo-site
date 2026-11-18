@@ -9,6 +9,7 @@ import {
   areValidSlots, dayString, hourLabel, INVALID_SLOTS_MESSAGE, slotStart, SLOT_TIMES, suggestedSlot, visitErrorMessage, type SlotDraft,
 } from '../../lib/listing/visits';
 import { sortedPhotos } from '../../lib/listings';
+import type { Message } from '../../lib/messages/api';
 import { keepNumbersTogether, lastSeenLabel } from '../../lib/messages/format';
 import { groupSummary, sameId, type Conversation, type ListingSnapshot } from '../../lib/messages/inbox';
 import { lotsLabel } from '../../lib/messages/listingBar';
@@ -26,6 +27,7 @@ import { OfferScreen } from '../listing/OfferScreen';
 import { VisitRequestScreen } from '../listing/VisitRequestScreen';
 import { BlockDialog, CallDialog, DELETED_ACCOUNT, groupMenuItems, headerMenuItems, ReportSheet } from './actions';
 import { Composer, type Suggestion } from './Composer';
+import { ForwardSheet } from './MessageInteractions';
 import { listingStore, loadListingRow, loadLots, lotsStore } from './listingRow';
 import { ActionMenu, ConfirmDialog, ConversationAvatar, Dialog, showIphoneOnly, showNotice } from './parts';
 import { navigate, openOnClick, routePath } from './route';
@@ -64,12 +66,16 @@ export function ConversationPane({ conversation, thread, offers, visitRequests, 
   const [blocking, setBlocking] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [accepting, setAccepting] = useState(false);
+  // Réponse en cours (au-dessus du champ) et message à transférer (demande du 17/11).
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [forwarding, setForwarding] = useState<Message | null>(null);
   const now = new Date();
   const messages = visibleMessages(thread.messages, conversation.clearedAt, now);
   const conversationOffers = offers.status === 'ready' || offers.status === 'error' ? offersIn(offers.value, conversation.id) : null;
   const requests = requestsIn(visitRequests, conversation);
   const other = conversation.otherUserId;
   const isBlocked = !conversation.isGroup && !!other && blocked.has(other.toLowerCase());
+  const canWrite = !isBlocked && !conversation.hasLeft && (conversation.isGroup || conversation.counterpart.name !== DELETED_ACCOUNT);
   const listing = conversation.listing;
   // Fiche du bien lue pour la barre de l'annonce : rendement, formulaire de visite, carte « Rentabilité » de l'offre.
   const rows = useStore(listingStore);
@@ -199,8 +205,11 @@ export function ConversationPane({ conversation, thread, offers, visitRequests, 
           offers={conversationOffers}
           requests={requests}
           me={me}
+          canWrite={canWrite}
           onOfferAction={onOfferAction}
           onProposeSlots={setProposing}
+          onReply={setReplyingTo}
+          onForward={setForwarding}
         />
       )}
 
@@ -210,7 +219,11 @@ export function ConversationPane({ conversation, thread, offers, visitRequests, 
         messages={thread.status === 'ready' && sameId(thread.conversationId, conversation.id) ? thread.messages : null}
         suggestions={suggestions}
         onMakeOffer={offerPossible ? () => setScreen({ kind: 'offer', parent: null }) : null}
+        replyingTo={canWrite ? replyingTo : null}
+        onReplyChange={setReplyingTo}
+        me={me}
       />
+      <ForwardSheet message={forwarding} originId={conversation.id} me={me} onClose={() => setForwarding(null)} />
 
       <CallDialog open={calling} name={conversation.counterpart.name} phone={conversation.counterpart.phone} onClose={() => setCalling(false)} />
       <BlockDialog open={blocking} userId={other} onClose={() => setBlocking(false)} />
@@ -360,12 +373,15 @@ function ListingBanner({ listing }: { listing: ListingSnapshot }) {
 
 // MARK: - Bas de la conversation
 
-function BottomBar({ conversation, isBlocked, messages, suggestions, onMakeOffer }: {
+function BottomBar({ conversation, isBlocked, messages, suggestions, onMakeOffer, replyingTo, onReplyChange, me }: {
   conversation: Conversation;
   isBlocked: boolean;
   messages: Parameters<typeof Composer>[0]['messages'];
   suggestions: Suggestion[];
   onMakeOffer: (() => void) | null;
+  replyingTo: Message | null;
+  onReplyChange: (message: Message | null) => void;
+  me: string | null;
 }) {
   if (isBlocked && conversation.otherUserId) {
     const other = conversation.otherUserId;
@@ -382,7 +398,16 @@ function BottomBar({ conversation, isBlocked, messages, suggestions, onMakeOffer
   if (conversation.hasLeft) return <div className="dm-bottom-line"><span>Vous avez quitté le groupe</span></div>;
   return (
     <div className="dm-bottom">
-      <Composer key={conversation.id} conversation={conversation} messages={messages} suggestions={suggestions} onMakeOffer={onMakeOffer} />
+      <Composer
+        key={conversation.id}
+        conversation={conversation}
+        messages={messages}
+        suggestions={suggestions}
+        onMakeOffer={onMakeOffer}
+        replyingTo={replyingTo}
+        onReplyChange={onReplyChange}
+        me={me}
+      />
     </div>
   );
 }
