@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   agendaErrorMessage, agendaSummary, countIn, DEFAULT_REMINDERS, defaultVisitStart, directionsUrl, groupKind, groupsIn, groupTitle,
-  isDuplicate, itemsIn, newVisitRow, reminderLabel, remindersSummary, requestEntries, upcomingVisitForListing, visitAddressFor,
-  visitContactFor, visitFromRow, type AgendaItem, type AgendaRequestRow, type NewVisit,
+  isDuplicate, itemsIn, newVisitRow, PERIOD_TITLES, periodGroupsIn, periodOf, reminderLabel, remindersSummary, requestEntries,
+  upcomingVisitForListing, visitAddressFor, visitCardTitle, visitContactFor, visitDateBlock, visitFromRow, visitPersonLine, visitSlotCount,
+  visitTimeRange, type AgendaItem, type AgendaRequestRow, type NewVisit,
 } from './agenda';
 
 const ME = 'a0000000-0000-4000-8000-0000000000c1';
@@ -17,6 +18,94 @@ function item(id: string, start: Date, change: Partial<AgendaItem> = {}): Agenda
 }
 
 const at = (days: number, hours: number) => new Date(2026, 10, 7 + days, hours, 0);
+
+// Mêmes cas que VisitAgendaTests (ImmoDomainTests) : mercredi 22 octobre 2026, 10 h, durée inconnue (une heure).
+describe('Mon agenda : périodes de l’app (VisitAgenda.periodGroups)', () => {
+  const now = new Date(2026, 9, 22, 10, 0);
+  const on = (day: number, hour: number) => new Date(2026, 9, day, hour, 0);
+  const sample = [
+    item('aujourdhui', on(22, 18), { durationMinutes: null }),
+    item('demain', on(23, 9), { status: 'awaitingOther', durationMinutes: null }),
+    item('semaine', on(25, 10), { status: 'toConfirm', durationMinutes: null }),
+    item('plus-tard', on(30, 14), { durationMinutes: null }),
+    item('ce-matin', on(22, 9), { durationMinutes: 30 }),
+    item('hier', on(21, 17), { durationMinutes: null }),
+    item('plus-tot', on(10, 11), { durationMinutes: null }),
+    item('annulee', on(24, 15), { status: 'cancelled', durationMinutes: null }),
+  ];
+
+  it('à venir : « Cette semaine » (aujourd’hui compris), puis « Plus tard »', () => {
+    expect(periodGroupsIn(sample, 'upcoming', now).map((g) => [g.period, g.items.map((v) => v.id)])).toEqual([
+      ['thisWeek', ['aujourdhui', 'demain', 'semaine']], ['later', ['plus-tard']],
+    ]);
+  });
+
+  it('passées : « Ce mois-ci », puis « Plus anciennes »', () => {
+    const visits = [...sample, item('premier', on(1, 10), { durationMinutes: null }), item('septembre', new Date(2026, 8, 28, 10), { durationMinutes: null })];
+    const groups = periodGroupsIn(visits, 'past', now);
+    expect(groups.map((g) => g.period)).toEqual(['thisMonth', 'older']);
+    expect(groups[1].items.map((v) => v.id)).toEqual(['septembre']);
+  });
+
+  it('limites des périodes, et leurs titres', () => {
+    expect(periodOf(on(22, 8), now)).toBe('thisWeek');
+    expect(periodOf(on(28, 23), now)).toBe('thisWeek');
+    expect(periodOf(on(29, 0), now)).toBe('later');
+    expect(periodOf(on(21, 23), now)).toBe('thisMonth');
+    expect(periodOf(new Date(2025, 9, 22, 9), now)).toBe('older');
+    expect(periodOf(on(22, 9), now, 'past')).toBe('thisMonth');
+    // Annulée, à venir : rangée comme les visites à venir.
+    expect(periodGroupsIn(sample, 'cancelled', now).map((g) => g.period)).toEqual(['thisWeek']);
+    expect(Object.values(PERIOD_TITLES)).toEqual(['Cette semaine', 'Plus tard', 'Ce mois-ci', 'Plus anciennes']);
+  });
+});
+
+// Carte d'une visite (VisitCard, VisitsAgendaView.swift).
+describe('Mon agenda : carte d’une visite', () => {
+  it('horaire : « 18 h 00 – 18 h 45 », l’heure de début seule sans durée', () => {
+    expect(visitTimeRange(item('a', new Date(2026, 10, 6, 18, 0), { durationMinutes: 45 }))).toBe('18 h 00 – 18 h 45');
+    expect(visitTimeRange(item('b', new Date(2026, 10, 9, 9, 5), { durationMinutes: 60 }))).toBe('9 h 05 – 10 h 05');
+    expect(visitTimeRange(item('c', new Date(2026, 10, 9, 14, 30), { durationMinutes: null }))).toBe('14 h 30');
+  });
+
+  it('bloc date : jour et mois abrégés, sans point, en capitales', () => {
+    expect(visitDateBlock(new Date(2026, 10, 6, 14, 30))).toEqual({ weekday: 'VEN', day: '6', month: 'NOV' });
+    expect(visitDateBlock(new Date(2027, 1, 15, 9, 0))).toEqual({ weekday: 'LUN', day: '15', month: 'FÉVR' });
+    expect(visitDateBlock(new Date(2026, 5, 3, 9, 0))).toEqual({ weekday: 'MER', day: '3', month: 'JUIN' });
+  });
+
+  it('bien : titre et ville ; « Visite » sans bien', () => {
+    const listing = { listingId: 'l', title: 'Studio meublé', price: 0, transaction: 'rent' as const, city: 'Lyon 7e', coverImageURL: null };
+    expect(visitCardTitle({ listing })).toBe('Studio meublé · Lyon 7e');
+    expect(visitCardTitle({ listing: { ...listing, city: '' } })).toBe('Studio meublé');
+    expect(visitCardTitle({ listing: null })).toBe('Visite');
+  });
+
+  it('personne : le contact, l’agence si elle diffère, « en attente de sa réponse » pour une demande envoyée', () => {
+    const visit = item('v', new Date(2026, 10, 9, 9, 0), { contactName: 'Sophie Martin' });
+    expect(visitPersonLine(visit, 'confirmed', null, null)).toBe('Avec Sophie Martin');
+    expect(visitPersonLine(visit, 'confirmed', null, 'Agence Bellecour')).toBe('Avec Sophie Martin · Agence Bellecour');
+    expect(visitPersonLine({ ...visit, contactName: 'Agence Bellecour' }, 'confirmed', null, 'Agence Bellecour')).toBe('Avec Agence Bellecour');
+    expect(visitPersonLine({ ...visit, contactName: null }, 'confirmed', null, 'Agence Bellecour')).toBe('Avec Agence Bellecour');
+    expect(visitPersonLine({ ...visit, contactName: null }, 'confirmed', null, null)).toBeNull();
+    // Visite enregistrée en attente : pas de « en attente de sa réponse » (seulement une demande).
+    expect(visitPersonLine(visit, 'awaitingOther', null, null)).toBe('Avec Sophie Martin');
+    const request = { ...visit, requestId: 'v' };
+    expect(visitPersonLine(request, 'awaitingOther', null, null)).toBe('Avec Sophie Martin · en attente de sa réponse');
+    expect(visitPersonLine(request, 'toConfirm', 3, null)).toBe('Avec Sophie Martin · en attente de sa réponse');
+    expect(visitPersonLine({ ...request, contactName: null }, 'toConfirm', 3, null)).toBe('en attente de sa réponse');
+  });
+
+  it('créneaux : seulement une demande pas annulée qui en propose plusieurs', () => {
+    const slots = [1, 2, 3].map((n) => ({ id: `S${n}`, start: `2026-11-1${n}T09:00:00.000`, durationMinutes: 45 }));
+    const request = { id: 'R', status: 'pending', slots, proposed_slots: null } as unknown as AgendaRequestRow;
+    const entry = item('R', new Date(2026, 10, 11, 10, 0), { requestId: 'R', status: 'awaitingOther' });
+    expect(visitSlotCount(entry, [request])).toBe(3);
+    expect(visitSlotCount({ ...entry, status: 'cancelled' }, [request])).toBeNull();
+    expect(visitSlotCount(entry, [{ ...request, slots: slots.slice(0, 1) } as AgendaRequestRow])).toBeNull();
+    expect(visitSlotCount(item('V', new Date(2026, 10, 11, 10, 0)), [request])).toBeNull();
+  });
+});
 
 describe('Mon agenda : onglets, ordre et groupes (VisitAgenda)', () => {
   const visits = [

@@ -212,7 +212,7 @@ const CONVERSATION_PREFERENCES = [
 ];
 /** Sortes de notification connues de l'app (NidaloNotification.Kind) : les autres sont ignorées. */
 const NOTIFICATION_KINDS = ['newRequest', 'accepted', 'declined', 'proposed', 'rescheduleProposed', 'rescheduled', 'rescheduleDeclined', 'cancelled',
-  'reminder', 'searchMatch', 'offerReceived', 'offerCountered', 'offerAccepted', 'offerDeclined', 'offerWithdrawn'];
+  'reminder', 'searchMatch', 'offerReceived', 'offerCountered', 'offerAccepted', 'offerDeclined', 'offerWithdrawn', 'visitSlotsOpened'];
 const notificationId = (n) => `d0000000-0000-4000-8000-00000000000${n}`;
 /** Table notifications, écrite par le serveur avec les textes de ses fonctions (visites, offres). */
 function notificationRows(now) {
@@ -1535,7 +1535,7 @@ async function phoneFits(page, name) {
       if (box.width === 0 && box.height === 0) continue;
       if (box.left < -0.5 || box.right > width + 0.5) found.push(`${label(element)} de ${Math.round(box.left)} à ${Math.round(box.right)} px`);
     }
-    for (const card of document.querySelectorAll('.dsc-visit, .dsc-card, .notification-row, dialog[open], .dsc-menu-list')) {
+    for (const card of document.querySelectorAll('.app-visit, .dsc-card, .notification-row, dialog[open], .dsc-menu-list')) {
       if (card.scrollWidth > card.clientWidth + 1) found.push(`${label(card)} : contenu de ${card.scrollWidth} px pour ${card.clientWidth}`);
     }
     return found;
@@ -1722,21 +1722,75 @@ function spaceRows(page, selector) {
     row.querySelector('.app-row-subtitle')?.textContent.trim() ?? null, row.getAttribute('href')]));
 }
 
-/** Cartes de visite de l'onglet affiché, par groupe de dates (VisitsAgendaView). */
+/**
+ * Cartes de visite de l'onglet affiché, par période (VisitsAgendaView, VisitCard) : bloc date (texte et libellé lu),
+ * horaire (barré si annulée), état, teintes [bloc date, état], bien, personne et compte rendu, liens et boutons.
+ */
 function agendaCards(page) {
-  return page.$$eval('.dsc-visit-group', (groups) => groups.map((group) => {
+  return page.$$eval('.app-visit-group', (groups) => groups.map((group) => {
     const text = (element) => (element ? element.textContent.replace(/\s+/g, ' ').trim() : null);
-    return [text(group.querySelector('.dsc-group-title')), [...group.querySelectorAll('.dsc-visit')].map((card) => ({
-      date: text(card.querySelector('.dsc-visit-date > span[aria-hidden="true"]')),
-      status: text(card.querySelector('.dsc-status')),
-      title: text(card.querySelector('.dsc-visit-title')),
-      lines: [...card.querySelectorAll('.dsc-visit-lines > span')].map(text),
-      route: card.querySelector('a.dsc-visit-action')?.getAttribute('href') ?? null,
-      request: card.querySelector('a.dsc-visit-open')?.getAttribute('href') ?? null,
-      contact: [...card.querySelectorAll('.dsc-visit-action')].find((action) => text(action) === 'Contacter')?.disabled === false,
+    const tone = (element) => [...(element?.classList ?? [])].find((name) => name.startsWith('app-tone-'))?.slice(9) ?? null;
+    return [text(group.querySelector('.app-section-label')), [...group.querySelectorAll('.app-visit')].map((card) => ({
+      block: [...card.querySelectorAll('.app-visit-date > span')].map(text).join(' '),
+      date: card.querySelector('.app-visit-date')?.getAttribute('aria-label') ?? null,
+      time: text(card.querySelector('.app-visit-time')),
+      cancelled: Boolean(card.querySelector('.app-visit-time.is-cancelled')),
+      status: text(card.querySelector('.app-visit-pill')),
+      tones: [tone(card.querySelector('.app-visit-date')), tone(card.querySelector('.app-visit-pill'))],
+      title: text(card.querySelector('.app-visit-title')),
+      lines: [...card.querySelectorAll('.app-visit-person, .app-visit-report')].map(text),
+      route: card.querySelector('a.app-visit-route')?.getAttribute('href') ?? null,
+      request: card.querySelector('a.app-visit-open')?.getAttribute('href') ?? null,
+      slots: [...card.querySelectorAll('a.app-visit-button')].find((link) => text(link) === 'Voir les créneaux')?.getAttribute('href') ?? null,
+      contact: [...card.querySelectorAll('.app-visit-button')].find((action) => text(action) === 'Message')?.disabled === false,
       menu: Boolean(card.querySelector('.dsc-menu-button')),
     }))];
   }));
+}
+
+/**
+ * Centre de notifications affiché (NotificationsView) : [petit titre du jour, [[teinte du carré d'icône, photo du bien
+ * (« photo », « cadre » sans photo, null sans annonce), heure]]].
+ */
+function notificationLayout(page) {
+  return page.$$eval('.notification-group', (groups) => groups.map((group) => [group.querySelector('.app-section-label')?.textContent ?? null,
+    [...group.querySelectorAll('.notification-row')].map((row) => [
+      [...(row.querySelector('.notification-icon')?.classList ?? [])].find((name) => name.startsWith('app-tone-'))?.slice(9) ?? null,
+      row.querySelector('.notification-photo img') ? 'photo' : row.querySelector('.notification-photo') ? 'cadre' : null,
+      row.querySelector('.notification-date')?.textContent ?? '',
+    ])]));
+}
+
+/** Teinte de chaque sorte de notification (NotificationCenterLayout.tone). */
+const NOTIFICATION_TONES = {
+  searchMatch: 'blue', accepted: 'blue', rescheduled: 'blue', reminder: 'blue', visitSlotsOpened: 'blue', offerReceived: 'green', offerCountered: 'green',
+  offerAccepted: 'green', newRequest: 'amber', proposed: 'amber', rescheduleProposed: 'amber', declined: 'red', rescheduleDeclined: 'red', cancelled: 'red',
+  offerDeclined: 'red', offerWithdrawn: 'red',
+};
+/** Forme de l'heure de chaque jour : « 11:02 », « Hier », « Lun. », « 3 nov. ». */
+const NOTIFICATION_TIMES = { 'Aujourd\'hui': /^\d\d:\d\d$/, Hier: /^Hier$/, 'Cette semaine': /^[A-Z][a-zé]+\.$/, 'Plus anciennes': /^\d{1,2} [a-zéû]+\.?$/ };
+
+/**
+ * Vérifie le centre de notifications contre les lignes du serveur (`known`, les plus récentes d'abord) : jours dans
+ * l'ordre de l'app (selon l'heure de la machine, celle du navigateur), teinte de la sorte, photo du bien, forme de l'heure.
+ */
+async function checkNotificationLayout(page, name, known) {
+  const photos = known.filter((row) => (listings.find((listing) => listing.id === row.listing_id)?.listing_photos?.length ?? 0) > 0).length;
+  await page.waitForFunction((count) => document.querySelectorAll('.notification-photo img').length === count, photos, { timeout: 8000 }).catch(() => undefined);
+  const start = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const wanted = [];
+  for (const row of known) {
+    const days = Math.round((start(new Date()) - start(new Date(row.created_at))) / (24 * HOUR));
+    const day = days <= 0 ? 'Aujourd\'hui' : days === 1 ? 'Hier' : days < 7 ? 'Cette semaine' : 'Plus anciennes';
+    const listing = listings.find((item) => item.id === row.listing_id);
+    const photo = row.listing_id === null ? null : listing?.listing_photos?.length ? 'photo' : 'cadre';
+    if (wanted.at(-1)?.[0] !== day) wanted.push([day, []]);
+    wanted.at(-1)[1].push([NOTIFICATION_TONES[row.kind], photo]);
+  }
+  const shown = await notificationLayout(page);
+  expectSame(name, 'jours, teintes et photos', shown.map(([day, rows]) => [day, rows.map(([tone, photo]) => [tone, photo])]), wanted);
+  const times = shown.flatMap(([day, rows]) => rows.filter(([, , time]) => !NOTIFICATION_TIMES[day]?.test(time)).map(([, , time]) => `${day} « ${time} »`));
+  if (times.length) problems.push(`${name} : heures ${times.join(', ')}`);
 }
 
 /** Biens consultés affichés : titre, ville et surface, prix, statut. */
@@ -2099,7 +2153,7 @@ try {
     }
     // Notifications sans compte : l'écran de l'app, avec son message (la cloche de l'app s'ouvre aussi sans compte).
     page = await open(guest, '/compte/?vue=notifications', `notifications-${width}-sans-compte`);
-    await page.waitForSelector('.notifications-screen .account-empty');
+    await page.waitForSelector('.notifications-screen .app-unavailable');
     const guestText = (await page.textContent('.notifications-screen'))?.replace(/\s+/g, ' ') ?? '';
     for (const text of ['Notifications', 'Aucune notification pour l’instant', 'Connectez-vous pour recevoir les réponses à vos demandes de visite et les rappels.']) {
       if (!guestText.includes(text)) problems.push(`notifications sans compte ${width} : « ${text} » absent`);
@@ -2158,6 +2212,7 @@ try {
     for (const href of [`/messages/?c=${conversationId(1)}`, `/annonce/?id=${listings[0].id}`, '/compte/?vue=demande-visite&id=e0000000-0000-4000-8000-000000000003']) {
       if (!hrefs.includes(href)) problems.push(`notifications ${width} : aucun lien vers ${href} (${JSON.stringify(hrefs)})`);
     }
+    await checkNotificationLayout(page, `notifications ${width}`, known);
     const current = await page.evaluate(() => [document.querySelector('.dtop-round[href="/compte/?vue=notifications"]')?.getAttribute('aria-current'), document.querySelector('.dtop-space')?.getAttribute('aria-current')]);
     if (current[0] !== 'page' || current[1] !== null) problems.push(`notifications ${width} : bouton actif ${JSON.stringify(current)}`);
     if ((await contentWidth(page, '.account-wrap')) !== 640) problems.push(`notifications ${width} : colonne de ${await contentWidth(page, '.account-wrap')} px au lieu de 640`);
@@ -4412,37 +4467,41 @@ try {
       // « Mon agenda » ouvre Mon agenda.
       await page.click('.dsp-space-rows a.app-row[href="/compte/?vue=agenda"]');
       await page.waitForURL(`${base}/compte/?vue=agenda`, { timeout: 8000 }).catch(() => problems.push(`${E} : « Mon agenda » ouvre ${page.url()}`));
-      await page.waitForSelector('.dsc-agenda-screen .dsc-visit', { timeout: 8000 }).catch(() => problems.push(`${E} : Mon agenda ne s'affiche pas`));
+      await page.waitForSelector('.app-agenda .app-visit', { timeout: 8000 }).catch(() => problems.push(`${E} : Mon agenda ne s'affiche pas`));
 
-      // Mon agenda : onglets dans l'ordre de l'app avec leur nombre, cartes groupées par date, Itinéraire vers Plans.
+      // Mon agenda (étape 3 : les pièces de l'app dans la mise en page du site) : onglets de l'app dans l'ordre de l'app
+      // avec leur nombre, « + », cartes de l'app groupées par période, Itinéraire vers Plans.
       const A = 'Mon agenda';
+      const addVisitPath = '/compte/?vue=ajouter-visite&depuis=agenda';
       expectSame(A, 'en-tête', [await textOf(page, '.dsc-head h1'), await textOf(page, '.dsc-head p'), await page.getAttribute('.dsc-back', 'href'),
-        await page.getAttribute('.dsc-square', 'href'), await page.getAttribute('.dsc-square', 'aria-label'), await textOf(page, '.dsc-add-visit'),
-        await page.getAttribute('.dsc-add-visit', 'href')],
-      ['Agenda des visites', 'Toutes vos visites à venir et passées.', '/compte/', '/compte/?vue=ajouter-visite&depuis=agenda', 'Programmer une visite',
-        'Ajouter une visite manuellement', '/compte/?vue=ajouter-visite&depuis=agenda']);
-      const agendaTabs = () => page.$$eval('.dsc-tab', (tabs) => tabs.map((tab) => [tab.childNodes[0]?.textContent ?? null, tab.querySelector('.dsc-tab-count')?.textContent ?? null,
-        tab.getAttribute('aria-selected')]));
-      expectSame(A, 'onglets', await agendaTabs(), [['À venir', '3', 'true'], ['Passées', '1', 'false'], ['Annulées', '1', 'false']]);
+        await page.getAttribute('.app-agenda-plus', 'href'), await page.getAttribute('.app-agenda-plus', 'aria-label'), await textOf(page, '.app-agenda-add-link'),
+        await page.getAttribute('.app-agenda-add-link', 'href')],
+      ['Agenda des visites', 'Toutes vos visites à venir et passées.', '/compte/', addVisitPath, 'Ajouter une visite', 'Ajouter une visite manuellement', addVisitPath]);
+      const agendaTabs = () => page.$$eval('.app-agenda-tab', (tabs) => tabs.map((tab) => [tab.querySelector('.app-agenda-tab-title')?.textContent ?? null,
+        tab.querySelector('.app-agenda-tab-count')?.textContent ?? null, tab.getAttribute('aria-selected'), tab.getAttribute('aria-label')]));
+      expectSame(A, 'onglets', await agendaTabs(), [['À venir', '3', 'true', 'À venir, 3'], ['Passées', '1', 'false', 'Passées, 1'], ['Annulées', '1', 'false', 'Annulées, 1']]);
       const plans = (address) => `https://maps.apple.com/?daddr=${encodeURIComponent(address)}`;
-      const card = (fields) => ({ route: null, request: null, contact: true, menu: true, ...fields });
+      const card = (fields) => ({ cancelled: false, route: null, request: null, slots: null, contact: true, menu: true, ...fields });
+      const requestPath = `/compte/?vue=demande-visite&id=${SPACE_REQUEST_ID}`;
       expectSame(A, 'À venir', await agendaCards(page), [
-        ['Aujourd\'hui', [card({ date: 'Ven. 6 nov. · 14h30', status: 'Confirmée', title: 'Appartement lumineux avec balcon', lines: ['Lyon 3e (69003)', 'Avec Agence du Parc'],
-          route: plans('Lyon 3e (69003)') })]],
         ['Cette semaine', [
-          card({ date: 'Lun. 9 nov. · 9h00', status: 'En attente', title: 'Studio meublé', lines: ['12 Rue de test, 69007 Lyon 7e', 'Avec Julien Moreau'],
-            route: plans('12 Rue de test, 69007 Lyon 7e') }),
-          // Demande envoyée, pas encore acceptée : son écran « Demande de visite » réunit ses actions (pas de menu « … »).
-          card({ date: 'Mar. 10 nov. · 10h00', status: 'En attente', title: 'T2 vendu loué près du métro', lines: ['Villeurbanne', 'Avec Marc Petit', '3 créneaux proposés'],
-            route: plans('Villeurbanne'), request: `/compte/?vue=demande-visite&id=${SPACE_REQUEST_ID}`, menu: false }),
+          card({ block: 'VEN 6 NOV', date: 'Vendredi 6 novembre · 14h30', time: '14 h 30 – 15 h 15', status: 'Confirmée', tones: ['blue', 'green'],
+            title: 'Appartement lumineux avec balcon · Lyon 3e', lines: ['Avec Agence du Parc'], route: plans('Lyon 3e (69003)') }),
+          card({ block: 'LUN 9 NOV', date: 'Lundi 9 novembre · 9h00', time: '9 h 00 – 9 h 30', status: 'En attente', tones: ['amber', 'amber'],
+            title: 'Studio meublé · Lyon 7e', lines: ['Avec Julien Moreau'], route: plans('12 Rue de test, 69007 Lyon 7e') }),
+          // Demande envoyée à trois créneaux, pas encore acceptée : « Voir les créneaux » et la carte ouvrent l'écran « Demande
+          // de visite », qui réunit ses actions (pas de menu « … »).
+          card({ block: 'MAR 10 NOV', date: 'Mardi 10 novembre · 10h00', time: '3 créneaux proposés', status: 'En attente', tones: ['amber', 'amber'],
+            title: 'T2 vendu loué près du métro · Villeurbanne', lines: ['Avec Marc Petit · en attente de sa réponse'], request: requestPath, slots: requestPath,
+            menu: false }),
         ]],
       ]);
       desktopAgenda = await agendaCards(page);
-      expectSame(A, 'lien Itinéraire', await page.$eval('.dsc-visit a.dsc-visit-action', (link) => [link.textContent, link.getAttribute('target'), link.getAttribute('rel')]),
+      expectSame(A, 'lien Itinéraire', await page.$eval('.app-visit a.app-visit-route', (link) => [link.textContent, link.getAttribute('target'), link.getAttribute('rel')]),
         ['Itinéraire', '_blank', 'noopener noreferrer']);
       // Menu « … » d'une visite à venir : les actions de l'app, toutes dans l'app iPhone.
       const visitMenu = async (index) => {
-        await page.locator('.dsc-visit').nth(index).locator('.dsc-menu-button').click();
+        await page.locator('.app-visit').nth(index).locator('.dsc-menu-button').click();
         await page.waitForSelector('.dsc-menu-list');
         return textsOf(page, '.dsc-menu-list [role="menuitem"]');
       };
@@ -4450,40 +4509,55 @@ try {
         ['Modifier la visite', 'Reprogrammer', 'Ajouter une note', 'Ajouter à mon calendrier', 'Annuler la visite', 'Supprimer']);
       await page.locator('.dsc-menu-list').getByRole('menuitem', { name: 'Ajouter à mon calendrier', exact: true }).click();
       await iphoneOnly(page, A, 'Ajouter à mon calendrier');
-      // Contacter : la conversation liée à la visite.
+      // Message : la conversation liée à la visite.
       await page.route(new RegExp(`^${base}/messages/`), (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Messages</title>' }));
-      await page.locator('.dsc-visit').nth(0).getByRole('button', { name: 'Contacter' }).click();
+      await page.locator('.app-visit').nth(0).getByRole('button', { name: 'Message' }).click();
       await page.waitForURL(`${base}/messages/?c=E0000000-0000-4000-8000-000000000001`, { timeout: 8000 })
-        .catch(() => problems.push(`${A} : « Contacter » ouvre ${page.url()} au lieu de la conversation liée`));
+        .catch(() => problems.push(`${A} : « Message » ouvre ${page.url()} au lieu de la conversation liée`));
       await page.goBack({ waitUntil: 'networkidle' });
-      await page.waitForSelector('.dsc-visit');
+      await page.waitForSelector('.app-visit');
       await favShot(page, '5-mon-espace-agenda-1440.png');
-      await page.click('.dsc-tab >> nth=1');
+      await page.click('.app-agenda-tab >> nth=1');
       expectSame(A, 'Passées', await agendaCards(page), [
-        ['Ces 7 derniers jours', [card({ date: 'Lun. 2 nov. · 15h00', status: 'Terminée', title: 'T2 vendu loué près du métro',
-          lines: ['Villeurbanne (69100)', 'Avec Camille Roux', 'Intéressant · À revoir'], route: plans('Villeurbanne (69100)') })]],
+        ['Ce mois-ci', [card({ block: 'LUN 2 NOV', date: 'Lundi 2 novembre · 15h00', time: '15 h 00 – 16 h 00', status: 'Terminée', tones: ['blue', 'gray'],
+          title: 'T2 vendu loué près du métro · Villeurbanne', lines: ['Avec Camille Roux', 'Intéressant · À revoir'], route: plans('Villeurbanne (69100)') })]],
       ]);
       expectSame(A, 'menu d\'une visite terminée', await visitMenu(0), ['Ajouter une note', 'Ajouter à mon calendrier', 'Supprimer']);
       await page.keyboard.press('Escape');
-      await page.click('.dsc-tab >> nth=2');
+      await page.click('.app-agenda-tab >> nth=2');
       expectSame(A, 'Annulées', await agendaCards(page), [
-        ['Ces 7 derniers jours', [card({ date: 'Mer. 4 nov. · 17h00', status: 'Annulée', title: 'T2 vendu loué près du métro', lines: ['Adresse non renseignée', 'Avec Camille Roux'] })]],
+        ['Ce mois-ci', [card({ block: 'MER 4 NOV', date: 'Mercredi 4 novembre · 17h00', time: '17 h 00 – 17 h 45', cancelled: true, status: 'Annulée',
+          tones: ['gray', 'red'], title: 'T2 vendu loué près du métro · Villeurbanne', lines: ['Avec Camille Roux'] })]],
       ]);
-      expectSame(A, 'onglet choisi', await agendaTabs(), [['À venir', '3', 'false'], ['Passées', '1', 'false'], ['Annulées', '1', 'true']]);
+      expectSame(A, 'onglet choisi', (await agendaTabs()).map((tab) => tab.slice(0, 3)), [['À venir', '3', 'false'], ['Passées', '1', 'false'], ['Annulées', '1', 'true']]);
       expectSame(A, 'menu d\'une visite annulée', await visitMenu(0), ['Reprogrammer', 'Ajouter une note', 'Ajouter à mon calendrier', 'Supprimer']);
       await page.keyboard.press('Escape');
       // Sans adresse : l'avis de l'app au lieu de l'itinéraire.
-      await page.locator('.dsc-visit').nth(0).getByRole('button', { name: 'Itinéraire' }).click();
+      await page.locator('.app-visit').nth(0).getByRole('button', { name: 'Itinéraire' }).click();
       expectSame(A, 'itinéraire sans adresse', await noticeText(page, A), 'Adresse non renseignée : l\'itinéraire sera disponible quand le vendeur l\'aura communiquée.');
       const agendaReads = space.calls.filter((call) => call.path === '/compte/' && ['agenda_visits', 'rpc/my_visit_requests'].includes(call.table));
       expectSame(A, 'lectures de l\'agenda', [...new Set(agendaReads.map((call) => `${call.method} ${call.table} ${call.search}`))].sort(),
         ['GET agenda_visits ?select=id,start_at,status,request_id,listing_id,visit', 'POST rpc/my_visit_requests ']);
+      // Agence de chaque bien visité (retouche de l'app 7452fd9) : la fiche de chaque annonce, lue une fois, puis les
+      // profils publics de leurs auteurs, comme « Ajouter une visite ».
+      const agencyReads = space.calls.filter((call) => call.path === '/compte/' && (call.table === 'rpc/public_profiles' || (call.table === 'listings' && call.search.includes('id=eq.'))));
+      expectSame(A, 'lectures des agences', [...new Set(agencyReads.map((call) => `${call.method} ${call.table} ${call.table === 'listings' ? call.search : JSON.stringify(call.body)}`))].sort(),
+        [...[0, 1, 2].map((n) => `GET listings ?select=id,owner_id,city,postal_code,location_precision,public_street&id=eq.${listings[n].id}&limit=1`),
+          `POST rpc/public_profiles ${JSON.stringify({ user_ids: [0, 1, 2].map((n) => listings[n].owner_id.toUpperCase()) })}`].sort());
+      // « Avec <personne> · <agence> » : une personne de l'agence qui publie le bien ; le nom de l'agence seul quand c'est
+      // aussi le contact (plus haut).
+      space.visits[0].visit.contactName = 'Camille Roux';
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.waitForFunction(() => document.querySelector('.app-visit .app-visit-person')?.textContent.includes('Agence du Parc'), null, { timeout: 8000 }).catch(() => undefined);
+      expectSame(A, 'personne et agence', (await agendaCards(page))[0]?.[1][0]?.lines ?? null, ['Avec Camille Roux · Agence du Parc']);
+      space.visits[0].visit.contactName = 'Agence du Parc';
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.waitForSelector('.app-visit');
 
       // Ajouter une visite (depuis l'agenda) : le bien d'une conversation, la date, la durée, le contact, deux participants,
       // les rappels et « Confirmée » ; « Enregistrer » insère dans agenda_visits la ligne que l'app insère.
       const V = 'Ajouter une visite';
-      await page.click('.dsc-tab >> nth=0');
-      await page.click('.dsc-add-visit');
+      await page.click('.app-agenda-add-link');
       await page.waitForURL(`${base}/compte/?vue=ajouter-visite&depuis=agenda`, { timeout: 8000 }).catch(() => problems.push(`${V} : ouvert à ${page.url()}`));
       await page.waitForSelector('.dsc-form-screen .dsc-choose');
       const dateField = page.getByLabel('Date', { exact: true });
@@ -4564,11 +4638,13 @@ try {
       expectSame(V, 'message', await textOf(page, '.dsc-saved'), 'Visite enregistrée · rappels la veille et 1 h avant');
       // Retour à l'agenda, où la visite s'ajoute à « Cette semaine ».
       await page.waitForURL(`${base}/compte/?vue=agenda`, { timeout: 8000 }).catch(() => problems.push(`${V} : après l'enregistrement, ${page.url()} au lieu de Mon agenda`));
-      await page.waitForFunction(() => document.querySelector('.dsc-tab .dsc-tab-count')?.textContent === '4', null, { timeout: 8000 })
+      await page.waitForFunction(() => document.querySelector('.app-agenda-tab .app-agenda-tab-count')?.textContent === '4', null, { timeout: 8000 })
         .catch(() => problems.push(`${V} : la visite enregistrée n'apparaît pas dans Mon agenda`));
-      const added = (await agendaCards(page)).flatMap(([, cards]) => cards).find((item) => item.date === 'Mar. 10 nov. · 14h30');
-      expectSame(V, 'visite dans l\'agenda', added, card({ date: 'Mar. 10 nov. · 14h30', status: 'Confirmée', title: 'Appartement lumineux avec balcon',
-        lines: ['Lyon 3e (69003)', 'Avec Agence du Parc'], route: plans('Lyon 3e (69003)') }));
+      const added = (await agendaCards(page)).flatMap(([group, cards]) => cards.map((item) => ({ group, ...item })))
+        .find((item) => item.date === 'Mardi 10 novembre · 14h30' && item.time !== '3 créneaux proposés');
+      expectSame(V, 'visite dans l\'agenda', added, { group: 'Cette semaine', ...card({ block: 'MAR 10 NOV', date: 'Mardi 10 novembre · 14h30', time: '14 h 30 – 15 h 30',
+        status: 'Confirmée', tones: ['blue', 'green'], title: 'Appartement lumineux avec balcon · Lyon 3e', lines: ['Avec Agence du Parc'],
+        route: plans('Lyon 3e (69003)') }) });
 
       // Mon projet : la sorte, le résumé et l'anneau ; une étape cochée et le partage, puis « Enregistrer mon projet »
       // envoie l'upsert de l'app (ProjectServerRow, sur user_id).
@@ -4761,10 +4837,10 @@ try {
       await context.close();
     }
 
-    // Téléphone (demande de Romain du 14 novembre) : Mon agenda et Ajouter une visite, les écrans de l'ordinateur, à
-    // 390 px (iPhone 13) et 320 px (iPhone SE), ouverts depuis Mon compte : les cartes de l'ordinateur, rien ne dépasse,
-    // la feuille « Bien concerné » tient dans l'écran et « Enregistrer » insère la visite. Captures :
-    // agenda-telephone*.png, ajouter-visite-telephone*.png, ajouter-visite-feuille-telephone*.png.
+    // Téléphone : Mon agenda, l'écran de l'app (retour rond, « + », grand titre, onglets sur la piste grise, mêmes cartes
+    // que l'ordinateur, mesures de l'app), et Ajouter une visite, à 390 px (iPhone 13) et 320 px (iPhone SE), ouverts
+    // depuis Mon compte : rien ne dépasse, la feuille « Bien concerné » tient dans l'écran et « Enregistrer » insère la
+    // visite. Captures : agenda-telephone*.png, ajouter-visite-telephone*.png, ajouter-visite-feuille-telephone*.png.
     for (const device of ['iPhone 13', 'iPhone SE']) {
       const A = `Mon agenda ${device}`;
       const V = `Ajouter une visite ${device}`;
@@ -4779,16 +4855,30 @@ try {
       await page.waitForSelector('.app-space .app-row');
       await page.click('a.app-row[href="/compte/?vue=agenda"]');
       await page.waitForURL(`${base}/compte/?vue=agenda`, { timeout: 8000 }).catch(() => problems.push(`${A} : « Mon agenda » ouvre ${page.url()}`));
-      await page.waitForSelector('.dsc-agenda-screen .dsc-visit', { timeout: 8000 }).catch(() => problems.push(`${A} : Mon agenda ne s'affiche pas`));
-      expectSame(A, 'en-tête', [await textOf(page, '.dsc-head h1'), await page.getAttribute('.dsc-back', 'href'), await textOf(page, '.dsc-add-visit'),
-        await page.$$eval('.dsc-tab', (tabs) => tabs.map((tab) => [tab.childNodes[0]?.textContent ?? null, tab.querySelector('.dsc-tab-count')?.textContent ?? null]))],
-      ['Agenda des visites', '/compte/', 'Ajouter une visite manuellement', [['À venir', '3'], ['Passées', '1'], ['Annulées', '1']]]);
+      await page.waitForSelector('.app-agenda .app-visit', { timeout: 8000 }).catch(() => problems.push(`${A} : Mon agenda ne s'affiche pas`));
+      expectSame(A, 'en-tête', [await page.getAttribute('.app-agenda-top .app-round', 'href'), await page.getAttribute('.app-agenda-top .app-round', 'aria-label'),
+        await page.getAttribute('.app-agenda-top .app-agenda-plus', 'href'), await page.getAttribute('.app-agenda-top .app-agenda-plus', 'aria-label'),
+        await textOf(page, '.app-agenda-header h1'), await textOf(page, '.app-agenda-header p'), await textOf(page, '.app-agenda-add-link'),
+        await page.$$eval('.app-agenda-tab', (tabs) => tabs.map((tab) => [tab.querySelector('.app-agenda-tab-title')?.textContent ?? null,
+          tab.querySelector('.app-agenda-tab-count')?.textContent ?? null]))],
+      ['/compte/', 'Retour', '/compte/?vue=ajouter-visite&depuis=agenda', 'Ajouter une visite', 'Agenda des visites', 'Toutes vos visites à venir et passées.',
+        'Ajouter une visite manuellement', [['À venir', '3'], ['Passées', '1'], ['Annulées', '1']]]);
       expectSame(A, 'cartes À venir, celles de l\'ordinateur', await agendaCards(page), desktopAgenda);
-      expectSame(A, 'bouton calendrier', await page.locator('.dsc-square').isVisible(), screenWidth >= 360);
+      // Mesures de l'app : retour et « + » de 44 (ronds de 42), titre de 30, piste de 46 et onglets de 38 (coins 16 et
+      // 12), bloc date de 52 × 60, carte aux coins de 22, boutons de 38 ; 12 entre les cartes.
+      expectSame(A, 'mesures', await page.evaluate(() => {
+        const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+        const style = (selector) => getComputedStyle(document.querySelector(selector));
+        const cards = [...document.querySelectorAll('.app-visit')].map((card) => card.getBoundingClientRect());
+        return [Math.round(box('.app-agenda-top .app-round').width), Math.round(box('.app-agenda-plus-circle').width), style('.app-agenda-header h1').fontSize,
+          Math.round(box('.app-agenda-tabs').height), style('.app-agenda-tabs').borderRadius, Math.round(box('.app-agenda-tab').height),
+          style('.app-agenda-tab[aria-selected="true"]').borderRadius, [Math.round(box('.app-visit-date').width), Math.round(box('.app-visit-date').height)],
+          style('.app-visit').borderRadius, Math.round(box('.app-visit-button').height), Math.round(cards[1].top - cards[0].bottom)];
+      }), [44, 42, '30px', 46, '16px', 38, '12px', [52, 60], '22px', 38, 12]);
       await phoneFits(page, A);
       await tallShot(page, `agenda-telephone${suffix}.png`);
       // Menu « … » d'une visite : entier dans l'écran, au-dessus de la barre du bas (la page défile juste assez).
-      await page.locator('.dsc-visit').nth(0).locator('.dsc-menu-button').click();
+      await page.locator('.app-visit').nth(0).locator('.dsc-menu-button').click();
       await page.waitForSelector('.dsc-menu-list');
       await page.waitForTimeout(300);
       expectSame(A, 'menu « … » entier au-dessus de la barre du bas', await page.evaluate(() => {
@@ -4801,15 +4891,15 @@ try {
       await page.waitForSelector('.dsc-menu-list', { state: 'detached', timeout: 4000 }).catch(() => problems.push(`${A} : Échap ne referme pas le menu « … »`));
       // Passées et Annulées : leurs cartes, dans l'écran.
       for (const [index, tab] of [[1, 'Passées'], [2, 'Annulées']]) {
-        await page.click(`.dsc-tab >> nth=${index}`);
-        await page.waitForFunction((i) => document.querySelectorAll('.dsc-tab')[i]?.getAttribute('aria-selected') === 'true', index, { timeout: 4000 }).catch(() => undefined);
-        expectSame(A, `onglet ${tab}`, (await agendaCards(page)).map(([group, cards]) => [group, cards.length]), [['Ces 7 derniers jours', 1]]);
+        await page.click(`.app-agenda-tab >> nth=${index}`);
+        await page.waitForFunction((i) => document.querySelectorAll('.app-agenda-tab')[i]?.getAttribute('aria-selected') === 'true', index, { timeout: 4000 }).catch(() => undefined);
+        expectSame(A, `onglet ${tab}`, (await agendaCards(page)).map(([group, cards]) => [group, cards.length]), [['Ce mois-ci', 1]]);
         await phoneFits(page, `${A}, ${tab}`);
       }
-      await page.click('.dsc-tab >> nth=0');
+      await page.click('.app-agenda-tab >> nth=0');
 
       // Ajouter une visite, depuis l'agenda.
-      await page.click('.dsc-add-visit');
+      await page.click('.app-agenda-add-link');
       await page.waitForURL(`${base}/compte/?vue=ajouter-visite&depuis=agenda`, { timeout: 8000 }).catch(() => problems.push(`${V} : ouvert à ${page.url()}`));
       await page.waitForSelector('.dsc-form-screen .dsc-choose');
       expectSame(V, 'formulaire vide', [await textOf(page, '.dsc-head h1'), await page.isDisabled('.dsc-head-action .dsc-button-primary'),
@@ -4843,7 +4933,7 @@ try {
         inserted?.body?.visit?.address ?? null, inserted?.body?.visit?.contactName ?? null],
       ['2026-11-10T13:30:00.000', listings[0].id.toUpperCase(), 'Lyon 3e (69003)', 'Agence du Parc']);
       await page.waitForURL(`${base}/compte/?vue=agenda`, { timeout: 8000 }).catch(() => problems.push(`${V} : après l'enregistrement, ${page.url()} au lieu de Mon agenda`));
-      await page.waitForFunction(() => document.querySelector('.dsc-tab .dsc-tab-count')?.textContent === '4', null, { timeout: 8000 })
+      await page.waitForFunction(() => document.querySelector('.app-agenda-tab .app-agenda-tab-count')?.textContent === '4', null, { timeout: 8000 })
         .catch(() => problems.push(`${V} : la visite enregistrée n'apparaît pas dans Mon agenda`));
       await page.close();
       await context.close();
@@ -5122,7 +5212,7 @@ try {
     await mock(guestPhone);
     const asked = badgeRequests.length;
     page = await open(guestPhone, '/compte/?vue=notifications', 'notifications-telephone-sans-compte');
-    await page.waitForSelector('.notifications-screen .account-empty');
+    await page.waitForSelector('.notifications-screen .app-unavailable');
     const guestText = (await page.textContent('.notifications-screen'))?.replace(/\s+/g, ' ') ?? '';
     for (const text of ['Notifications', 'Aucune notification pour l’instant', 'Connectez-vous pour recevoir les réponses à vos demandes de visite et les rappels.']) {
       if (!guestText.includes(text)) problems.push(`notifications téléphone sans compte : « ${text} » absent`);
@@ -5152,6 +5242,18 @@ try {
       [known.length, expectedBadges(live.state).notifications, 1]);
     expectSame(N, 'liens', rows.map((row) => row[0]), [`/messages/?c=${conversationId(1)}`, `/annonce/?id=${listings[0].id}`, `/annonce/?id=${listings[2].id}`,
       '/compte/?vue=demande-visite&id=e0000000-0000-4000-8000-000000000003']);
+    // Écran de l'app : en-tête de page poussée (retour rond, titre centré, « Tout lire »), jours, teintes, photos, heures.
+    expectSame(N, 'en-tête', [await page.getAttribute('.app-page-header .app-round', 'href'), await textOf(page, '.app-page-header-title'),
+      await textOf(page, '.app-page-header-trailing')], ['/compte/', 'Notifications', 'Tout lire']);
+    await checkNotificationLayout(page, N, known);
+    // Mesures de l'app : carré de 40 (coins 13), point de 7, photo de 46 (coins 12), traits retirés de 76.
+    expectSame(N, 'mesures', await page.evaluate(() => {
+      const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+      const style = (selector) => getComputedStyle(document.querySelector(selector));
+      return [Math.round(box('.notification-icon').width), style('.notification-icon').borderRadius, Math.round(box('.notification-dot').width),
+        Math.round(box('.notification-photo').width), style('.notification-photo').borderRadius,
+        getComputedStyle(document.querySelector('.notification-group .app-group')).getPropertyValue('--app-separator-inset').trim()];
+    }), [40, '13px', 7, 46, '12px', '76px']);
     await waitFor(() => live.followed().includes('notifications'), `${N} : temps réel`);
     expectSame(N, 'tables suivies en direct', [...new Set(live.followed())].sort(), ['notifications']);
     expectSame(N, 'lectures', [...new Set(badgeRequests.slice(asked).map((request) => request.table))], ['notifications']);

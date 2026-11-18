@@ -249,3 +249,33 @@ span.criterion-chip-label { cursor: default; }
 @media (hover: hover) {
   a.app-row:hover, button.app-row:hover { background: #FAF9F7; }
 }
+
+/* En-tête d'une page poussée (NidaloPageHeader) : retour rond à gauche, titre de 17 gras centré sur toute la largeur
+   (56 de chaque côté), élément à droite ; 10 sous l'en-tête. */
+.app-page-header {
+  position: relative; display: flex; align-items: center; justify-content: space-between; min-height: 44px; padding-bottom: 10px;
+  color: var(--app-navy); font-family: var(--app-font);
+}
+.app-page-header-title {
+  position: absolute; top: 0; right: 56px; left: 56px; height: 44px; margin: 0; overflow: hidden; color: var(--app-navy);
+  font: 700 17px/44px var(--app-font); text-align: center; text-overflow: ellipsis; white-space: nowrap; pointer-events: none;
+}
+.app-page-header-trailing { position: relative; display: flex; align-items: center; margin-left: auto; }
+
+/* Écran vide ou indisponible (ContentUnavailableView) : icône de 44 gris clair, titre de 17 gras, texte de 14 gris. */
+.app-unavailable {
+  display: flex; flex-direction: column; align-items: center; padding: 40px 24px; color: var(--app-navy); font-family: var(--app-font);
+  text-align: center;
+}
+.app-unavailable-icon { width: 44px; height: 44px; margin-bottom: 14px; color: var(--app-text-muted); }
+.app-unavailable h2 { margin: 0; color: var(--app-navy); font: 700 17px/22px var(--app-font); }
+.app-unavailable p { max-width: 340px; margin: 6px 0 0; color: var(--app-text-secondary); font: 400 14px/20px var(--app-font); }
+.app-unavailable > :is(a, button) { margin-top: 16px; }
+
+/* Teintes des pastilles d'état (NidaloPill.Tone) : fond et encre, pour les pastilles, le bloc date des visites et le
+   carré d'icône des notifications. */
+.app-tone-green { --tone-bg: #E3F2E8; --tone-ink: #2F7A4E; }
+.app-tone-amber { --tone-bg: #FBF0D9; --tone-ink: #946B1E; }
+.app-tone-blue { --tone-bg: #EFF2F9; --tone-ink: #435BAA; }
+.app-tone-red { --tone-bg: #FCE9E9; --tone-ink: #C2413E; }
+.app-tone-gray { --tone-bg: #F1F0EC; --tone-ink: #5D6470; }

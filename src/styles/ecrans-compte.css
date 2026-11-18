@@ -6,9 +6,10 @@
    prises sur l'app (VisitsAgendaView.swift, NotificationsView). */
 
 /* Téléphone : les jetons de l'ordinateur (--d-…) que ces écrans utilisent, avec les valeurs de l'ordinateur (sur
-   ordinateur, ils viennent de :root dans ordinateur.css). Les fenêtres (.dsc-dialog, .dsc-picker) les reçoivent aussi. */
+   ordinateur, ils viennent de :root dans ordinateur.css). Les fenêtres (.dsc-dialog, .dsc-picker) et Mon agenda (son
+   menu « … ») les reçoivent aussi. */
 @media (max-width: 1023.98px) {
-  :is(.dsc, .dsc-dialog, .dsc-picker, .notifications-screen) {
+  :is(.dsc, .dsc-dialog, .dsc-picker, .notifications-screen, .app-agenda) {
     --d-bg: #FAF9F6;
     --d-text: #242D38;
     --d-grey: #75808B;
@@ -121,8 +122,7 @@
 .dsc-menu-list button.is-danger { color: var(--d-red); }
 .dsc-menu-list .icon { flex: none; width: 17px; height: 17px; }
 
-/* Mon agenda : onglets avec leur nombre, bouton calendrier, cartes de visite groupées par date */
-.dsc-agenda-bar { display: flex; align-items: center; gap: 10px; }
+/* Onglets avec leur nombre et bouton carré (Signalements) ; Mon agenda a ceux de l'app (agenda-app.css) */
 .dsc-tabs { flex: 1; min-width: 0; display: flex; padding: 3px; border: 1px solid var(--d-card-border); border-radius: 999px; background: #FFFFFF; }
 .dsc-tab { flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 38px; padding: 0 10px; border: 0; border-radius: 999px; background: transparent; color: var(--d-text); font-size: 15px; font-weight: 500; white-space: nowrap; cursor: pointer; }
 .dsc-tab:hover { background: var(--d-hover); }
@@ -132,37 +132,6 @@
 .dsc-square { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; border: 1px solid var(--d-card-border); border-radius: 12px; background: #FFFFFF; color: var(--d-blue); }
 .dsc-square:hover { background: var(--d-hover); }
 .dsc-square .icon { width: 20px; height: 20px; }
-.dsc-visits { display: flex; flex-direction: column; gap: 22px; }
-.dsc-visit-group { display: flex; flex-direction: column; gap: 10px; }
-.dsc-group-title { color: var(--d-grey); font-size: 14px; font-weight: 700; line-height: 20px; }
-.dsc-visit { display: flex; align-items: flex-start; gap: 14px; padding: 14px; border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; }
-.dsc-visit-photo { width: 104px; height: 96px; }
-.dsc-visit-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.dsc-visit-top { display: flex; align-items: center; gap: 8px; }
-.dsc-visit-date { flex: 1; min-width: 0; overflow: hidden; color: var(--d-text); font-size: 16px; font-weight: 700; line-height: 22px; text-overflow: ellipsis; white-space: nowrap; }
-.dsc-visit-date.is-cancelled { color: var(--d-grey); text-decoration: line-through; }
-.dsc-status { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
-.dsc-status .icon { width: 12px; height: 12px; }
-.dsc-status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.dsc-status.is-confirmed { background: var(--d-green-pill); color: var(--d-green-text); }
-.dsc-status.is-awaitingOther { background: #FDF1E1; color: #A25311; }
-.dsc-status.is-toConfirm { background: var(--d-blue-light); color: var(--d-blue); }
-.dsc-status.is-done { background: #F2F0EC; color: var(--d-grey); }
-.dsc-status.is-cancelled { background: #FBEDEB; color: var(--d-red); }
-.dsc-visit-title { overflow: hidden; color: rgba(36, 45, 56, 0.85); font-size: 14px; font-weight: 500; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
-.dsc-visit-open { display: flex; align-items: center; gap: 6px; border-radius: 8px; color: inherit; text-decoration: none; }
-a.dsc-visit-open:hover .dsc-visit-lines > :first-child { color: var(--d-text); text-decoration: underline; }
-.dsc-visit-lines { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; color: var(--d-grey); font-size: 13.5px; line-height: 19px; }
-.dsc-visit-note, .dsc-visit-report { color: var(--d-blue); font-weight: 600; }
-.dsc-visit-report { display: inline-flex; align-items: center; gap: 4px; }
-.dsc-visit-report .icon { flex: none; width: 13px; height: 13px; }
-.dsc-visit-chevron { flex: none; width: 18px; height: 18px; color: var(--d-text); }
-.dsc-visit-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-.dsc-visit-action { flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 38px; padding: 0 10px; border: 0; border-radius: 11px; background: var(--d-blue-light); color: var(--d-blue); font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer; }
-.dsc-visit-action:hover:not(:disabled) { background: #E2E8F6; }
-.dsc-visit-action:disabled { opacity: 0.45; cursor: default; }
-.dsc-visit-action .icon { width: 15px; height: 15px; }
-.dsc-add-visit { height: 48px; }
 
 /* Biens consultés : lignes reliées par des filets, « Retirer » à droite */
 .dsc-viewed-list { margin: 0; padding: 0; list-style: none; overflow: hidden; border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; }
@@ -374,27 +343,46 @@ a.dsc-visit-open:hover .dsc-visit-lines > :first-child { color: var(--d-text); t
 .dsc-btn-quiet:hover { background: #E2E8F6; }
 .dsc-dialog .btn:focus-visible { outline: 3px solid var(--d-blue); outline-offset: 2px; }
 
-/* ——— Notifications (NotificationsView de l'app) ——— */
-.notification-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
-.notification-row { display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 14px 16px 14px 12px; border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; color: var(--d-text); font: inherit; text-align: left; text-decoration: none; cursor: pointer; transition: box-shadow 0.15s ease, transform 0.15s ease; }
-.notification-row:hover { box-shadow: var(--d-card-hover-shadow); transform: translateY(-2px); }
-.notification-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; color: var(--d-icon); }
-.notification-icon .icon { width: 20px; height: 20px; }
-.notification-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding-top: 1px; }
-.notification-head { display: flex; align-items: baseline; gap: 6px; }
-.notification-title { flex: 1; min-width: 0; overflow: hidden; font-size: 15px; font-weight: 700; line-height: 21px; text-overflow: ellipsis; white-space: nowrap; }
-.notification-date { flex: none; color: var(--d-grey); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.notification-body { color: rgba(36, 45, 56, 0.8); font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
-.notification-dot { flex: none; width: 8px; height: 8px; margin-top: 7px; border-radius: 50%; background: var(--d-blue); }
-.notifications-read-all { height: var(--d-button-height); padding: 0 16px; border: 0; border-radius: var(--d-button-radius); background: var(--d-blue-light); color: var(--d-blue); font-size: 15px; font-weight: 600; cursor: pointer; white-space: nowrap; }
-.notifications-read-all:hover { background: #E2E8F6; }
-.notifications-screen .account-empty > .icon { color: var(--d-blue); }
-.notifications-screen .account-empty p { color: var(--d-grey); }
-.notification-row:focus-visible, .notifications-read-all:focus-visible { outline: 3px solid var(--d-blue); outline-offset: 2px; }
-
-@media (prefers-reduced-motion: reduce) {
-  .notification-row { transition: none; }
-  .notification-row:hover { transform: none; }
+/* ——— Notifications (NotificationsView de l'app) ———
+   Groupes par jour : petit titre (4 au-dessus d'« Aujourd'hui », 14 au-dessus des autres) puis la carte de groupe,
+   8 entre eux ; traits retirés de 76. Ligne : point de 7 (17 du haut), carré teinté de 40 (coins 13, icône 19), titre
+   de 15 gras sur 2 lignes au plus, heure de 12 gris clair, texte de 13 gris sur 2 lignes, photo de 46 (coins 12) ;
+   12 d'écart, marges 6 · 14 et 12 en hauteur. « Tout lire » : 15 gras bleu, 44 de haut. */
+.notifications-screen { display: flex; flex-direction: column; padding-bottom: 24px; color: var(--app-navy); font-family: var(--app-font); }
+.notification-list { display: flex; flex-direction: column; gap: 8px; }
+.notification-group { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; }
+.notification-group.is-today { padding-top: 4px; }
+.notification-row {
+  display: flex; align-items: flex-start; gap: 12px; width: 100%; margin: 0; padding: 12px 14px 12px 6px; border: 0; background: transparent;
+  color: var(--app-navy); font: inherit; text-align: left; text-decoration: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.notification-dot, .notification-dot-space { flex: none; width: 7px; height: 7px; margin-top: 17px; border-radius: 50%; }
+.notification-dot { background: var(--app-brand); }
+.notification-icon {
+  display: inline-flex; flex: none; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 13px;
+  background: var(--tone-bg); color: var(--tone-ink);
+}
+.notification-icon .icon { width: 19px; height: 19px; }
+.notification-text { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
+.notification-head { display: flex; align-items: baseline; gap: 16px; }
+.notification-title, .notification-body { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.notification-title { min-width: 0; color: var(--app-navy); font-size: 15px; font-weight: 700; line-height: 20px; }
+.notification-date { flex: none; margin-left: auto; color: var(--app-text-muted); font-size: 12px; line-height: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.notification-body { color: var(--app-text-secondary); font-size: 13px; line-height: 18px; }
+.notification-photo {
+  display: inline-flex; flex: none; align-items: center; justify-content: center; width: 46px; height: 46px; overflow: hidden; border-radius: 12px;
+  background: #F1F0EC; color: rgba(36, 45, 56, 0.35);
+}
+.notification-photo img { width: 100%; height: 100%; object-fit: cover; }
+.notification-photo .icon { width: 20px; height: 20px; }
+.notifications-read-all {
+  min-height: 44px; margin: 0; padding: 0; border: 0; background: none; color: var(--app-brand); font: 700 15px/1 var(--app-font);
+  white-space: nowrap; cursor: pointer;
+}
+.notification-row:focus-visible { outline: 3px solid var(--app-brand); outline-offset: -3px; border-radius: 22px; }
+.notifications-read-all:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; border-radius: 8px; }
+@media (hover: hover) {
+  .notification-row:hover { background: #FAF9F7; }
 }
 
 /* ——— Téléphone (moins de 1024 px) : les mêmes écrans, aux mesures de l'app ——— */
@@ -407,27 +395,10 @@ a.dsc-visit-open:hover .dsc-visit-lines > :first-child { color: var(--d-text); t
   .dsc-titles h1 { font-size: 22px; line-height: 28px; }
   .dsc-titles p { font-size: 14px; line-height: 20px; }
 
-  /* Mon agenda : onglets, bouton calendrier et cartes de visite de l'app (photo 88 × 84, boutons de 38) */
-  .dsc-agenda-bar { gap: 8px; }
+  /* Onglets avec leur nombre et bouton carré (Signalements) */
   .dsc-tab { gap: 5px; height: 36px; padding: 0 6px; font-size: 14px; }
   .dsc-tab-count { min-width: 20px; height: 20px; padding: 0 5px; font-size: 11.5px; }
   .dsc-square { width: 44px; height: 44px; }
-  .dsc-visits { gap: 18px; }
-  .dsc-visit-group { gap: 8px; }
-  .dsc-group-title { font-size: 13.5px; }
-  .dsc-visit { gap: 12px; padding: 12px; }
-  .dsc-visit-photo { width: 88px; height: 84px; border-radius: 12px; }
-  /* La date et l'heure restent entières : le statut passe dessous quand la place manque. */
-  .dsc-visit-top { flex-wrap: wrap; gap: 4px 6px; }
-  .dsc-visit-date { flex: 1 0 auto; max-width: 100%; }
-  .dsc-visit-date { font-size: 15px; line-height: 20px; }
-  .dsc-status { height: 22px; padding: 0 8px; font-size: 11.5px; }
-  .dsc-visit-title { font-size: 13px; line-height: 18px; }
-  .dsc-visit-lines { font-size: 12.5px; line-height: 17px; }
-  .dsc-visit-actions { gap: 6px; margin-top: 7px; }
-  .dsc-visit-action { gap: 5px; padding: 0 8px; font-size: 12.5px; }
-  .dsc-visit-action .icon { width: 14px; height: 14px; }
-  .dsc-add-visit { height: 46px; }
 
   /* Cartes, formulaires et fenêtres */
   .dsc-card { padding: 16px; }
@@ -440,21 +411,8 @@ a.dsc-visit-open:hover .dsc-visit-lines > :first-child { color: var(--d-text); t
   .dsc-picker { width: calc(100% - 32px); max-width: calc(100% - 32px); max-height: calc(100dvh - 48px); }
   .dsc-picker-body { padding: 16px; }
 
-  /* Notifications : pas d'effet de survol sur un écran tactile (il resterait après le toucher) */
-  .notification-row:hover { box-shadow: none; transform: none; }
   /* Au-dessus de la barre du bas (téléphone, jusqu'à 760 px) quand la page défile pour montrer un menu « … ». */
   @media (max-width: 760px) {
     .dsc-menu-list { scroll-margin-bottom: calc(var(--tabbar-height) + env(safe-area-inset-bottom) + 12px); }
-  }
-
-  /* Très petit téléphone (moins de 360 px) : le bouton calendrier laisse la place aux onglets (« Ajouter une visite
-     manuellement » reste en bas), et la carte de visite passe la photo à 64 px et ses boutons sur toute la largeur. */
-  @media (max-width: 359.98px) {
-    .dsc-agenda-bar .dsc-square { display: none; }
-    .dsc-visit { display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 12px; row-gap: 3px; align-items: start; }
-    .dsc-visit-photo { grid-column: 1; grid-row: 1 / span 3; width: 64px; height: 64px; }
-    .dsc-visit-body { display: contents; }
-    .dsc-visit-top, .dsc-visit-title, .dsc-visit-open { grid-column: 2; }
-    .dsc-visit-actions { grid-column: 1 / -1; }
   }
 }
