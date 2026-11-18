@@ -9,6 +9,8 @@
 // liste, rouverte avec sa zone).
 // Champs de lieu : « Autour de moi » (position accordée : la commune de la Géoplateforme ; refusée : le message et
 // « Réessayer »), recherches récentes de chaque compte, flèches du clavier, un lieu choisi qui remplace la zone.
+// Confidentialité : la phrase de l'app sur la position (« Autour de moi ») et le cas du site, sur la page construite et
+// dans src/content/confidentialite.html.
 // Captures : carte-*.png, zone-*.png, lieu-*.png.
 // Lancer après la construction : node scripts/check-carte.mjs [dossier construit, docs/ par défaut] [dossier des captures]
 // « --avant » : seulement les captures des écrans qui existaient déjà (carte, champs de lieu), sur l'ancien site.
@@ -809,6 +811,27 @@ if (!before) {
     await waitForUrl(page, () => new URLSearchParams(location.search).get('lieu') === 'Lyon', N, 'le lieu choisi n\'est pas cherché');
     expectSame(N, 'le lieu remplace la zone', new URL(page.url()).searchParams.has('dessin'), false);
   }
+  await context.close();
+}
+
+if (!before) {
+  // Confidentialité : la phrase de l'app (LegalTexts, « Sur votre iPhone seulement ») et le cas du site (« Le site
+  // nidalo.fr »), sur la page construite et dans src/content/confidentialite.html, que scripts/make-pages.py reprend.
+  const N = 'confidentialité';
+  const wanted = [
+    'Votre position n’est utilisée que si vous la partagez dans une conversation, ou si vous touchez « Autour de moi » dans une recherche : elle sert alors à trouver votre commune (Géoplateforme de l’IGN) et les biens autour de vous ; si vous enregistrez cette recherche, son point est gardé avec elle.',
+    'Pour « Autour de moi », votre navigateur vous demande d’abord l’accès à votre position. Vos derniers lieux cherchés restent dans ce navigateur, une liste par compte.',
+  ];
+  const { context, page } = await open(DESKTOP, newState());
+  await page.goto(`${base}/confidentialite/`);
+  await page.waitForSelector('main h1');
+  const shown = tidy(await page.textContent('main'));
+  const source = tidy((await readFile(join(root, 'src', 'content', 'confidentialite.html'), 'utf8')).replace(/<[^>]+>/g, ' '));
+  for (const sentence of wanted) {
+    expectTrue(N, 'phrase absente de la page', shown.includes(tidy(sentence)), sentence.slice(0, 50));
+    expectTrue(N, 'phrase absente de src/content/confidentialite.html', source.includes(tidy(sentence)), sentence.slice(0, 50));
+  }
+  expectTrue(N, 'ancienne phrase sur la position encore là', !shown.includes('Votre position n’est envoyée que si') && !source.includes('Votre position n’est envoyée que si'));
   await context.close();
 }
 
