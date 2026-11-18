@@ -42,8 +42,8 @@ describe('Mes mandats', () => {
     ];
     expect(mandatesIn(rows, 'active', TODAY).map((row) => row.id)).toEqual(['janvier', 'mars', 'sans-fin', 'sans-fin-ancien']);
     expect(mandatesIn(rows, 'ended', TODAY).map((row) => row.id)).toEqual(['termine', 'echu']);
-    expect(mandatesSubtitle(rows, TODAY)).toBe('4 mandats actifs, vente et location');
-    expect(mandatesSubtitle([], TODAY)).toBe('0 mandat actif, vente et location');
+    expect(mandatesSubtitle(rows, TODAY)).toBe('4 mandats actifs');
+    expect(mandatesSubtitle([], TODAY)).toBe('0 mandat actif');
   });
 
   it('reconnaît les miens dans le registre de l\'agence', () => {

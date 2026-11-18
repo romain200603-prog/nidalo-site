@@ -1,0 +1,13 @@
+/* Mon compte, comme l'app (Features/Profile/ProfileView.swift, space()) : grand titre et cloche, carte du profil,
+   groupes de lignes, « Se déconnecter » et « Supprimer mon compte ». Les pièces (bouton rond, grand titre, groupes,
+   lignes) sont dans pieces-app.css ; la carte du profil, les chiffres de l'agence et « Se déconnecter » dans
+   account.css. Même page sur téléphone et, pour un compte professionnel, sur ordinateur (colonne de 672 px). */
+
+.app-space { display: flex; flex-direction: column; padding-bottom: 60px; color: var(--app-navy); font-family: var(--app-font); }
+/* 2 + les 8 du haut de .account-wrap : les 10 de l'app (2 de la page, 8 du titre) ; 18 sous le titre. */
+.app-space-header { padding: 2px 0 18px; }
+.app-space .app-menu-group { display: flex; flex-direction: column; gap: 8px; margin-top: 24px; }
+.app-space .app-menu-group > .field-error { margin: 0; padding-left: 4px; }
+.app-space .pro-stats { margin-top: 12px; }
+.app-space .logout-button { margin-top: 28px; }
+.app-space .delete-account-link { margin-top: 18px; }

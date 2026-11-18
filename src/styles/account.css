@@ -106,12 +106,33 @@
 .avatar { display: inline-flex; align-items: center; justify-content: center; flex: none; overflow: hidden; border-radius: 50%; background: var(--blue-soft); color: var(--blue); font-weight: 700; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
 .avatar .icon { width: 50%; height: 50%; }
-.space-profile { display: flex; align-items: center; gap: 15px; min-height: 95px; margin-top: -15px; padding: 11px 15px; color: var(--ink); text-decoration: none; }
-.space-profile:hover { border-color: var(--blue-border); }
-.space-profile-text { display: flex; flex: 1; min-width: 0; flex-direction: column; align-items: flex-start; }
-.space-profile-name { max-width: 100%; overflow: hidden; font-size: 18px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-.space-profile-line { max-width: 100%; overflow: hidden; color: var(--text-secondary); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
-.space-profile-badge { display: inline-flex; align-items: center; height: 22px; margin-top: 5px; padding: 0 9px; border-radius: 999px; background: var(--blue-soft); color: var(--blue); font-size: 11.5px; font-weight: 700; }
+/* Carte du profil de Mon compte (SpaceProfileCard de l'app) : photo de 64 (ou l'initiale sur le dégradé du logo), nom
+   19 très gras, e-mail 13, pastille du type de compte, bouton « Modifier » de 36 à droite ; marges 16, coins 22. */
+.space-profile {
+  display: flex; align-items: center; gap: 14px; padding: 16px; border: 1px solid var(--app-border); border-radius: 22px;
+  background: #FFFFFF; color: var(--app-navy); font-family: var(--app-font); text-decoration: none; -webkit-tap-highlight-color: transparent;
+}
+.space-profile-photo {
+  display: inline-flex; flex: none; align-items: center; justify-content: center; width: 64px; height: 64px; overflow: hidden;
+  border-radius: 50%; background: linear-gradient(135deg, #396CDF, #2549AC); color: #FFFFFF; font-size: 24px; font-weight: 800;
+}
+.space-profile-photo img { width: 100%; height: 100%; object-fit: cover; }
+.space-profile-text { display: flex; flex: 1; min-width: 0; flex-direction: column; align-items: flex-start; gap: 2px; }
+.space-profile-name { max-width: 100%; overflow: hidden; font-size: 19px; font-weight: 800; line-height: 24px; text-overflow: ellipsis; white-space: nowrap; }
+.space-profile-line { max-width: 100%; overflow: hidden; color: var(--app-text-secondary); font-size: 13px; line-height: 17px; text-overflow: ellipsis; white-space: nowrap; }
+.space-profile-badge {
+  display: inline-flex; align-items: center; height: 22px; margin-top: 4px; padding: 0 9px; border-radius: 11px;
+  background: var(--app-brand-soft); color: var(--app-brand); font-size: 11.5px; font-weight: 700;
+}
+/* 14 + l'espace de 4 + 14 avant le bouton, comme l'app. */
+.space-profile-action {
+  display: inline-flex; flex: none; align-items: center; height: 36px; margin-left: 18px; padding: 0 14px; border: 1px solid var(--app-border);
+  border-radius: 18px; background: #FFFFFF; color: var(--app-navy); font-size: 14px; font-weight: 700; white-space: nowrap;
+}
+.space-profile:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+@media (hover: hover) {
+  .space-profile:hover .space-profile-action { background: #F7F6F3; }
+}
 .row-chevron { width: 17px; height: 17px; color: var(--text-muted); }
 
 /* Lignes d'une carte */
@@ -128,46 +149,23 @@
 .row-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--blue); color: #FFFFFF; font-size: 12px; font-weight: 700; }
 .row .row-chevron { width: 16px; height: 16px; }
 
-/* Projet immobilier */
-.project-card { display: flex; flex-direction: column; gap: 13px; padding: 16px; }
-.project-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.project-card h2 { font-size: 18px; font-weight: 700; }
-.project-card p { margin: 2px 0 0; color: var(--text-secondary); font-size: 13px; }
-.project-ring { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 54px; height: 54px; border-radius: 50%; background: conic-gradient(var(--blue) var(--progress, 0%), var(--blue-soft) 0); }
-.project-ring span { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; background: var(--card); color: var(--ink); font-size: 13px; font-weight: 700; }
-.project-steps { display: flex; margin: 0; padding: 0; list-style: none; }
-.project-steps li { position: relative; display: flex; flex: 1; min-width: 0; flex-direction: column; align-items: center; gap: 6px; }
-.project-steps li + li::before { content: ''; position: absolute; top: 8.5px; right: calc(50% + 10px); left: calc(-50% + 10px); height: 3px; border-radius: 2px; background: var(--blue-soft); }
-.project-steps li.is-done + li.is-done::before { background: var(--blue); }
-.project-step-dot { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--blue-border); background: var(--card); color: #FFFFFF; }
-.project-steps li.is-done .project-step-dot { border-color: var(--blue); background: var(--blue); }
-.project-step-dot .icon { width: 11px; height: 11px; stroke-width: 3.5; }
-.project-step-label { max-width: 100%; overflow: hidden; color: var(--text-secondary); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
-.project-steps li.is-done .project-step-label { color: var(--ink); font-weight: 600; }
-.project-button { width: 100%; min-height: 52px; font-size: 15px; font-weight: 700; }
-.project-button .icon { width: 16px; height: 16px; }
+/* Espace professionnel : trois chiffres séparés par des traits de 46 (ProStatsCard de l'app), coins 16. */
+.pro-stats {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 14.5px 0; border: 1px solid var(--app-border);
+  border-radius: 16px; background: #FFFFFF; font-family: var(--app-font); text-align: center;
+}
+.pro-stats div { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-width: 0; }
+.pro-stats div + div::before { content: ''; position: absolute; left: 0; top: 50%; width: 1px; height: 46px; margin-top: -23px; background: #F2F0EC; }
+.pro-stats strong { color: var(--app-navy); font-size: 22px; font-weight: 800; line-height: 28px; font-variant-numeric: tabular-nums; }
+.pro-stats span { max-width: 100%; overflow: hidden; color: var(--app-text-secondary); font-size: 12px; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Mes activités */
-.activity-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.activity-tile { display: flex; flex-direction: column; justify-content: space-between; gap: 8px; min-height: 104px; padding: 14px; border-radius: 16px; color: var(--ink); text-decoration: none; }
-.activity-tile:hover { border-color: var(--blue-border); }
-.activity-tile-text { justify-content: flex-start; }
-.activity-tile-text .activity-detail { color: var(--ink); font-size: 15px; font-weight: 700; line-height: 1.25; }
-.activity-title { font-size: 14px; font-weight: 600; line-height: 1.3; }
-.activity-detail { color: var(--text-secondary); font-size: 13px; line-height: 1.2; overflow-wrap: anywhere; }
-.activity-detail strong { display: block; color: var(--ink); font-size: clamp(19px, 5.6vw, 30px); font-weight: 800; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* Espace professionnel */
-.pro-stats { display: grid; grid-template-columns: repeat(3, 1fr); padding: 14px 0; text-align: center; }
-.pro-stats div { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.pro-stats div + div { border-left: 1px solid var(--border); }
-.pro-stats strong { color: var(--ink); font-size: 22px; font-weight: 800; }
-.pro-stats span { color: var(--text-secondary); font-size: 12px; }
-
-/* Bas de page */
-.logout-button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 51px; border: 1px solid rgba(192, 57, 43, 0.25); border-radius: 16px; background: var(--card); color: var(--red); font-size: 17px; font-weight: 700; cursor: pointer; }
-.logout-button .icon { width: 20px; height: 20px; }
-.delete-account-link { margin-top: -8px; color: var(--text-secondary); font-size: 14.5px; font-weight: 500; text-align: center; text-decoration: none; }
+/* Bas de page : « Se déconnecter », carte blanche de 52 aux coins 18, en rouge ; « Supprimer mon compte » en gris. */
+.logout-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 52px; border: 1px solid var(--app-border);
+  border-radius: 18px; background: #FFFFFF; color: #C0392B; font: 700 16px var(--app-font); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.logout-button .icon { width: 19px; height: 19px; }
+.delete-account-link { color: var(--app-text-secondary); font: 500 14.5px/20px var(--app-font); text-align: center; text-decoration: none; }
 .delete-account-link:hover { text-decoration: underline; }
 
 /* En-tête des écrans (retour, titre, action) */

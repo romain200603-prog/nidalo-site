@@ -399,10 +399,10 @@ try {
     let context = await phone();
     await mock(context, state);
     let page = await open(context, '/compte/', 'Mon compte (téléphone)');
-    await page.locator('.space-section').first().waitFor();
+    await page.locator('.app-menu-group').first().waitFor();
     await page.waitForTimeout(300);
     await shot(page, 'moncompte-telephone.png');
-    await page.locator('.space-section', { has: page.locator('.section-title', { hasText: 'Compte et sécurité' }) })
+    await page.locator('.app-menu-group', { has: page.locator('.app-section-label', { hasText: 'Compte et sécurité' }) })
       .screenshot({ path: join(out, 'moncompte-telephone-section.png') });
     await page.goto(`${base}/conditions/`, { waitUntil: 'networkidle' });
     await shot(page, 'conditions-telephone.png');
@@ -437,15 +437,15 @@ try {
       const context = await phone();
       await mock(context, state);
       const page = await open(context, '/compte/', N);
-      await page.waitForFunction(() => [...document.querySelectorAll('.row-title')].some((el) => el.textContent === 'Signalements'), null, { timeout: 8000 })
+      await page.waitForFunction(() => [...document.querySelectorAll('.app-row-title')].some((el) => el.textContent === 'Signalements'), null, { timeout: 8000 })
         .catch(() => problems.push(`${N} : ligne « Signalements » absente`));
-      const section = await page.$$eval('.space-section', (els) => {
-        const found = els.find((el) => el.querySelector('.section-title')?.textContent.includes('Compte et sécurité'));
-        return found ? [...found.querySelectorAll('.row-title')].map((el) => el.textContent) : [];
+      const section = await page.$$eval('.app-menu-group', (els) => {
+        const found = els.find((el) => el.querySelector('.app-section-label')?.textContent.includes('Compte et sécurité'));
+        return found ? [...found.querySelectorAll('.app-row-title')].map((el) => el.textContent) : [];
       });
       expectSame(N, 'Compte et sécurité', section, ['Connexion et sécurité', 'Confidentialité et données', 'Type de compte', 'Signalements']);
       expectSame(N, 'is_moderator demandé une fois', rpcCalls(state, 'is_moderator').length, 1);
-      await page.locator('.row-group a.row', { hasText: 'Signalements' }).click();
+      await page.locator('.app-group a.app-row', { hasText: 'Signalements' }).click();
       await page.waitForURL(/vue=signalements/);
       await waitCards(page, 4, N);
       expectSame(N, 'titre', tidy(await page.locator('.dsc-titles').textContent()), 'SignalementsChaque signalement est à traiter sous 24 heures.');
@@ -552,11 +552,11 @@ try {
       const context = await desktop();
       await mock(context, state);
       const page = await open(context, '/compte/', N);
-      await page.locator('#compte-et-securite .dsp-row', { hasText: 'Signalements' }).waitFor({ timeout: 8000 })
+      await page.locator('#compte-et-securite .app-row', { hasText: 'Signalements' }).waitFor({ timeout: 8000 })
         .catch(() => problems.push(`${N} : ligne « Signalements » absente`));
-      expectSame(N, 'Compte et sécurité', await texts(page, '#compte-et-securite .dsp-row-title'),
+      expectSame(N, 'Compte et sécurité', await texts(page, '#compte-et-securite .app-row-title'),
         ['Connexion et sécurité', 'Confidentialité et données', 'Type de compte', 'Signalements']);
-      await page.locator('#compte-et-securite .dsp-row', { hasText: 'Signalements' }).click();
+      await page.locator('#compte-et-securite .app-row', { hasText: 'Signalements' }).click();
       await page.waitForURL(/vue=signalements/);
       await waitCards(page, 4, N);
       await shot(page, 'signalements-ordinateur.png');
@@ -570,8 +570,8 @@ try {
       const context = await phone();
       await mock(context, state);
       const page = await open(context, '/compte/', N);
-      await page.locator('.space-section').first().waitFor();
-      if (await page.locator('.row-title', { hasText: 'Signalements' }).count()) problems.push(`${N} : ligne « Signalements » affichée`);
+      await page.locator('.app-menu-group').first().waitFor();
+      if (await page.locator('.app-row-title', { hasText: 'Signalements' }).count()) problems.push(`${N} : ligne « Signalements » affichée`);
       await page.goto(`${base}/compte/?vue=signalements`, { waitUntil: 'networkidle' });
       await page.locator('.dsc-empty').waitFor({ timeout: 8000 }).catch(() => undefined);
       expectSame(N, 'page réservée', [tidy(await page.locator('.dsc-empty').textContent().catch(() => null)), await page.locator('.dsc-tabs').count(),

@@ -104,9 +104,9 @@ export const isOwnMandate = (row: Pick<MandateRow, 'owner_id'>, me: string | nul
   !row.owner_id || (!!me && row.owner_id.toLowerCase() === me.toLowerCase())
 );
 
-/** Ligne de Mon compte, comme l'app : « 2 mandats actifs, vente et location ». */
+/** Ligne de Mon compte, comme l'app (ProfileView.swift, « Mes mandats ») : « 2 mandats actifs ». */
 export const mandatesSubtitle = (rows: MandateRow[], today: string): string => (
-  `${plural(activeMandatesCount(rows, today), 'mandat actif', 'mandats actifs')}, vente et location`
+  plural(activeMandatesCount(rows, today), 'mandat actif', 'mandats actifs')
 );
 
 // MARK: - Formulaire

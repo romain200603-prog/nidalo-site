@@ -1,36 +1,33 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../../components/Icon';
 import type { IconName } from '../../components/iconPaths';
-import { agendaItems, agendaStore, agendaSummary, loadAgenda } from '../../lib/account/agenda';
+import { MenuRows } from '../../components/MenuRows';
+import { agendaItems, agendaStore, itemsIn, loadAgenda } from '../../lib/account/agenda';
 import { signOut } from '../../lib/account/auth';
 import { loadModerator, moderatorStore } from '../../lib/account/moderation';
-import { listingsCountText, loadMyListings, myListingsStore } from '../../lib/account/myListings';
+import { loadMyListings, myListingsStore, ONLINE_STATUSES } from '../../lib/account/myListings';
 import { saveAccountType, type Account } from '../../lib/account/profile';
-import { PROJECT_STEPS, STEP_LABELS } from '../../lib/account/project';
-import {
-  completionOf, editableProjectStore, isStepCompleted, loadEditableProject, newProject, projectSubtitle,
-} from '../../lib/account/projectEditor';
+import { editableProjectStore, loadEditableProject, projectSubtitle } from '../../lib/account/projectEditor';
 import { loadSavedSearches, savedSearchesStore } from '../../lib/account/savedSearches';
 import { currentUserId, useStore } from '../../lib/account/session';
-import { slotLabel } from '../../lib/listing/visits';
+import { agendaSubtitle, onlineSubtitle, savedSearchesSubtitle, viewedSubtitle } from '../../lib/account/spaceSubtitles';
 import { accountPath, AGENCY_FORM_PATH, PATHS } from '../../lib/paths';
 import { recentlyViewedIds } from '../../lib/recentlyViewed';
-import { ChoiceDialog, DesktopRows, IPHONE_ONLY, IphoneOnlyDialog, ProgressRing } from './DesktopParts';
+import { ChoiceDialog, IPHONE_ONLY, IphoneOnlyDialog } from './DesktopParts';
 import { Avatar } from './parts';
 
 // « Mon espace » sur ordinateur (maquette 5 de Romain), pour un compte particulier. À gauche, la colonne de 280 px :
-// profil, sections de la page, « Se déconnecter » et « Supprimer mon compte ». À droite, l'espace de l'app dans son
-// ordre (Features/Profile/ProfileView.swift:136-217, MySpaceComponents.swift) : projet et agenda, Mes activités,
-// Contrats et location, Compte et sécurité, Paramètres et assistance. Les documents de « Contrats et location », les
-// alertes de l'iPhone et les préférences restent dans l'app iPhone. Sous 1024 px, AccountPage garde l'écran du téléphone.
+// profil, sections de la page, « Se déconnecter » et « Supprimer mon compte ». À droite, les groupes de Mon compte de
+// l'app dans son ordre, avec ses lignes (Features/Profile/ProfileView.swift) : Mon espace sous le titre, Contrats et
+// location (avec la carte du dossier du site), Compte et sécurité, Paramètres et assistance. Les documents de
+// « Contrats et location », les alertes de l'iPhone et les préférences restent dans l'app iPhone. Sous 1024 px,
+// AccountPage garde l'écran du téléphone.
 
-type SectionId = 'mon-espace' | 'mon-agenda' | 'mes-activites' | 'contrats-et-location' | 'compte-et-securite' | 'parametres-et-assistance';
+type SectionId = 'mon-espace' | 'contrats-et-location' | 'compte-et-securite' | 'parametres-et-assistance';
 
 /** Sections de la page, dans l'ordre de l'app, avec les icônes de la maquette. */
 const SECTIONS: { id: SectionId; title: string; icon: IconName }[] = [
   { id: 'mon-espace', title: 'Mon espace', icon: 'house' },
-  { id: 'mon-agenda', title: 'Mon agenda', icon: 'calendar' },
-  { id: 'mes-activites', title: 'Mes activités', icon: 'layoutGrid' },
   { id: 'contrats-et-location', title: 'Contrats et location', icon: 'fileText' },
   { id: 'compte-et-securite', title: 'Compte et sécurité', icon: 'lock' },
   { id: 'parametres-et-assistance', title: 'Paramètres et assistance', icon: 'gear' },
@@ -87,111 +84,13 @@ function useCurrentSection(): [SectionId, (id: SectionId) => void] {
   return [current, choose];
 }
 
-/** « 1 recherche active » → « 1 » et « recherche active » ; « Aucun historique » → tout le texte (ActivityTile.split). */
-function splitDetail(detail: string): { number: string | null; rest: string } {
-  const space = detail.indexOf(' ');
-  const first = space < 0 ? detail : detail.slice(0, space);
-  return /^\d+$/.test(first) ? { number: first, rest: space < 0 ? '' : detail.slice(space + 1) } : { number: null, rest: detail };
-}
-
-/** « Aucune recherche », « 1 recherche active », « 2 recherches actives » (ProfileView.count). */
-function count(value: number, one: string, many: string, none: string): string {
-  if (value === 0) return none;
-  return value === 1 ? `1 ${one}` : `${value} ${many}`;
-}
-
-/** Projet immobilier : usage ou catégorie et ville, anneau des critères renseignés, étapes du parcours (ProjectCard). */
-function ProjectCard() {
-  const state = useStore(editableProjectStore);
-  // Avant la lecture, l'app montre son projet par défaut (Résidentiel, sans ville).
-  const project = state.status === 'ready' ? state.project : newProject('');
-  const steps = PROJECT_STEPS[project.kind];
-  return (
-    <article className="dsp-card dsp-project" aria-labelledby="dsp-project-title">
-      <div className="dsp-project-head">
-        <div className="dsp-project-titles">
-          <h2 id="dsp-project-title" className="dsp-card-title">Votre projet immobilier</h2>
-          <p className="dsp-project-subtitle">{projectSubtitle(project)}</p>
-        </div>
-        <ProgressRing progress={completionOf(project)} size={60} />
-      </div>
-      <ol className="dsp-steps" aria-label="Étapes du projet">
-        {steps.map((step, index) => {
-          const done = isStepCompleted(project, step);
-          // Trait vers l'étape voisine, bleu si les deux sont franchies (ProjectStepsBar).
-          const before = index > 0 && done && isStepCompleted(project, steps[index - 1]);
-          const after = index < steps.length - 1 && done && isStepCompleted(project, steps[index + 1]);
-          return (
-            <li key={step} className={done ? 'is-done' : undefined} aria-label={`${STEP_LABELS[step]}, ${done ? 'terminée' : 'à venir'}`}>
-              <span className="dsp-step-track" aria-hidden="true">
-                <span className={`dsp-step-line${index === 0 ? ' is-hidden' : before ? ' is-done' : ''}`} />
-                <span className="dsp-step-dot">{done && <Icon name="check" />}</span>
-                <span className={`dsp-step-line${index === steps.length - 1 ? ' is-hidden' : after ? ' is-done' : ''}`} />
-              </span>
-              <span className="dsp-step-label" aria-hidden="true">{STEP_LABELS[step]}</span>
-            </li>
-          );
-        })}
-      </ol>
-      <a className="dsp-button dsp-button-primary dsp-project-button" href={accountPath('projet')}>
-        Voir mon avancement
-        <Icon name="arrowRight" />
-      </a>
-    </article>
-  );
-}
-
-/** Visites à venir (demandes en attente comprises), prochaine date, « Voir mon agenda », « Ajouter une visite » (AgendaCard). */
-function AgendaCard() {
-  const state = useStore(agendaStore);
-  const now = new Date();
-  const summary = agendaSummary(agendaItems(state, currentUserId(), now), now);
-  const next = summary.next;
-  return (
-    <section id="mon-agenda" className="dsp-card dsp-agenda" aria-labelledby="dsp-agenda-title">
-      <h2 id="dsp-agenda-title" className="dsp-card-title">Mon agenda</h2>
-      <div className="dsp-agenda-summary">
-        <span className="dsp-agenda-icon" aria-hidden="true"><Icon name="calendar" /></span>
-        <div className="dsp-agenda-text">
-          <p className="dsp-agenda-title">
-            <span>{summary.title}</span>
-            {summary.toConfirm > 0 && <span className="dsp-pill">{summary.toConfirm} à confirmer</span>}
-          </p>
-          {next ? (
-            <>
-              <p>Prochaine : {slotLabel(next.start)}{summary.nextIsPending ? ' · en attente' : ''}</p>
-              {next.listing && <p className="dsp-agenda-listing">{next.listing.title} · {next.listing.city}</p>}
-            </>
-          ) : (
-            <p>Aucune visite prévue pour l&apos;instant.</p>
-          )}
-        </div>
-      </div>
-      <div className="dsp-agenda-actions">
-        <a className="dsp-button dsp-button-primary" href={accountPath('agenda')}><Icon name="calendarDays" />Voir mon agenda</a>
-        <a className="dsp-button dsp-button-light" href={accountPath('ajouter-visite')}><Icon name="calendarPlus" />Ajouter une visite</a>
-      </div>
-    </section>
-  );
-}
-
-/** Tuile de « Mes activités » : titre, premier nombre du détail en grand, puis la suite (ActivityTile). */
-function ActivityTile({ title, detail, href }: { title: string; detail: string; href: string }) {
-  const { number, rest } = splitDetail(detail);
-  return (
-    <a className="dsp-card dsp-tile" href={href}>
-      <span className="dsp-tile-title">{title}</span>
-      {number && <span className="dsp-tile-number">{number}</span>}
-      <span className="dsp-tile-rest">{rest}</span>
-    </a>
-  );
-}
-
 type Dialog = 'logout' | 'type' | 'review' | null;
 
 export function DesktopSpace({ account }: { account: Account }) {
   const listings = useStore(myListingsStore);
   const searches = useStore(savedSearchesStore);
+  const project = useStore(editableProjectStore);
+  const agenda = useStore(agendaStore);
   const moderator = useStore(moderatorStore);
   const [current, chooseSection] = useCurrentSection();
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -207,9 +106,9 @@ export function DesktopSpace({ account }: { account: Account }) {
     void loadModerator(currentUserId());
   }, []);
 
-  const myListings = listings.status === 'ready' ? listings.items : [];
-  const searchCount = searches.status === 'ready' ? searches.items.length : 0;
-  const viewedCount = recentlyViewedIds().length;
+  const now = new Date();
+  const upcoming = itemsIn(agendaItems(agenda, currentUserId(), now), 'upcoming', now);
+  const online = listings.status === 'ready' ? listings.items.filter((row) => ONLINE_STATUSES.includes(row.status)).length : 0;
   const iphone = (title: string) => () => setIphoneOnly(title);
 
   async function switchType() {
@@ -254,19 +153,18 @@ export function DesktopSpace({ account }: { account: Account }) {
 
       <div className="dsp-main">
         <h1 id="mon-espace" className="dsp-title">Mon espace</h1>
-        <div className="dsp-top">
-          <ProjectCard />
-          <AgendaCard />
+        <div className="dsp-space-rows">
+          <MenuRows label="Mon espace" rows={[
+            { icon: 'calendarBlank', title: 'Mon agenda', tint: 'blue', href: accountPath('agenda'),
+              subtitle: agendaSubtitle(upcoming.length, upcoming.filter((item) => item.status === 'toConfirm').length) },
+            { icon: 'search', title: 'Mes recherches', tint: 'blue', href: accountPath('recherches'),
+              subtitle: savedSearchesSubtitle(searches.status === 'ready' ? searches.items.length : 0) },
+            { icon: 'eye', title: 'Biens consultés', tint: 'blue', href: accountPath('consultes'), subtitle: viewedSubtitle(recentlyViewedIds().length) },
+            { icon: 'target', title: 'Mon projet', tint: 'green', href: accountPath('projet'),
+              subtitle: project.status === 'ready' ? projectSubtitle(project.project) || null : null },
+            { icon: 'home', title: 'Mes annonces', tint: 'blue', href: accountPath('annonces'), subtitle: onlineSubtitle(online) },
+          ]} />
         </div>
-
-        <section id="mes-activites" className="dsp-section" aria-labelledby="dsp-activites">
-          <h2 id="dsp-activites" className="dsp-section-title">Mes activités</h2>
-          <div className="dsp-tiles">
-            <ActivityTile title="Mes recherches" detail={count(searchCount, 'recherche active', 'recherches actives', 'Aucune recherche')} href={accountPath('recherches')} />
-            <ActivityTile title="Biens consultés" detail={count(viewedCount, 'annonce', 'annonces', 'Aucun historique')} href={accountPath('consultes')} />
-            <ActivityTile title="Mes annonces" detail={listingsCountText(myListings)} href={accountPath('annonces')} />
-          </div>
-        </section>
 
         <section id="contrats-et-location" className="dsp-section" aria-labelledby="dsp-contrats">
           <h2 id="dsp-contrats" className="dsp-section-title">Contrats et location</h2>
@@ -283,22 +181,22 @@ export function DesktopSpace({ account }: { account: Account }) {
                 Compléter mon dossier
               </button>
             </article>
-            <DesktopRows rows={[
-              { icon: 'keyRound', title: 'Mon bail de location', onClick: iphone('Mon bail de location') },
-              { icon: 'receipt', title: 'Quittances de loyer', onClick: iphone('Quittances de loyer') },
-              { icon: 'clipboardCheck', title: 'États des lieux', onClick: iphone('États des lieux') },
-              { icon: 'handshake', title: 'Offres et compromis', onClick: iphone('Offres et compromis') },
-              { icon: 'filePenLine', title: 'Documents à signer', onClick: iphone('Documents à signer') },
+            <MenuRows rows={[
+              { icon: 'fileText', title: 'Mon bail de location', tint: 'teal', onClick: iphone('Mon bail de location') },
+              { icon: 'euro', title: 'Quittances de loyer', tint: 'teal', onClick: iphone('Quittances de loyer') },
+              { icon: 'clipboardCheck', title: 'États des lieux', tint: 'teal', onClick: iphone('États des lieux') },
+              { icon: 'tag', title: 'Offres et compromis', tint: 'amber', onClick: iphone('Offres et compromis') },
+              { icon: 'filePenLine', title: 'Documents à signer', tint: 'amber', onClick: iphone('Documents à signer') },
             ]} />
           </div>
         </section>
 
         <section id="compte-et-securite" className="dsp-section" aria-labelledby="dsp-compte">
           <h2 id="dsp-compte" className="dsp-section-title">Compte et sécurité</h2>
-          <DesktopRows rows={[
+          <MenuRows rows={[
             { icon: 'lock', title: 'Connexion et sécurité', href: accountPath('securite') },
-            { icon: 'shield', title: 'Confidentialité et données', href: accountPath('confidentialite') },
-            { icon: 'arrowLeftRight', title: 'Type de compte', onClick: () => setDialog('type') },
+            { icon: 'shieldCheck', title: 'Confidentialité et données', href: accountPath('confidentialite') },
+            { icon: 'user', title: 'Type de compte', subtitle: 'Particulier', onClick: () => setDialog('type') },
             // Modération : seulement pour un compte modérateur.
             ...(moderator === true ? [{ icon: 'flag' as const, title: 'Signalements', href: accountPath('signalements') }] : []),
           ]} />
@@ -307,13 +205,14 @@ export function DesktopSpace({ account }: { account: Account }) {
 
         <section id="parametres-et-assistance" className="dsp-section" aria-labelledby="dsp-parametres">
           <h2 id="dsp-parametres" className="dsp-section-title">Paramètres et assistance</h2>
-          <DesktopRows rows={[
+          {/* « Notifications » : la ligne du site, gardée (dans l'app, la cloche du grand titre mène au même écran). */}
+          <MenuRows rows={[
             { icon: 'bell', title: 'Notifications', href: accountPath('notifications') },
             { icon: 'bell', title: 'Alertes sur cet iPhone', onClick: iphone('Alertes sur cet iPhone') },
             { icon: 'gear', title: 'Préférences', onClick: iphone('Préférences') },
             { icon: 'circleHelp', title: 'Aide et assistance', href: PATHS.help },
+            { icon: 'info', title: 'Informations légales', href: accountPath('legal') },
             { icon: 'star', title: 'Donner mon avis', onClick: () => setDialog('review') },
-            { icon: 'fileText', title: 'Informations légales', href: accountPath('legal') },
           ]} />
         </section>
       </div>
