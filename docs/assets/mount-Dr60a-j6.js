@@ -1,1 +1,0 @@
-import{gn as e,mn as t,t as n}from"./client-jEOJQjSH.js";var r=t(),i=n(),a=e();function o(e){let t=document.getElementById(`root`);if(!t)throw Error(`Élément #root absent`);(0,i.createRoot)(t).render((0,a.jsx)(r.StrictMode,{children:e}))}export{o as t};
