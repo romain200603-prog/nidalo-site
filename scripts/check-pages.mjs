@@ -1666,6 +1666,9 @@ try {
     const box = dialog.getBoundingClientRect();
     return [box.x, box.y, box.width, box.height];
   }), [0, 0, 1440, 900]);
+  // Ordre de l'app : en-tête, pavés des catégories, localisation, pastilles, critères.
+  expectSame('filtres ordinateur', 'ordre', await page.$eval('dialog[open] .filters-scroll', (scroll) => [...scroll.querySelectorAll('.filters-header, .filters-modes, .filter-card')]
+    .slice(0, 3).map((el) => el.querySelector('h3')?.textContent ?? el.classList[el.classList.length - 1])), ['filters-header', 'filters-modes', 'Localisation']);
   // Pièces et chambres sur une seule ligne chacune, comme l'app : 3 puis 4 allument 3 et 4 (« De 3 à 4 ») ; chambres 1
   // puis 2. Un critère choisi apparaît en pastille retirable ; le DPE affiche sa fourchette.
   const roomsRow = (name) => page.getByRole('group', { name: `${name} minimum et maximum` });
@@ -1687,6 +1690,9 @@ try {
   if (!chips.some((c) => c.includes('3 à 4 pièces')) || !chips.some((c) => c.includes('1 à 2 chambres')) || !chips.some((c) => /DPE/.test(c))) {
     problems.push(`filtres : pastilles « ${chips.join(' | ')} »`);
   }
+  // Pastilles blanches de l'app : ici, seule la croix agit (le libellé n'est pas un bouton).
+  expectSame('filtres', 'pastilles : seule la croix agit', await page.$$eval('dialog[open] .criterion-chip:not(.is-leaving)', (items) => [...new Set(items.map((item) =>
+    `${[...item.querySelectorAll('button')].map((button) => button.className).join(',')} | ${item.querySelector('.criterion-chip-label').tagName}`))]), ['criterion-chip-remove | SPAN']);
   await page.getByRole('heading', { name: 'Surface et pièces' }).scrollIntoViewIfNeeded();
   await page.waitForTimeout(300);
   await page.screenshot({ path: join(out, 'filtres-ordinateur.png') });
@@ -4215,17 +4221,55 @@ try {
     .catch(() => problems.push('recherche téléphone : « Enregistrer » sans compte n\'ouvre pas la connexion'));
   await page.keyboard.press('Escape');
   await page.waitForSelector('dialog.signin-sheet[open]', { state: 'detached', timeout: 4000 }).catch(() => undefined);
+  // Carte de l'app (MapTabView) : une ligne en haut, retour, lieu et filtres (48 chacun, 10 entre eux, 14 des bords, 6
+  // sous le haut de l'écran) ; ni pavés, ni pastilles, ni « Liste » ; les commandes 10 dessous ; zoom au doigt. Sur une
+  // page neuve, ouverte par l'adresse (vue=carte) : après une capture pleine page, Chrome oublie l'écran tactile simulé
+  // (survol, pointeur) pour le reste de la page.
+  const mapPage = await open(phone, '/recherche/?mode=buy&vue=carte', 'carte-telephone');
+  await mapPage.waitForSelector('.map-column.is-open .map-marker', { timeout: 15000 });
+  await mapPage.waitForTimeout(400);
+  await mapPage.screenshot({ path: join(out, 'carte-telephone.png') });
+  expectSame('carte téléphone', 'ligne du haut, commandes', await mapPage.evaluate(() => {
+    const box = (selector) => {
+      const r = document.querySelector(selector)?.getBoundingClientRect();
+      return r ? [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)] : null;
+    };
+    return {
+      back: box('.map-back'), field: box('.map-app-top .place-field-app input'), filters: box('.map-app-top .filters-button'),
+      tools: box('.map-column .map-round'), others: document.querySelectorAll('.map-column .mode-tabs, .map-column .criterion-chip, .map-close').length,
+      zoom: getComputedStyle(document.querySelector('.map-column .maplibregl-ctrl-top-right')).display,
+    };
+  }), { back: [14, 6, 48, 48], field: [72, 6, 246, 48], filters: [328, 6, 48, 48], tools: [328, 64, 48, 48], others: 0, zoom: 'none' });
+  await mapPage.close();
   await page.click('.map-open');
   await page.waitForSelector('.map-marker', { timeout: 15000 });
   await page.waitForTimeout(400);
-  await page.screenshot({ path: join(out, 'carte-telephone.png') });
   await page.tap('.map-marker');
   await page.waitForSelector('.map-preview');
   await page.screenshot({ path: join(out, 'carte-telephone-apercu.png') });
-  await page.click('.map-close');
+  // Les filtres s'ouvrent depuis la carte, sans « Voir sur la carte » ; Échap les referme sans fermer la carte ;
+  // « Retour » rend la liste.
+  await page.click('.map-app-top .filters-button');
+  await page.waitForSelector('dialog.filters-dialog[open]');
+  expectSame('carte téléphone', 'filtres ouverts depuis la carte : « Voir sur la carte »', await page.locator('dialog[open] .filters-map-link').count(), 0);
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('dialog.filters-dialog[open]', { state: 'detached', timeout: 4000 })
+    .catch(() => problems.push('carte téléphone : Échap ne referme pas les filtres'));
+  expectSame('carte téléphone', 'carte encore ouverte après Échap des filtres', await page.locator('.map-column.is-open').count(), 1);
+  await page.click('.map-back');
+  await page.waitForSelector('.map-column:not(.is-open)', { state: 'attached', timeout: 4000 })
+    .catch(() => problems.push('carte téléphone : « Retour » ne referme pas la carte'));
   await page.click('.filters-button');
   await page.waitForSelector('dialog.filters-dialog[open]');
   await checkApplyButton(page, 'filtres téléphone');
+  // Ordre de l'app : en-tête, pavés des catégories (à 27 des bords de l'écran), localisation, pastilles, critères.
+  expectSame('filtres téléphone', 'ordre, pavés', await page.evaluate(() => {
+    const scroll = document.querySelector('dialog[open] .filters-scroll');
+    const order = [...scroll.querySelectorAll('.filters-header, .filters-modes, .filter-card')].slice(0, 3)
+      .map((el) => el.querySelector('h3')?.textContent ?? el.classList[el.classList.length - 1]);
+    const tiles = scroll.querySelector('.filters-modes').getBoundingClientRect();
+    return [order, Math.round(tiles.left), Math.round(innerWidth - tiles.right)];
+  }), [['filters-header', 'filters-modes', 'Localisation'], 27, 27]);
   await page.screenshot({ path: join(out, 'filtres-telephone.png') });
   await page.evaluate(() => document.querySelector('dialog[open] .filters-scroll')?.scrollTo(0, 1e6));
   await page.screenshot({ path: join(out, 'filtres-telephone-bas.png') });
@@ -4234,7 +4278,7 @@ try {
   await page.click('dialog[open] .filters-map-link');
   await page.waitForSelector('.map-column.is-open');
   if (!page.url().includes('vue=carte')) problems.push(`carte : adresse sans « vue=carte » (${page.url()})`);
-  await page.click('.map-close');
+  await page.click('.map-back');
   if (page.url().includes('vue=carte')) problems.push(`carte : « vue=carte » reste après fermeture (${page.url()})`);
   page = await open(phone, '/recherche/?mode=rent', 'location-telephone');
   await page.waitForSelector('.listing-card');

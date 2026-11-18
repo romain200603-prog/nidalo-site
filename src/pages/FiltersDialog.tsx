@@ -17,11 +17,11 @@ import {
   switchMode, type SearchDraft,
 } from '../lib/search';
 
-// « Filtres de recherche », comme Features/Search/SearchFiltersSheet.swift : localisation et rayon, catégorie,
-// critères actifs retirables, puis les critères propres à chaque catégorie. Les changements portent sur des copies
-// (une par catégorie), appliquées d'un coup par « Afficher N annonces ». Plein écran sur téléphone ; sur ordinateur,
-// une page complète (demande de Romain du 7 novembre : « Plus de critères » ouvre une page, plus une fenêtre), sur
-// deux colonnes, que le bouton Retour du navigateur referme comme une page.
+// « Filtres de recherche », comme Features/Search/SearchFiltersSheet.swift, dans l'ordre de l'app : catégorie (les pavés
+// de l'accueil), localisation et rayon, critères actifs retirables, puis les critères propres à chaque catégorie. Les
+// changements portent sur des copies (une par catégorie), appliquées d'un coup par « Afficher N annonces ». Plein écran
+// sur téléphone ; sur ordinateur, une page complète (demande de Romain du 7 novembre : « Plus de critères » ouvre une
+// page, plus une fenêtre), sur deux colonnes, que le bouton Retour du navigateur referme comme une page.
 
 /** Écran d'ordinateur : même seuil que le reste du site (lib/desktop). */
 const DESKTOP_QUERY = '(min-width: 1024px)';
@@ -223,6 +223,10 @@ export function FiltersDialog({ open, draft, remembered, onClose, onApply, onSho
           </header>
 
           <div className="filters-page">
+            {/* Même ordre que l'accueil et Votre recherche : catégorie, lieu, pastilles, critères. Les pavés de l'accueil,
+                à 27 des bords de l'écran sur téléphone. */}
+            {!fixedMode && <ModeTabs mode={mode} onChange={changeMode} className="mode-tabs-search filters-modes" />}
+
             <FilterCard
               title="Localisation"
               action={onShowMap && (
@@ -238,15 +242,14 @@ export function FiltersDialog({ open, draft, remembered, onClose, onApply, onSho
               <PlaceField
                 className="filters-place"
                 label="Ville, quartier ou code postal"
-                placeholder="Ville, quartier ou code postal"
+                placeholder="Ville, quartier, code postal…"
+                clearLabel="Effacer la localisation"
                 value={working.place}
                 onChange={(text) => update({ place: text, area: null })}
                 onChoose={choosePlace}
               />
               {searchCenter(working) && <RadiusChoices value={working.radiusKm} onChange={(radiusKm) => update({ radiusKm })} />}
             </FilterCard>
-
-            {!fixedMode && <ModeTabs mode={mode} onChange={changeMode} className="mode-tabs-search filters-modes" />}
 
             {/* Critères appliqués, retirables un par un : ici, seule la croix agit (activeChips de l'app). */}
             <CriterionChipsRow chips={chips} label="Critères appliqués" className="filters-active"

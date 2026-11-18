@@ -338,14 +338,37 @@ main:focus { outline: none; }
 /* Bascule « liste / carte » : sur ordinateur seulement (le téléphone garde le bouton « Carte »). */
 .view-toggle { display: none; }
 
-/* Téléphone : la carte s'ouvre en plein écran, comme dans l'app */
+/* Téléphone : la carte s'ouvre en plein écran, comme dans l'app (MapTabView) */
 @media (max-width: 1023px) {
   .map-column.is-open { display: block; position: fixed; inset: 0; z-index: 45; background: var(--page); }
   .map-column.is-open .results-map { position: absolute; inset: 0; }
-  .map-column.is-open .map-close { display: inline-flex; position: absolute; z-index: 5; left: 50%; transform: translateX(-50%); top: calc(14px + env(safe-area-inset-top)); border-radius: 999px; box-shadow: 0 8px 18px rgba(10, 26, 68, 0.24); padding: 0 22px; }
-  .map-column.is-open .map-tools { top: calc(110px + env(safe-area-inset-top)); }
+  /* Ligne du haut, sans catégories ni critères : retour, lieu, filtres et leur nombre ; blancs, 48 de haut, rayon 16,
+     ombrés, 10 entre eux, 14 des bords, 6 sous la barre d'état. */
+  .map-app-top { position: absolute; z-index: 6; top: calc(6px + env(safe-area-inset-top)); left: 14px; right: 14px; display: flex; align-items: center; gap: 10px; }
+  .map-back {
+    flex: none; display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border: 0; border-radius: 16px;
+    background: #FFFFFF; color: var(--app-navy); box-shadow: 0 4px 16px rgba(36, 45, 56, 0.14); cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .map-back .icon { width: 20px; height: 20px; }
+  .map-back:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+  /* Champ du lieu de la carte : sans bordure, ombré, loupe de 19 à 16 du bord, lieu 12 après. */
+  .map-app-top .place-field-app input { padding-left: 47px; border: 0; box-shadow: 0 4px 16px rgba(36, 45, 56, 0.12); }
+  .map-app-top .place-field-app input:focus { box-shadow: 0 4px 16px rgba(36, 45, 56, 0.12), 0 0 0 3px rgba(60, 92, 176, 0.25); }
+  .map-app-top .place-field-app .place-field-icon { left: 16px; top: 14.5px; width: 19px; height: 19px; }
+  .map-app-top .place-field-idle { left: 47px; }
+  /* Suggestions de lieu sous toute la ligne. */
+  .map-app-top .place-field-app .place-list { left: -58px; right: -58px; }
+  /* Commandes de la carte (roundButton de l'app) : 48, rayon 16, 10 sous la ligne du haut et 14 du bord. */
+  .map-column.is-open .map-tools { top: calc(64px + env(safe-area-inset-top)); right: 14px; }
+  .map-column.is-open .map-round { width: 48px; height: 48px; border-radius: 16px; color: var(--app-navy); box-shadow: 0 4px 16px rgba(36, 45, 56, 0.14); }
+  .map-column.is-open .map-round.is-active { background: var(--app-brand); color: #FFFFFF; }
+  /* Zoom : au doigt sur un écran tactile, comme l'app ; sinon, ses boutons sous les commandes. */
+  .map-column.is-open .maplibregl-ctrl-top-right { top: calc(170px + env(safe-area-inset-top)); right: 4px; }
   .map-column.is-open .map-preview { bottom: calc(18px + env(safe-area-inset-bottom)); }
   body.map-is-open { overflow: hidden; }
+}
+@media (max-width: 1023px) and (hover: none) and (pointer: coarse) {
+  .map-column.is-open .maplibregl-ctrl-top-right { display: none; }
 }
 @media (max-width: 760px) {
   .map-open { bottom: calc(var(--tabbar-height) + 14px + env(safe-area-inset-bottom)); }
@@ -391,6 +414,13 @@ main:focus { outline: none; }
 .filters-reset .icon { width: 17px; height: 17px; stroke-width: 2.4; }
 .filters-modes { margin-top: 0; }
 .filters-active { margin: 0 -16px; padding: 0 16px; }
+/* Téléphone et tablette : le fond de page de l'app, et ses pavés des catégories à 27 des bords (11 dans la marge de 16). */
+@media (max-width: 1023px) {
+  .filters-dialog { background: var(--app-page); }
+  .filters-back { background: var(--app-segment); color: var(--app-navy); }
+  .filters-reset { border-color: var(--app-border); }
+  .filters-modes { margin: 0 11px; }
+}
 .filters-apply { flex: none; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--card); box-shadow: 0 -2px 10px rgba(10, 26, 68, 0.06); }
 .filters-apply .btn { width: 100%; min-height: 52px; font-size: 15px; font-weight: 700; }
 .filters-apply .btn .icon { width: 18px; height: 18px; }
@@ -412,6 +442,8 @@ main:focus { outline: none; }
   .filters-titles p { color: var(--d-grey); font-size: 14px; }
   .filters-reset:hover { background: var(--d-blue-light); }
   .filters-page { display: flex; flex-direction: column; gap: 16px; width: min(1040px, calc(100% - 2 * var(--d-margin))); margin: 24px auto 0; }
+  /* Les pavés des catégories, en haut, à la largeur de ceux de Votre recherche. */
+  .filters-modes { max-width: 600px; }
   .filters-active { flex-wrap: wrap; margin: 0; padding: 0; overflow: visible; }
   .filters-cards { display: block; columns: 2; column-gap: 20px; }
   .filters-cards > .filter-card { margin-bottom: 20px; break-inside: avoid; }

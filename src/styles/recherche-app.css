@@ -19,11 +19,12 @@
   .search-back:focus-visible .search-back-circle { outline: 3px solid var(--app-brand); outline-offset: 2px; }
 
   /* Champ blanc de 48 (rayon 16, bordure), loupe de 20 à 14 du bord, lieu 16 medium (15 dans l'app : 16 évite le zoom de
-     l'iPhone) ; hors saisie, « Lyon et alentours » à la place du lieu ; effacement : croix dans un rond gris. */
+     l'iPhone), texte d'aide trop long coupé par « … » comme dans l'app ; hors saisie, « Lyon et alentours » à la place du
+     lieu ; effacement : croix dans un rond gris. */
   .place-field-app { flex: 1; min-width: 0; }
   .place-field-app input {
     height: 48px; padding: 0 40px 0 44px; border: 1px solid var(--app-border); border-radius: 16px; background: #FFFFFF;
-    color: var(--app-navy); font: 500 16px/1.2 var(--app-font);
+    color: var(--app-navy); font: 500 16px/1.2 var(--app-font); text-overflow: ellipsis;
   }
   .place-field-app input::placeholder { color: var(--app-text-muted); }
   .place-field-app input:focus { border-color: var(--app-brand); box-shadow: 0 0 0 3px rgba(60, 92, 176, 0.15); }

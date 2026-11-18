@@ -197,10 +197,12 @@ export function SearchPage() {
     window.history.replaceState(window.history.state, '', query ? `?${query}` : window.location.pathname);
   }, [mapOpen]);
 
-  // La carte en plein écran se ferme avec Échap.
+  // La carte en plein écran se ferme avec Échap (pas celui qui referme les suggestions de lieu ou les filtres).
   useEffect(() => {
     if (!mapOpen) return;
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setMapOpen(false); };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented && !document.querySelector('dialog[open]')) setMapOpen(false);
+    };
     window.addEventListener('keydown', onKey);
     document.body.classList.add('map-is-open');
     return () => {
@@ -357,6 +359,17 @@ export function SearchPage() {
         </div>
 
         <div className={`map-column${mapOpen ? ' is-open' : ''}`} aria-hidden={undefined}>
+          {/* Téléphone : la ligne du haut de la carte de l'app (MapTabView), sans catégories ni critères : retour (vers la
+              liste), lieu, filtres et leur nombre. */}
+          {!desktop && (
+            <div className="map-app-top">
+              <button type="button" className="map-back" aria-label="Retour" onClick={() => setMapOpen(false)}>
+                <Icon name="arrowLeft" />
+              </button>
+              {placeField(true)}
+              <FiltersButton count={filterCount} floating onClick={() => setFiltersOpen(true)} />
+            </div>
+          )}
           <Suspense fallback={<div className="results-map" aria-busy="true" />}>
             <ResultsMap
               results={results}
@@ -368,10 +381,12 @@ export function SearchPage() {
             />
           </Suspense>
           {selected && <MapPreview result={selected} mode={draft.mode} onClose={() => setSelectedId(null)} />}
-          <button type="button" className="map-close btn btn-primary" onClick={() => setMapOpen(false)}>
-            <Icon name="list" />
-            Liste
-          </button>
+          {desktop && (
+            <button type="button" className="map-close btn btn-primary" onClick={() => setMapOpen(false)}>
+              <Icon name="list" />
+              Liste
+            </button>
+          )}
         </div>
       </div>
 
@@ -394,7 +409,8 @@ export function SearchPage() {
           Object.assign(byMode.current, drafts);
           apply(next);
         }}
-        onShowMap={(next, drafts) => {
+        // Ouverts depuis la carte, pas de « Voir sur la carte » (comme l'app).
+        onShowMap={mapOpen ? undefined : (next, drafts) => {
           setFiltersOpen(false);
           Object.assign(byMode.current, drafts);
           apply(next);
