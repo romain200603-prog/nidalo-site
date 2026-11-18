@@ -376,8 +376,8 @@ main:focus { outline: none; }
   .map-column.is-open .map-tools { top: calc(64px + env(safe-area-inset-top)); right: 14px; }
   .map-column.is-open .map-round { width: 48px; height: 48px; border-radius: 16px; color: var(--app-navy); box-shadow: 0 4px 16px rgba(36, 45, 56, 0.14); }
   .map-column.is-open .map-round.is-active { background: var(--app-brand); color: #FFFFFF; }
-  /* Zoom : au doigt sur un écran tactile, comme l'app ; sinon, ses boutons sous les commandes. */
-  .map-column.is-open .maplibregl-ctrl-top-right { top: calc(170px + env(safe-area-inset-top)); right: 4px; }
+  /* Zoom : au doigt sur un écran tactile, comme l'app ; sinon, ses boutons sous les trois commandes. */
+  .map-column.is-open .maplibregl-ctrl-top-right { top: calc(228px + env(safe-area-inset-top)); right: 4px; }
   .map-column.is-open .map-preview { bottom: calc(18px + env(safe-area-inset-bottom)); }
   body.map-is-open { overflow: hidden; }
 }

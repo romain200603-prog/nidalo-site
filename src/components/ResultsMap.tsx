@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
-import { AttributionControl, LngLatBounds, Map as MapLibreMap, NavigationControl, setWorkerUrl } from 'maplibre-gl';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { AttributionControl, LngLatBounds, Map as MapLibreMap, NavigationControl, setWorkerUrl, type GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { Icon } from './Icon';
 import { ListingPhoto } from './PhotoPager';
 import { clusters } from '../lib/clustering';
+import { boundingBox as zoneBox, distanceMeters, encodeZone, radiusLabel } from '../lib/drawnZone';
 import { formatPinPrice } from '../lib/format';
 import { sortedPhotos } from '../lib/listings';
 import type { Coordinate } from '../lib/places';
@@ -21,7 +22,61 @@ const FRANCE: BoundingBox = [-5.2, 41.3, 9.6, 51.1];
 const PLAN_ONLY_LAYERS = ['parcs', 'bois', 'ilots', 'eau', 'cours-eau', 'batiments', 'voies-ferrees', 'rues-lisere', 'rues', 'axes-lisere', 'gares-points'];
 const LABEL_LAYERS = ['noms-rues', 'noms-eau', 'noms-plans-eau', 'gares-noms', 'parcs-noms', 'quartiers', 'villes'];
 
-export type MapFrame = { token: number; box: BoundingBox | null; points: Coordinate[] };
+/** Cadrage demandé par la page ; `zone` : `box` est le cadre de la zone dessinée, cadrée en entier (ses bords visibles). */
+export type MapFrame = { token: number; box: BoundingBox | null; points: Coordinate[]; zone?: boolean };
+
+/** Outil du tracé de la zone (MapDrawTool de l'app) : au doigt (ou à la souris), ou cercle (centre puis rayon). */
+export type DrawTool = 'free' | 'circle';
+
+// Zone dessinée (ListingsMapView.swift, showZone) : l'extérieur voilé de bleu nuit (un polygone qui couvre le globe, la
+// zone en trou ; 50 % en satellite, 30 % en plan), puis un liseré blanc de 6,5 et le trait bleu de 3,5, jointures et
+// bouts arrondis. Calques en haut du style ; les vignettes des biens (éléments de la page) restent par-dessus.
+const ZONE_SOURCE = 'zone-dessinee';
+const ZONE_VEIL_SOURCE = 'zone-dessinee-exterieur';
+const ZONE_VEIL_LAYER = 'zone-dessinee-voile';
+/** Bleu du contour et du tracé de l'app (UIColor 0x43 0x5B 0xAA de ListingsMapView), bleu nuit du voile (Color.navy). */
+const ZONE_BLUE = '#435BAA';
+const ZONE_VEIL = '#242D38';
+const WORLD = [[-180, -85], [-180, 85], [180, 85], [180, -85], [-180, -85]];
+type GeoData = Exclude<Parameters<GeoJSONSource['setData']>[0], string>;
+const EMPTY: GeoData = { type: 'FeatureCollection', features: [] };
+
+function zoneShapes(zone: Coordinate[] | null | undefined): { veil: GeoData; outline: GeoData } {
+  if (!zone || zone.length < 3) return { veil: EMPTY, outline: EMPTY };
+  const ring = zone.map((point) => [point.longitude, point.latitude]);
+  ring.push(ring[0]);
+  return {
+    veil: { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [WORLD, ring] } },
+    outline: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: ring } },
+  };
+}
+
+/** Pose (ou retire) la zone ; crée ses sources et calques s'ils manquent (style rechargé). */
+function showZone(map: MapLibreMap, zone: Coordinate[] | null | undefined, satellite: boolean) {
+  const { veil, outline } = zoneShapes(zone);
+  const veilSource = map.getSource(ZONE_VEIL_SOURCE) as GeoJSONSource | undefined;
+  const lineSource = map.getSource(ZONE_SOURCE) as GeoJSONSource | undefined;
+  if (veilSource && lineSource) {
+    void veilSource.setData(veil);
+    void lineSource.setData(outline);
+    return;
+  }
+  const round = { 'line-join': 'round', 'line-cap': 'round' } as const;
+  map.addSource(ZONE_VEIL_SOURCE, { type: 'geojson', data: veil });
+  map.addLayer({ id: ZONE_VEIL_LAYER, type: 'fill', source: ZONE_VEIL_SOURCE, paint: { 'fill-color': ZONE_VEIL, 'fill-opacity': satellite ? 0.5 : 0.3 } });
+  map.addSource(ZONE_SOURCE, { type: 'geojson', data: outline });
+  map.addLayer({ id: 'zone-dessinee-lisere', type: 'line', source: ZONE_SOURCE, layout: round, paint: { 'line-color': '#FFFFFF', 'line-width': 6.5 } });
+  map.addLayer({ id: 'zone-dessinee-bord', type: 'line', source: ZONE_SOURCE, layout: round, paint: { 'line-color': ZONE_BLUE, 'line-width': 3.5 } });
+}
+
+/** Marges du cadrage d'une zone : sous la ligne du haut et sa pastille, à gauche des commandes. */
+function zonePadding(width: number) {
+  return width >= 1024 ? { top: 84, bottom: 48, left: 60, right: 84 } : { top: 124, bottom: 40, left: 40, right: 80 };
+}
+
+type Point = { x: number; y: number };
+/** Tracé en cours, en points de l'écran (relatifs à la carte). */
+type Trace = { pointerId: number; tool: DrawTool; points: Point[]; begun: boolean };
 
 /**
  * Comme dans l'app (MapSession), la carte s'ouvre en vue satellite et garde le dernier choix tant que la page est
@@ -39,6 +94,22 @@ type Props = {
   /** Zone visible après un déplacement fait par la personne. */
   onUserMove?: (box: BoundingBox) => void;
   className?: string;
+  /** Zone dessinée affichée : posée, ou proposée pendant l'ajustement ; aucune pendant le tracé. */
+  zone?: Coordinate[] | null;
+  /** Zone posée de la recherche : « Recadrer » montre toute la zone (searchedRegion de l'app). */
+  searchedZone?: Coordinate[] | null;
+  /** Tracé en cours et son outil : la carte ne bouge plus, le doigt ou la souris trace ; `null` hors du tracé. */
+  drawTool?: DrawTool | null;
+  /** Tracé libre terminé : ses points, dans l'ordre du tracé. */
+  onDrawZone?: (trace: Coordinate[]) => void;
+  /** Cercle terminé : centre et rayon sur le terrain. */
+  onDrawCircle?: (center: Coordinate, radiusMeters: number) => void;
+  /** Tracé trop petit (boîte de moins de 40 px ou moins de 800 px², cercle de moins de 200 m) : ignoré. */
+  onDrawTooSmall?: () => void;
+  /** Zone visible, à chaque arrêt de la carte. */
+  onVisibleArea?: (box: BoundingBox) => void;
+  /** Commandes ajoutées sous les deux de la carte (le crayon de la zone). */
+  tools?: ReactNode;
 };
 
 function coordinateOf(result: Result): Coordinate | null {
@@ -53,7 +124,10 @@ function boundsOf(points: Coordinate[]): LngLatBounds | null {
   return bounds;
 }
 
-export function ResultsMap({ results, showsYield, selectedId, hoveredId, onSelect, frame, onUserMove, className }: Props) {
+export function ResultsMap({
+  results, showsYield, selectedId, hoveredId, onSelect, frame, onUserMove, className, zone, searchedZone, drawTool = null, onDrawZone,
+  onDrawCircle, onDrawTooSmall, onVisibleArea, tools,
+}: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const [ready, setReady] = useState(false);
@@ -65,6 +139,19 @@ export function ResultsMap({ results, showsYield, selectedId, hoveredId, onSelec
   onUserMoveRef.current = onUserMove;
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const onVisibleAreaRef = useRef(onVisibleArea);
+  onVisibleAreaRef.current = onVisibleArea;
+  const zoneRef = useRef(zone);
+  zoneRef.current = zone;
+  const satelliteRef = useRef(satellite);
+  satelliteRef.current = satellite;
+  // Tracé en cours : gardé hors de l'état (plusieurs mouvements peuvent arriver entre deux affichages), puis affiché.
+  const traceRef = useRef<Trace | null>(null);
+  const [, setTraceVersion] = useState(0);
+  const setTrace = (next: Trace | null) => {
+    traceRef.current = next;
+    setTraceVersion((version) => version + 1);
+  };
 
   // Création de la carte, une fois.
   useEffect(() => {
@@ -112,10 +199,19 @@ export function ResultsMap({ results, showsYield, selectedId, hoveredId, onSelec
       // Une tuile manquante n'empêche pas la carte de marcher ; seul le style est indispensable.
       if (!map.isStyleLoaded() && !map.loaded() && String(event.error?.message ?? '').includes('immo-carte')) setFailed(true);
     });
-    map.on('moveend', (event) => {
-      if (!(event as { originalEvent?: unknown }).originalEvent) return;
+    const visibleArea = (): BoundingBox => {
       const b = map.getBounds();
-      onUserMoveRef.current?.([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+      return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+    };
+    map.on('moveend', (event) => {
+      onVisibleAreaRef.current?.(visibleArea());
+      if (!(event as { originalEvent?: unknown }).originalEvent) return;
+      onUserMoveRef.current?.(visibleArea());
+    });
+    map.on('load', () => onVisibleAreaRef.current?.(visibleArea()));
+    // Style rechargé : la zone dessinée revient (ses calques font partie du style).
+    map.on('styledata', () => {
+      if (map.isStyleLoaded() && !map.getSource(ZONE_SOURCE)) showZone(map, zoneRef.current, satelliteRef.current);
     });
     map.on('click', () => onSelectRef.current(null));
     mapRef.current = map;
@@ -130,7 +226,7 @@ export function ResultsMap({ results, showsYield, selectedId, hoveredId, onSelec
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    const padding = { top: 60, bottom: 60, left: 40, right: 40 };
+    const padding = frame.zone ? zonePadding(map.getContainer().clientWidth) : { top: 60, bottom: 60, left: 40, right: 40 };
     if (frame.box) {
       map.fitBounds(frame.box, { padding, duration: 0, maxZoom: 15 });
       return;
@@ -150,6 +246,8 @@ export function ResultsMap({ results, showsYield, selectedId, hoveredId, onSelec
     if (layer('satellite')) map.setLayoutProperty('satellite', 'visibility', satellite ? 'visible' : 'none');
     for (const id of PLAN_ONLY_LAYERS) if (layer(id)) map.setLayoutProperty(id, 'visibility', satellite ? 'none' : 'visible');
     if (layer('axes')) map.setPaintProperty('axes', 'line-opacity', satellite ? 0.55 : 1);
+    // Voile autour de la zone dessinée : plus marqué sur la photo.
+    if (layer(ZONE_VEIL_LAYER)) map.setPaintProperty(ZONE_VEIL_LAYER, 'fill-opacity', satellite ? 0.5 : 0.3);
     for (const id of LABEL_LAYERS) {
       if (!layer(id)) continue;
       if (!planColors.current[id]) {
@@ -160,6 +258,31 @@ export function ResultsMap({ results, showsYield, selectedId, hoveredId, onSelec
       map.setPaintProperty(id, 'text-halo-color', satellite ? 'rgba(0, 0, 0, 0.65)' : (original.halo as string));
     }
   }, [satellite, ready]);
+
+  // Zone dessinée posée ou proposée (rien pendant le tracé).
+  const zoneKey = zone ? encodeZone(zone) : '';
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    showZone(map, zoneRef.current, satelliteRef.current);
+  }, [zoneKey, ready]);
+
+  // Tracé : la carte ne bouge plus (glisser, molette, double-clic, pincement, clavier), puis tout revient comme avant.
+  const drawing = drawTool !== null;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !drawing) return;
+    map.stop();
+    const handlers = [map.dragPan, map.scrollZoom, map.boxZoom, map.doubleClickZoom, map.touchZoomRotate, map.keyboard];
+    const enabled = handlers.map((handler) => handler.isEnabled());
+    for (const handler of handlers) handler.disable();
+    return () => {
+      handlers.forEach((handler, index) => { if (enabled[index]) handler.enable(); });
+      map.touchZoomRotate.disableRotation();
+      map.keyboard.disableRotation();
+      setTrace(null);
+    };
+  }, [drawing, ready]);
 
   const map = mapRef.current;
   const width = container.current?.clientWidth ?? 0;
@@ -184,8 +307,114 @@ export function ResultsMap({ results, showsYield, selectedId, hoveredId, onSelec
   }
 
   function recenter() {
+    // Zone dessinée : toute la zone, pour voir son contour (searchedRegion de l'app).
+    const box = searchedZone ? zoneBox(searchedZone) : null;
+    if (box && map) {
+      map.fitBounds([box.southWest.longitude, box.southWest.latitude, box.northEast.longitude, box.northEast.latitude],
+        { padding: zonePadding(width), duration: 350 });
+      return;
+    }
     const bounds = boundsOf(results.flatMap((r) => { const c = coordinateOf(r); return c ? [c] : []; }));
     if (bounds && map) map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 350 });
+  }
+
+  // MARK: Tracé (handleDraw de l'app) : un seul pointeur, capturé ; le trait commence après un petit déplacement (un
+  // simple appui ne trace rien), au point d'appui.
+
+  function pointOf(event: ReactPointerEvent<HTMLDivElement>): Point {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  }
+
+  function onDrawDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!drawTool || traceRef.current || !event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setTrace({ pointerId: event.pointerId, tool: drawTool, points: [pointOf(event)], begun: false });
+  }
+
+  function onDrawMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const trace = traceRef.current;
+    if (!trace || event.pointerId !== trace.pointerId) return;
+    const point = pointOf(event);
+    const [first] = trace.points;
+    if (!trace.begun && Math.hypot(point.x - first.x, point.y - first.y) < (event.pointerType === 'touch' ? 10 : 4)) return;
+    setTrace({ ...trace, begun: true, points: trace.tool === 'free' ? [...trace.points, point] : [first, point] });
+  }
+
+  function onDrawUp(event: ReactPointerEvent<HTMLDivElement>) {
+    const trace = traceRef.current;
+    if (!trace || event.pointerId !== trace.pointerId) return;
+    setTrace(null);
+    if (!trace.begun || !map) return;
+    const point = pointOf(event);
+    const points = trace.tool === 'free' ? [...trace.points, point] : [trace.points[0], point];
+    const geo = (p: Point): Coordinate => {
+      const { lng, lat } = map.unproject([p.x, p.y]);
+      return { latitude: lat, longitude: lng };
+    };
+    if (trace.tool === 'free') {
+      // Une boîte d'au moins 40 px de côté, et une vraie surface (un trait droit n'est pas une zone).
+      const xs = points.map((p) => p.x);
+      const ys = points.map((p) => p.y);
+      let area = 0;
+      points.forEach((a, index) => {
+        const b = points[(index + 1) % points.length];
+        area += a.x * b.y - b.x * a.y;
+      });
+      if (Math.max(...xs) - Math.min(...xs) < 40 || Math.max(...ys) - Math.min(...ys) < 40 || Math.abs(area) / 2 < 800) {
+        onDrawTooSmall?.();
+        return;
+      }
+      onDrawZone?.(points.map(geo));
+      return;
+    }
+    const center = geo(points[0]);
+    const radius = distanceMeters(center, geo(points[1]));
+    if (radius < 200) {
+      onDrawTooSmall?.();
+      return;
+    }
+    onDrawCircle?.(center, radius);
+  }
+
+  function onDrawCancel(event: ReactPointerEvent<HTMLDivElement>) {
+    if (traceRef.current && event.pointerId === traceRef.current.pointerId) setTrace(null);
+  }
+
+  /** Trait en cours : liseré blanc de 8 et trait bleu de 4,5, pointillés blancs jusqu'au départ, rond blanc et point bleu. */
+  function traceDrawing(current: Trace) {
+    const [first] = current.points;
+    const last = current.points[current.points.length - 1];
+    const radius = Math.hypot(last.x - first.x, last.y - first.y);
+    const path = current.tool === 'free'
+      ? current.points.map((p, index) => `${index ? 'L' : 'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ')
+      : `M${(first.x + radius).toFixed(1)} ${first.y.toFixed(1)} A${radius.toFixed(1)} ${radius.toFixed(1)} 0 1 1 ${(first.x - radius).toFixed(1)} ${first.y.toFixed(1)} A${radius.toFixed(1)} ${radius.toFixed(1)} 0 1 1 ${(first.x + radius).toFixed(1)} ${first.y.toFixed(1)}`;
+    return (
+      <svg className="map-draw-trace" aria-hidden="true">
+        <path d={path} stroke="#FFFFFF" strokeWidth={8} />
+        <path d={path} stroke={ZONE_BLUE} strokeWidth={4.5} />
+        <line x1={last.x} y1={last.y} x2={first.x} y2={first.y} stroke="#FFFFFF" strokeWidth={2.5} strokeDasharray="2 7" />
+        <circle cx={first.x} cy={first.y} r={7} fill="#FFFFFF" stroke="none" />
+        <circle cx={first.x} cy={first.y} r={4.5} fill={ZONE_BLUE} stroke="none" />
+      </svg>
+    );
+  }
+
+  /** Étiquette « Rayon : 2,5 km » près du milieu du rayon, décalée de côté : jamais sous le doigt. */
+  function radiusTag(current: Trace) {
+    if (current.tool !== 'circle' || current.points.length < 2 || !map) return null;
+    const [first, last] = current.points;
+    const radius = Math.hypot(last.x - first.x, last.y - first.y);
+    if (radius <= 0) return null;
+    const center = map.unproject([first.x, first.y]);
+    const edge = map.unproject([last.x, last.y]);
+    const meters = distanceMeters({ latitude: center.lat, longitude: center.lng }, { latitude: edge.lat, longitude: edge.lng });
+    const normal = { x: -(last.y - first.y) / radius, y: (last.x - first.x) / radius };
+    const side = normal.y > 0 ? -1 : 1;
+    const x = (first.x + last.x) / 2 + normal.x * 30 * side;
+    const y = (first.y + last.y) / 2 + normal.y * 30 * side;
+    return <span className="map-draw-radius" style={{ transform: `translate(${x}px, ${y}px) translate(-50%, -50%)` }}>{radiusLabel(meters)}</span>;
   }
 
   if (failed) {
@@ -197,8 +426,16 @@ export function ResultsMap({ results, showsYield, selectedId, hoveredId, onSelec
   }
 
   return (
-    <div className={`results-map ${className ?? ''}`}>
+    <div className={`results-map${drawing ? ' is-drawing' : ''} ${className ?? ''}`}>
       <div ref={container} className="map-canvas" role="region" aria-label="Carte des biens" data-ready={ready ? "oui" : "non"} />
+      {/* Tracé : surface au-dessus de la carte et sous les vignettes et les commandes (un trait ne commence jamais sur un
+          bouton) ; elle seule bloque le défilement et le zoom de la page, et seulement pendant le tracé. */}
+      {drawing && (
+        <div className="map-draw" data-tool={drawTool} onPointerDown={onDrawDown} onPointerMove={onDrawMove} onPointerUp={onDrawUp}
+          onPointerCancel={onDrawCancel} onLostPointerCapture={onDrawCancel}>
+          {traceRef.current?.begun && traceDrawing(traceRef.current)}
+        </div>
+      )}
       <div className="map-markers">
         {groups.map((group) => {
           if (group.ids.length > 1) {
@@ -257,10 +494,12 @@ export function ResultsMap({ results, showsYield, selectedId, hoveredId, onSelec
           <Icon name="layers" />
         </button>
         <button type="button" className="map-round" aria-label="Recadrer sur les biens trouvés" title="Recadrer sur les biens trouvés"
-          onClick={recenter} disabled={!results.length}>
+          onClick={recenter} disabled={!results.length && !searchedZone}>
           <Icon name="crosshair" />
         </button>
+        {tools}
       </div>
+      {traceRef.current?.begun && radiusTag(traceRef.current)}
     </div>
   );
 }

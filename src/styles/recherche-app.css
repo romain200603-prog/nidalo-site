@@ -28,7 +28,7 @@
   }
   .place-field-app input::placeholder { color: var(--app-text-muted); }
   .place-field-app input:focus { border-color: var(--app-brand); box-shadow: 0 0 0 3px rgba(60, 92, 176, 0.15); }
-  .place-field-app input.is-idle { color: transparent; }
+  .place-field-app input.is-idle, .place-field-app input.is-idle::placeholder { color: transparent; }
   .place-field-app .place-field-icon { left: 14px; top: 14px; width: 20px; height: 20px; color: var(--app-navy); }
   .place-field-idle {
     position: absolute; left: 45px; right: 40px; top: 0; overflow: hidden; color: var(--app-navy); font: 500 16px/48px var(--app-font);

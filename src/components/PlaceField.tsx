@@ -203,6 +203,12 @@ export function PlaceField({
       setDismissed(true);
       return;
     }
+    // Raccourcis refermés par Échap : ↓ les rouvre (le focus reste dans le champ).
+    if (shortcuts && within && dismissed && !value.trim() && event.key === 'ArrowDown') {
+      event.preventDefault();
+      setDismissed(false);
+      return;
+    }
     if (event.key === 'ArrowDown' && suggestions.length) {
       event.preventDefault();
       setOpen(true);
