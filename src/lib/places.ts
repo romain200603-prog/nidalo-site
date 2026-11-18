@@ -189,9 +189,34 @@ export function parseCommunes(json: unknown, postalPrefix?: string): PlaceSugges
     });
 }
 
+/**
+ * Commune d'un point, d'après la réponse de la Géoplateforme (`/geocodage/reverse`) : la première adresse ou commune
+ * trouvée ; un arrondissement donne sa ville (PlaceSuggestionParsing.reverseCommune de l'app).
+ */
+export function reverseCommune(json: unknown): string | null {
+  for (const place of parseGeoplateforme(json)) {
+    const city = place.city?.trim();
+    if (city) return city;
+    if (place.kind === 'municipality') return place.name;
+  }
+  return null;
+}
+
+/**
+ * Nombre écrit comme Swift (`"\(latitude)"`) dans la demande de l'app : « 45.0 » pour un entier, « 1.5e-05 » sous
+ * 0,0001, sinon le plus court nombre qui le redonne (comme JavaScript).
+ */
+export function swiftNumber(value: number): string {
+  if (value === 0) return Object.is(value, -0) ? '-0.0' : '0.0';
+  if (Number.isInteger(value) && Math.abs(value) < 1e16) return `${value}.0`;
+  if (Math.abs(value) < 1e-4) return value.toExponential().replace(/e([+-])(\d)$/, 'e$10$2');
+  return String(value);
+}
+
 // MARK: - Fournisseur
 
 const GEOCODING = 'https://data.geopf.fr/geocodage/search';
+const REVERSE_GEOCODING = 'https://data.geopf.fr/geocodage/reverse';
 const COMMUNES_API = 'https://geo.api.gouv.fr';
 const COMMUNE_FIELDS = 'nom,code,codesPostaux,departement,centre,population';
 
@@ -225,6 +250,20 @@ async function get(url: string, params: Record<string, string>, signal?: AbortSi
   if (response.status === 429) throw new PlaceSearchError('rateLimited');
   if (!response.ok) throw new PlaceSearchError('unavailable');
   return response.json();
+}
+
+/**
+ * Commune d'un point (« Autour de Lyon ») : géocodage inverse de la Géoplateforme, la même demande que l'app
+ * (FrenchPlaceProvider.commune(at:)). `null` si le service ne répond pas : le libellé reste « Autour de moi ».
+ */
+export async function communeAt(coordinate: Coordinate, signal?: AbortSignal): Promise<string | null> {
+  try {
+    return reverseCommune(await get(REVERSE_GEOCODING, {
+      lat: swiftNumber(coordinate.latitude), lon: swiftNumber(coordinate.longitude), index: 'address', limit: '1',
+    }, signal));
+  } catch {
+    return null;
+  }
 }
 
 /** Suggestions pour le champ de recherche de biens (communes, arrondissements, quartiers). */

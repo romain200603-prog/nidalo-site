@@ -11,10 +11,10 @@ import { formatPrice } from '../lib/format';
 import { highlightsFor } from '../lib/highlights';
 import { investmentTypeLabel } from '../lib/homeCriteria';
 import { PROPERTY_TYPE_LABELS, type SearchMode } from '../lib/labels';
-import { placeShortName, type PlaceSuggestion } from '../lib/places';
+import type { PlaceSuggestion } from '../lib/places';
 import {
-  filterChips, MODE_PROPERTY_TYPES, OUTDOOR_LABELS, OUTDOOR_SPACES, paramsFromDraft, resetFilters, search, searchCenter,
-  switchMode, type SearchDraft,
+  chosenFromSuggestion, filterChips, MODE_PROPERTY_TYPES, OUTDOOR_LABELS, OUTDOOR_SPACES, paramsFromDraft, resetFilters, search,
+  searchCenter, switchMode, type SearchDraft,
 } from '../lib/search';
 
 // « Filtres de recherche », comme Features/Search/SearchFiltersSheet.swift, dans l'ordre de l'app : catégorie (les pavés
@@ -169,8 +169,8 @@ export function FiltersDialog({ open, draft, remembered, onClose, onApply, onSho
   }
 
   function choosePlace(place: PlaceSuggestion) {
-    const name = placeShortName(place);
-    update({ place: name, area: null, chosen: { kind: place.kind, name, postalCode: place.postalCode, inseeCode: place.inseeCode, coordinate: place.coordinate } });
+    const chosen = chosenFromSuggestion(place);
+    update({ place: chosen.name, area: null, drawnZone: null, chosen });
   }
 
   function choosePriceMode(byArea: boolean) {
@@ -245,8 +245,10 @@ export function FiltersDialog({ open, draft, remembered, onClose, onApply, onSho
                 placeholder="Ville, quartier, code postal…"
                 clearLabel="Effacer la localisation"
                 value={working.place}
-                onChange={(text) => update({ place: text, area: null })}
+                // Un lieu saisi remplace la zone dessinée, comme dans l'app (un champ vidé la garde).
+                onChange={(text) => update(text.trim() ? { place: text, area: null, drawnZone: null } : { place: text, area: null })}
                 onChoose={choosePlace}
+                shortcuts
               />
               {searchCenter(working) && <RadiusChoices value={working.radiusKm} onChange={(radiusKm) => update({ radiusKm })} />}
             </FilterCard>

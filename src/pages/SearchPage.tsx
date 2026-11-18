@@ -10,7 +10,10 @@ import { ListingPhoto } from '../components/PhotoPager';
 import { SearchNoResults } from '../components/SearchNoResults';
 import { HeartButton } from '../components/account/HeartButton';
 import { SaveSearchButton, SaveSearchSheet, useSavedSearchFor } from '../components/account/SaveSearchButton';
-import type { MapFrame } from '../components/ResultsMap';
+import {
+  drawingInstruction, ZoneBanner, ZoneChip, zoneMenuItems, ZonePencil, zoneSession, ZoneToolPicker, ZoneValidationCard,
+} from '../components/MapZone';
+import type { DrawTool, MapFrame } from '../components/ResultsMap';
 
 // Le moteur de carte est lourd : chargé à part, la liste s'affiche sans l'attendre.
 const ResultsMap = lazy(() => import('../components/ResultsMap').then((m) => ({ default: m.ResultsMap })));
@@ -24,17 +27,24 @@ import { highlightsFor } from '../lib/highlights';
 import type { SearchMode } from '../lib/labels';
 import { sortedPhotos } from '../lib/listings';
 import { listingPath, PATHS } from '../lib/paths';
-import { placeShortName, type PlaceSuggestion } from '../lib/places';
+import { circle, distanceMeters, isUsable as isUsableZone, largestLoop, rounded, scaled, SCALE_STEP, simplified, smoothed } from '../lib/drawnZone';
+import type { Coordinate, PlaceSuggestion } from '../lib/places';
 import { recentlyViewedIds } from '../lib/recentlyViewed';
 import {
-  activeFilterCount, boxAround, defaultDraft, draftFromParams, effectiveSort, filterChips, locationFor, paramsFromDraft,
-  placeLabel, search, SORT_LABELS, sortOptions, type Result, type SearchDraft, type SortOrder,
-  switchMode,
+  activeFilterCount, boxAround, chosenFromSuggestion, defaultDraft, draftFromParams, drawnZoneOf, effectiveSort, filterChips,
+  locationFor, paramsFromDraft, placeLabel, search, SORT_LABELS, sortOptions, type BoundingBox, type Result, type SearchDraft,
+  type SortOrder, switchMode,
 } from '../lib/search';
 import { GOOD_YIELD, grossYieldText } from '../lib/cardContent';
 import '../styles/recherche-app.css';
 
 type Status = { kind: 'loading' } | { kind: 'ready'; results: Result[] } | { kind: 'error' };
+
+/**
+ * Zone dessinée en cours (MapTabView de l'app) : tracé, ou zone proposée à ajuster puis valider ; elle ne remplace le
+ * lieu de la recherche qu'une fois validée.
+ */
+type ZoneEditing = { step: 'drawing' } | { step: 'proposal'; zone: Coordinate[]; title: string };
 
 function readDraft(): SearchDraft {
   return draftFromParams(new URLSearchParams(window.location.search));
@@ -131,6 +141,15 @@ export function SearchPage() {
   /** Fiches déjà ouvertes (« Déjà vue »), relues au retour sur la page. */
   const [seen, setSeen] = useState<Set<string>>(() => new Set(recentlyViewedIds()));
   const [frame, setFrame] = useState<MapFrame>({ token: 0, box: null, points: [] });
+  const [zoneEditing, setZoneEditing] = useState<ZoneEditing | null>(null);
+  const [drawTool, setDrawTool] = useState<DrawTool>(() => zoneSession.drawTool);
+  /** « Tracez une zone plus grande », 2 s, après un tracé trop petit. */
+  const [drawHint, setDrawHint] = useState<string | null>(null);
+  const drawHintTimer = useRef<number | undefined>(undefined);
+  /** Biens de la zone proposée (le dernier calcul fini), pour la carte et « 6 biens dans cette zone ». */
+  const [proposalFound, setProposalFound] = useState<{ zone: Coordinate[]; results: Result[] } | null>(null);
+  /** Zone visible de la carte (« Zone autour du centre de la carte »). */
+  const visibleArea = useRef<BoundingBox | null>(null);
   const [attempt, setAttempt] = useState(0);
   const toastShown = useToastShown();
   const savedSearch = useSavedSearchFor(draft);
@@ -152,6 +171,7 @@ export function SearchPage() {
       setDraft(next);
       setPlaceText(next.place);
       setMapOpen(readMapOpen());
+      setZoneEditing(null);
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
@@ -177,14 +197,15 @@ export function SearchPage() {
           : location.kind === 'around' ? boxAround(location.center, location.radiusMeters) : null;
         const points = results.flatMap(({ row }) => (row.public_latitude === null || row.public_longitude === null ? []
           : [{ latitude: Number(row.public_latitude), longitude: Number(row.public_longitude) }]));
-        setFrame((f) => ({ token: f.token + 1, box: points.length || box ? box : null, points }));
+        setFrame((f) => ({ token: f.token + 1, box: points.length || box ? box : null, points, zone: drawnZoneOf(draft) !== null }));
       })
       .catch(() => { if (!cancelled) setStatus({ kind: 'error' }); });
     return () => { cancelled = true; };
   }, [key, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    document.title = `${draft.place ? `${placeLabel(draft)} · ` : ''}Rechercher un bien · Nidalo`;
+    const label = placeLabel(draft);
+    document.title = `${label ? `${label} · ` : ''}Rechercher un bien · Nidalo`;
   }, [draft]);
 
   // L'adresse suit la carte ouverte (sans nouvelle entrée d'historique), pour la retrouver au retour d'une annonce.
@@ -211,6 +232,43 @@ export function SearchPage() {
     };
   }, [mapOpen]);
 
+  // Ajustement d'une zone : la même recherche avec la zone proposée à la place du lieu, 250 ms après le dernier − ou +
+  // (le calcul en cours est abandonné) ; la carte n'est pas recadrée.
+  const proposalZone = zoneEditing?.step === 'proposal' ? zoneEditing.zone : null;
+  useEffect(() => {
+    if (!proposalZone) {
+      setProposalFound(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      const next = { ...draft, place: '', chosen: null, area: null, drawnZone: proposalZone };
+      search(next, (row) => highlightsFor(row, draft.mode === 'invest' ? draft.downPayment : null))
+        .then((found) => { if (!cancelled) setProposalFound({ zone: proposalZone, results: found }); })
+        .catch(() => { if (!cancelled) setProposalFound({ zone: proposalZone, results: [] }); });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [proposalZone, key]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Carte fermée : le tracé ou l'ajustement en cours s'arrête (la zone d'avant reste).
+  useEffect(() => {
+    if (!mapOpen) setZoneEditing(null);
+  }, [mapOpen]);
+
+  // Le bouton qui avait le focus a disparu (crayon qui change de forme, bandeau, carte de validation ou pastille
+  // refermés) : le focus du clavier va au bouton « Voir les biens » pendant l'ajustement, au crayon sinon.
+  const zonePosed = drawnZoneOf(draft) !== null;
+  useEffect(() => {
+    if (!mapOpen || (document.activeElement && document.activeElement !== document.body)) return;
+    const target = zoneEditing?.step === 'proposal' ? '.map-column .zone-commit' : '.map-column .zone-pencil';
+    document.querySelector<HTMLElement>(target)?.focus({ preventScroll: true });
+  }, [zoneEditing?.step, zonePosed]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => () => window.clearTimeout(drawHintTimer.current), []);
+
   const results = status.kind === 'ready' ? status.results : [];
   const selected = useMemo(() => results.find((r) => r.row.id === selectedId) ?? null, [results, selectedId]);
   const chips = filterChips(draft);
@@ -222,17 +280,90 @@ export function SearchPage() {
   /** Bouton « Carte » : avec des annonces, hors saisie du lieu et sans message en bas de l'écran. */
   const showsMapButton = results.length > 0 && !editingPlace && !toastShown;
 
+  // Un lieu choisi ou saisi remplace la zone dessinée (comme l'app) ; un champ vidé la garde.
   function choosePlace(place: PlaceSuggestion) {
-    const name = placeShortName(place);
-    apply({ ...draft, place: name, area: null, chosen: { kind: place.kind, name, postalCode: place.postalCode, inseeCode: place.inseeCode, coordinate: place.coordinate } });
+    const chosen = chosenFromSuggestion(place);
+    apply({ ...draft, place: chosen.name, area: null, drawnZone: null, chosen });
   }
 
   function submitPlace() {
     const text = placeText.trim();
-    apply({ ...draft, place: text, area: null, chosen: draft.chosen && draft.chosen.name === text ? draft.chosen : null });
+    apply({
+      ...draft, place: text, area: null, drawnZone: text ? null : draft.drawnZone,
+      chosen: draft.chosen && draft.chosen.name === text ? draft.chosen : null,
+    });
   }
 
   const openSave = () => void requireAccount(() => setSaveOpen(true));
+
+  // MARK: Zone dessinée (MapTabView de l'app)
+
+  const postedZone = drawnZoneOf(draft);
+
+  /** Crayon : le tracé ; pendant le tracé ou l'ajustement, il fait comme « Annuler ». */
+  function startDrawing() {
+    if (zoneEditing) {
+      setZoneEditing(null);
+      return;
+    }
+    setSelectedId(null);
+    setZoneEditing({ step: 'drawing' });
+  }
+
+  /** L'ajustement d'une zone : « Votre zone est tracée » après un tracé, « Ajustez votre zone » sinon. */
+  function proposeZone(zone: Coordinate[], title: string) {
+    setSelectedId(null);
+    setZoneEditing({ step: 'proposal', zone: rounded(zone), title });
+  }
+
+  /** Tracé trop petit : on reste en mode tracé, le bandeau le dit pendant 2 s. */
+  function showTooSmall() {
+    setDrawHint('Tracez une zone plus grande');
+    window.clearTimeout(drawHintTimer.current);
+    drawHintTimer.current = window.setTimeout(() => setDrawHint(null), 2000);
+  }
+
+  /** Tracé fini : la plus grande boucle, lissée (deux passes de Chaikin), puis simplifiée (60 points au plus). */
+  function finishDrawing(trace: Coordinate[]) {
+    const zone = simplified(smoothed(largestLoop(trace)));
+    if (!isUsableZone(zone) || !isUsableZone(rounded(zone))) {
+      showTooSmall();
+      return;
+    }
+    proposeZone(zone, 'Votre zone est tracée');
+  }
+
+  /** « Zone autour du centre de la carte » : un cercle au centre, de rayon le quart de la largeur visible. */
+  function zoneAroundMapCenter() {
+    const area = visibleArea.current;
+    if (!area) return;
+    const [west, south, east, north] = area;
+    const center = { latitude: (south + north) / 2, longitude: (west + east) / 2 };
+    const width = distanceMeters({ latitude: center.latitude, longitude: west }, { latitude: center.latitude, longitude: east });
+    proposeZone(circle(center, width / 4), 'Votre zone est tracée');
+  }
+
+  /** « Voir les biens » : la zone remplace le lieu, la recherche se relance. */
+  function commitZone(zone: Coordinate[]) {
+    setZoneEditing(null);
+    apply({ ...draft, place: '', chosen: null, area: null, drawnZone: zone });
+  }
+
+  function clearZone() {
+    apply({ ...draft, drawnZone: null });
+  }
+
+  const zoneMenu = postedZone ? zoneMenuItems({
+    saved: savedSearch,
+    onRedraw: startDrawing,
+    onAdjust: () => proposeZone(postedZone, 'Ajustez votre zone'),
+    onCreateAlert: openSave,
+    onEnableAlert: (item) => void requireAccount(() => { void saveSearch({ ...item, alerts_enabled: true }); }),
+    onClear: clearZone,
+  }) : null;
+  const proposalLoading = proposalZone !== null && proposalFound?.zone !== proposalZone;
+  /** Biens montrés sur la carte : pendant l'ajustement, ceux de la zone proposée (les précédents jusqu'au calcul fini). */
+  const mapResults = proposalZone ? (proposalFound?.results ?? results) : results;
 
   const placeField = (app: boolean) => (
     <PlaceField
@@ -240,9 +371,11 @@ export function SearchPage() {
       label="Lieu de la recherche"
       placeholder={app ? 'Ville, quartier, code postal…' : undefined}
       clearLabel={app ? 'Effacer la localisation' : undefined}
-      // Une grande ville est cherchée avec ses alentours : le champ le dit hors saisie (« Lyon et alentours »).
-      idleText={app && draft.place && placeText.trim() === draft.place.trim() ? placeLabel(draft) : undefined}
+      // Une grande ville est cherchée avec ses alentours : le champ le dit hors saisie (« Lyon et alentours »), comme
+      // « Zone dessinée » quand une zone remplace le lieu.
+      idleText={app && placeText.trim() === draft.place.trim() ? placeLabel(draft) || undefined : undefined}
       onFocusChange={app ? setEditingPlace : undefined}
+      shortcuts
       value={placeText}
       onChange={(text) => {
         setPlaceText(text);
@@ -284,7 +417,7 @@ export function SearchPage() {
                     {filterCount > 0 && <span className="filters-count" aria-hidden="true">{filterCount}</span>}
                   </button>
                 </div>
-                {draft.place && <p className="search-place-label"><Icon name="pin" />{placeLabel(draft)}</p>}
+                {placeLabel(draft) && <p className="search-place-label"><Icon name="pin" />{placeLabel(draft)}</p>}
               </>
             )}
             {/* Critères actifs : le libellé ouvre les filtres, la croix retire le critère. */}
@@ -358,10 +491,11 @@ export function SearchPage() {
           )}
         </div>
 
-        <div className={`map-column${mapOpen ? ' is-open' : ''}`} aria-hidden={undefined}>
+        <div className={`map-column${mapOpen ? ' is-open' : ''}${zoneEditing ? ` is-editing-zone is-zone-${zoneEditing.step}` : postedZone ? ' has-zone' : ''}`}
+          aria-hidden={undefined}>
           {/* Téléphone : la ligne du haut de la carte de l'app (MapTabView), sans catégories ni critères : retour (vers la
-              liste), lieu, filtres et leur nombre. */}
-          {!desktop && (
+              liste), lieu, filtres et leur nombre. Pendant le tracé ou l'ajustement, le bandeau de la zone la remplace. */}
+          {!desktop && !zoneEditing && (
             <div className="map-app-top">
               <button type="button" className="map-back" aria-label="Retour" onClick={() => setMapOpen(false)}>
                 <Icon name="arrowLeft" />
@@ -370,22 +504,57 @@ export function SearchPage() {
               <FiltersButton count={filterCount} floating onClick={() => setFiltersOpen(true)} />
             </div>
           )}
+          {!zoneEditing && postedZone && <ZoneChip onOpen={() => setFiltersOpen(true)} onRemove={clearZone} />}
           <Suspense fallback={<div className="results-map" aria-busy="true" />}>
             <ResultsMap
-              results={results}
+              results={mapResults}
               showsYield={draft.mode === 'invest'}
               selectedId={selectedId}
               hoveredId={hoveredId}
               onSelect={setSelectedId}
               frame={frame}
+              // Pendant le tracé, l'ancienne zone n'est plus affichée ; pendant l'ajustement, la zone proposée.
+              zone={zoneEditing ? proposalZone : postedZone}
+              searchedZone={postedZone}
+              drawTool={zoneEditing?.step === 'drawing' ? drawTool : null}
+              onDrawZone={finishDrawing}
+              onDrawCircle={(center, radius) => proposeZone(circle(center, radius), 'Votre zone est tracée')}
+              onDrawTooSmall={showTooSmall}
+              onVisibleArea={(box) => { visibleArea.current = box; }}
+              tools={<ZonePencil menu={zoneMenu} editing={zoneEditing !== null} onStart={startDrawing} />}
             />
           </Suspense>
-          {selected && <MapPreview result={selected} mode={draft.mode} onClose={() => setSelectedId(null)} />}
-          {desktop && (
+          {/* Bandeau du tracé, en haut de l'écran mais après la carte dans la page : depuis le crayon, Tab mène à « Zone
+              autour du centre de la carte » et à « Annuler », puis au choix de l'outil ou à la carte de validation. */}
+          {zoneEditing && (
+            <ZoneBanner
+              text={drawHint && zoneEditing.step === 'drawing' ? drawHint
+                : zoneEditing.step === 'proposal' ? zoneEditing.title : drawingInstruction(drawTool)}
+              onCancel={() => setZoneEditing(null)}
+              onZoneAroundCenter={zoneEditing.step === 'drawing' ? zoneAroundMapCenter : undefined}
+            />
+          )}
+          {/* Pendant le tracé et l'ajustement, ni aperçu ni « Liste » (le panneau de l'app glisse hors de l'écran). */}
+          {selected && !zoneEditing && <MapPreview result={selected} mode={draft.mode} onClose={() => setSelectedId(null)} />}
+          {desktop && !zoneEditing && (
             <button type="button" className="map-close btn btn-primary" onClick={() => setMapOpen(false)}>
               <Icon name="list" />
               Liste
             </button>
+          )}
+          {zoneEditing?.step === 'drawing' && (
+            <ZoneToolPicker tool={drawTool} onChange={(tool) => { zoneSession.drawTool = tool; setDrawTool(tool); }} />
+          )}
+          {zoneEditing?.step === 'proposal' && (
+            <ZoneValidationCard
+              zone={zoneEditing.zone}
+              count={proposalFound?.results.length ?? 0}
+              loading={proposalLoading}
+              onShrink={() => proposeZone(scaled(zoneEditing.zone, 1 / SCALE_STEP), zoneEditing.title)}
+              onGrow={() => proposeZone(scaled(zoneEditing.zone, SCALE_STEP), zoneEditing.title)}
+              onRestart={() => setZoneEditing({ step: 'drawing' })}
+              onCommit={() => commitZone(zoneEditing.zone)}
+            />
           )}
         </div>
       </div>

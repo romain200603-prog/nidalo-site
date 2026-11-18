@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import type { IconName } from '../../components/iconPaths';
 import { useDesktop } from '../../lib/desktop';
@@ -119,34 +119,47 @@ export function Thumb({ url, className }: { url: string | null; className?: stri
   );
 }
 
-export type MenuItem = { label: string; icon?: IconName; onClick: () => void; danger?: boolean };
+export type MenuItem = { label: string; icon?: IconName; onClick: () => void; danger?: boolean; disabled?: boolean };
 
 /**
  * Menu de l'app (Menu) : liste d'actions sous le bouton « … », ou sous un bouton à libellé (`trigger`) ; Échap ou
  * un clic ailleurs le referme. Sur téléphone, la page défile juste assez pour le montrer en entier, au-dessus de la
- * barre du bas.
+ * barre du bas. Au clavier : ouvert, le focus va à la première action ; les flèches (et Début, Fin) passent d'une
+ * action à l'autre ; Échap rend le focus au bouton ; Tab referme. Une action inactive (`disabled`) reste affichée.
  */
-export function ActionMenu({ label, items, trigger, triggerClassName = 'dsc-menu-button' }: {
+export function ActionMenu({ label, items, trigger, triggerClassName = 'dsc-menu-button', icon = 'ellipsis', className }: {
   label: string;
   items: MenuItem[];
   trigger?: ReactNode;
   triggerClassName?: string;
+  /** Icône du bouton sans libellé (« … » par défaut) ; son nom est `label`, aussi en infobulle. */
+  icon?: IconName;
+  /** Classe ajoutée au menu, pour sa place sur l'écran (crayon de la carte…). */
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const id = useId();
   const desktop = useDesktop();
   useEffect(() => {
     if (open && !desktop) listRef.current?.scrollIntoView({ block: 'nearest' });
   }, [open, desktop]);
   useEffect(() => {
+    if (open) listRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true });
+  }, [open]);
+  useEffect(() => {
     if (!open) return;
     const onPointer = (event: MouseEvent) => {
       if (!ref.current?.contains(event.target as Node)) setOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key !== 'Escape') return;
+      // Échap ferme le menu seulement (pas la fenêtre ni la carte qui le contient).
+      event.preventDefault();
+      setOpen(false);
+      buttonRef.current?.focus({ preventScroll: true });
     };
     document.addEventListener('mousedown', onPointer);
     document.addEventListener('keydown', onKey);
@@ -155,17 +168,30 @@ export function ActionMenu({ label, items, trigger, triggerClassName = 'dsc-menu
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
+  const onListKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const buttons = [...(listRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])];
+    if (!buttons.length) return;
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const next = { ArrowDown: index + 1, ArrowUp: index - 1, Home: 0, End: buttons.length - 1 }[event.key];
+    if (next !== undefined) {
+      event.preventDefault();
+      buttons[(next + buttons.length) % buttons.length].focus();
+    } else if (event.key === 'Tab') {
+      setOpen(false);
+    }
+  };
   return (
-    <div className="dsc-menu" ref={ref}>
-      <button type="button" className={triggerClassName} aria-label={trigger ? undefined : label} aria-haspopup="menu" aria-expanded={open}
+    <div className={className ? `dsc-menu ${className}` : 'dsc-menu'} ref={ref}>
+      <button ref={buttonRef} type="button" className={triggerClassName} aria-label={trigger ? undefined : label}
+        title={trigger || icon === 'ellipsis' ? undefined : label} aria-haspopup="menu" aria-expanded={open}
         aria-controls={open ? id : undefined} onClick={() => setOpen(!open)}>
-        {trigger ?? <Icon name="ellipsis" />}
+        {trigger ?? <Icon name={icon} />}
       </button>
       {open && (
-        <div className="dsc-menu-list" role="menu" id={id} ref={listRef}>
+        <div className="dsc-menu-list" role="menu" id={id} ref={listRef} onKeyDown={onListKey}>
           {items.map((item) => (
-            <button key={item.label} type="button" role="menuitem" className={item.danger ? 'is-danger' : undefined}
-              onClick={() => { setOpen(false); item.onClick(); }}>
+            <button key={item.label} type="button" role="menuitem" className={item.danger ? 'is-danger' : undefined} disabled={item.disabled}
+              onClick={() => { setOpen(false); buttonRef.current?.focus({ preventScroll: true }); item.onClick(); }}>
               {item.icon && <Icon name={item.icon} />}{item.label}
             </button>
           ))}

@@ -1,10 +1,12 @@
 import { formatArea, formatFraction, formatPrice } from '../format';
 import { PROPERTY_TYPE_LABELS, type PropertyType, type SearchMode } from '../labels';
+import { boundingBox, DRAWN_ZONE_LABEL, isUsable as isUsableZone } from '../drawnZone';
 import type { HotelScope } from '../listingJson';
+import { isNearbyLabel, savedLabel } from '../nearby';
 import type { Coordinate } from '../places';
 import {
-  BEDROOM_NOUNS, chosenPlace, countRangeLabel, DEFAULT_RADIUS_METERS, defaultDraft, floorRange, knownCityCenter, MODE_PROPERTY_TYPES,
-  ROOM_NOUNS, searchCenter, type EnergyClass, type OutdoorSpace, type SearchDraft,
+  BEDROOM_NOUNS, chosenPlace, countRangeLabel, DEFAULT_RADIUS_METERS, defaultDraft, drawnZoneOf, floorRange, knownCityCenter,
+  MODE_PROPERTY_TYPES, ROOM_NOUNS, searchCenter, type EnergyClass, type OutdoorSpace, type SearchDraft,
 } from '../search';
 import { supabase } from '../supabase';
 import { databaseMessage } from './errors';
@@ -77,6 +79,11 @@ export type SearchQueryJson = {
   building?: BuildingJson;
   text?: string;
   locationLabel?: string;
+  /**
+   * Zone dessinée sur la carte (DrawnZone.swift) : `[{"latitude":45.76,"longitude":4.83},…]`, 60 sommets au plus, le
+   * premier n'est pas répété ; `location` est alors son rectangle (`area`). Facultative.
+   */
+  drawnZone?: Coordinate[];
 };
 
 export type SavedSearch = {
@@ -155,7 +162,12 @@ export function queryFromDraft(draft: SearchDraft): SearchQueryJson {
     requiresParking: false,
   };
   const place = draft.place.trim();
-  if (draft.area) {
+  const zone = drawnZoneOf(draft);
+  const zoneBox = zone ? boundingBox(zone) : null;
+  if (zoneBox) {
+    // Zone dessinée (sans lieu saisi) : son rectangle, puis le polygone (`drawnZone`, écrit en dernier).
+    query.location = { area: { _0: { southWest: { ...zoneBox.southWest }, northEast: { ...zoneBox.northEast } } } };
+  } else if (draft.area) {
     // Cadre de la carte (« Rechercher dans cette zone ») : ouest, sud, est, nord.
     const [west, south, east, north] = draft.area;
     query.location = { area: { _0: { southWest: { latitude: south, longitude: west }, northEast: { latitude: north, longitude: east } } } };
@@ -164,7 +176,9 @@ export function queryFromDraft(draft: SearchDraft): SearchQueryJson {
     const chosen = chosenPlace(draft);
     if (center) {
       query.location = { around: { center: { latitude: center.latitude, longitude: center.longitude }, radiusMeters: draft.radiusKm ? draft.radiusKm * 1000 : DEFAULT_RADIUS_METERS } };
-      if (!knownCityCenter(place)) query.locationLabel = place;
+      // « Autour de moi » : enregistrée comme une recherche autour d'une ville, « Autour de Lyon » (NearbySearch).
+      if (chosen?.nearby) query.locationLabel = savedLabel(chosen.commune);
+      else if (!knownCityCenter(place)) query.locationLabel = place;
     } else if (chosen) {
       query.location = { city: compact({ name: place, postalCode: chosen.postalCode, inseeCode: chosen.inseeCode }) };
     } else if (place) {
@@ -236,6 +250,7 @@ export function queryFromDraft(draft: SearchDraft): SearchQueryJson {
     });
     if (Object.keys(building).length) query.building = building;
   }
+  if (zoneBox && zone) query.drawnZone = zone.map((point) => ({ latitude: point.latitude, longitude: point.longitude }));
   return query;
 }
 
@@ -285,9 +300,14 @@ export function draftFromQuery(query: SearchQueryJson): SearchDraft {
     }
     draft.radiusKm = radiusMeters === DEFAULT_RADIUS_METERS ? null : Math.round(radiusMeters / 1000);
   } else if ('area' in location) {
-    // Zone de la carte, gardée pour relancer la même recherche (l'app la perd encore : SearchDraft(query:)).
-    const { southWest, northEast } = location.area._0;
-    draft.area = [southWest.longitude, southWest.latitude, northEast.longitude, northEast.latitude];
+    if (isUsableZone(query.drawnZone)) {
+      // Zone dessinée : le polygone, sans texte de lieu (son rectangle se déduit de lui).
+      draft.drawnZone = query.drawnZone.map((point) => ({ latitude: point.latitude, longitude: point.longitude }));
+    } else {
+      // Zone de la carte, gardée pour relancer la même recherche.
+      const { southWest, northEast } = location.area._0;
+      draft.area = [southWest.longitude, southWest.latitude, northEast.longitude, northEast.latitude];
+    }
   }
   draft.maxMonthlyCharges = query.maxMonthlyCharges ?? null;
   draft.pricePerSquareMeterMin = query.pricePerSquareMeter?.min ?? null;
@@ -352,10 +372,12 @@ export function placeLabelOf(query: SearchQueryJson): string | null {
   const location = query.location;
   if ('city' in location) return location.city.postalCode ? `${location.city.name} (${location.city.postalCode})` : location.city.name;
   if ('around' in location) {
+    // « Autour de Lyon » (recherche « Autour de moi ») s'affiche tel quel.
+    if (query.locationLabel && isNearbyLabel(query.locationLabel)) return query.locationLabel;
     const name = knownCityAt(location.around.center) ?? query.locationLabel;
     return name ? `${name} et alentours` : 'Autour d\'un point';
   }
-  if ('area' in location) return 'Zone de la carte';
+  if ('area' in location) return isUsableZone(query.drawnZone) ? DRAWN_ZONE_LABEL : 'Zone de la carte';
   return null;
 }
 
@@ -417,18 +439,24 @@ export function proposedName(query: SearchQueryJson, mode: SearchMode): string {
   return [...parts.join(' · ')].slice(0, 80).join('');
 }
 
-/** Deux requêtes identiques (les ensembles de types et d'extérieurs sans ordre), comme `==` en Swift. */
+/**
+ * Deux requêtes identiques (les ensembles de types et d'extérieurs sans ordre, les sommets d'une zone dans leur ordre),
+ * comme `==` en Swift.
+ */
 export function sameQuery(a: SearchQueryJson, b: SearchQueryJson): boolean {
   return canonical(a) === canonical(b);
 }
 
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).sort().join(',')}]`;
+function canonical(value: unknown, ordered = false): string {
+  if (Array.isArray(value)) {
+    const items = value.map((item) => canonical(item));
+    return `[${(ordered ? items : items.sort()).join(',')}]`;
+  }
   if (value && typeof value === 'object') {
     const entries = Object.entries(value as Record<string, unknown>)
       .filter(([, v]) => v !== undefined && v !== null)
       .sort(([a], [b]) => (a < b ? -1 : 1));
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(',')}}`;
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v, k === 'drawnZone')}`).join(',')}}`;
   }
   return JSON.stringify(value);
 }
