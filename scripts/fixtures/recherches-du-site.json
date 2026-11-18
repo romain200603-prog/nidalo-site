@@ -306,5 +306,100 @@
       "requiresParking": false,
       "excludesLeased": true
     }
+  },
+  {
+    "label": "Zone dessinée (tracé arrondi au mètre, comme sur le site)",
+    "mode": "buy",
+    "name": "Résidentiel · Zone dessinée · Appartement · Jusqu'à 400 000 €",
+    "query": {
+      "transaction": "sale",
+      "propertyTypes": [
+        "apartment"
+      ],
+      "location": {
+        "area": {
+          "_0": {
+            "southWest": {
+              "latitude": 45.74587,
+              "longitude": 4.82061
+            },
+            "northEast": {
+              "latitude": 45.7781,
+              "longitude": 4.86725
+            }
+          }
+        }
+      },
+      "price": {
+        "max": 400000
+      },
+      "livingArea": {},
+      "rooms": {},
+      "bedrooms": {},
+      "floor": {},
+      "requiresElevator": false,
+      "requiresOutdoorSpace": false,
+      "outdoorSpaces": [],
+      "requiresParking": false,
+      "excludesLeased": true,
+      "drawnZone": [
+        {
+          "latitude": 45.77412,
+          "longitude": 4.82061
+        },
+        {
+          "latitude": 45.7781,
+          "longitude": 4.84433
+        },
+        {
+          "latitude": 45.76902,
+          "longitude": 4.86725
+        },
+        {
+          "latitude": 45.75218,
+          "longitude": 4.86194
+        },
+        {
+          "latitude": 45.74587,
+          "longitude": 4.83912
+        },
+        {
+          "latitude": 45.75633,
+          "longitude": 4.8215
+        }
+      ]
+    }
+  },
+  {
+    "label": "Location « Autour de moi » près de Lyon (point arrondi à 3 décimales, comme sur le site)",
+    "mode": "rent",
+    "name": "Location · Autour de Lyon · Appartement · Jusqu'à 1 100 €/mois",
+    "query": {
+      "transaction": "rent",
+      "propertyTypes": [
+        "apartment"
+      ],
+      "location": {
+        "around": {
+          "center": {
+            "latitude": 45.758,
+            "longitude": 4.832
+          },
+          "radiusMeters": 20000
+        }
+      },
+      "price": {
+        "max": 1100
+      },
+      "livingArea": {},
+      "rooms": {},
+      "bedrooms": {},
+      "floor": {},
+      "requiresElevator": false,
+      "requiresOutdoorSpace": false,
+      "outdoorSpaces": [],
+      "requiresParking": false,
+      "locationLabel": "Autour de Lyon"
+    }
   }
 ]

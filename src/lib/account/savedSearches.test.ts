@@ -142,6 +142,23 @@ describe('recherches enregistrées depuis le site : fichier de contrôle pour l�
       label: 'Zone de la carte',
       draft: { ...base('buy'), area: [4.8, 45.73, 4.9, 45.79], priceMax: 400000 },
     },
+    {
+      label: 'Zone dessinée (tracé arrondi au mètre, comme sur le site)',
+      draft: {
+        ...base('buy'), priceMax: 400000, types: ['apartment'],
+        drawnZone: [
+          { latitude: 45.77412, longitude: 4.82061 }, { latitude: 45.7781, longitude: 4.84433 }, { latitude: 45.76902, longitude: 4.86725 },
+          { latitude: 45.75218, longitude: 4.86194 }, { latitude: 45.74587, longitude: 4.83912 }, { latitude: 45.75633, longitude: 4.8215 },
+        ],
+      },
+    },
+    {
+      label: 'Location « Autour de moi » près de Lyon (point arrondi à 3 décimales, comme sur le site)',
+      draft: {
+        ...base('rent'), place: 'Autour de moi', radiusKm: 20, priceMax: 1100, types: ['apartment'],
+        chosen: { kind: 'municipality', name: 'Autour de moi', coordinate: { latitude: 45.758, longitude: 4.832 }, nearby: true, commune: 'Lyon' },
+      },
+    },
   ];
   const entries = drafts.map(({ label, draft }) => {
     const query = queryFromDraft(draft);
@@ -165,5 +182,82 @@ describe('recherches enregistrées depuis le site : fichier de contrôle pour l�
 
   it('garde le fichier de contrôle à jour', async () => {
     await expect(`${JSON.stringify(entries, null, 2)}\n`).toMatchFileSnapshot('../../../scripts/fixtures/recherches-du-site.json');
+  });
+});
+
+// Zone dessinée et « Autour de moi » (DrawnZoneTests.swift, NearbySearchTests.swift) : JSON écrit comme le Codable
+// synthétisé de Swift (clés facultatives absentes, `area` en `{"_0": …}`), relu et réécrit à l'identique dans les deux sens.
+describe('zone dessinée et « Autour de moi » : même JSON que l’app', () => {
+  const triangle = [{ latitude: 45.74, longitude: 4.82 }, { latitude: 45.78, longitude: 4.84 }, { latitude: 45.74, longitude: 4.88 }];
+  const BASE = {
+    transaction: 'sale', propertyTypes: ['apartment', 'house', 'land'], price: { max: 400000 }, livingArea: {}, rooms: {}, bedrooms: {},
+    floor: {}, requiresElevator: false, requiresOutdoorSpace: false, outdoorSpaces: [], requiresParking: false, excludesLeased: true,
+  };
+  /** Recherche par zone dessinée, telle que l'app l'enregistre : le rectangle de la zone, puis ses sommets. */
+  const APP_ZONE = {
+    ...BASE,
+    location: { area: { _0: { southWest: { latitude: 45.74, longitude: 4.82 }, northEast: { latitude: 45.78, longitude: 4.88 } } } },
+    drawnZone: triangle,
+  } as unknown as SearchQueryJson;
+  /** « Autour de moi » près de Lyon, enregistrée par l'app : « Autour de Lyon ». */
+  const APP_NEARBY = {
+    ...BASE,
+    location: { around: { center: { latitude: 45.7578, longitude: 4.832 }, radiusMeters: 10000 } },
+    locationLabel: 'Autour de Lyon',
+  } as unknown as SearchQueryJson;
+
+  it('relit une zone de l’app et la réécrit à l’identique', () => {
+    const draft = draftFromQuery(APP_ZONE);
+    expect(draft.drawnZone).toEqual(triangle);
+    expect(draft.area).toBeNull();
+    expect(draft.place).toBe('');
+    expect(queryFromDraft(draft)).toEqual(APP_ZONE);
+    expect(placeLabelOf(APP_ZONE)).toBe('Zone dessinée');
+    expect(proposedName(APP_ZONE, 'buy').replace(/[\u00A0\u202F]/g, ' ')).toBe('Résidentiel · Zone dessinée · Appartement, Maison, Terrain · Jusqu\'à 400 000 €');
+  });
+
+  it('écrit une zone tracée sur le site comme l’app', () => {
+    const query = queryFromDraft({ ...defaultDraft('buy'), drawnZone: triangle, priceMax: 400000 });
+    expect(query).toEqual(APP_ZONE);
+    expect(JSON.stringify(query.drawnZone)).toBe('[{"latitude":45.74,"longitude":4.82},{"latitude":45.78,"longitude":4.84},{"latitude":45.74,"longitude":4.88}]');
+    // Un lieu saisi remplace la zone (l'app la vide dès qu'un lieu est saisi).
+    expect(queryFromDraft({ ...defaultDraft('buy'), drawnZone: triangle, place: 'Lyon' }).drawnZone).toBeUndefined();
+  });
+
+  it('relit une recherche enregistrée avant la zone, ou avec une zone inutilisable, sans zone', () => {
+    const old = { ...APP_ZONE } as Record<string, unknown>;
+    delete old.drawnZone;
+    const draft = draftFromQuery(old as unknown as SearchQueryJson);
+    expect(draft.drawnZone).toBeNull();
+    expect(draft.area).toEqual([4.82, 45.74, 4.88, 45.78]);
+    expect(placeLabelOf(old as unknown as SearchQueryJson)).toBe('Zone de la carte');
+    const unusable = { ...APP_ZONE, drawnZone: triangle.slice(0, 2) } as SearchQueryJson;
+    expect(draftFromQuery(unusable).drawnZone).toBeNull();
+    expect(placeLabelOf(unusable)).toBe('Zone de la carte');
+  });
+
+  it('distingue deux zones aux mêmes sommets dans un autre ordre', () => {
+    const reversed = { ...APP_ZONE, drawnZone: [...triangle].reverse() } as SearchQueryJson;
+    expect(sameQuery(APP_ZONE, { ...APP_ZONE })).toBe(true);
+    expect(sameQuery(APP_ZONE, reversed)).toBe(false);
+  });
+
+  it('relit « Autour de Lyon » de l’app et la réécrit à l’identique', () => {
+    const draft = draftFromQuery(APP_NEARBY);
+    expect(draft.place).toBe('Autour de Lyon');
+    expect(queryFromDraft(draft)).toEqual(APP_NEARBY);
+    expect(placeLabelOf(APP_NEARBY)).toBe('Autour de Lyon');
+    expect(resumeSummaryOf(APP_NEARBY).replace(/[\u00A0\u202F]/g, ' ')).toBe('Autour de Lyon · Appartement, Maison, Terrain · ≤ 400 k€');
+  });
+
+  it('écrit « Autour de moi » comme l’app : le point, 10 km, « Autour de <commune> »', () => {
+    const nearby = {
+      ...defaultDraft('buy'), place: 'Autour de moi', priceMax: 400000,
+      chosen: { kind: 'municipality' as const, name: 'Autour de moi', coordinate: { latitude: 45.7578, longitude: 4.832 }, nearby: true as const, commune: 'Lyon' },
+    };
+    expect(queryFromDraft(nearby)).toEqual(APP_NEARBY);
+    // Commune inconnue : « Autour de moi ».
+    expect(queryFromDraft({ ...nearby, chosen: { ...nearby.chosen, commune: undefined } }).locationLabel).toBe('Autour de moi');
+    expect(queryFromDraft({ ...nearby, radiusKm: 20 }).location).toEqual({ around: { center: { latitude: 45.7578, longitude: 4.832 }, radiusMeters: 20000 } });
   });
 });

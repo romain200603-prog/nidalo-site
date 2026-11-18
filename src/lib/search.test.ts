@@ -153,3 +153,52 @@ describe('pastilles des critères', () => {
     expect(plain(compactPrice(1250))).toBe('1 250 €');
   });
 });
+
+describe('zone dessinée et « Autour de moi »', () => {
+  const triangle = [{ latitude: 45.74, longitude: 4.82 }, { latitude: 45.78, longitude: 4.84 }, { latitude: 45.74, longitude: 4.88 }];
+  const zoneDraft: SearchDraft = { ...defaultDraft(), drawnZone: triangle };
+  const nearby: SearchDraft = {
+    ...defaultDraft(), place: 'Autour de moi',
+    chosen: { kind: 'municipality', name: 'Autour de moi', coordinate: { latitude: 45.758, longitude: 4.832 }, nearby: true, commune: 'Lyon' },
+  };
+
+  it('cherche dans le rectangle de la zone, puis garde les biens du polygone (comme SearchMatching)', () => {
+    expect(locationFor(zoneDraft)).toEqual({ kind: 'area', box: [4.82, 45.74, 4.88, 45.78] });
+    expect(placeLabel(zoneDraft)).toBe('Zone dessinée');
+    expect(matches(testRow({ public_latitude: 45.75, public_longitude: 4.85 }), zoneDraft, null)).toBe(true);
+    // Dans le rectangle mais hors du triangle.
+    expect(matches(testRow({ public_latitude: 45.775, public_longitude: 4.825 }), zoneDraft, null)).toBe(false);
+    expect(matches(testRow({ public_latitude: null, public_longitude: null }), zoneDraft, null)).toBe(false);
+    // Sans zone utilisable, seul le rectangle compte… et sans rectangle non plus, partout.
+    const twoPoints = { ...zoneDraft, drawnZone: triangle.slice(0, 2) };
+    expect(locationFor(twoPoints)).toEqual({ kind: 'anywhere' });
+    // Un lieu saisi passe avant la zone.
+    expect(locationFor({ ...zoneDraft, place: 'Lyon' }).kind).toBe('around');
+  });
+
+  it('garde la zone et « Autour de moi » dans l’adresse de la page', () => {
+    const params = paramsFromDraft(zoneDraft);
+    expect(params.get('dessin')).toBe('45.74,4.82,45.78,4.84,45.74,4.88');
+    expect(params.has('lieu')).toBe(false);
+    expect(draftFromParams(params).drawnZone).toEqual(triangle);
+    // Un lieu dans l'adresse : pas de zone.
+    params.set('lieu', 'Lyon');
+    expect(draftFromParams(params).drawnZone).toBeNull();
+    const nearbyParams = paramsFromDraft(nearby);
+    expect(Object.fromEntries(nearbyParams)).toEqual({ mode: 'buy', lieu: 'Autour de moi', choix: 'municipality', lat: '45.75800', lng: '4.83200', autour: 'Lyon' });
+    expect(draftFromParams(nearbyParams)).toEqual(nearby);
+    const withoutCommune = { ...nearby, chosen: { ...nearby.chosen!, commune: undefined } };
+    const read = draftFromParams(paramsFromDraft(withoutCommune));
+    expect(read.chosen?.nearby).toBe(true);
+    expect(read.chosen?.commune).toBeUndefined();
+  });
+
+  it('cherche autour de la position, avec le rayon de 10 km par défaut, et l’affiche tel quel', () => {
+    expect(locationFor(nearby)).toEqual({ kind: 'around', center: { latitude: 45.758, longitude: 4.832 }, radiusMeters: 10_000 });
+    expect(locationFor({ ...nearby, radiusKm: 20 })).toMatchObject({ radiusMeters: 20_000 });
+    expect(placeLabel(nearby)).toBe('Autour de moi');
+    // Recherche enregistrée « Autour de Lyon », relue : telle quelle aussi.
+    expect(placeLabel({ ...defaultDraft(), place: 'Autour de Lyon', chosen: { kind: 'municipality', name: 'Autour de Lyon', coordinate: { latitude: 45.758, longitude: 4.832 } } }))
+      .toBe('Autour de Lyon');
+  });
+});

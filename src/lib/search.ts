@@ -1,7 +1,9 @@
 import { assetDetails, int, rentalInfo, scopeLabel, sourced, type HotelScope } from './listingJson';
 import type { PropertyType, SearchMode } from './labels';
 import { LISTING_COLUMNS, PUBLIC_STATUSES, type ListingRow } from './listings';
-import { searchNormalized, type Coordinate, type PlaceKind } from './places';
+import { contains as zoneContains, boundingBox as zoneBox, decodeZone, DRAWN_ZONE_LABEL, encodeZone, isUsable as isUsableZone } from './drawnZone';
+import { isNearby, isNearbyLabel } from './nearby';
+import { placeShortName, searchNormalized, type Coordinate, type PlaceKind, type PlaceSuggestion } from './places';
 import { supabase } from './supabase';
 
 // Recherche du site, mêmes règles que l'app :
@@ -29,6 +31,9 @@ export type ChosenPlace = {
   postalCode?: string;
   inseeCode?: string;
   coordinate?: Coordinate;
+  /** « Autour de moi » (NearbySearch de l'app) : le point de la personne, et sa commune pour le libellé enregistré. */
+  nearby?: true;
+  commune?: string;
 };
 
 /** Critères de recherche, tels que saisis (comme `SearchDraft` dans l'app). Les montants sont en euros. */
@@ -40,6 +45,11 @@ export type SearchDraft = {
   radiusKm: number | null;
   /** Cadre de la carte, s'il remplace le lieu (« Rechercher dans cette zone »). */
   area: BoundingBox | null;
+  /**
+   * Zone dessinée sur la carte (60 points au plus), sans lieu saisi : la recherche porte sur son rectangle, puis sur le
+   * polygone (SearchDraft.drawnZone de l'app). Un lieu saisi ou choisi la remplace.
+   */
+  drawnZone: Coordinate[] | null;
   priceMin: number | null;
   priceMax: number | null;
   livingAreaMin: number | null;
@@ -214,6 +224,7 @@ export function defaultDraft(mode: SearchMode = 'buy'): SearchDraft {
     chosen: null,
     radiusKm: null,
     area: null,
+    drawnZone: null,
     priceMin: null,
     priceMax: null,
     livingAreaMin: null,
@@ -268,7 +279,7 @@ export function defaultDraft(mode: SearchMode = 'buy'): SearchDraft {
 
 /** « Réinitialiser les filtres de cette catégorie » : tout est vidé sauf le lieu et le rayon (comme l'app). */
 export function resetFilters(draft: SearchDraft): SearchDraft {
-  return { ...defaultDraft(draft.mode), place: draft.place, chosen: draft.chosen, radiusKm: draft.radiusKm, area: draft.area };
+  return { ...defaultDraft(draft.mode), place: draft.place, chosen: draft.chosen, radiusKm: draft.radiusKm, area: draft.area, drawnZone: draft.drawnZone };
 }
 
 /**
@@ -277,7 +288,22 @@ export function resetFilters(draft: SearchDraft): SearchDraft {
  */
 export function switchMode(current: SearchDraft, mode: SearchMode, remembered?: SearchDraft): SearchDraft {
   const base = remembered && remembered.mode === mode ? remembered : defaultDraft(mode);
-  return { ...base, mode, place: current.place, chosen: current.chosen, radiusKm: current.radiusKm, area: current.area };
+  return { ...base, mode, place: current.place, chosen: current.chosen, radiusKm: current.radiusKm, area: current.area, drawnZone: current.drawnZone };
+}
+
+/** Lieu choisi dans les suggestions, « Autour de moi » ou un lieu récent, tel que la recherche le garde. */
+export function chosenFromSuggestion(place: PlaceSuggestion): ChosenPlace {
+  const chosen: ChosenPlace = { kind: place.kind, name: placeShortName(place), postalCode: place.postalCode, inseeCode: place.inseeCode, coordinate: place.coordinate };
+  if (isNearby(place)) {
+    chosen.nearby = true;
+    if (place.city) chosen.commune = place.city;
+  }
+  return chosen;
+}
+
+/** Zone dessinée de la recherche : seulement sans lieu saisi, et utilisable (3 sommets distincts au moins). */
+export function drawnZoneOf(draft: Pick<SearchDraft, 'place' | 'drawnZone'>): Coordinate[] | null {
+  return !draft.place.trim() && isUsableZone(draft.drawnZone) ? draft.drawnZone : null;
 }
 
 /** Lieu choisi, s'il correspond encore au texte du champ. */
@@ -294,14 +320,25 @@ export function searchCenter(draft: SearchDraft): Coordinate | null {
   return chosen.coordinate ?? null;
 }
 
-/** « Lyon et alentours », « Péron et alentours », sinon le lieu tel que saisi. */
+/**
+ * « Lyon et alentours », « Péron et alentours », « Autour de moi » et « Autour de Lyon » tels quels, « Zone dessinée »,
+ * sinon le lieu tel que saisi.
+ */
 export function placeLabel(draft: SearchDraft): string {
   const place = draft.place.trim();
+  if (!place && drawnZoneOf(draft)) return DRAWN_ZONE_LABEL;
   if (knownCityCenter(place)) return `${place.charAt(0).toLocaleUpperCase('fr-FR')}${place.slice(1)} et alentours`;
+  if (chosenPlace(draft)?.nearby || isNearbyLabel(place)) return place;
   return searchCenter(draft) ? `${place} et alentours` : place;
 }
 
 export function locationFor(draft: SearchDraft): SearchLocation {
+  // Zone dessinée (sans lieu saisi) : son rectangle, puis le polygone (voir matches).
+  const zone = drawnZoneOf(draft);
+  const zoneBounds = zone ? zoneBox(zone) : null;
+  if (zoneBounds) {
+    return { kind: 'area', box: [zoneBounds.southWest.longitude, zoneBounds.southWest.latitude, zoneBounds.northEast.longitude, zoneBounds.northEast.latitude] };
+  }
   if (draft.area) return { kind: 'area', box: draft.area };
   const place = draft.place.trim();
   const center = searchCenter(draft);
@@ -500,6 +537,12 @@ export function matches(row: ListingRow, draft: SearchDraft, highlights: Highlig
   const type = row.property_type;
   if (!propertyTypesFor(draft).includes(type as PropertyType)) return false;
   if (!options.ignoreLocation && !locationContains(locationFor(draft), row)) return false;
+  // Zone dessinée : un bien n'est gardé que s'il est dans le polygone (SearchMatching.swift).
+  const zone = options.ignoreLocation ? null : drawnZoneOf(draft);
+  if (zone) {
+    const coordinate = rowCoordinate(row);
+    if (!coordinate || !zoneContains(coordinate, zone)) return false;
+  }
   const price = Number(row.price);
   if (!inRange(price, range(draft.priceMin, draft.priceMax))) return false;
   if (!inRange(Number(row.living_area), range(draft.livingAreaMin, draft.livingAreaMax))) return false;
@@ -695,7 +738,15 @@ export function draftFromParams(params: URLSearchParams): SearchDraft {
       inseeCode: params.get('insee')?.trim() || undefined,
       coordinate: lat !== null && lng !== null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { latitude: lat, longitude: lng } : undefined,
     };
+    // « Autour de moi » : « autour » donne la commune du point (vide si elle n'a pas été trouvée).
+    const commune = params.get('autour');
+    if (commune !== null) {
+      draft.chosen.nearby = true;
+      if (commune.trim()) draft.chosen.commune = commune.trim().slice(0, 120);
+    }
   }
+  // Zone dessinée, sans lieu saisi (un lieu la remplace).
+  if (!draft.place) draft.drawnZone = decodeZone(params.get('dessin'));
   const radius = amount(params.get('rayon'));
   draft.radiusKm = radius && radius >= 1 && radius <= 200 ? Math.round(radius) : null;
   const box = params.get('zone')?.split(',').map(Number);
@@ -793,7 +844,10 @@ export function paramsFromDraft(draft: SearchDraft): URLSearchParams {
       params.set('lat', chosen.coordinate.latitude.toFixed(5));
       params.set('lng', chosen.coordinate.longitude.toFixed(5));
     }
+    if (chosen.nearby) params.set('autour', chosen.commune ?? '');
   }
+  const zone = drawnZoneOf(draft);
+  if (zone) params.set('dessin', encodeZone(zone));
   if (draft.radiusKm !== null) params.set('rayon', String(draft.radiusKm));
   if (draft.area) params.set('zone', draft.area.map((n) => n.toFixed(5)).join(','));
   if (draft.priceMin !== null) params.set('prixMin', String(draft.priceMin));
