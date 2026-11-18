@@ -167,3 +167,15 @@ span.criterion-chip-label { cursor: default; }
 }
 @keyframes app-fade-in { from { opacity: 0; } }
 @keyframes app-fade-out { to { opacity: 0; } }
+
+/* Vos favoris (ModeSegmentedControl(selectionOrAll:) de l'app) : « Tous » puis les quatre catégories, dans la carte
+   blanche de l'accueil (marges 19 · 11 · 15 · 11, coins 26, contour, ombre). « Tous » : gris neutre, encre marine. */
+.mode-tabs-all { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.mode-tabs-card {
+  padding: 19px 11px 15px; border: 1px solid var(--app-border); border-radius: 26px; background: #FFFFFF;
+  box-shadow: 0 10px 30px rgba(31, 36, 48, 0.07);
+}
+.mode-tab-all { --tile-soft: #F1F0EC; --tile-ink: var(--app-navy); --tile-shadow: rgba(36, 45, 56, 0.35); }
+/* Le nom se resserre jusqu'à 80 % pour tenir sur une ligne, comme minimumScaleFactor(0.8) de l'app. */
+.mode-tabs-all .mode-tab { container-type: inline-size; }
+.mode-tabs-all .mode-name { font-size: clamp(10.4px, 18cqi, 13px); }

@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { showToast } from '../../components/AppToast';
+import { CriterionChipsRow } from '../../components/CriterionChips';
+import { FavoritesEmptyState } from '../../components/FavoritesEmptyState';
+import { ModeTabs } from '../../components/ModeTabs';
 import { Icon } from '../../components/Icon';
 import { Page } from '../../components/Layout';
 import { PhotoPager } from '../../components/PhotoPager';
@@ -6,10 +10,10 @@ import { HeartIcon } from '../../components/account/HeartButton';
 import { SignInCard } from '../../components/account/SignInCard';
 import { isNewAccount } from '../../lib/account/auth';
 import {
-  categoryIncludes, categoryOfMode, FAVORITE_CATEGORIES, FAVORITE_SORTS, favoriteDetails, favoriteSuggestions,
+  categoryIncludes, categoryOfMode, FAVORITE_SORTS, favoriteDetails, favoriteSuggestions,
   matchesText, modeOfCategory, savedCountText, sortFavorites, type FavoriteCard, type FavoriteCategory, type FavoriteSort,
 } from '../../lib/account/favoriteCards';
-import { loadFavorites, removeFavorite, useFavorites, type Favorite } from '../../lib/account/favorites';
+import { loadFavorites, useFavorites, type Favorite } from '../../lib/account/favorites';
 import { loadSavedSearches, savedSearchesStore } from '../../lib/account/savedSearches';
 import { useSession, useStore } from '../../lib/account/session';
 import { formatCardPrice, GOOD_YIELD } from '../../lib/cardContent';
@@ -18,11 +22,12 @@ import { formatFraction, formatPrice } from '../../lib/format';
 import { DPE_COLORS } from '../../lib/labels';
 import { sortedPhotos } from '../../lib/listings';
 import { comparePath, listingPath, PATHS } from '../../lib/paths';
-import { defaultDraft, pricePerSquareMeter, type SearchDraft } from '../../lib/search';
+import { defaultDraft, filterChips, pricePerSquareMeter, type SearchDraft } from '../../lib/search';
 import { FiltersDialog, type DraftsByMode } from '../FiltersDialog';
 import { SavedSearchesList, useSearchCounts } from '../account/SavedSearchesList';
 import { EmptyState, Spinner } from '../account/parts';
-import { filterCount, matchingIds, useFavoriteCards } from './data';
+import { filterCount, matchingIds, removeWithUndo, useFavoriteCards } from './data';
+import { FavoritesTabs } from './FavoritesTabs';
 
 // « Vos favoris » sur ordinateur (maquette 4 de Romain), avec le contenu et les actions de l'app
 // (Features/Favorites/FavoritesView.swift) : titre, bouton rond Comparer avec son nombre, onglets Favoris et
@@ -33,7 +38,6 @@ import { filterCount, matchingIds, useFavoriteCards } from './data';
 type Tab = 'favorites' | 'searches';
 
 /** Toast de la comparaison (CompareToast de l'app) : texte, et « Voir » ou « Gérer » qui ouvre Comparer. */
-type CompareNotice = { id: number; text: string; action: string | null };
 
 /** Carte d'un favori : photo (rendement, cœur, Comparer, compteur), titre, infos clés, prix, prix au m², DPE. */
 function FavoriteCardView({ card, compared, onRemove, onCompare }: {
@@ -123,7 +127,7 @@ function MissingCard({ id }: { id: string }) {
       <span className="dfav-missing-icon"><Icon name="house" /></span>
       <span className="dfav-missing-title">Annonce plus disponible</span>
       <span className="dfav-missing-text">Le vendeur l&apos;a retirée, vendue ou louée.</span>
-      <button type="button" className="dfav-missing-remove" onClick={() => void removeFavorite(id)}>Retirer</button>
+      <button type="button" className="dfav-missing-remove" onClick={() => removeWithUndo(id)}>Retirer</button>
     </div>
   );
 }
@@ -143,18 +147,10 @@ function DesktopFavorites({ items }: { items: Favorite[] }) {
   const [filterDrafts, setFilterDrafts] = useState<DraftsByMode>({});
   const [filterMode, setFilterMode] = useState<SearchDraft['mode']>('buy');
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [notice, setNotice] = useState<CompareNotice | null>(null);
 
   useEffect(() => {
     void loadSavedSearches();
   }, []);
-
-  // Le toast reste 4 secondes, comme dans l'app.
-  useEffect(() => {
-    if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(null), 4000);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
 
   function changeTab(next: Tab) {
     setTab(next);
@@ -168,6 +164,7 @@ function DesktopFavorites({ items }: { items: Favorite[] }) {
   const addedAt = useMemo(() => new Map(items.map((item) => [item.listing_id, item.created_at])), [items]);
   const activeDraft = filterDrafts[filterMode];
   const activeFilters = filterCount(activeDraft);
+  const chips = activeDraft ? filterChips(activeDraft) : [];
   const filteredIds = useMemo(
     () => (activeDraft && activeFilters > 0 ? matchingIds(cards, activeDraft) : null),
     [cards, activeDraft, activeFilters],
@@ -196,10 +193,18 @@ function DesktopFavorites({ items }: { items: Favorite[] }) {
     window.location.assign(comparePath());
   }
 
-  /** Bouton Comparer d'une carte (CompareButton de l'app) : ajoute ou retire, puis le toast. */
+  /**
+   * Bouton Comparer d'une carte (CompareButton de l'app) : ajoute ou retire, puis le message du bas, le même que
+   * « Retiré des favoris » (un seul message à la fois, le dernier remplace l'autre, comme CompareToast de l'app).
+   */
   function toggleCompared(id: string) {
     const message = compareToast(toggleCompare(id), compareState().ids.length);
-    if (message) setNotice({ id: Date.now(), ...message });
+    if (!message) return;
+    showToast({
+      icon: 'columns',
+      text: message.text,
+      action: message.action ? { label: message.action, accessibilityLabel: message.action, run: () => window.location.assign(comparePath()) } : undefined,
+    });
   }
 
   let list;
@@ -217,14 +222,7 @@ function DesktopFavorites({ items }: { items: Favorite[] }) {
   } else if (cards.length === 0 && loaded.missing.length > 0) {
     list = <div className="dfav-grid">{loaded.missing.map((id) => <MissingCard key={id} id={id} />)}</div>;
   } else if (cards.length === 0) {
-    list = (
-      <EmptyState
-        icon="heart"
-        title="Aucun favori pour l'instant"
-        text="Touchez le cœur d'une annonce pour la retrouver ici et la comparer."
-        action={<a className="btn btn-primary dfav-empty-button" href={PATHS.search}>Rechercher un bien</a>}
-      />
-    );
+    list = <FavoritesEmptyState kind="favorites" className="dfav-empty" />;
   } else if (shown.length === 0) {
     list = (
       <EmptyState
@@ -242,7 +240,7 @@ function DesktopFavorites({ items }: { items: Favorite[] }) {
             key={card.row.id}
             card={card}
             compared={compare.ids.includes(card.row.id)}
-            onRemove={() => void removeFavorite(card.row.id)}
+            onRemove={() => removeWithUndo(card.row.id)}
             onCompare={() => toggleCompared(card.row.id)}
           />
         ))}
@@ -272,28 +270,19 @@ function DesktopFavorites({ items }: { items: Favorite[] }) {
           </button>
         </div>
 
-        <div className="dfav-tabs" role="group" aria-label="Favoris ou recherches">
-          <button type="button" aria-pressed={tab === 'favorites'} className={`dfav-tab${tab === 'favorites' ? ' is-active' : ''}`} onClick={() => changeTab('favorites')}>
-            <Icon name="heart" />Favoris
-          </button>
-          <button
-            type="button"
-            aria-pressed={tab === 'searches'}
-            aria-label={`Recherches, ${searchItems.length}${hasNews ? ', nouveautés' : ''}`}
-            className={`dfav-tab${tab === 'searches' ? ' is-active' : ''}`}
-            onClick={() => changeTab('searches')}
-          >
-            <Icon name="search" />Recherches
-            <span className="dfav-tab-count">({searchItems.length}){hasNews && <span className="dfav-dot" aria-hidden="true" />}</span>
-          </button>
-        </div>
+        <FavoritesTabs tab={tab} onChange={changeTab} searchCount={searchItems.length} hasNews={hasNews} />
 
         {tab === 'searches' ? (
-          <div className="dfav-searches">
+          <div key="searches" className="dfav-searches fav-tab-panel">
             <SavedSearchesList embedded counts={counts} />
           </div>
+        ) : items.length === 0 ? (
+          // Aucun favori : ni recherche, ni filtres, ni catégories (ils reviennent avec le premier favori).
+          <div key="empty" className="fav-tab-panel fav-empty-place-favorites dfav-empty-place">
+            <FavoritesEmptyState kind="favorites" className="dfav-empty" />
+          </div>
         ) : (
-          <>
+          <div key="favorites" className="fav-tab-panel">
             <div className="dfav-tools">
               <div className="dfav-search">
                 <div className="dfav-field">
@@ -351,21 +340,19 @@ function DesktopFavorites({ items }: { items: Favorite[] }) {
                 <Icon name="sliders" />
                 {activeFilters > 0 && <span className="dfav-filters-count" aria-hidden="true">{activeFilters}</span>}
               </button>
-              <span className="dfav-divider" aria-hidden="true" />
-              <div className="dfav-chips" role="group" aria-label="Catégories">
-                {FAVORITE_CATEGORIES.map((entry) => (
-                  <button
-                    key={entry.category}
-                    type="button"
-                    aria-pressed={category === entry.category}
-                    className={`dfav-chip${category === entry.category ? ' is-selected' : ''}`}
-                    onClick={() => setCategory(entry.category)}
-                  >
-                    <Icon name={entry.icon} />{entry.title}
-                  </button>
-                ))}
-              </div>
             </div>
+
+            <ModeTabs includesAll mode={modeOfCategory(category)} onChange={(mode) => setCategory(mode ? categoryOfMode(mode) : 'all')}
+              className="mode-tabs-card dfav-categories" />
+
+            {/* Filtres actifs (avec le lieu) : le libellé ouvre les filtres, la croix retire le critère. */}
+            {chips.length > 0 && (
+              <CriterionChipsRow chips={chips} className="dfav-criteria" onOpen={() => setFiltersOpen(true)}
+                onRemove={(id) => {
+                  const chip = chips.find((entry) => entry.id === id);
+                  if (chip && activeDraft) setFilterDrafts({ ...filterDrafts, [filterMode]: chip.remove(activeDraft) });
+                }} />
+            )}
 
             {cards.length > 0 && (
               <div className="dfav-toolbar">
@@ -400,17 +387,7 @@ function DesktopFavorites({ items }: { items: Favorite[] }) {
                 }}
               />
             )}
-          </>
-        )}
-      </div>
-
-      <div className={`dfav-toast${notice ? ' is-shown' : ''}`} role="status" aria-live="polite">
-        {notice && (
-          <span key={notice.id} className="dfav-toast-box">
-            <Icon name="columns" />
-            <span className="dfav-toast-text">{notice.text}</span>
-            {notice.action && <a href={comparePath()}>{notice.action}</a>}
-          </span>
+          </div>
         )}
       </div>
     </div>

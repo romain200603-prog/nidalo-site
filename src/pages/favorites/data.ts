@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { databaseMessage } from '../../lib/account/errors';
 import { categoryIncludes, categoryOfMode, favoriteCard, relevanceOrder, type FavoriteCard } from '../../lib/account/favoriteCards';
-import type { Favorite } from '../../lib/account/favorites';
+import { hideToast, showToast } from '../../components/AppToast';
+import { flushPendingRemoval, removeUndoably, undoRemoval, type Favorite } from '../../lib/account/favorites';
 import { highlightsFor } from '../../lib/highlights';
 import { LISTING_COLUMNS, type ListingRow } from '../../lib/listings';
 import { activeFilterCount, matches, type SearchDraft } from '../../lib/search';
@@ -77,4 +78,21 @@ export function matchingIds(cards: FavoriteCard[], draft: SearchDraft): Set<stri
 export function filterCount(draft: SearchDraft | undefined): number {
   if (!draft) return 0;
   return activeFilterCount(draft) + (draft.place.trim() ? 1 : 0);
+}
+
+let listening = false;
+
+/**
+ * Cœur d'une carte, ou « Retirer » d'une annonce plus disponible (FavoritesView.showUndo de l'app) : la carte part,
+ * puis le message « Retiré des favoris » avec « Annuler » (4 s). Page quittée ou cachée : le retrait part tout de
+ * suite, et le message, qui ne peut plus rien annuler, s'en va.
+ */
+export function removeWithUndo(listingId: string) {
+  if (!removeUndoably(listingId)) return;
+  showToast({ icon: 'heart', text: 'Retiré des favoris', action: { label: 'Annuler', accessibilityLabel: 'Annuler le retrait', run: undoRemoval } });
+  if (listening) return;
+  listening = true;
+  const flush = () => { if (flushPendingRemoval()) hideToast(); };
+  window.addEventListener('pagehide', flush);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
 }

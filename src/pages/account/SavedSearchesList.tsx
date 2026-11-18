@@ -12,6 +12,7 @@ import { SEARCH_MODES } from '../../lib/labels';
 import { PATHS } from '../../lib/paths';
 import { paramsFromDraft, search, type SearchDraft } from '../../lib/search';
 import { EmptyState, Spinner } from './parts';
+import { FavoritesEmptyState } from '../../components/FavoritesEmptyState';
 
 // « Mes recherches » (Features/Profile/SavedSearchesView.swift), dans Mon compte et dans l'onglet Recherches des Favoris.
 
@@ -127,14 +128,12 @@ export function SavedSearchesList({ embedded = false, counts: provided }: {
 
   if (state.status === 'loading' || state.status === 'none') return <Spinner />;
   if (state.status === 'error') return <EmptyState icon="triangleAlert" title="Erreur" text={state.message} />;
+  // Même état vide illustré dans Vos favoris (98 sous les onglets) et dans Mon espace (centré), comme l'app.
   if (!items.length) {
     return (
-      <EmptyState
-        icon="search"
-        title="Aucune recherche sauvegardée"
-        text="Lancez une recherche depuis l'accueil pour la retrouver ici."
-        action={<a className="btn btn-light" href={PATHS.search}>Rechercher un bien</a>}
-      />
+      <div className={embedded ? 'fav-empty-place-searches' : 'fav-empty-place-account'}>
+        <FavoritesEmptyState kind="searches" />
+      </div>
     );
   }
 

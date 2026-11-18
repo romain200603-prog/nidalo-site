@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import { Icon } from './Icon';
+import type { IconName } from './iconPaths';
 import { SEARCH_MODES, type SearchMode } from '../lib/labels';
 import '../styles/pieces-app.css';
 
@@ -19,13 +20,23 @@ export type ModeAccordion = {
  * Les flèches du clavier passent d'une catégorie à l'autre.
  * `accordion` (accueil du téléphone) : aucune catégorie ouverte au départ, chaque pavé ouvre ou referme ses filtres.
  */
-export function ModeTabs({ mode, onChange, className, accordion }: {
+export function ModeTabs(props: {
   mode: SearchMode;
   onChange: (mode: SearchMode) => void;
   className?: string;
   accordion?: ModeAccordion;
+  includesAll?: false;
+} | {
+  /** Vos favoris : « Tous » (`null`) en premier, puis les quatre catégories, dans la carte blanche de l'accueil. */
+  mode: SearchMode | null;
+  onChange: (mode: SearchMode | null) => void;
+  className?: string;
+  accordion?: undefined;
+  includesAll: true;
 }) {
+  const { mode, className, accordion } = props;
   const hintId = useId();
+  const onChange = props.onChange as (mode: SearchMode | null) => void;
   if (accordion) {
     return (
       <div className={`mode-tabs ${className ?? ''}`} role="group" aria-label="Catégories">
@@ -52,25 +63,30 @@ export function ModeTabs({ mode, onChange, className, accordion }: {
       </div>
     );
   }
+  // « Tous » : même pavé, gris neutre, icône des quatre carrés (HomeCategoryButtonStyle, segment sans catégorie).
+  const items: { mode: SearchMode | null; label: string; icon: IconName }[] = props.includesAll
+    ? [{ mode: null, label: 'Tous', icon: 'layoutGrid' }, ...SEARCH_MODES]
+    : SEARCH_MODES;
   return (
-    <div className={`mode-tabs ${className ?? ''}`} role="radiogroup" aria-label="Type de recherche">
-      {SEARCH_MODES.map((item) => (
+    <div className={`mode-tabs${props.includesAll ? ' mode-tabs-all' : ''} ${className ?? ''}`} role="radiogroup"
+      aria-label={props.includesAll ? 'Catégories' : 'Type de recherche'}>
+      {items.map((item) => (
         <button
-          key={item.mode}
+          key={item.mode ?? 'all'}
           type="button"
           role="radio"
           aria-checked={item.mode === mode}
-          className={`mode-tab mode-tab-${item.mode}`}
+          className={`mode-tab mode-tab-${item.mode ?? 'all'}`}
           onClick={() => { if (item.mode !== mode) onChange(item.mode); }}
           onKeyDown={(event) => {
-            const index = SEARCH_MODES.findIndex((m) => m.mode === mode);
+            const index = items.findIndex((m) => m.mode === mode);
             const step = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0;
             if (!step) return;
             event.preventDefault();
-            const next = SEARCH_MODES[(index + step + SEARCH_MODES.length) % SEARCH_MODES.length];
+            const next = items[(index + step + items.length) % items.length];
             onChange(next.mode);
             const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('button');
-            buttons?.[SEARCH_MODES.indexOf(next)]?.focus();
+            buttons?.[items.indexOf(next)]?.focus();
           }}
           tabIndex={item.mode === mode ? 0 : -1}
         >

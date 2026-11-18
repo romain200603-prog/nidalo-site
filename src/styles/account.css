@@ -317,14 +317,8 @@
 .compare-button { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 41px; height: 41px; border: 1px solid var(--border); border-radius: 50%; background: var(--card); color: var(--ink); }
 .compare-button .icon { width: 20px; height: 20px; }
 .favorites-subtitle { margin: 2px 0 0; color: var(--text-secondary); font-size: 14px; }
-.favorites-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 560px; margin-top: 20px; }
-.favorites-tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; padding: 0 10px; border: 0; border-radius: 14px; background: var(--blue-soft); color: var(--ink); font-size: 15px; font-weight: 600; white-space: nowrap; cursor: pointer; }
-.favorites-tabs button .icon { width: 17px; height: 17px; }
-.favorites-tabs button.is-active { background: var(--blue); color: #FFFFFF; }
-.favorites-tab-count { position: relative; color: var(--blue); }
-.favorites-tabs button.is-active .favorites-tab-count { color: #FFFFFF; }
-.news-dot { position: absolute; top: 2px; right: -7px; width: 6px; height: 6px; border-radius: 50%; background: var(--blue); }
-.favorites-tabs button.is-active .news-dot { background: #FFFFFF; }
+/* Onglets Favoris · Recherches : ceux de l'app (FavoritesTabs.tsx, favoris-app.css), 20 sous le sous-titre. */
+.favorites-wrap .fav-tabs { max-width: 560px; margin-top: 20px; }
 .favorites-searches { max-width: 720px; margin-top: 15px; }
 .favorites-search { display: flex; gap: 10px; max-width: 720px; margin-top: 15px; }
 .favorites-field { display: flex; flex: 1; min-width: 0; align-items: center; gap: 10px; height: 52px; padding: 0 8px 0 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--card); }
@@ -345,7 +339,8 @@
 .favorites-suggestions .icon { width: 18px; height: 18px; color: var(--icon); }
 .favorites-suggestion-text { display: flex; flex-direction: column; }
 .favorites-suggestion-detail { color: var(--text-secondary); font-size: 12.5px; font-weight: 500; }
-.favorites-categories { margin-top: 14px; }
+.favorites-categories { max-width: 560px; margin-top: 14px; box-sizing: border-box; }
+.favorites-criteria { margin-top: 12px; }
 .category-chip { display: inline-flex; align-items: center; flex: none; gap: 7px; height: 42px; padding: 0 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--ink); font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 .category-chip .icon { width: 17px; height: 17px; }
 .category-chip.is-selected { border-color: transparent; background: var(--blue); color: #FFFFFF; }

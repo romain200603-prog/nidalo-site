@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
+import { CriterionChipsRow } from '../components/CriterionChips';
+import { FavoritesEmptyState } from '../components/FavoritesEmptyState';
 import { Icon } from '../components/Icon';
+import { ModeTabs } from '../components/ModeTabs';
 import { Page } from '../components/Layout';
 import { PhotoPager } from '../components/PhotoPager';
 import { SignInCard } from '../components/account/SignInCard';
 import { HeartIcon } from '../components/account/HeartButton';
 import { isNewAccount } from '../lib/account/auth';
 import {
-  categoryIncludes, categoryOfMode, FAVORITE_CATEGORIES, FAVORITE_SORTS, favoriteDetails, favoriteSuggestions,
+  categoryIncludes, categoryOfMode, FAVORITE_SORTS, favoriteDetails, favoriteSuggestions,
   matchesText, modeOfCategory, savedCountText, sortFavorites, type FavoriteCard, type FavoriteCategory, type FavoriteSort,
 } from '../lib/account/favoriteCards';
-import { loadFavorites, removeFavorite, useFavorites, type Favorite } from '../lib/account/favorites';
+import { loadFavorites, useFavorites, type Favorite } from '../lib/account/favorites';
 import { loadSavedSearches, savedSearchesStore } from '../lib/account/savedSearches';
 import { useSession, useStore } from '../lib/account/session';
 import { formatCardPrice, yieldTone } from '../lib/cardContent';
@@ -18,13 +21,14 @@ import { DPE_COLORS } from '../lib/labels';
 import { useDesktop } from '../lib/desktop';
 import { sortedPhotos } from '../lib/listings';
 import { listingPath, PATHS } from '../lib/paths';
-import { defaultDraft, pricePerSquareMeter, type SearchDraft } from '../lib/search';
+import { defaultDraft, filterChips, pricePerSquareMeter, type SearchDraft } from '../lib/search';
 import { FiltersDialog, type DraftsByMode } from './FiltersDialog';
 import { soonPath } from './account/Screens';
 import { SavedSearchesList, useSearchCounts } from './account/SavedSearchesList';
 import { EmptyState, Spinner } from './account/parts';
 import { DesktopFavoritesPage } from './favorites/DesktopFavorites';
-import { filterCount, matchingIds, useFavoriteCards } from './favorites/data';
+import { filterCount, matchingIds, removeWithUndo, useFavoriteCards } from './favorites/data';
+import { FavoritesTabs } from './favorites/FavoritesTabs';
 import '../styles/account.css';
 
 // « Vos favoris » (Features/Favorites/FavoritesView.swift) : onglets Favoris et Recherches ; recherche, catégories,
@@ -121,34 +125,9 @@ function MissingCards({ ids }: { ids: string[] }) {
             <span className="missing-title">Annonce plus disponible</span>
             <span className="missing-subtitle">Le vendeur l&apos;a retirée, vendue ou louée.</span>
           </span>
-          <button type="button" className="missing-remove" onClick={() => void removeFavorite(id)}>Retirer</button>
+          <button type="button" className="missing-remove" onClick={() => removeWithUndo(id)}>Retirer</button>
         </div>
       ))}
-    </div>
-  );
-}
-
-function FavoritesTabs({ tab, onChange, searchCount, hasNews }: {
-  tab: 'favorites' | 'searches';
-  onChange: (tab: 'favorites' | 'searches') => void;
-  searchCount: number;
-  hasNews: boolean;
-}) {
-  return (
-    <div className="favorites-tabs" role="group" aria-label="Favoris ou recherches">
-      <button type="button" aria-pressed={tab === 'favorites'} className={tab === 'favorites' ? 'is-active' : undefined} onClick={() => onChange('favorites')}>
-        <Icon name="heart" />Favoris
-      </button>
-      <button
-        type="button"
-        aria-pressed={tab === 'searches'}
-        aria-label={`Recherches, ${searchCount}${hasNews ? ', nouveautés' : ''}`}
-        className={tab === 'searches' ? 'is-active' : undefined}
-        onClick={() => onChange('searches')}
-      >
-        <Icon name="search" />Recherches
-        <span className="favorites-tab-count">({searchCount}){hasNews && <span className="news-dot" aria-hidden="true" />}</span>
-      </button>
     </div>
   );
 }
@@ -184,6 +163,7 @@ function FavoritesContent({ items }: { items: Favorite[] }) {
   const addedAt = useMemo(() => new Map(items.map((item) => [item.listing_id, item.created_at])), [items]);
   const activeDraft = filterDrafts[filterMode];
   const activeFilters = filterCount(activeDraft);
+  const chips = activeDraft ? filterChips(activeDraft) : [];
   const filteredIds = useMemo(
     () => (activeDraft && activeFilters > 0 ? matchingIds(cards, activeDraft) : null),
     [cards, activeDraft, activeFilters],
@@ -216,11 +196,16 @@ function FavoritesContent({ items }: { items: Favorite[] }) {
       <FavoritesTabs tab={tab} onChange={changeTab} searchCount={searchItems.length} hasNews={hasNews} />
 
       {tab === 'searches' ? (
-        <div className="favorites-searches">
+        <div key="searches" className="favorites-searches fav-tab-panel">
           <SavedSearchesList embedded counts={counts} />
         </div>
+      ) : items.length === 0 ? (
+        // Aucun favori : ni recherche, ni filtres, ni catégories (ils reviennent avec le premier favori).
+        <div key="empty" className="fav-tab-panel fav-empty-place-favorites">
+          <FavoritesEmptyState kind="favorites" />
+        </div>
       ) : (
-        <>
+        <div key="favorites" className="fav-tab-panel">
           <div className="favorites-search">
             <div className="favorites-field">
               <Icon name="search" />
@@ -278,19 +263,17 @@ function FavoritesContent({ items }: { items: Favorite[] }) {
             </ul>
           )}
 
-          <div className="chips-row favorites-categories" role="group" aria-label="Catégories">
-            {FAVORITE_CATEGORIES.map((entry) => (
-              <button
-                key={entry.category}
-                type="button"
-                aria-pressed={category === entry.category}
-                className={`category-chip${category === entry.category ? ' is-selected' : ''}`}
-                onClick={() => setCategory(entry.category)}
-              >
-                <Icon name={entry.icon} />{entry.title}
-              </button>
-            ))}
-          </div>
+          <ModeTabs includesAll mode={modeOfCategory(category)} onChange={(mode) => setCategory(mode ? categoryOfMode(mode) : 'all')}
+            className="mode-tabs-card favorites-categories" />
+
+          {/* Filtres actifs (avec le lieu, que rien d'autre ne montre ici) : les retirer met à jour la liste. */}
+          {chips.length > 0 && (
+            <CriterionChipsRow chips={chips} className="favorites-criteria" onOpen={() => setFiltersOpen(true)}
+              onRemove={(id) => {
+                const chip = chips.find((entry) => entry.id === id);
+                if (chip && activeDraft) setFilterDrafts({ ...filterDrafts, [filterMode]: chip.remove(activeDraft) });
+              }} />
+          )}
 
           {cards.length > 0 && (
             <div className="favorites-toolbar">
@@ -321,12 +304,7 @@ function FavoritesContent({ items }: { items: Favorite[] }) {
               cards.length === 0 && loaded.missing.length > 0 ? (
                 <MissingCards ids={loaded.missing} />
               ) : cards.length === 0 ? (
-                <EmptyState
-                  icon="heart"
-                  title="Aucun favori pour l'instant"
-                  text="Touchez le cœur d'une annonce pour la retrouver ici."
-                  action={<a className="btn btn-primary favorites-empty-button" href={PATHS.search}>Rechercher un bien</a>}
-                />
+                <FavoritesEmptyState kind="favorites" />
               ) : shown.length === 0 ? (
                 <EmptyState
                   icon="search"
@@ -337,7 +315,7 @@ function FavoritesContent({ items }: { items: Favorite[] }) {
               ) : (
                 <>
                   {shown.map((card) => (
-                    <FavoriteListingCard key={card.row.id} card={card} onRemove={() => void removeFavorite(card.row.id)} />
+                    <FavoriteListingCard key={card.row.id} card={card} onRemove={() => removeWithUndo(card.row.id)} />
                   ))}
                   <MissingCards ids={loaded.missing} />
                 </>
@@ -361,7 +339,7 @@ function FavoritesContent({ items }: { items: Favorite[] }) {
               }}
             />
           )}
-        </>
+        </div>
       )}
     </>
   );

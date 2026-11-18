@@ -284,7 +284,7 @@ function pageView(request) {
  * `listingRows` : annonces renvoyées par la table listings (par défaut les trois de fixtures/listings.json) ;
  * `account` : tables du compte de test à remplacer (projet avec critères, autre nom affiché…).
  */
-async function mock(context, { signedIn = false, listingRows = listings, account = {} } = {}) {
+async function mock(context, { signedIn = false, listingRows = listings, account = {}, refuse = [], slow = {} } = {}) {
   const tables = { ...ACCOUNT, ...account };
   // Mon espace d'un compte professionnel, sur téléphone aussi : la ligne « Mes contacts » lit les conversations, les
   // demandes de visite et les offres pour son nombre de contacts et sa pastille (scripts/check-espace-pro.mjs).
@@ -360,6 +360,10 @@ async function mock(context, { signedIn = false, listingRows = listings, account
         let body = null;
         try { body = request.postDataJSON(); } catch { body = request.postData(); }
         writes.push({ method: request.method(), table, search: url.search, body });
+        // La marque interne « keepalive » du site (lib/supabase.ts) ne doit jamais partir.
+        if (Object.keys(request.headers()).some((name) => name.toLowerCase() === 'x-nidalo-keepalive')) problems.push(`${table} : marque keepalive envoyée au serveur`);
+        // Écriture refusée par le serveur (droits) : `refuse` liste « MÉTHODE table ».
+        if (refuse.includes(`${request.method()} ${table}`)) return json(route, 403, { code: '42501', message: 'permission denied' });
         // Une recherche enregistrée revient telle qu'envoyée ; les autres écritures ne renvoient rien.
         if (table === 'saved_searches' && request.method() === 'POST') {
           return json(route, 201, { user_id: USER_ID, created_at: new Date().toISOString(), last_notified_at: null, last_viewed_at: null, alerts_enabled: true, ...body });
@@ -373,8 +377,15 @@ async function mock(context, { signedIn = false, listingRows = listings, account
         return json(route, request.method() === 'POST' ? 201 : 204);
       }
       const rows = filtered(tables[table], url.searchParams);
-      if (single) return rows.length === 1 ? json(route, 200, rows[0]) : json(route, 406, { code: 'PGRST116', message: 'no rows' });
-      return json(route, 200, rows);
+      const respond = () => (single
+        ? (rows.length === 1 ? json(route, 200, rows[0]) : json(route, 406, { code: 'PGRST116', message: 'no rows' }))
+        : json(route, 200, rows));
+      // Réponse lente (`slow` : table → millisecondes), pour voir ce que la page montre pendant le chargement.
+      if (slow[table]) {
+        setTimeout(respond, slow[table]);
+        return undefined;
+      }
+      return respond();
     }
     let rows = listingRows;
     if (signedIn && table === 'listings' && url.searchParams.get('owner_id') === `eq.${USER_ID}`) {
@@ -593,6 +604,8 @@ async function open(context, path, name) {
     const text = msg.text();
     // La page 404 répond exprès avec le code 404 : Chrome le signale dans la console, ce n'est pas une erreur du site.
     if (name.startsWith('404') && /status of 404/.test(text)) return;
+    // Écriture refusée exprès par le serveur simulé (`refuse`) : Chrome signale aussi le 403 dans la console.
+    if (/refusé/.test(name) && /status of 403/.test(text)) return;
     if (msg.type() === 'error' || /Content Security Policy/i.test(text)) problems.push(`${name}: ${msg.type()} ${text}`);
   });
   page.on('pageerror', (error) => problems.push(`${name}: erreur ${error.message}`));
@@ -1309,19 +1322,142 @@ async function favoritePhotosLoaded(page, count, name) {
   }
 }
 
-/** Toast de la comparaison (CompareToast) : son texte et son lien « Voir » ou « Gérer ». */
+/** Message du bas de la comparaison (CompareToast, le même que « Retiré des favoris ») : son texte et « Voir » ou « Gérer ». */
 async function waitForCompareNotice(page, want, name) {
   try {
     await page.waitForFunction((target) => {
-      const box = document.querySelector('.dfav-toast-box');
-      return box?.querySelector('.dfav-toast-text')?.textContent === target.text && (box.querySelector('a')?.textContent ?? null) === target.action;
+      const box = document.querySelector('.app-toast:not(.is-leaving)');
+      return box?.querySelector('.app-toast-text')?.textContent === target.text && (box.querySelector('.app-toast-action')?.textContent ?? null) === target.action;
     }, want, { timeout: 4000 });
   } catch {
     const shown = await page.evaluate(() => {
-      const box = document.querySelector('.dfav-toast-box');
-      return box ? { text: box.querySelector('.dfav-toast-text')?.textContent ?? null, action: box.querySelector('a')?.textContent ?? null } : null;
+      const box = document.querySelector('.app-toast');
+      return box ? { text: box.querySelector('.app-toast-text')?.textContent ?? null, action: box.querySelector('.app-toast-action')?.textContent ?? null } : null;
     });
     problems.push(`${name} : toast ${JSON.stringify(shown)} au lieu de ${JSON.stringify(want)}`);
+  }
+}
+
+/** Message du bas « Retiré des favoris » avec « Annuler » (FavoritesView.showUndo de l'app). */
+async function waitForRemovalNotice(page, name) {
+  try {
+    await page.waitForFunction(() => {
+      const box = document.querySelector('.app-toast:not(.is-leaving)');
+      const action = box?.querySelector('.app-toast-action');
+      return box?.querySelector('.app-toast-text')?.textContent === 'Retiré des favoris' && action?.textContent === 'Annuler'
+        && action.getAttribute('aria-label') === 'Annuler le retrait';
+    }, null, { timeout: 4000 });
+  } catch {
+    problems.push(`${name} : message « Retiré des favoris · Annuler » absent (${await page.evaluate(() => document.querySelector('.app-toast')?.textContent ?? 'aucun')})`);
+  }
+}
+
+/**
+ * Vos favoris sur téléphone, comme l'app (FavoritesView.swift, FavoritesEmptyState.swift ; demande du 17/11) : au
+ * premier chargement la roue, jamais « Aucun favori » ; onglets à pastille glissante ; pavés des catégories avec
+ * « Tous » dans la carte blanche ; retrait annulable ; états vides illustrés (Favoris, Recherches, Mon espace ›
+ * Mes recherches). Captures : favoris-*-telephone.png.
+ */
+async function phoneFavorites() {
+  const P = 'favoris téléphone';
+  const context = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
+  await mock(context, { signedIn: true, listingRows: FAV_LISTINGS, account: FAV_ACCOUNT, slow: { favorites: 1200 } });
+  await context.addInitScript(() => {
+    window.nidaloSeen = { spinner: false, empty: false };
+    new MutationObserver(() => {
+      if (document.querySelector('.favorites-wrap .account-spinner')) window.nidaloSeen.spinner = true;
+      if (document.querySelector('.fav-empty') || document.body?.textContent?.includes('Aucun favori pour')) window.nidaloSeen.empty = true;
+    }).observe(document, { subtree: true, childList: true });
+  });
+  let page = await open(context, '/favoris/', P);
+  await page.waitForSelector('.favorite-card');
+  expectSame(P, 'premier chargement', await page.evaluate(() => window.nidaloSeen), { spinner: true, empty: false });
+  expectSame(P, 'onglets', await page.$$eval('.favorites-wrap .fav-tab', (els) => els.map((el) => [el.querySelector('.fav-tab-title')?.textContent ?? null,
+    el.querySelector('.fav-tab-count')?.textContent ?? null, el.getAttribute('aria-label'), el.getAttribute('aria-pressed')])),
+  [['Favoris', null, null, 'true'], ['Recherches', '(2)', 'Recherches, 2, nouveautés', 'false']]);
+  expectSame(P, 'catégories', [await page.$$eval('.favorites-categories .mode-tab', (els) => els.map((el) => [el.textContent.trim(), el.getAttribute('aria-checked')])),
+    await page.evaluate(() => { const card = document.querySelector('.favorites-categories'); const style = getComputedStyle(card); return [style.borderTopLeftRadius, style.backgroundColor, Math.round(card.getBoundingClientRect().width)]; })],
+  [[['Tous', 'true'], ['Résidentiel', 'false'], ['Location', 'false'], ['Investir', 'false'], ['Hôtels', 'false']], ['26px', 'rgb(255, 255, 255)', 358]]);
+  const tabsBox = await page.evaluate(() => {
+    const box = (el) => { const r = el.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width), Math.round(r.height)]; };
+    return { piste: box(document.querySelector('.favorites-wrap .fav-tabs')), pastille: box(document.querySelector('.favorites-wrap .fav-tabs-pill')),
+      onglet: box(document.querySelector('.favorites-wrap .fav-tab')) };
+  });
+  expectSame(P, 'onglets, mesures', tabsBox, { piste: [16, 358, 48], pastille: [20, 175, 40], onglet: [20, 175, 40] });
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: join(out, 'favoris-onglet-favoris-telephone.png'), fullPage: true });
+  const phoneTitles = () => page.$$eval('.favorite-card .favorite-title', (els) => els.map((el) => el.textContent));
+  // Catégorie Location, puis Tous.
+  await page.locator('.favorites-categories .mode-tab', { hasText: 'Location' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.favorite-card').length === 1, null, { timeout: 4000 }).catch(() => problems.push(`${P} : Location ne garde pas une seule carte`));
+  expectSame(P, 'Location', [await phoneTitles(), await textOf(page, '.favorites-total')], [[FAV_STUDIO], '1 sur 4 biens']);
+  await page.locator('.favorites-categories .mode-tab', { hasText: 'Tous' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.favorite-card').length === 4, null, { timeout: 4000 }).catch(() => problems.push(`${P} : Tous ne remet pas les 4 cartes`));
+  // Cœur : la carte part, « Retiré des favoris · Annuler » ; « Annuler » la remet à sa place, rien n'est envoyé.
+  let mark = writes.length;
+  await page.locator('.favorite-card', { has: page.locator('.favorite-title', { hasText: FAV_FLAT }) }).locator('.favorite-heart').click();
+  await page.waitForFunction(() => document.querySelectorAll('.favorite-card').length === 3, null, { timeout: 4000 }).catch(() => problems.push(`${P} : le cœur laisse la carte`));
+  await waitForRemovalNotice(page, `${P} : cœur`);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: join(out, 'favoris-retrait-telephone.png') });
+  await page.click('.app-toast-action');
+  await page.waitForFunction(() => document.querySelectorAll('.favorite-card').length === 4, null, { timeout: 4000 }).catch(() => problems.push(`${P} : « Annuler » ne remet pas la carte`));
+  expectSame(P, '« Annuler »', await phoneTitles(), FAV_ALL);
+  await page.waitForTimeout(4500);
+  expectSame(P, '« Annuler » : rien d\'envoyé', writes.slice(mark), []);
+  // Retrait laissé à son terme : il part à la fin du message.
+  await page.locator('.favorite-card', { has: page.locator('.favorite-title', { hasText: FAV_HOTEL }) }).locator('.favorite-heart').click();
+  await waitForRemovalNotice(page, `${P} : cœur de l'hôtel`);
+  await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${favId(4)}` }, null]], `${P} : fin du message`);
+  // Onglet Recherches : la pastille glisse sous l'onglet, le contenu change.
+  await page.click('.favorites-wrap .fav-tab >> nth=1');
+  await page.waitForSelector('.favorites-searches .saved-search');
+  await page.waitForTimeout(700);
+  expectSame(P, 'onglet Recherches', [await page.$$eval('.favorites-wrap .fav-tab', (els) => els.map((el) => el.getAttribute('aria-pressed'))),
+    await page.evaluate(() => Math.round(document.querySelector('.favorites-wrap .fav-tabs-pill').getBoundingClientRect().left)), await page.locator('.favorites-search, .favorites-categories').count()],
+  [['false', 'true'], 195, 0]);
+  await waitForSearchCountsIn(page, '.favorites-searches', P);
+  await page.screenshot({ path: join(out, 'favoris-onglet-recherches-telephone.png'), fullPage: true });
+  await page.close();
+  await context.close();
+
+  // Aucun favori, aucune recherche : les deux états vides illustrés ; ni recherche, ni filtres, ni pavés.
+  const empty = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
+  await mock(empty, { signedIn: true, listingRows: FAV_LISTINGS, account: { favorites: [], saved_searches: [] } });
+  page = await open(empty, '/favoris/', `${P} vide`);
+  await page.waitForSelector('.favorites-wrap .fav-empty');
+  expectSame(`${P} vide`, 'Favoris', [await textOf(page, '.fav-empty h2'), await textOf(page, '.fav-empty p'), await textOf(page, '.fav-empty a'), await page.getAttribute('.fav-empty a', 'href'),
+    await page.locator('.favorites-search, .favorites-categories, .favorites-toolbar').count(), await page.locator('.fav-empty .fav-ghost').count(),
+    await page.evaluate(() => Math.round(document.querySelector('.fav-empty a').getBoundingClientRect().width)), await page.getAttribute('.favorites-wrap .fav-tab >> nth=1', 'aria-label'),
+    await page.locator('.favorites-wrap .fav-tab-count').count()],
+  ['Aucun favori pour l\'instant', 'Touchez le cœur d\'une annonce pour la retrouver ici et la comparer.', 'Rechercher un bien', '/recherche/', 0, 2, 358, 'Recherches, 0', 0]);
+  await phoneFits(page, `${P} vide`);
+  await page.screenshot({ path: join(out, 'favoris-vide-telephone.png') });
+  await page.click('.favorites-wrap .fav-tab >> nth=1');
+  await page.waitForSelector('.favorites-searches .fav-empty');
+  expectSame(`${P} vide`, 'Recherches', [await textOf(page, '.favorites-searches .fav-empty h2'), await textOf(page, '.favorites-searches .fav-empty p'),
+    await textOf(page, '.fav-empty-search-count'), await textOf(page, '.fav-empty-search-sort'), await textOf(page, '.fav-empty-save'), await page.getAttribute('.favorites-searches .fav-empty a', 'href')],
+  ['Aucune recherche enregistrée', 'Touchez Enregistrer sur une recherche pour la retrouver ici, avec ses nouveautés.', '6 annonces', 'Triées par pertinence', 'Enregistrer', '/recherche/']);
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: join(out, 'favoris-recherches-vide-telephone.png') });
+  // Mon espace › Mes recherches : le même état vide, centré.
+  page = await open(empty, '/compte/?vue=recherches', `${P} Mes recherches vide`);
+  await page.waitForSelector('.fav-empty');
+  expectSame(`${P} Mes recherches vide`, 'texte', [await textOf(page, '.fav-empty h2'), await textOf(page, '.fav-empty a')], ['Aucune recherche enregistrée', 'Rechercher un bien']);
+  await page.screenshot({ path: join(out, 'mes-recherches-vide-telephone.png') });
+  await page.close();
+  await empty.close();
+}
+
+/** Nombres de résultats des recherches affichés, dans un conteneur donné. */
+async function waitForSearchCountsIn(page, container, name) {
+  try {
+    await page.waitForFunction((selector) => {
+      const buttons = [...document.querySelectorAll(`${selector} .run-button`)];
+      return buttons.length > 0 && buttons.every((button) => !button.textContent.includes('Relancer la recherche'));
+    }, container, { timeout: 8000 });
+  } catch {
+    problems.push(`${name} : nombre de résultats des recherches non affiché`);
   }
 }
 
@@ -1812,7 +1948,7 @@ try {
   await page.waitForFunction(() => document.querySelector('.dfav-total')?.textContent?.trim() === '1 sur 2 biens', null, { timeout: 4000 })
     .catch(async () => problems.push(`Favoris : recherche « villeur », compteur « ${await page.textContent('.dfav-total')} »`));
   await page.screenshot({ path: join(out, 'favoris-recherche-ordinateur.png') });
-  await page.click('.dfav-tab >> nth=1');
+  await page.click('.dfav .fav-tab >> nth=1');
   await page.waitForSelector('.dfav-searches .saved-search');
   if (!page.url().includes('onglet=recherches')) problems.push(`Favoris : l'onglet Recherches n'est pas dans l'adresse (${page.url()})`);
   await page.screenshot({ path: join(out, 'favoris-recherches-ordinateur.png'), fullPage: true });
@@ -3269,9 +3405,9 @@ try {
   // Favoris sur ordinateur (maquette 4), à 1440 × 900 et 1024 × 768, avec le compte de test et des annonces inventées :
   // une vente, une location, un investissement loué (rendement), un hôtel et une annonce retirée. Contenu et actions de
   // l'app (FavoritesView.swift, SavedSearchesView.swift). Captures pour Romain : 4-favoris-*.png.
-  const favContext = async (width, height, listingRows, account, signedIn = true) => {
+  const favContext = async (width, height, listingRows, account, signedIn = true, refuse = []) => {
     const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR' });
-    const mocked = await mock(context, { signedIn, listingRows, account });
+    const mocked = await mock(context, { signedIn, listingRows, account, refuse });
     return { context, server: mocked };
   };
   for (const [width, height] of [[1440, 900], [1024, 768]]) {
@@ -3282,12 +3418,12 @@ try {
       page = await open(context, '/favoris/', `${F} maquette`);
       await waitForFavorites(page, ['Appartement 2 pièces – Annemasse', 'Studio avec vue dégagée'], '2 biens sauvegardés', `${F} maquette`);
       await page.waitForSelector('.dfav-missing');
-      await page.waitForSelector('.dfav-dot');
+      await page.waitForSelector('.fav-tab-dot');
       await favoritePhotosLoaded(page, 2, `${F} maquette`);
       await checkBadges(page, mockupServer.state, `${F} maquette`);
       await favShot(page, `4-favoris-${width}.png`);
       if (width === 1440) {
-        await page.click('.dfav-tab >> nth=1');
+        await page.click('.dfav .fav-tab >> nth=1');
         await page.waitForSelector('.dfav-searches .saved-search');
         await waitForSearchCounts(page, `${F} maquette`);
         await favShot(page, '4-favoris-recherches-1440.png');
@@ -3299,22 +3435,24 @@ try {
     const { context: favDesk, server: favServer } = await favContext(width, height, FAV_LISTINGS, FAV_ACCOUNT);
     page = await open(favDesk, '/favoris/', F);
     await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', F);
-    await page.waitForSelector('.dfav-dot');
+    await page.waitForSelector('.fav-tab-dot');
     await favoritePhotosLoaded(page, 3, F);
     await checkChrome(page, F, { signedIn: true, margin: width >= 1280 ? 48 : 32 });
     await checkBadges(page, favServer.state, F);
     expectSame(F, 'en-tête', [await textOf(page, '.dfav-titles h1'), await textOf(page, '.dfav-titles p'), await page.getAttribute('.dfav-compare', 'aria-label'),
       await page.isDisabled('.dfav-compare'), await page.locator('.dfav-compare-count').count(), await page.getAttribute('.dtop-round[href="/favoris/"]', 'aria-current')],
     ['Vos favoris', 'Retrouvez vos biens favoris et vos recherches', 'Comparer vos favoris', false, 0, 'page']);
-    expectSame(F, 'onglets', await page.$$eval('.dfav-tab', (els) => els.map((el) => [el.firstChild?.nextSibling?.textContent ?? null, el.querySelector('.dfav-tab-count')?.textContent ?? null,
-      el.getAttribute('aria-label'), el.getAttribute('aria-pressed'), Boolean(el.querySelector('.dfav-dot'))])),
+    // Onglets de l'app (FavoritesTabs, demande du 17/11) : un seul sélecteur, la pastille bleue sous l'onglet choisi.
+    expectSame(F, 'onglets', await page.$$eval('.dfav .fav-tab', (els) => els.map((el) => [el.querySelector('.fav-tab-title')?.textContent ?? null, el.querySelector('.fav-tab-count')?.textContent ?? null,
+      el.getAttribute('aria-label'), el.getAttribute('aria-pressed'), Boolean(el.querySelector('.fav-tab-dot'))])),
     [['Favoris', null, null, 'true', false], ['Recherches', '(2)', 'Recherches, 2, nouveautés', 'false', true]]);
     expectSame(F, 'recherche, filtres et tri', [await page.getAttribute('.dfav-field input', 'placeholder'), await page.getAttribute('.dfav-field input', 'aria-label'),
       await page.getAttribute('.dfav-filters', 'aria-label'), await page.getAttribute('.dfav-sort select', 'aria-label'), await page.textContent('.dfav-sort > span'),
       await page.$$eval('.dfav-sort option', (els) => els.map((el) => [el.value, el.textContent]))],
     ['Ville, code postal, type de bien', 'Rechercher dans vos favoris', 'Filtres', 'Trier par', 'Pertinence',
       [['relevance', 'Pertinence'], ['priceAscending', 'Prix croissant'], ['priceDescending', 'Prix décroissant'], ['recentlyAdded', 'Ajout le plus récent']]]);
-    expectSame(F, 'catégories', await page.$$eval('.dfav-chip', (els) => els.map((el) => [el.textContent.trim(), el.getAttribute('aria-pressed')])),
+    // Catégories : les pavés de l'app avec « Tous » en premier (ModeSegmentedControl(selectionOrAll:)).
+    expectSame(F, 'catégories', await page.$$eval('.dfav-categories .mode-tab', (els) => els.map((el) => [el.textContent.trim(), el.getAttribute('aria-checked')])),
       [['Tous', 'true'], ['Résidentiel', 'false'], ['Location', 'false'], ['Investir', 'false'], ['Hôtels', 'false']]);
     expectSame(F, 'cartes', await favoriteCardsShown(page), FAV_CARDS);
     // L'annonce retirée vient après les cartes, comme dans l'app.
@@ -3330,35 +3468,37 @@ try {
         content: Math.round(box(document.querySelector('.dfav-inner')).width), columns: getComputedStyle(document.querySelector('.dfav-grid')).gridTemplateColumns.split(' ').length,
         widths: [...new Set(items.map((rect) => Math.round(rect.width)))], heights: new Set(items.map((rect) => Math.round(rect.height))).size,
         photos: [...new Set([...document.querySelectorAll('.dfav-photo')].map((photo) => Math.round(box(photo).height)))], field: Math.round(field.width),
-        chipsBesideField: [...document.querySelectorAll('.dfav-chip')].every((chip) => Math.abs(middle(box(chip)) - middle(field)) <= 2),
+        tilesBelowField: box(document.querySelector('.dfav-categories')).top >= field.bottom && Math.round(box(document.querySelector('.dfav-categories')).width) === 480,
         overflowX: document.documentElement.scrollWidth - innerWidth, footer: Boolean(document.querySelector('.dfoot')),
       };
     });
     expectSame(F, 'mise en page', favLayout, {
-      content: width === 1440 ? 1200 : 960, columns: 3, widths: [width === 1440 ? 384 : 307], heights: 1, photos: [220], field: 420, chipsBesideField: width === 1440, overflowX: 0, footer: true,
+      content: width === 1440 ? 1200 : 960, columns: 3, widths: [width === 1440 ? 384 : 307], heights: 1, photos: [220], field: 420, tilesBelowField: true, overflowX: 0, footer: true,
     });
     // Tailles de la maquette (titre 36/700, textes 15, titres de carte 17/700) et police Inter partout, boutons compris.
     const favFonts = await page.evaluate(() => {
       const font = (selector) => {
         const style = getComputedStyle(document.querySelector(selector));
+        // Inter du site sans rien de plus ; la police du système (pavés des catégories de l'app) : « système ».
+        if (style.fontFamily.startsWith('-apple-system')) return `${style.fontSize} ${style.fontWeight} système`;
         return `${style.fontSize} ${style.fontWeight}${style.fontFamily.startsWith('"Nidalo Inter"') ? '' : ` ${style.fontFamily}`}`;
       };
       return {
-        titre: font('.dfav-titles h1'), 'sous-titre': font('.dfav-titles p'), onglet: font('.dfav-tab'), champ: font('.dfav-field input'), catégorie: font('.dfav-chip'),
+        titre: font('.dfav-titles h1'), 'sous-titre': font('.dfav-titles p'), onglet: font('.dfav .fav-tab'), champ: font('.dfav-field input'), catégorie: font('.dfav-categories .mode-name'),
         nombre: font('.dfav-total'), tri: font('.dfav-sort'), 'titre de carte': font('.dfav-title'), infos: font('.dfav-details'), prix: font('.dfav-price strong'),
         'prix au m²': font('.dfav-per-meter'), rendement: font('.dfav-yield'), 'plus disponible': font('.dfav-missing-title'), Retirer: font('.dfav-missing-remove'),
       };
     });
     expectSame(F, 'polices', favFonts, {
-      titre: '36px 700', 'sous-titre': '15px 400', onglet: '15px 600', champ: '15px 400', catégorie: '15px 600', nombre: '15px 600', tri: '15px 600', 'titre de carte': '17px 700',
+      titre: '36px 700', 'sous-titre': '15px 400', onglet: '15px 600', champ: '15px 400', catégorie: '13px 600 système', nombre: '15px 600', tri: '15px 600', 'titre de carte': '17px 700',
       infos: '15px 400', prix: '20px 700', 'prix au m²': '14px 500', rendement: '14px 600', 'plus disponible': '18px 700', Retirer: '15px 600',
     });
     await favShot(page, `favoris-${width}.png`);
-    await page.click('.dfav-tab >> nth=1');
+    await page.click('.dfav .fav-tab >> nth=1');
     await page.waitForSelector('.dfav-searches .saved-search');
     await waitForSearchCounts(page, F);
     if (page.url() !== `${base}/favoris/?onglet=recherches`) problems.push(`${F} : adresse de l'onglet Recherches ${page.url()}`);
-    expectSame(F, 'onglet Recherches', [await page.$$eval('.dfav-tab', (els) => els.map((el) => el.getAttribute('aria-pressed'))), await page.locator('.dfav-tools, .dfav-grid').count()],
+    expectSame(F, 'onglet Recherches', [await page.$$eval('.dfav .fav-tab', (els) => els.map((el) => el.getAttribute('aria-pressed'))), await page.locator('.dfav-tools, .dfav-grid').count()],
       [['false', 'true'], 0]);
     expectSame(F, 'recherches', await page.$$eval('.dfav-searches .saved-search', (cards) => cards.map((card) => [card.querySelector('h3')?.textContent ?? null,
       card.querySelector('.saved-search-text p')?.textContent.replace(/\s+/g, ' ') ?? null, card.querySelector('.alerts-on, .alerts-off')?.textContent.trim() ?? null,
@@ -3394,9 +3534,9 @@ try {
       await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : « Tout afficher »`);
       if (await page.inputValue('.dfav-field input')) problems.push(`${B} : « Tout afficher » garde la recherche`);
       for (const [chip, titles] of [['Résidentiel', [FAV_FLAT]], ['Location', [FAV_STUDIO]], ['Investir', [FAV_T2]], ['Hôtels', [FAV_HOTEL]], ['Tous', FAV_ALL]]) {
-        await page.locator('.dfav-chip', { hasText: chip }).click();
+        await page.locator('.dfav-categories .mode-tab', { hasText: chip }).click();
         await waitForFavorites(page, titles, titles.length === 4 ? '4 biens sauvegardés' : `${titles.length} sur 4 biens`, `${B} : catégorie ${chip}`);
-        expectSame(B, `catégorie ${chip}`, await page.$$eval('.dfav-chip[aria-pressed="true"]', (els) => els.map((el) => el.textContent.trim())), [chip]);
+        expectSame(B, `catégorie ${chip}`, await page.$$eval('.dfav-categories .mode-tab[aria-checked="true"]', (els) => els.map((el) => el.textContent.trim())), [chip]);
       }
       for (const [sort, short, titles] of [['priceAscending', 'Prix ↑', [FAV_STUDIO, FAV_T2, FAV_FLAT, FAV_HOTEL]], ['priceDescending', 'Prix ↓', [FAV_HOTEL, FAV_FLAT, FAV_T2, FAV_STUDIO]],
         ['recentlyAdded', 'Récents', [FAV_STUDIO, FAV_HOTEL, FAV_T2, FAV_FLAT]], ['relevance', 'Pertinence', FAV_ALL]]) {
@@ -3408,10 +3548,13 @@ try {
       await page.selectOption('.dfav-sort select', 'priceDescending');
       await page.fill('.dfav-field input', 'lyon');
       await waitForFavorites(page, [FAV_FLAT, FAV_STUDIO], '2 sur 4 biens', `${B} : « lyon », prix décroissant`);
-      await page.locator('.dfav-chip', { hasText: 'Location' }).click();
+      // Les suggestions du champ couvrent les pavés, juste dessous : on quitte le champ avant de choisir la catégorie.
+      await page.locator('.dfav-field input').blur();
+      await page.waitForSelector('.dfav-suggestions', { state: 'detached', timeout: 4000 }).catch(() => problems.push(`${B} : les suggestions restent après avoir quitté le champ`));
+      await page.locator('.dfav-categories .mode-tab', { hasText: 'Location' }).click();
       await waitForFavorites(page, [FAV_STUDIO], '1 sur 4 biens', `${B} : « lyon », Location`);
       await page.fill('.dfav-field input', '');
-      await page.locator('.dfav-chip', { hasText: 'Tous' }).click();
+      await page.locator('.dfav-categories .mode-tab', { hasText: 'Tous' }).click();
       await page.selectOption('.dfav-sort select', 'relevance');
       await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : tout affiché`);
       // Filtres : ouverts sur la catégorie de la pastille (« Tous » : Résidentiel) ; appliqués aux favoris chargés.
@@ -3425,8 +3568,8 @@ try {
       await page.waitForSelector('dialog.filters-dialog', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${B} : les filtres restent ouverts`));
       await waitForFavorites(page, [FAV_FLAT], '1 sur 4 biens', `${B} : filtre « 3 pièces »`);
       expectSame(B, 'filtres appliqués', [await page.getAttribute('.dfav-filters', 'aria-label'), await textOf(page, '.dfav-filters-count'),
-        await page.$$eval('.dfav-chip[aria-pressed="true"]', (els) => els.map((el) => el.textContent.trim()))], ['Filtres, 1 actifs', '1', ['Résidentiel']]);
-      await page.locator('.dfav-chip', { hasText: 'Tous' }).click();
+        await page.$$eval('.dfav-categories .mode-tab[aria-checked="true"]', (els) => els.map((el) => el.textContent.trim()))], ['Filtres, 1 actifs', '1', ['Résidentiel']]);
+      await page.locator('.dfav-categories .mode-tab', { hasText: 'Tous' }).click();
       // « Tous » garde les filtres posés (FavoritesView : filteredIDs) : seuls les favoris qui y correspondent restent.
       await waitForFavorites(page, [FAV_FLAT], '1 sur 4 biens', `${B} : filtre gardé sur « Tous »`);
       await page.close();
@@ -3445,14 +3588,14 @@ try {
       await favCard(FAV_FLAT).locator('.dfav-card-compare').click();
       await waitForCompareNotice(page, { text: 'Ajouté à la comparaison', action: 'Voir' }, `${B} : ajout`);
       expectSame(B, 'après un ajout', [await comparedIds(), await roundButton(), await pressedCards(), await favCard(FAV_FLAT).locator('.dfav-card-compare').getAttribute('aria-label'),
-        await page.getAttribute('.dfav-toast-box a', 'href'), page.url()],
-      [{ ids: [favId(1)], referenceId: favId(1) }, ['Comparer, 1 bien', '1'], [FAV_FLAT], 'Retirer de la comparaison', '/comparer/', `${base}/favoris/`]);
+        await page.getAttribute('.app-toast-action', 'aria-label'), page.url()],
+      [{ ids: [favId(1)], referenceId: favId(1) }, ['Comparer, 1 bien', '1'], [FAV_FLAT], 'Retirer de la comparaison', 'Voir', `${base}/favoris/`]);
       await favCard(FAV_FLAT).locator('.dfav-card-compare').click();
       await waitForCompareNotice(page, { text: 'Retiré de la comparaison', action: null }, `${B} : retrait`);
       expectSame(B, 'après un retrait', [await comparedIds(), await roundButton(), await pressedCards()], [{ ids: [], referenceId: null }, ['Comparer vos favoris', null], []]);
       // Tous les favoris comptent, pas seulement la catégorie affichée (FavoritesView : sorted(listings)).
       await page.selectOption('.dfav-sort select', 'priceAscending');
-      await page.locator('.dfav-chip', { hasText: 'Hôtels' }).click();
+      await page.locator('.dfav-categories .mode-tab', { hasText: 'Hôtels' }).click();
       await waitForFavorites(page, [FAV_HOTEL], '1 sur 4 biens', `${B} : Hôtels, prix croissant`);
       await page.click('.dfav-compare');
       await page.waitForURL(`${base}/comparer/`).catch(() => problems.push(`${B} : le bouton rond n'ouvre pas /comparer/ (${page.url()})`));
@@ -3463,8 +3606,13 @@ try {
       // Un quatrième : refusé, « 3 biens maximum, retirez-en un » avec « Gérer » ; la comparaison ne change pas.
       await favCard(FAV_HOTEL).locator('.dfav-card-compare').click();
       await waitForCompareNotice(page, { text: '3 biens maximum, retirez-en un', action: 'Gérer' }, `${B} : quatrième bien`);
-      expectSame(B, 'quatrième bien', [await comparedIds(), await pressedCards(), await page.getAttribute('.dfav-toast-box a', 'href')],
-        [{ ids: [favId(2), favId(3), favId(1)], referenceId: favId(2) }, [FAV_T2, FAV_FLAT, FAV_STUDIO], '/comparer/']);
+      expectSame(B, 'quatrième bien', [await comparedIds(), await pressedCards(), await page.getAttribute('.app-toast-action', 'aria-label')],
+        [{ ids: [favId(2), favId(3), favId(1)], referenceId: favId(2) }, [FAV_T2, FAV_FLAT, FAV_STUDIO], 'Gérer']);
+      // « Gérer » ouvre Comparer, comme « Voir ».
+      await page.click('.app-toast-action');
+      await page.waitForURL(`${base}/comparer/`).catch(() => problems.push(`${B} : « Gérer » n'ouvre pas /comparer/ (${page.url()})`));
+      await page.goto(`${base}/favoris/`, { waitUntil: 'networkidle' });
+      await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : retour après « Gérer »`);
       // Retirer la référence la passe au premier qui reste ; l'hôtel a ensuite sa place.
       await favCard(FAV_STUDIO).locator('.dfav-card-compare').click();
       await waitForCompareNotice(page, { text: 'Retiré de la comparaison', action: null }, `${B} : retrait du studio`);
@@ -3479,20 +3627,73 @@ try {
       if (writes.length !== compareWrites) problems.push(`${B} : la comparaison a écrit au serveur ${JSON.stringify(writes.slice(compareWrites))}`);
       await page.close();
 
-      // Cœur et « Retirer » : FavoritesStore.toggle → DELETE favorites?listing_id=eq.<id> ; la carte quitte la grille.
+      // Cœur et « Retirer » : retrait annulable (FavoritesStore.removeUndoably, demande du 17/11). La carte part tout de
+      // suite, puis « Retiré des favoris » et « Annuler » (4 s) ; DELETE favorites?listing_id=eq.<id> ne part qu'à la fin
+      // du message, au retrait suivant (le premier devient définitif) ou quand la page est cachée ; « Annuler » remet la
+      // carte à sa place sans rien envoyer.
       page = await open(favDesk, '/favoris/', `${B} cœur`);
       await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : cœur`);
       let mark = writes.length;
       await favCard(FAV_FLAT).locator('.dfav-heart').click();
       await waitForFavorites(page, [FAV_T2, FAV_STUDIO, FAV_HOTEL], '3 biens sauvegardés', `${B} : après le cœur`);
-      await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${favId(1)}` }, null]], `${B} : cœur`);
+      await waitForRemovalNotice(page, `${B} : cœur`);
+      await page.waitForTimeout(2500);
+      expectSame(B, 'cœur : rien d\'envoyé pendant le message', writes.slice(mark), []);
+      await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${favId(1)}` }, null]], `${B} : cœur, fin du message`);
       if (page.url() !== `${base}/favoris/`) problems.push(`${B} : le cœur a ouvert ${page.url()}`);
+      // « Annuler » : le favori revient à sa place, rien ne part.
+      mark = writes.length;
+      await favCard(FAV_STUDIO).locator('.dfav-heart').click();
+      await waitForFavorites(page, [FAV_T2, FAV_HOTEL], '2 biens sauvegardés', `${B} : retrait du studio`);
+      await waitForRemovalNotice(page, `${B} : retrait du studio`);
+      await page.click('.app-toast-action');
+      await waitForFavorites(page, [FAV_T2, FAV_STUDIO, FAV_HOTEL], '3 biens sauvegardés', `${B} : « Annuler »`);
+      await page.waitForSelector('.app-toast', { state: 'detached', timeout: 4000 }).catch(() => problems.push(`${B} : le message reste après « Annuler »`));
+      expectSame(B, '« Annuler » : ordre « Ajout le plus récent »', await (async () => {
+        await page.selectOption('.dfav-sort select', 'recentlyAdded');
+        await page.waitForTimeout(200);
+        const titles = await favoriteTitles(page);
+        await page.selectOption('.dfav-sort select', 'relevance');
+        return titles;
+      })(), [FAV_STUDIO, FAV_HOTEL, FAV_T2]);
+      await page.waitForTimeout(4500);
+      expectSame(B, '« Annuler » : rien d\'envoyé', writes.slice(mark), []);
+      // Deux retraits de suite : le premier part au second ; « Annuler » ne remet que le dernier.
+      mark = writes.length;
+      await favCard(FAV_STUDIO).locator('.dfav-heart').click();
+      await waitForRemovalNotice(page, `${B} : premier de deux retraits`);
+      await favCard(FAV_HOTEL).locator('.dfav-heart').click();
+      await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${favId(2)}` }, null]], `${B} : second retrait`);
+      await waitForFavorites(page, [FAV_T2], '1 bien sauvegardé', `${B} : deux retraits`);
+      await page.click('.app-toast-action');
+      await waitForFavorites(page, [FAV_T2, FAV_HOTEL], '2 biens sauvegardés', `${B} : « Annuler » après deux retraits`);
+      // « Retirer » d'une annonce plus disponible : même message ; page cachée : le retrait part tout de suite.
       mark = writes.length;
       await page.click('.dfav-missing-remove');
       await page.waitForSelector('.dfav-missing', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${B} : « Retirer » laisse l'annonce plus disponible`));
-      await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${GONE_ID}` }, null]], `${B} : « Retirer »`);
-      expectSame(B, 'après les retraits', [await favoriteTitles(page), await textOf(page, '.dfav-total')], [[FAV_T2, FAV_STUDIO, FAV_HOTEL], '3 biens sauvegardés']);
+      await waitForRemovalNotice(page, `${B} : « Retirer »`);
+      expectSame(B, '« Retirer » : rien d\'envoyé tout de suite', writes.slice(mark), []);
+      await page.evaluate(() => {
+        Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${GONE_ID}` }, null]], `${B} : « Retirer », page cachée`);
+      await page.waitForSelector('.app-toast', { state: 'detached', timeout: 4000 }).catch(() => problems.push(`${B} : le message reste quand la page est cachée`));
+      expectSame(B, 'après les retraits', [await favoriteTitles(page), await textOf(page, '.dfav-total')], [[FAV_T2, FAV_HOTEL], '2 biens sauvegardés']);
       await page.close();
+      {
+        // Le serveur refuse le retrait : le favori revient à sa place (FavoritesStore.send → restore).
+        const { context: refusing } = await favContext(width, height, FAV_LISTINGS, FAV_ACCOUNT, true, ['DELETE favorites']);
+        page = await open(refusing, '/favoris/', `${B} retrait refusé`);
+        await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : retrait refusé`);
+        mark = writes.length;
+        await page.locator('.dfav-card', { has: page.locator('.dfav-title', { hasText: FAV_FLAT }) }).locator('.dfav-heart').click();
+        await waitForFavorites(page, [FAV_T2, FAV_STUDIO, FAV_HOTEL], '3 biens sauvegardés', `${B} : retrait refusé, carte partie`);
+        await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${favId(1)}` }, null]], `${B} : retrait refusé`);
+        await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : retrait refusé, carte revenue`);
+        await page.close();
+        await refusing.close();
+      }
 
       // Onglet Recherches : les actions de SavedSearchesView, envoyées comme l'app (AccountStore.save, deleteSearch,
       // markSearchViewed) : nom, critères et alertes ensemble, mise à jour par l'id.
@@ -3547,7 +3748,7 @@ try {
       await expectWrites(mark, [['DELETE', 'saved_searches', { id: `eq.${invest.id}` }, null]], `${B} : supprimer`);
       await page.waitForFunction(() => document.querySelectorAll('.dfav-searches .saved-search').length === 1, null, { timeout: 8000 })
         .catch(() => problems.push(`${B} : la recherche supprimée reste affichée`));
-      expectSame(B, 'après la suppression', [await textOf(page, '.dfav-tab-count'), await textOf(page, '.dfav-searches .saved-search h3')], ['(1)', 'Lyon centre']);
+      expectSame(B, 'après la suppression', [await textOf(page, '.dfav .fav-tab-count'), await textOf(page, '.dfav-searches .saved-search h3')], ['(1)', 'Lyon centre']);
       // Voir les résultats : la recherche est vue (last_viewed_at), puis ses résultats s'ouvrent.
       mark = writes.length;
       await searchCard(0).locator('.run-button').click();
@@ -3562,13 +3763,24 @@ try {
     await favDesk.close();
   }
   {
-    // Aucun favori : le texte de l'app et « Rechercher un bien » ; rien à comparer.
-    const { context } = await favContext(1440, 900, FAV_LISTINGS, { favorites: [] });
+    // Aucun favori : l'état vide illustré de l'app (FavoritesEmptyState, demande du 17/11), sans recherche, filtres ni
+    // catégories ; rien à comparer. Aucune recherche enregistrée : le même état, avec sa carte « 6 annonces ».
+    const { context } = await favContext(1440, 900, FAV_LISTINGS, { favorites: [], saved_searches: [] });
     page = await open(context, '/favoris/', 'favoris vide');
-    await page.waitForSelector('.dfav .account-empty');
-    expectSame('favoris vide', 'texte', [await textOf(page, '.dfav .account-empty h2'), await textOf(page, '.dfav .account-empty p'), await textOf(page, '.dfav .account-empty a'),
-      await page.getAttribute('.dfav .account-empty a', 'href'), await page.isDisabled('.dfav-compare'), await page.locator('.dfav-toolbar').count()],
-    ['Aucun favori pour l\'instant', 'Touchez le cœur d\'une annonce pour la retrouver ici et la comparer.', 'Rechercher un bien', '/recherche/', true, 0]);
+    await page.waitForSelector('.dfav .fav-empty');
+    expectSame('favoris vide', 'texte', [await textOf(page, '.dfav .fav-empty h2'), await textOf(page, '.dfav .fav-empty p'), await textOf(page, '.dfav .fav-empty a'),
+      await page.getAttribute('.dfav .fav-empty a', 'href'), await page.isDisabled('.dfav-compare'), await page.locator('.dfav-toolbar, .dfav-tools, .dfav-categories').count(),
+      await page.locator('.dfav .fav-empty .fav-ghost').count(), await page.getAttribute('.dfav .fav-empty-drawing', 'aria-hidden')],
+    ['Aucun favori pour l\'instant', 'Touchez le cœur d\'une annonce pour la retrouver ici et la comparer.', 'Rechercher un bien', '/recherche/', true, 0, 2, 'true']);
+    expectSame('favoris vide', 'onglets', await page.$$eval('.dfav .fav-tab', (els) => els.map((el) => [el.textContent.trim(), el.getAttribute('aria-label')])),
+      [['Favoris', null], ['Recherches', 'Recherches, 0']]);
+    await favShot(page, 'favoris-vide-1440.png');
+    await page.click('.dfav .fav-tab >> nth=1');
+    await page.waitForSelector('.dfav-searches .fav-empty');
+    expectSame('recherches vides', 'texte', [await textOf(page, '.dfav-searches .fav-empty h2'), await textOf(page, '.dfav-searches .fav-empty p'),
+      await textOf(page, '.dfav-searches .fav-empty-search-count'), await textOf(page, '.dfav-searches .fav-empty-save'), await page.getAttribute('.dfav-searches .fav-empty a', 'href')],
+    ['Aucune recherche enregistrée', 'Touchez Enregistrer sur une recherche pour la retrouver ici, avec ses nouveautés.', '6 annonces', 'Enregistrer', '/recherche/']);
+    await favShot(page, 'favoris-recherches-vides-1440.png');
     await page.close();
     await context.close();
   }
@@ -4405,6 +4617,7 @@ try {
   await page.screenshot({ path: join(out, 'favoris-telephone.png') });
   await page.screenshot({ path: join(out, 'favoris-telephone-long.png'), fullPage: true });
   page = await open(signedPhone, '/compte/?vue=informations', 'mes-informations-telephone');
+  await phoneFavorites();
   await page.waitForSelector('input[autocomplete="tel"]');
   await page.screenshot({ path: join(out, 'mes-informations-telephone-long.png'), fullPage: true });
   await signedPhone.close();
