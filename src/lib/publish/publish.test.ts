@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildingOfDraft, coOwnershipLotsIssue, coOwnershipNeedsProcedure, emptyBuilding, emptyHotel, emptyRental, energyCostHint, flatRateWarning, hotelOfDraft, inventoryFeeIssue, missingRequiredFields,
-  energyPriceYearIssue, newDraft, rentalBanMessage, rentalChargesLabel, saleChargesLabel, selectCategory, selectSubtype, showsCoOwnership, showsEnergyCosts, showsInventoryFee,
+  energyPriceYearIssue, newDraft, rentalAvailability, rentalBanMessage, rentalChargesLabel, saleChargesLabel, selectCategory, selectSubtype, showsCoOwnership, showsEnergyCosts, showsInventoryFee,
   showsRentControl, stepIsComplete, stepIssues, subtypes, tenantShareWarning, PUBLISH_CATEGORIES, PUBLISH_STEPS,
   type PropertyType, type PublishDraft,
 } from './draft';
 import {
   canSaveDraft, firstIssue, furthestAtStart, guideForRequired, hasChanges, initialStep, previewRow, recapRows, sameDraft, stepOfIssue,
 } from './flow';
-import { appDecodingProblems, assetJson, dayToDate, draftFromRow, listingWrite } from './serialize';
+import { availability } from '../cardContent';
+import { CATEGORY_DISPLAY_ORDER, CATEGORY_SUBTITLES, CATEGORY_TITLES } from './labels';
+import { appDecodingProblems, assetJson, availableFromDate, dateToDay, dayToDate, draftFromRow, listingWrite } from './serialize';
 import { proposedDescription, proposedTitle } from './writing';
 
 // Publier sur ordinateur : mêmes règles et même écriture que l'app (ListingDraft, PublishWriting,
@@ -39,6 +41,17 @@ describe('catégorie et champs obligatoires', () => {
     expect([hotel.transaction, hotel.propertyType, hotel.assetDetails?.kind]).toEqual(['sale', 'hotel', 'hotel']);
     const mixed = selectSubtype(selectCategory(newDraft('x'), 'investment'), subtypes('investment')[3]);
     expect([mixed.propertyType, mixed.isMixedBuilding, mixed.assetDetails?.kind]).toEqual(['building', true, 'building']);
+  });
+
+  it('étape 1 comme l’app : ordre des catégories, sous-titres courts, immeuble mixte avec sa précision', () => {
+    expect(CATEGORY_DISPLAY_ORDER.map((category) => [CATEGORY_TITLES[category], CATEGORY_SUBTITLES[category]])).toEqual([
+      ['Résidentiel', 'Logement ou terrain'], ['Location', 'Bien à louer'], ['Investissement', 'Bien loué, immeuble'], ['Hôtels', 'Hôtel à vendre'],
+    ]);
+    expect([...CATEGORY_DISPLAY_ORDER].sort()).toEqual([...PUBLISH_CATEGORIES].sort());
+    expect(subtypes('investment').map((option) => [option.title, option.detail ?? null])).toEqual([
+      ['Appartement loué', null], ['Maison locative', null], ['Immeuble de rapport', null], ['Immeuble mixte', 'logements et commerces'],
+      ['Local commercial', null], ['Bureaux', null],
+    ]);
   });
 
   it('manquants au départ, aucun une fois tout rempli', () => {
@@ -88,6 +101,52 @@ describe('écriture relisible par l’app', () => {
     };
     const back = draftFromRow(row as unknown as Parameters<typeof draftFromRow>[0], { street: '12 rue Mercière', latitude: 45.7616, longitude: 4.8321 });
     expect(sameDraft(back, flat())).toBe(true);
+  });
+});
+
+describe('disponibilité d’une location (RentalAvailabilityTests de l’app)', () => {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const dayOf = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+  it('une annonce rouverte retrouve son choix : non précisée, tout de suite (jour même ou passé), à partir d’une date à venir', () => {
+    expect(rentalAvailability(null, '2026-11-18')).toBe('unspecified');
+    expect(rentalAvailability('2026-11-18', '2026-11-18')).toBe('immediately');
+    expect(rentalAvailability('2026-10-01', '2026-11-18')).toBe('immediately');
+    expect(rentalAvailability('2026-11-19', '2026-11-18')).toBe('from');
+    // « Tout de suite » choisi la veille : toujours « tout de suite » le lendemain.
+    expect(rentalAvailability('2026-11-17', '2026-11-18')).toBe('immediately');
+  });
+
+  it('« Tout de suite » s’écrit au début du jour : « Disponible de suite » dès le matin ; une date à venir, à midi UTC', () => {
+    const morning = new Date(2026, 10, 18, 8, 30);
+    const today = availableFromDate('2026-11-18', morning);
+    expect(today).toBe(new Date(2026, 10, 18).toISOString());
+    expect(new Date(today) <= morning).toBe(true);
+    expect(availability(new Date(today), morning)).toBe('Disponible de suite');
+    expect(dateToDay(today)).toBe('2026-11-18');
+    expect(availableFromDate('2026-10-01', morning)).toBe(new Date(2026, 9, 1).toISOString());
+    const later = availableFromDate('2026-12-04', morning);
+    expect(later).toBe('2026-12-04T12:00:00.000Z');
+    expect(availability(new Date(later), morning)).toBe('Disponible le 4 décembre');
+  });
+
+  it('écrite dans les informations locatives, relisible par l’app, relue au même jour', () => {
+    const now = new Date();
+    const rent = selectSubtype(selectCategory(flat(), 'rental'), subtypes('rental')[0]);
+    const draft = { ...rent, rentalInfo: { ...(rent.rentalInfo ?? emptyRental()), isFurnished: true, availableFrom: dayOf(now) } };
+    const write = listingWrite(draft, { insert: false });
+    expect(write.rental_info?.availableFrom).toBe(new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString());
+    expect(appDecodingProblems(write)).toEqual([]);
+    const row = {
+      ...write, owner_id: 'u', status: 'active', previous_price: null, public_latitude: null, public_longitude: null, public_street: null,
+      asset_details: null, published_at: null, created_at: null, updated_at: null,
+      listing_photos: [{ id: 'p1', storage_path: 'u/l/p1.jpg', position: 0, width: 1200, height: 900 }],
+    };
+    const back = draftFromRow(row as unknown as Parameters<typeof draftFromRow>[0], { street: '12 rue Mercière', latitude: 45.7616, longitude: 4.8321 });
+    expect(back.rentalInfo?.availableFrom).toBe(dayOf(now));
+    expect(rentalAvailability(back.rentalInfo?.availableFrom ?? null, dayOf(now))).toBe('immediately');
+    const none = listingWrite({ ...draft, rentalInfo: { ...draft.rentalInfo, availableFrom: null } }, { insert: false });
+    expect(none.rental_info && 'availableFrom' in none.rental_info).toBe(false);
   });
 });
 

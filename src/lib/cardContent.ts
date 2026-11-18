@@ -304,8 +304,9 @@ export function cardLocation(city: string, content: CardContent): string {
   return parts.join(' · ');
 }
 
+/** « Disponible le 4 décembre », ou « Disponible de suite » pour une date passée (ListingCardFormatting.availability). */
 export function availability(date: Date, now = new Date()): string {
-  return date > now ? `Disponible le ${dayMonth.format(date)}` : 'Disponible immédiatement';
+  return date > now ? `Disponible le ${dayMonth.format(date)}` : 'Disponible de suite';
 }
 
 

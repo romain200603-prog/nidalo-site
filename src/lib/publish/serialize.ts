@@ -77,6 +77,17 @@ function localDay(d: Date): Day {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/**
+ * Disponibilité d'une location : « Tout de suite » (le jour même, ou un jour passé) s'écrit au début de ce jour, à
+ * l'heure du navigateur, comme l'app (RentalAvailability.availableFrom()) ; les cartes et la fiche disent alors
+ * « Disponible de suite » dès le matin. Un jour à venir s'écrit à midi UTC, comme les autres dates (dayToDate).
+ */
+export function availableFromDate(day: Day, now = new Date()): string {
+  if (day > localDay(now)) return dayToDate(day);
+  const [year, month, dayOfMonth] = day.split('-').map(Number);
+  return new Date(year, month - 1, dayOfMonth).toISOString();
+}
+
 /** Date écrite par l'app ou par le site → jour du calendrier, à l'heure du navigateur. */
 export function dateToDay(value: unknown): Day | null {
   const d = date(value);
@@ -101,7 +112,7 @@ export function rentalJson(info: RentalDraft): Json {
   put(json, 'potentialMonthlyRent', info.potentialMonthlyRent);
   json.isLeased = info.isLeased;
   put(json, 'leaseEndDate', info.leaseEndDate && dayToDate(info.leaseEndDate));
-  put(json, 'availableFrom', info.availableFrom && dayToDate(info.availableFrom));
+  put(json, 'availableFrom', info.availableFrom && availableFromDate(info.availableFrom));
   put(json, 'recoverableMonthlyCharges', info.recoverableMonthlyCharges);
   put(json, 'isFurnished', info.isFurnished);
   put(json, 'securityDeposit', info.securityDeposit);
