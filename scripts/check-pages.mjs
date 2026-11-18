@@ -5302,6 +5302,96 @@ try {
     await context.close();
   }
 
+  // Haut des pages du téléphone (étape 3) : plus d'en-tête bleu sous 761 px. Chaque page commence comme son écran de
+  // l'app : grand titre d'un onglet (Favoris, Messages, Mon compte), retour et titre d'un écran poussé ; les pages que
+  // l'app n'a pas (aide, pages légales, 404, « bientôt », annonce introuvable) ont le retour rond et le titre, leur h1
+  // restant pour les lecteurs d'écran ; le retour ramène à la page précédente du site, sinon à sa page. Une conversation
+  // ouverte garde sa barre et toute la hauteur. Fond de page et barre du navigateur aux couleurs de l'app. Entre 761 et
+  // 1023 px, l'en-tête bleu reste (seul menu de ces largeurs). Captures : haut-telephone-*.png.
+  {
+    const T = 'haut du téléphone';
+    const context = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
+    await mock(context, { signedIn: true });
+    const topOf = (p) => p.evaluate(() => {
+      const header = document.querySelector('.phone-page-head .app-page-header');
+      const title = header?.querySelector('.app-page-header-title');
+      return {
+        band: [...document.querySelectorAll('.topbar')].every((bar) => getComputedStyle(bar).display === 'none'),
+        background: getComputedStyle(document.body).backgroundColor,
+        header: header ? [Math.round(header.getBoundingClientRect().top), header.querySelector('.app-round')?.getAttribute('href') ?? null,
+          header.querySelector('.app-round')?.getAttribute('aria-label') ?? null, title?.textContent ?? null, title?.tagName ?? null, title?.getAttribute('aria-hidden') ?? null] : null,
+        // h1 de la page : son texte, et masqué à l'écran (1 px), lu par les lecteurs d'écran.
+        h1: [...document.querySelectorAll('main h1')].map((heading) => [heading.textContent.trim(), Math.round(heading.getBoundingClientRect().width) <= 1]),
+      };
+    });
+    page = await open(context, '/aide/', `${T} aide`);
+    expectSame(T, 'couleur de la barre du navigateur', await page.$$eval('meta[name="theme-color"]', (metas) => metas.map((meta) => [meta.getAttribute('content'), meta.getAttribute('media')])),
+      [['#FAF9F6', '(max-width: 760px)'], ['#1F5BC6', '(min-width: 761px)']]);
+    await page.close();
+    const unknownListing = '6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1aff';
+    for (const [path, title, back, file] of [['/aide/', 'Aide', '/', 'aide'], ['/conditions/', 'Conditions d’utilisation', '/', 'conditions'],
+      ['/confidentialite/', 'Politique de confidentialité', '/', 'confidentialite'], ['/mentions-legales/', 'Mentions légales', '/', 'mentions-legales'],
+      ['/page-inexistante/', 'Page introuvable', '/', '404'], ['/publier/', 'Publier une annonce', '/', 'publier'], ['/comparer/', 'Comparer', '/favoris/', 'comparer'],
+      [`/annonce/?id=${unknownListing}`, 'Annonce introuvable', '/recherche/', 'annonce-introuvable']]) {
+      // La page 404 répond avec le code 404 (signalé par Chrome, voir open()).
+      const name = file === '404' ? `404 ${T}` : `${T} ${file}`;
+      page = await open(context, path, name);
+      await page.waitForSelector('.phone-page-head .app-page-header', { timeout: 8000 }).catch(() => problems.push(`${name} : ni retour ni titre`));
+      expectSame(name, 'haut de la page', await topOf(page), { band: true, background: 'rgb(250, 249, 246)', header: [6, back, 'Retour', title, 'P', 'true'], h1: [[title, true]] });
+      await phoneFits(page, name);
+      await page.screenshot({ path: join(out, `haut-telephone-${file}.png`) });
+      await page.close();
+    }
+    // Onglets : leur grand titre en haut, sans en-tête bleu ; conversation ouverte : sa barre en haut, toute la hauteur.
+    // Messages avec ses conversations simulées (chatContext).
+    const { context: chatPhone } = await chatContext({ phone: true });
+    for (const [tabContext, path, selector, file] of [[context, '/favoris/', '.favorites-head h1', 'favoris'], [chatPhone, '/messages/', '.dm-side-title h1', 'messages'],
+      [context, '/compte/', '.app-space-header h1', 'compte']]) {
+      page = await open(tabContext, path, `${T} ${file}`);
+      await page.waitForSelector(selector, { timeout: 8000 }).catch(() => problems.push(`${T} ${file} : grand titre absent`));
+      const facts = await page.evaluate((sel) => [[...document.querySelectorAll('.topbar')].every((bar) => getComputedStyle(bar).display === 'none'),
+        getComputedStyle(document.body).backgroundColor, Math.round(document.querySelector(sel).getBoundingClientRect().top) <= 16, document.querySelectorAll('.phone-page-head').length], selector);
+      expectSame(`${T} ${file}`, '[sans en-tête bleu, fond, grand titre en haut, sans retour]', facts, [true, 'rgb(250, 249, 246)', true, 0]);
+      await page.screenshot({ path: join(out, `haut-telephone-${file}.png`) });
+      await page.close();
+    }
+    {
+      page = await open(chatPhone, `/messages/?c=${chatId(1)}`, `${T} conversation`);
+      await page.waitForSelector('.dm.is-thread .dm-composer', { timeout: 8000 }).catch(() => problems.push(`${T} : conversation absente`));
+      expectSame(`${T} conversation`, '[haut, hauteur, barre du bas, en-tête bleu]', await page.evaluate(() => {
+        const box = document.querySelector('.dm.is-thread').getBoundingClientRect();
+        return [Math.round(box.top), Math.round(box.height) === innerHeight, getComputedStyle(document.querySelector('.tabbar')).display,
+          getComputedStyle(document.querySelector('.topbar')).display];
+      }), [0, true, 'none', 'none']);
+      await page.screenshot({ path: join(out, 'haut-telephone-conversation.png') });
+      await chatPhone.close();
+    }
+    // Retour d'une page que l'app n'a pas : la page précédente du site (Informations légales), sinon l'accueil.
+    page = await open(context, '/compte/?vue=legal', `${T} retour`);
+    await page.click('a[href="/conditions/"]');
+    await page.waitForURL(`${base}/conditions/`, { timeout: 8000 }).catch(() => problems.push(`${T} : « Conditions » ne s'ouvre pas`));
+    await page.click('.phone-page-head .app-round');
+    await page.waitForURL(`${base}/compte/?vue=legal`, { timeout: 8000 }).catch(() => problems.push(`${T} : le retour des conditions mène à ${page.url()}`));
+    await page.close();
+    page = await open(context, '/aide/', `${T} retour sans page précédente`);
+    await page.click('.phone-page-head .app-round');
+    await page.waitForURL(`${base}/`, { timeout: 8000 }).catch(() => problems.push(`${T} : le retour de l'aide ouverte seule mène à ${page.url()}`));
+    await page.close();
+    await context.close();
+    // Entre 761 et 1023 px : l'en-tête bleu reste, sans le retour ni le titre du téléphone ; le titre de la page est visible.
+    const tablet = await browser.newContext({ viewport: { width: 800, height: 1000 }, locale: 'fr-FR' });
+    await mock(tablet);
+    for (const path of ['/aide/', '/publier/', '/page-inexistante/']) {
+      const name = path === '/page-inexistante/' ? `404 ${T} 800 px` : `${T} 800 px ${path}`;
+      page = await open(tablet, path, name);
+      await page.waitForSelector('main h1');
+      expectSame(name, '[en-tête bleu, retour du téléphone, h1 visible]', [await page.locator('.topbar').isVisible(), await page.locator('.phone-page-head').isVisible(),
+        await page.locator('main h1').first().isVisible()], [true, false, true]);
+      await page.close();
+    }
+    await tablet.close();
+  }
+
   // Notifications sur téléphone (demande de Romain du 14 novembre) : l'écran de l'ordinateur, ouvert depuis Mon compte,
   // à 390 px (iPhone 13) et 320 px (iPhone SE). Sans compte, son message et aucune demande ; avec le compte, les lignes
   // et leurs liens, un clic marque la notification lue, « Tout lire » toutes, et une nouvelle notification arrive en

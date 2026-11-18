@@ -254,7 +254,7 @@ export function SearchPage() {
   );
 
   return (
-    <Page section="search" wide appTop={!desktop}>
+    <Page section="search" wide>
       <div className="search-layout">
         <div className="search-column">
           {/* Téléphone : une seule ligne en haut, qui ne défile pas : retour, lieu, filtres (SearchPlaceField). */}

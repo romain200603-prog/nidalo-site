@@ -1,13 +1,11 @@
-/* « Quel est votre profil ? », comme l'app (Features/Account/AccountTypeView.swift) : fond de page de l'app, sans
-   barre du bas sur téléphone (hidesTabBar) ; sous 1024 px, le bas de l'écran (réassurance et bouton) reste en bas de
-   l'écran pendant que la page défile. Ordinateur : la même page dans la colonne de 672 px, le bouton à la suite. Pièces
-   communes (bouton rond, barre d'étapes, petit titre, carte de groupe, lignes) dans pieces-app.css. */
+/* « Quel est votre profil ? », comme l'app (Features/Account/AccountTypeView.swift) : sans barre du bas sur téléphone
+   (hidesTabBar) ; sous 1024 px, le bas de l'écran (réassurance et bouton) reste en bas de l'écran pendant que la page
+   défile. Ordinateur : la même page dans la colonne de 672 px, le bouton à la suite. Fond de page de l'app sous
+   1024 px (app.css). Pièces communes (bouton rond, barre d'étapes, petit titre, carte de groupe, lignes) dans
+   pieces-app.css. */
 
 /* 6 au-dessus du retour, comme l'app. */
 .account-wrap:has(> .app-profile-step) { padding-top: 6px; }
-@media (max-width: 1023.98px) {
-  .page:has(.app-profile-step) { background: var(--app-page); }
-}
 @media (max-width: 760px) {
   body:has(.app-profile-step) { padding-bottom: 0; }
   body:has(.app-profile-step) .tabbar { display: none; }
