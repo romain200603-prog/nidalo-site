@@ -2,7 +2,7 @@ import { supabase } from '../supabase';
 import { cleanPhoto, PHOTO_SIDE } from '../cleanPhoto';
 import {
   attachmentIssue, CONTENT_MISMATCH, contentMatches, DOCUMENT_EXTENSIONS, lowerExtension, PHOTO_EXTENSIONS, photoExtension,
-  storageContentType, type Attachment, type DocumentCategory,
+  storageContentType, type Attachment, type AttachmentKind, type DocumentCategory,
 } from './content';
 import { sizeLabel } from './format';
 
@@ -265,6 +265,60 @@ export async function uploadPending(item: PendingFile, conversationId: string): 
   const path = storagePath(conversationId, `${newId()}.${ext}`);
   await put(path, item.file, storageContentType('document', ext));
   return { id: item.id, kind: 'document', fileName: item.fileName, storagePath: path, byteCount: item.file.size, ...category };
+}
+
+// MARK: - Transfert
+
+/** « Photo.heic » → « Photo.jpg » (MessageAttachmentFiles.renamed). */
+export function renamedFile(name: string, ext: string): string {
+  const base = name.replace(/\.[^.]*$/, '');
+  return `${base || name}.${ext}`;
+}
+
+/**
+ * Un fichier d'une conversation recopié dans le dossier d'une autre, sous le même nom (uploadFile de l'app après le
+ * téléchargement de l'original) : une photo, ou une image jointe comme document, repart en JPEG sans métadonnées ;
+ * une vidéo sans lieu ni appareil ; le reste tel quel. Rend le chemin sur le serveur.
+ */
+async function copyFile(path: string, kind: AttachmentKind, conversationId: string): Promise<string> {
+  const url = await signedUrl(path);
+  const response = url ? await fetch(url).catch(() => null) : null;
+  if (!response?.ok) throw new Error(UPLOAD_FAILURE);
+  const source = await response.blob();
+  const original = path.split('/').pop() || `${newId()}`;
+  const ext = lowerExtension(original);
+  if (kind === 'photo' || (kind === 'document' && PHOTO_EXTENSIONS.includes(ext))) {
+    const target = storagePath(conversationId, renamedFile(original, 'jpg'));
+    await put(target, await photoJpeg(source), 'image/jpeg');
+    return target;
+  }
+  const target = storagePath(conversationId, original);
+  if (kind === 'video') {
+    await put(target, new Blob([videoWithoutMetadata(await source.arrayBuffer())]), storageContentType('video', ext));
+    return target;
+  }
+  await put(target, source, storageContentType(kind, ext));
+  return target;
+}
+
+/**
+ * Pièces jointes d'un message transféré, recopiées dans le dossier de la conversation d'arrivée par le même envoi
+ * (SupabaseMessagingRepository.send puis MessageAttachmentFiles.upload) : le fichier et sa vignette ; un document en
+ * image renommé en « .jpg ». Un GIF, un lieu ou un contact n'a pas de fichier et part tel quel.
+ */
+export async function copyAttachments(items: Attachment[], conversationId: string): Promise<Attachment[]> {
+  const copied: Attachment[] = [];
+  for (const item of items) {
+    const next: Attachment = { ...item };
+    if (item.storagePath) {
+      next.storagePath = await copyFile(item.storagePath, item.kind, conversationId);
+      const ext = lowerExtension(next.storagePath);
+      if (item.kind === 'document' && ext !== lowerExtension(item.fileName)) next.fileName = renamedFile(item.fileName, ext);
+    }
+    if (item.thumbnailPath) next.thumbnailPath = await copyFile(item.thumbnailPath, 'photo', conversationId);
+    copied.push(next);
+  }
+  return copied;
 }
 
 // MARK: - Lecture (URL signées)

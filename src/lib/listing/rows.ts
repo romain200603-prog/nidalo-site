@@ -13,6 +13,8 @@ const monthYear = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numer
 const dayMonthYear = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Paris' });
 
 export const formatMonthYear = (d: Date): string => monthYear.format(d);
+/** « 08/2027 » (LotText.monthYear de l'app). */
+const monthNumberYear = new Intl.DateTimeFormat('fr-FR', { month: '2-digit', year: 'numeric', timeZone: 'Europe/Paris' });
 export const formatLongDate = (d: Date): string => dayMonthYear.format(d);
 
 // MARK: - Libellés
@@ -202,6 +204,16 @@ export function hotelActivity(row: ListingRow): { rows: OriginRow[]; showsNote: 
 
 // MARK: - Caractéristiques
 
+/**
+ * « Vendu occupé », avec la fin du bail quand l'annonce la donne, pour un appartement ou une maison vendus loués
+ * (Listing.soldOccupiedLabel de l'app) ; `null` sinon.
+ */
+export function soldOccupiedLabel(row: ListingRow): string | null {
+  const rental = rentalDetails(row);
+  if (row.transaction !== 'sale' || (row.property_type !== 'apartment' && row.property_type !== 'house') || !rental?.isLeased) return null;
+  return rental.leaseEndDate ? `Vendu occupé · bail jusqu'au ${monthNumberYear.format(rental.leaseEndDate)}` : 'Vendu occupé';
+}
+
 export function featureRows(row: ListingRow): Row[] {
   const type = row.property_type;
   const isHome = type === 'apartment' || type === 'house';
@@ -286,9 +298,11 @@ export function featureRows(row: ListingRow): Row[] {
   const sale = row.transaction === 'sale';
   const rental = rentalDetails(row);
   if (sale && rental) {
-    rows.push(['Situation locative', rental.isLeased ? 'Loué' : 'Libre']);
-    if (rental.isLeased && rental.currentMonthlyRent !== null) rows.push(['Loyer actuel', perMonth(rental.currentMonthlyRent)]);
-    if (rental.isLeased && rental.leaseEndDate) rows.push(['Fin du bail', formatMonthYear(rental.leaseEndDate)]);
+    // Appartement ou maison vendus loués : « Vendu occupé · bail jusqu'au 08/2027 », la fin du bail comprise.
+    const soldOccupied = soldOccupiedLabel(row);
+    rows.push(['Situation locative', soldOccupied ?? (rental.isLeased ? 'Loué' : 'Libre')]);
+    if (rental.isLeased && rental.currentMonthlyRent !== null) rows.push(['Loyer encaissé', perMonth(rental.currentMonthlyRent)]);
+    if (soldOccupied === null && rental.isLeased && rental.leaseEndDate) rows.push(['Fin du bail', formatMonthYear(rental.leaseEndDate)]);
   }
   if (sale && rental?.potentialMonthlyRent !== null && rental?.potentialMonthlyRent !== undefined) {
     rows.push(['Loyer potentiel (hypothèse)', perMonth(rental.potentialMonthlyRent)]);

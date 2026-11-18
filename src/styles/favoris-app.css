@@ -1,0 +1,105 @@
+/* Vos favoris comme l'app (FavoritesView.swift, FavoritesEmptyState.swift ; demande du 17/11), téléphone et ordinateur :
+   les onglets Favoris · Recherches et l'état vide illustré. 1 pt de l'app = 1 px. */
+
+/* Onglets : piste grise de 48 (coins 14, 4 de marge), pastille bleue (coins 10) qui glisse avec le ressort de l'app.
+   Icône 17, titre 15 demi-gras ; actif : blanc ; le nombre en bleu, blanc sur la pastille. */
+.fav-tabs {
+  position: relative; display: grid; grid-template-columns: 1fr 1fr; height: 48px; padding: 4px; box-sizing: border-box;
+  border-radius: 14px; background: var(--app-segment); font-family: var(--app-font);
+}
+.fav-tabs-pill {
+  position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 10px; background: var(--app-brand);
+  transition: transform var(--app-duration) var(--app-ease);
+}
+.fav-tabs.is-searches .fav-tabs-pill { transform: translateX(100%); }
+.fav-tab {
+  position: relative; display: flex; align-items: center; justify-content: center; gap: 7px; min-width: 0; margin: 0; padding: 0 6px;
+  border: 0; border-radius: 10px; background: none; color: var(--app-navy); font: 600 15px/1.2 var(--app-font); white-space: nowrap;
+  cursor: pointer; -webkit-tap-highlight-color: transparent; transition: color var(--app-duration) var(--app-ease);
+}
+.fav-tab .icon { flex: none; width: 17px; height: 17px; }
+.fav-tab-title { overflow: hidden; text-overflow: ellipsis; }
+.fav-tab-count { position: relative; color: var(--app-brand); transition: color var(--app-duration) var(--app-ease); }
+.fav-tab-dot { position: absolute; top: -2px; right: -5px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; transform: translate(50%, 0); }
+.fav-tab[aria-pressed="true"], .fav-tab[aria-pressed="true"] .fav-tab-count { color: #FFFFFF; }
+.fav-tab:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+
+/* Contenu sous les onglets : fondu et glissement de 14 (fondu seul si « Réduire les animations »). */
+.fav-tab-panel { animation: fav-panel-in var(--app-duration) var(--app-ease) both; }
+@keyframes fav-panel-in { from { opacity: 0; transform: translateY(14px); } }
+
+/* État vide : dessin, titre 16 gras (22 sous les cartes, 36 sous « 6 annonces »), texte 13 (290 au plus, 6 dessous),
+   bouton bleu de 52 sur toute la largeur (coins 12, 15 demi-gras, loupe 18), 20 sous le texte. */
+.fav-empty { display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 400px; margin: 0 auto; font-family: var(--app-font); text-align: center; }
+.fav-empty-drawing { display: flex; justify-content: center; width: 100%; }
+.fav-empty-title { margin: 22px 0 0; color: var(--app-navy); font: 700 16px/1.25 var(--app-font); }
+.fav-empty.is-searches .fav-empty-title { margin-top: 36px; }
+.fav-empty-message { max-width: 290px; margin: 6px 0 0; color: var(--app-text-secondary); font: 400 13px/1.4 var(--app-font); }
+.fav-empty-button {
+  display: flex; align-items: center; justify-content: center; gap: 9px; box-sizing: border-box; width: 100%; min-height: 52px; margin-top: 20px;
+  padding: 0 16px; border-radius: 12px; background: var(--app-brand); color: #FFFFFF; font: 600 15px/1.2 var(--app-font); text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.fav-empty-button:hover { color: #FFFFFF; text-decoration: none; }
+.fav-empty-button:active { background: var(--app-brand-pressed); }
+.fav-empty-button .icon { flex: none; width: 18px; height: 18px; }
+.fav-empty-button:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 3px; }
+
+/* Anneau qui grandit jusqu'à 1,9 fois sa taille en s'effaçant, toutes les 2,6 s. */
+.fav-pulse {
+  position: absolute; inset: 0; box-sizing: border-box; border: 1.5px solid var(--app-brand); border-radius: inherit; pointer-events: none;
+  animation: fav-pulse 2.6s ease-out infinite;
+}
+@keyframes fav-pulse { from { transform: scale(1); opacity: 1; } to { transform: scale(1.9); opacity: 0; } }
+
+/* Deux cartes d'annonce dessinées (248 × 124) : 150 de large, coins 14 ; derrière, décalée de 98 et 16, à 70 %. */
+.fav-empty-cards { position: relative; flex: none; width: 248px; height: 124px; }
+.fav-ghost {
+  position: absolute; top: 0; left: 0; display: flex; flex-direction: column; width: 150px; box-sizing: border-box; overflow: hidden;
+  border: 1px solid var(--app-border); border-radius: 14px; background: #FFFFFF;
+}
+.fav-ghost.is-back { top: 16px; left: 98px; opacity: 0.7; }
+.fav-ghost.is-front { overflow: visible; }
+.fav-ghost-photo { display: flex; align-items: center; justify-content: center; height: 66px; background: var(--app-segment); }
+.fav-ghost.is-front .fav-ghost-photo { height: 74px; border-radius: 13px 13px 0 0; background: #EFECE6; color: #CBC6BD; }
+.fav-ghost-photo .icon { width: 26px; height: 26px; }
+.fav-ghost-lines { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; }
+.fav-ghost-lines span { display: block; width: 70px; height: 8px; border-radius: 4px; background: #D6D2CB; }
+.fav-ghost-lines span + span { width: 100px; height: 6px; border-radius: 3px; background: var(--app-border); }
+.fav-ghost-heart {
+  position: absolute; top: 8px; right: 8px; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+  box-sizing: border-box; border: 1.5px solid var(--app-brand); border-radius: 50%; background: #FFFFFF; color: var(--app-brand);
+}
+.fav-ghost-heart svg { width: 16px; height: 16px; fill: currentColor; }
+.fav-ghost-heart .fav-pulse { inset: -1.5px; }
+
+/* « 6 annonces · Triées par pertinence » et « Enregistrer » dessiné (36 de haut, coins 11, contour bleu de 1,5). */
+.fav-empty-search {
+  display: flex; align-items: center; gap: 12px; box-sizing: border-box; width: 100%; max-width: 304px; height: 74px; padding: 0 14px 0 16px;
+  border: 1px solid var(--app-border); border-radius: 16px; background: #FFFFFF; text-align: left;
+}
+.fav-empty-search-text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; white-space: nowrap; }
+.fav-empty-search-count { overflow: hidden; color: var(--app-navy); font: 700 16px/1.25 var(--app-font); text-overflow: ellipsis; }
+.fav-empty-search-sort { overflow: hidden; color: var(--app-text-secondary); font: 500 12px/1.3 var(--app-font); text-overflow: ellipsis; }
+.fav-empty-save {
+  position: relative; display: flex; flex: none; align-items: center; gap: 6px; height: 36px; padding: 0 12px; box-sizing: border-box;
+  border: 1.5px solid var(--app-brand); border-radius: 11px; background: var(--app-brand-soft); color: var(--app-brand); font: 600 13px/1 var(--app-font);
+}
+.fav-empty-save .icon { width: 15px; height: 15px; }
+.fav-empty-save .fav-pulse { inset: -1.5px; }
+
+/* Place de l'état vide : 62 sous les onglets (Favoris), 98 (Recherches, dont les 15 au-dessus de la liste des
+   recherches) ; Mon espace › Mes recherches : centré. */
+.fav-empty-place-favorites { padding-top: 62px; }
+.fav-empty-place-searches { padding-top: 83px; }
+.fav-empty-place-account { display: flex; align-items: center; min-height: calc(100vh - 260px); padding: 24px 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fav-tabs-pill { display: none; }
+  .fav-tab { transition: background-color 0.25s ease-in-out, color 0.25s ease-in-out; }
+  .fav-tab-count { transition: color 0.25s ease-in-out; }
+  .fav-tab[aria-pressed="true"] { background: var(--app-brand); }
+  .fav-tab-panel { animation: fav-panel-fade 0.25s ease-in-out both; }
+  .fav-pulse { display: none; }
+}
+@keyframes fav-panel-fade { from { opacity: 0; } }

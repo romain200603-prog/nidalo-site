@@ -140,7 +140,7 @@ export function profitabilityView({ inputs, isRentCurrent }: Profitability, choi
   };
   const source = result.line('monthlyRent')?.origin === 'estimated'
     ? 'Estimée à partir d\'un loyer estimé par Nidalo'
-    : isRentCurrent ? 'Estimée à partir du loyer actuel indiqué par le vendeur' : 'Estimée à partir du loyer indiqué par le vendeur';
+    : isRentCurrent ? 'Estimée à partir du loyer encaissé indiqué par le vendeur' : 'Estimée à partir du loyer indiqué par le vendeur';
   const rows = breakdown.entries.map((entry) => ({
     id: entry.kind,
     label: entry.kind === 'collectedRent' && !isRentCurrent ? 'Loyer potentiel encaissé' : LABELS[entry.kind],

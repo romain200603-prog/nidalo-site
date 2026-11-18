@@ -5,15 +5,18 @@ import { accountStore, formFor, loadAccount, publicName, saveProfile } from '../
 import { useStore } from '../../lib/account/session';
 import type { Message } from '../../lib/messages/api';
 import {
-  CATEGORY_ICONS, CATEGORY_LABELS, DOCUMENT_CATEGORIES, documentIcon, documentLine, MAX_FILES_PER_MESSAGE, type Attachment, type DocumentCategory,
+  CATEGORY_ICONS, CATEGORY_LABELS, contentPreview, DOCUMENT_CATEGORIES, documentIcon, documentLine, MAX_FILES_PER_MESSAGE, type Attachment,
+  type DocumentCategory,
 } from '../../lib/messages/content';
 import {
   DOCUMENT_ACCEPT, MEDIA_ACCEPT, pendingDocument, pendingMedia, releasePending, UNREADABLE, UPLOAD_FAILURE, uploadPending, type PendingFile,
 } from '../../lib/messages/files';
 import { durationLabel, sizeLabel } from '../../lib/messages/format';
-import type { Conversation } from '../../lib/messages/inbox';
+import { sameId, type Conversation } from '../../lib/messages/inbox';
+import { replyComposerTitle } from '../../lib/messages/interactions';
 import { sendAttachments, sendText } from '../../lib/messages/store';
-import { needsFirstName } from '../../lib/messages/thread';
+import { groupSender, needsFirstName } from '../../lib/messages/thread';
+import { ReplyComposerBar } from './MessageInteractions';
 import { Dialog, Sheet, showIphoneOnly, showNotice } from './parts';
 
 // Zone de saisie (demande de Romain du 14 novembre 2026) : réponses rapides selon le contexte, puis « + » (pièces
@@ -44,7 +47,7 @@ const SOURCES: { key: string; title: string; subtitle: string; icon: IconName; w
   { key: 'dossier', title: 'Mon dossier', subtitle: 'Pièces de votre dossier immobilier, avec filigrane', icon: 'folderCheck', web: null },
 ];
 
-export function Composer({ conversation, messages, suggestions, onMakeOffer }: {
+export function Composer({ conversation, messages, suggestions, onMakeOffer, replyingTo = null, onReplyChange = () => undefined, me = null }: {
   conversation: Conversation;
   /** Réponses rapides selon le contexte (demande de visite, dossier). */
   suggestions: Suggestion[];
@@ -52,6 +55,10 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer }: {
   messages: Message[] | null;
   /** « Faire une offre » dans le « + » : acheteur d'une annonce en vente, sans offre en cours. */
   onMakeOffer: (() => void) | null;
+  /** Message auquel on répond (« Réponse à Sophie Martin » au-dessus du champ) ; il part avec le message envoyé. */
+  replyingTo?: Message | null;
+  onReplyChange?: (message: Message | null) => void;
+  me?: string | null;
 }) {
   const account = useStore(accountStore);
   const emojiPanelId = useId();
@@ -72,6 +79,9 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer }: {
   pendingRef.current = pending;
 
   useEffect(() => { void loadAccount(); }, []);
+  // « Répondre » : le champ prend la main, comme l'app (isComposerFocused).
+  const replyId = replyingTo?.id ?? null;
+  useEffect(() => { if (replyId) field.current?.focus(); }, [replyId]);
   // Page quittée ou autre conversation : les aperçus locaux sont libérés.
   useEffect(() => () => releasePending(pendingRef.current), []);
 
@@ -131,11 +141,19 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer }: {
       setAskName(true);
       return;
     }
+    await sendDraft();
+  };
+
+  /** Comme l'app : le champ et la réponse se vident tout de suite ; refusé, le texte et la réponse reviennent. */
+  const sendDraft = async () => {
     const text = draft;
+    const reply = replyingTo;
     setDraft('');
-    const outcome = await sendText(conversation.id, text);
+    onReplyChange(null);
+    const outcome = await sendText(conversation.id, text, reply?.id ?? null);
     if (!outcome.sent) {
       setDraft(text);
+      onReplyChange(reply);
       showNotice(outcome.refusal ?? SEND_FAILED);
     }
   };
@@ -153,13 +171,7 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer }: {
       showNotice(error);
       return;
     }
-    const text = draft;
-    setDraft('');
-    const outcome = await sendText(conversation.id, text);
-    if (!outcome.sent) {
-      setDraft(text);
-      showNotice(outcome.refusal ?? SEND_FAILED);
-    }
+    await sendDraft();
   };
 
   /** Ajoute un élément à l'aperçu ; 10 au plus par message (AttachmentFlow.add). */
@@ -214,6 +226,14 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer }: {
             </button>
           ))}
         </div>
+      )}
+      {replyingTo && (
+        <ReplyComposerBar
+          title={replyComposerTitle(sameId(replyingTo.senderId, me),
+            groupSender(conversation, replyingTo.senderId)?.name ?? conversation.counterpart.name)}
+          preview={contentPreview(replyingTo.content)}
+          onCancel={() => onReplyChange(null)}
+        />
       )}
       <div className="dm-composer">
         <button type="button" className="dm-plus" onClick={() => setMenu('sources')} aria-label="Ajouter une pièce jointe" title="Ajouter une pièce jointe">
@@ -330,6 +350,8 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer }: {
         <PreviewSheet
           items={pending}
           conversationId={conversation.id}
+          replyToId={replyingTo?.id ?? null}
+          onReplySent={() => onReplyChange(null)}
           onRemove={(id) => setPending((current) => {
             releasePending(current.filter((item) => item.id === id));
             return current.filter((item) => item.id !== id);
@@ -414,9 +436,12 @@ function FirstNameForm({ id, lastName, onClose, onSend }: { id: string; lastName
 
 // MARK: - Aperçu avant envoi (AttachmentPreviewSheet)
 
-function PreviewSheet({ items, conversationId, onRemove, onDone }: {
+function PreviewSheet({ items, conversationId, replyToId, onReplySent, onRemove, onDone }: {
   items: PendingFile[];
   conversationId: string;
+  /** Réponse en cours : les pièces jointes partent en réponse à ce message. */
+  replyToId: string | null;
+  onReplySent: () => void;
   onRemove: (id: string) => void;
   onDone: () => void;
 }) {
@@ -452,14 +477,16 @@ function PreviewSheet({ items, conversationId, onRemove, onDone }: {
         if (cancelled.current) return;
         setProgress((index + 1) / sendable.length);
       }
-      const outcome = await sendAttachments(conversationId, stored, caption);
+      const outcome = await sendAttachments(conversationId, stored, caption, replyToId);
       if (cancelled.current) return;
       if (!outcome.sent) {
-        // Message d'accompagnement refusé par le filtre de mots interdits : son message ; sinon l'échec habituel.
+        // Message d'accompagnement refusé par le filtre de mots interdits, ou message cité qui n'est plus disponible :
+        // le message du serveur ; sinon l'échec habituel.
         setProgress(null);
         setError(outcome.refusal ?? UPLOAD_FAILURE);
         return;
       }
+      if (replyToId) onReplySent();
       onDone();
     } catch (failure) {
       if (cancelled.current) return;

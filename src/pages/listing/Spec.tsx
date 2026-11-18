@@ -5,15 +5,17 @@ import { useFitTexts } from './fitText';
 // Éléments des cartes Rentabilité, Coût de la location et Rentabilité hôtelière, comme SpecCardComponents.swift :
 // mesures de la maquette de 480 px ramenées à l'écran par --k (393/480), dans listing.css, et couleurs de `Spec`.
 
+// Couleurs de l'app depuis la fiche refaite (Spec, SpecCardComponents.swift) : bleu marine, gris et bleu Nidalo, vert
+// et rouge de l'app.
 export const SPEC_COLORS = {
-  navy: '#0C144C',
-  gray: '#5C606C',
-  blue: '#3B58B7',
-  valueBlue: '#2F4BA6',
+  navy: '#242D38',
+  gray: '#75808B',
+  blue: '#3C5CB0',
+  valueBlue: '#3C5CB0',
   orange: '#BB8059',
-  grayBlue: '#8E9BB8',
-  green: '#2E7D4F',
-  red: '#B42318',
+  grayBlue: '#9AA2AA',
+  green: '#577965',
+  red: '#C0392B',
 } as const;
 
 export function SpecCard({ children, labelledBy, className }: { children: ReactNode; labelledBy?: string; className?: string }) {
@@ -21,11 +23,10 @@ export function SpecCard({ children, labelledBy, className }: { children: ReactN
   return <section ref={ref} className={`spec-card ${className ?? ''}`} aria-labelledby={labelledBy}>{children}</section>;
 }
 
-/** Titre de carte : pastille 46 (icône 21), titre 24/30, sous-titre 14,5/20. */
-export function SpecCardHeader({ id, icon, title, subtitle }: { id: string; icon: ReactNode; title: string; subtitle: string }) {
+/** Titre de carte 24/30 et sous-titre 14,5/20, sans pastille d'icône (titre de section de l'app). */
+export function SpecCardHeader({ id, title, subtitle }: { id: string; title: string; subtitle: string }) {
   return (
     <div className="spec-header">
-      <span className="spec-header-icon" aria-hidden="true">{icon}</span>
       <div className="spec-header-text">
         <h2 id={id}>{title}</h2>
         <p>{subtitle}</p>
@@ -56,15 +57,14 @@ export function SpecBanner({ left, right, hotel = false }: { left: BannerColumn;
   );
 }
 
-/** Encadré clair (vert ou rouge pâle pour le cash-flow) : titre et sous-texte à gauche, valeur à droite. */
-export function SpecValueBox({ title, subtitle, tone, children }: {
+/** Encadré clair (fond de page, contour de l'app) : titre et sous-texte à gauche, valeur à droite. */
+export function SpecValueBox({ title, subtitle, children }: {
   title: string;
   subtitle?: string | null;
-  tone?: 'positive' | 'negative';
   children: ReactNode;
 }) {
   return (
-    <div className={`spec-value-box${tone ? ` is-${tone}` : ''}`}>
+    <div className="spec-value-box">
       <div className="spec-value-text">
         <span className="spec-value-title">{title}</span>
         {subtitle && <span className="spec-value-subtitle">{subtitle}</span>}
@@ -112,29 +112,39 @@ export function SpecBadge({ badge }: { badge: Badge }) {
   return <span className={`spec-badge spec-badge-${badge.tone}`}>{badge.title}</span>;
 }
 
-/** Ligne avec barre : libellé, pastille ou précision, montant ; barre de 9 dessous. */
-export function SpecBarRow({ label, detail, badge, amount, ratio, color, tight = false }: {
+/**
+ * Ligne avec barre : libellé, pastille ou précision, montant ; barre de 9 dessous. Mois type de la Rentabilité :
+ * sans barre, avec le carré de couleur de son segment devant le libellé (`marker` : une couleur, ou `''` pour une
+ * place vide qui garde les libellés alignés).
+ */
+export function SpecBarRow({ label, detail, badge, amount, ratio = 0, color = 'transparent', tight = false, marker = null, showsBar = true, amountColor }: {
   label: string;
   detail?: string | null;
   badge?: Badge | null;
   amount: string;
-  ratio: number;
-  color: string;
+  ratio?: number;
+  color?: string;
   /** Écart 6 et hauteur 26 (Hôtels) au lieu de 8 et 24. */
   tight?: boolean;
+  marker?: string | null;
+  showsBar?: boolean;
+  amountColor?: string;
 }) {
   const width = Math.min(Math.max(Number.isFinite(ratio) ? ratio : 0, 0), 1) * 100;
   return (
     <div className={`spec-bar-row${tight ? ' tight' : ''}`}>
       <div className="spec-bar-line">
+        {marker !== null && <i className="spec-row-marker" style={{ background: marker || 'transparent' }} aria-hidden="true" />}
         <span className="spec-bar-label" data-fit="0.8">{label}</span>
         {badge && <SpecBadge badge={badge} />}
         {detail && <span className="spec-bar-detail" data-fit="0.8">{detail}</span>}
-        <span className="spec-bar-amount">{amount}</span>
+        <span className="spec-bar-amount" style={amountColor ? { color: amountColor } : undefined}>{amount}</span>
       </div>
-      <div className="spec-bar-track" aria-hidden="true">
-        <span style={{ width: `max(calc(6px * var(--k)), ${width}%)`, background: color }} />
-      </div>
+      {showsBar && (
+        <div className="spec-bar-track" aria-hidden="true">
+          <span style={{ width: `max(calc(6px * var(--k)), ${width}%)`, background: color }} />
+        </div>
+      )}
     </div>
   );
 }

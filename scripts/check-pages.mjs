@@ -284,7 +284,7 @@ function pageView(request) {
  * `listingRows` : annonces renvoyées par la table listings (par défaut les trois de fixtures/listings.json) ;
  * `account` : tables du compte de test à remplacer (projet avec critères, autre nom affiché…).
  */
-async function mock(context, { signedIn = false, listingRows = listings, account = {} } = {}) {
+async function mock(context, { signedIn = false, listingRows = listings, account = {}, refuse = [], slow = {} } = {}) {
   const tables = { ...ACCOUNT, ...account };
   // Mon espace d'un compte professionnel, sur téléphone aussi : la ligne « Mes contacts » lit les conversations, les
   // demandes de visite et les offres pour son nombre de contacts et sa pastille (scripts/check-espace-pro.mjs).
@@ -360,6 +360,10 @@ async function mock(context, { signedIn = false, listingRows = listings, account
         let body = null;
         try { body = request.postDataJSON(); } catch { body = request.postData(); }
         writes.push({ method: request.method(), table, search: url.search, body });
+        // La marque interne « keepalive » du site (lib/supabase.ts) ne doit jamais partir.
+        if (Object.keys(request.headers()).some((name) => name.toLowerCase() === 'x-nidalo-keepalive')) problems.push(`${table} : marque keepalive envoyée au serveur`);
+        // Écriture refusée par le serveur (droits) : `refuse` liste « MÉTHODE table ».
+        if (refuse.includes(`${request.method()} ${table}`)) return json(route, 403, { code: '42501', message: 'permission denied' });
         // Une recherche enregistrée revient telle qu'envoyée ; les autres écritures ne renvoient rien.
         if (table === 'saved_searches' && request.method() === 'POST') {
           return json(route, 201, { user_id: USER_ID, created_at: new Date().toISOString(), last_notified_at: null, last_viewed_at: null, alerts_enabled: true, ...body });
@@ -373,8 +377,15 @@ async function mock(context, { signedIn = false, listingRows = listings, account
         return json(route, request.method() === 'POST' ? 201 : 204);
       }
       const rows = filtered(tables[table], url.searchParams);
-      if (single) return rows.length === 1 ? json(route, 200, rows[0]) : json(route, 406, { code: 'PGRST116', message: 'no rows' });
-      return json(route, 200, rows);
+      const respond = () => (single
+        ? (rows.length === 1 ? json(route, 200, rows[0]) : json(route, 406, { code: 'PGRST116', message: 'no rows' }))
+        : json(route, 200, rows));
+      // Réponse lente (`slow` : table → millisecondes), pour voir ce que la page montre pendant le chargement.
+      if (slow[table]) {
+        setTimeout(respond, slow[table]);
+        return undefined;
+      }
+      return respond();
     }
     let rows = listingRows;
     if (signedIn && table === 'listings' && url.searchParams.get('owner_id') === `eq.${USER_ID}`) {
@@ -387,6 +398,11 @@ async function mock(context, { signedIn = false, listingRows = listings, account
     const id = url.searchParams.get('id');
     if (id?.startsWith('eq.')) rows = rows.filter((r) => r.id === id.slice(3));
     if (id?.startsWith('in.(')) rows = filtered(rows, [['id', id]]);
+    // Annonces lentes (`slow.listings`), pour voir ce que la page montre pendant leur lecture.
+    if (slow.listings) {
+      setTimeout(() => json(route, 200, rows), slow.listings);
+      return undefined;
+    }
     json(route, 200, rows);
   });
   await context.route('https://izzsoitqtzzswkpvdozd.supabase.co/auth/v1/**', (route) => {
@@ -593,6 +609,9 @@ async function open(context, path, name) {
     const text = msg.text();
     // La page 404 répond exprès avec le code 404 : Chrome le signale dans la console, ce n'est pas une erreur du site.
     if (name.startsWith('404') && /status of 404/.test(text)) return;
+    // Écriture refusée exprès par le serveur simulé (`refuse`, ou le trigger des réponses : 400) : Chrome signale aussi
+    // le refus dans la console.
+    if (/refusé/.test(name) && /status of 40[03]/.test(text)) return;
     if (msg.type() === 'error' || /Content Security Policy/i.test(text)) problems.push(`${name}: ${msg.type()} ${text}`);
   });
   page.on('pageerror', (error) => problems.push(`${name}: erreur ${error.message}`));
@@ -807,8 +826,11 @@ function chatClock(chat) {
   return new Date(CHAT_NOW.getTime() + chat.tick * 1000).toISOString();
 }
 
-const MESSAGE_KEYS = ['id', 'conversation_id', 'sender_id', 'kind', 'client_id', 'content', 'created_at', 'expires_at', 'message_reactions'];
-const messageColumns = (row) => Object.fromEntries(MESSAGE_KEYS.map((key) => [key, row[key]]));
+const MESSAGE_KEYS = ['id', 'conversation_id', 'sender_id', 'kind', 'client_id', 'content', 'created_at', 'expires_at', 'reply_to_id', 'forwarded', 'message_reactions'];
+/** Colonnes rendues d'un message ; reply_to_id et forwarded valent null et false par défaut, comme la table. */
+const messageColumns = (row) => Object.fromEntries(MESSAGE_KEYS.map((key) => [key, key === 'reply_to_id' ? row[key] ?? null : key === 'forwarded' ? row[key] ?? false : row[key]]));
+/** Contenus qu'un transfert accepte (trigger messages_reply_forward_check). */
+const FORWARDABLE_KEYS = ['text', 'image', 'photos', 'file', 'attachments'];
 
 /** Lignes de my_conversations, comme la fonction du serveur : dernier message, non-lus, réglages, lectures ; la plus récente d'abord. */
 function chatRows(chat) {
@@ -819,7 +841,8 @@ function chatRows(chat) {
     const members = chat.participants.filter((item) => sameChatId(item.conversation_id, conversation.id) && item.left_at === null);
     const mine = members.find((item) => sameChatId(item.user_id, USER_ID));
     const other = conversation.other ? members.find((item) => sameChatId(item.user_id, conversation.other)) : null;
-    const listing = HOME_LISTINGS.find((row) => row.id === conversation.listing) ?? null;
+    // Annonces de l'accueil, ou des annonces de test (une location, pour « Discussions liées aux annonces »).
+    const listing = [...HOME_LISTINGS, ...listings].find((row) => row.id === conversation.listing) ?? null;
     return {
       conversation_id: conversation.id, kind: conversation.kind, listing_id: listing?.id ?? null,
       listing_snapshot: listing ? {
@@ -942,11 +965,23 @@ function chatRespond(chat, reply, { table, method, params, body, single }) {
       return reply(200, chat.blocks.map((id) => ({ blocked_id: id })));
     case 'messages': {
       if (method === 'POST') {
+        // Trigger messages_reply_forward_check : l'original d'une réponse doit être un message de membre de la même
+        // conversation, pas expiré ; un transfert n'accepte que le texte, les photos, les documents et les vocaux.
+        if (body.reply_to_id != null) {
+          const original = chat.messages.find((item) => sameChatId(item.id, body.reply_to_id));
+          const usable = original && sameChatId(original.conversation_id, body.conversation_id) && original.kind !== 'system'
+            && (!original.expires_at || new Date(original.expires_at) > new Date(chatClock(chat)));
+          if (!usable) return reply(400, { code: 'P0001', message: 'Le message auquel vous répondez n\'est plus disponible.', details: null, hint: 'message_reply_unavailable' });
+        }
+        if (body.forwarded === true && !FORWARDABLE_KEYS.includes(Object.keys(body.content ?? {})[0])) {
+          return reply(400, { code: 'P0001', message: 'Ce message ne peut pas être transféré.', details: null, hint: 'message_forward_invalid' });
+        }
         // L'expéditeur et l'heure viennent du serveur ; les identifiants reviennent en minuscules (type uuid).
         const row = {
           id: String(body.id).toLowerCase(), conversation_id: String(body.conversation_id).toLowerCase(), sender_id: USER_ID,
           kind: Object.keys(body.content ?? {})[0] ?? 'text', client_id: String(body.client_id).toLowerCase(), content: body.content,
           created_at: chatClock(chat), expires_at: null, message_reactions: [], preview: body.preview,
+          reply_to_id: body.reply_to_id != null ? String(body.reply_to_id).toLowerCase() : null, forwarded: body.forwarded === true,
         };
         chat.messages.push(row);
         return reply(201, single ? messageColumns(row) : [messageColumns(row)]);
@@ -1170,7 +1205,8 @@ function inboxRows(page) {
   return page.$$eval('.dm-list .dm-row', (rows) => rows.map((row) => ({
     name: row.querySelector('.dm-row-name')?.textContent ?? null,
     time: row.querySelector('.dm-row-time')?.textContent ?? null,
-    listing: row.querySelector('.dm-row-listing')?.textContent ?? null,
+    // La petite maison devant le bien (demande du 17/11) : seulement le texte.
+    listing: row.querySelector('.dm-row-listing')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
     preview: row.querySelector('.dm-row-preview')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
     unread: row.querySelector('.dm-unread')?.textContent ?? null,
     greyPill: Boolean(row.querySelector('.dm-unread.is-muted')),
@@ -1309,19 +1345,142 @@ async function favoritePhotosLoaded(page, count, name) {
   }
 }
 
-/** Toast de la comparaison (CompareToast) : son texte et son lien « Voir » ou « Gérer ». */
+/** Message du bas de la comparaison (CompareToast, le même que « Retiré des favoris ») : son texte et « Voir » ou « Gérer ». */
 async function waitForCompareNotice(page, want, name) {
   try {
     await page.waitForFunction((target) => {
-      const box = document.querySelector('.dfav-toast-box');
-      return box?.querySelector('.dfav-toast-text')?.textContent === target.text && (box.querySelector('a')?.textContent ?? null) === target.action;
+      const box = document.querySelector('.app-toast:not(.is-leaving)');
+      return box?.querySelector('.app-toast-text')?.textContent === target.text && (box.querySelector('.app-toast-action')?.textContent ?? null) === target.action;
     }, want, { timeout: 4000 });
   } catch {
     const shown = await page.evaluate(() => {
-      const box = document.querySelector('.dfav-toast-box');
-      return box ? { text: box.querySelector('.dfav-toast-text')?.textContent ?? null, action: box.querySelector('a')?.textContent ?? null } : null;
+      const box = document.querySelector('.app-toast');
+      return box ? { text: box.querySelector('.app-toast-text')?.textContent ?? null, action: box.querySelector('.app-toast-action')?.textContent ?? null } : null;
     });
     problems.push(`${name} : toast ${JSON.stringify(shown)} au lieu de ${JSON.stringify(want)}`);
+  }
+}
+
+/** Message du bas « Retiré des favoris » avec « Annuler » (FavoritesView.showUndo de l'app). */
+async function waitForRemovalNotice(page, name) {
+  try {
+    await page.waitForFunction(() => {
+      const box = document.querySelector('.app-toast:not(.is-leaving)');
+      const action = box?.querySelector('.app-toast-action');
+      return box?.querySelector('.app-toast-text')?.textContent === 'Retiré des favoris' && action?.textContent === 'Annuler'
+        && action.getAttribute('aria-label') === 'Annuler le retrait';
+    }, null, { timeout: 4000 });
+  } catch {
+    problems.push(`${name} : message « Retiré des favoris · Annuler » absent (${await page.evaluate(() => document.querySelector('.app-toast')?.textContent ?? 'aucun')})`);
+  }
+}
+
+/**
+ * Vos favoris sur téléphone, comme l'app (FavoritesView.swift, FavoritesEmptyState.swift ; demande du 17/11) : au
+ * premier chargement la roue, jamais « Aucun favori » ; onglets à pastille glissante ; pavés des catégories avec
+ * « Tous » dans la carte blanche ; retrait annulable ; états vides illustrés (Favoris, Recherches, Mon espace ›
+ * Mes recherches). Captures : favoris-*-telephone.png.
+ */
+async function phoneFavorites() {
+  const P = 'favoris téléphone';
+  const context = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
+  await mock(context, { signedIn: true, listingRows: FAV_LISTINGS, account: FAV_ACCOUNT, slow: { favorites: 1200 } });
+  await context.addInitScript(() => {
+    window.nidaloSeen = { spinner: false, empty: false };
+    new MutationObserver(() => {
+      if (document.querySelector('.favorites-wrap .account-spinner')) window.nidaloSeen.spinner = true;
+      if (document.querySelector('.fav-empty') || document.body?.textContent?.includes('Aucun favori pour')) window.nidaloSeen.empty = true;
+    }).observe(document, { subtree: true, childList: true });
+  });
+  let page = await open(context, '/favoris/', P);
+  await page.waitForSelector('.favorite-card');
+  expectSame(P, 'premier chargement', await page.evaluate(() => window.nidaloSeen), { spinner: true, empty: false });
+  expectSame(P, 'onglets', await page.$$eval('.favorites-wrap .fav-tab', (els) => els.map((el) => [el.querySelector('.fav-tab-title')?.textContent ?? null,
+    el.querySelector('.fav-tab-count')?.textContent ?? null, el.getAttribute('aria-label'), el.getAttribute('aria-pressed')])),
+  [['Favoris', null, null, 'true'], ['Recherches', '(2)', 'Recherches, 2, nouveautés', 'false']]);
+  expectSame(P, 'catégories', [await page.$$eval('.favorites-categories .mode-tab', (els) => els.map((el) => [el.textContent.trim(), el.getAttribute('aria-checked')])),
+    await page.evaluate(() => { const card = document.querySelector('.favorites-categories'); const style = getComputedStyle(card); return [style.borderTopLeftRadius, style.backgroundColor, Math.round(card.getBoundingClientRect().width)]; })],
+  [[['Tous', 'true'], ['Résidentiel', 'false'], ['Location', 'false'], ['Investir', 'false'], ['Hôtels', 'false']], ['26px', 'rgb(255, 255, 255)', 358]]);
+  const tabsBox = await page.evaluate(() => {
+    const box = (el) => { const r = el.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width), Math.round(r.height)]; };
+    return { piste: box(document.querySelector('.favorites-wrap .fav-tabs')), pastille: box(document.querySelector('.favorites-wrap .fav-tabs-pill')),
+      onglet: box(document.querySelector('.favorites-wrap .fav-tab')) };
+  });
+  expectSame(P, 'onglets, mesures', tabsBox, { piste: [16, 358, 48], pastille: [20, 175, 40], onglet: [20, 175, 40] });
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: join(out, 'favoris-onglet-favoris-telephone.png'), fullPage: true });
+  const phoneTitles = () => page.$$eval('.favorite-card .favorite-title', (els) => els.map((el) => el.textContent));
+  // Catégorie Location, puis Tous.
+  await page.locator('.favorites-categories .mode-tab', { hasText: 'Location' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.favorite-card').length === 1, null, { timeout: 4000 }).catch(() => problems.push(`${P} : Location ne garde pas une seule carte`));
+  expectSame(P, 'Location', [await phoneTitles(), await textOf(page, '.favorites-total')], [[FAV_STUDIO], '1 sur 4 biens']);
+  await page.locator('.favorites-categories .mode-tab', { hasText: 'Tous' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.favorite-card').length === 4, null, { timeout: 4000 }).catch(() => problems.push(`${P} : Tous ne remet pas les 4 cartes`));
+  // Cœur : la carte part, « Retiré des favoris · Annuler » ; « Annuler » la remet à sa place, rien n'est envoyé.
+  let mark = writes.length;
+  await page.locator('.favorite-card', { has: page.locator('.favorite-title', { hasText: FAV_FLAT }) }).locator('.favorite-heart').click();
+  await page.waitForFunction(() => document.querySelectorAll('.favorite-card').length === 3, null, { timeout: 4000 }).catch(() => problems.push(`${P} : le cœur laisse la carte`));
+  await waitForRemovalNotice(page, `${P} : cœur`);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: join(out, 'favoris-retrait-telephone.png') });
+  await page.click('.app-toast-action');
+  await page.waitForFunction(() => document.querySelectorAll('.favorite-card').length === 4, null, { timeout: 4000 }).catch(() => problems.push(`${P} : « Annuler » ne remet pas la carte`));
+  expectSame(P, '« Annuler »', await phoneTitles(), FAV_ALL);
+  await page.waitForTimeout(4500);
+  expectSame(P, '« Annuler » : rien d\'envoyé', writes.slice(mark), []);
+  // Retrait laissé à son terme : il part à la fin du message.
+  await page.locator('.favorite-card', { has: page.locator('.favorite-title', { hasText: FAV_HOTEL }) }).locator('.favorite-heart').click();
+  await waitForRemovalNotice(page, `${P} : cœur de l'hôtel`);
+  await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${favId(4)}` }, null]], `${P} : fin du message`);
+  // Onglet Recherches : la pastille glisse sous l'onglet, le contenu change.
+  await page.click('.favorites-wrap .fav-tab >> nth=1');
+  await page.waitForSelector('.favorites-searches .saved-search');
+  await page.waitForTimeout(700);
+  expectSame(P, 'onglet Recherches', [await page.$$eval('.favorites-wrap .fav-tab', (els) => els.map((el) => el.getAttribute('aria-pressed'))),
+    await page.evaluate(() => Math.round(document.querySelector('.favorites-wrap .fav-tabs-pill').getBoundingClientRect().left)), await page.locator('.favorites-search, .favorites-categories').count()],
+  [['false', 'true'], 195, 0]);
+  await waitForSearchCountsIn(page, '.favorites-searches', P);
+  await page.screenshot({ path: join(out, 'favoris-onglet-recherches-telephone.png'), fullPage: true });
+  await page.close();
+  await context.close();
+
+  // Aucun favori, aucune recherche : les deux états vides illustrés ; ni recherche, ni filtres, ni pavés.
+  const empty = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
+  await mock(empty, { signedIn: true, listingRows: FAV_LISTINGS, account: { favorites: [], saved_searches: [] } });
+  page = await open(empty, '/favoris/', `${P} vide`);
+  await page.waitForSelector('.favorites-wrap .fav-empty');
+  expectSame(`${P} vide`, 'Favoris', [await textOf(page, '.fav-empty h2'), await textOf(page, '.fav-empty p'), await textOf(page, '.fav-empty a'), await page.getAttribute('.fav-empty a', 'href'),
+    await page.locator('.favorites-search, .favorites-categories, .favorites-toolbar').count(), await page.locator('.fav-empty .fav-ghost').count(),
+    await page.evaluate(() => Math.round(document.querySelector('.fav-empty a').getBoundingClientRect().width)), await page.getAttribute('.favorites-wrap .fav-tab >> nth=1', 'aria-label'),
+    await page.locator('.favorites-wrap .fav-tab-count').count()],
+  ['Aucun favori pour l\'instant', 'Touchez le cœur d\'une annonce pour la retrouver ici et la comparer.', 'Rechercher un bien', '/recherche/', 0, 2, 358, 'Recherches, 0', 0]);
+  await phoneFits(page, `${P} vide`);
+  await page.screenshot({ path: join(out, 'favoris-vide-telephone.png') });
+  await page.click('.favorites-wrap .fav-tab >> nth=1');
+  await page.waitForSelector('.favorites-searches .fav-empty');
+  expectSame(`${P} vide`, 'Recherches', [await textOf(page, '.favorites-searches .fav-empty h2'), await textOf(page, '.favorites-searches .fav-empty p'),
+    await textOf(page, '.fav-empty-search-count'), await textOf(page, '.fav-empty-search-sort'), await textOf(page, '.fav-empty-save'), await page.getAttribute('.favorites-searches .fav-empty a', 'href')],
+  ['Aucune recherche enregistrée', 'Touchez Enregistrer sur une recherche pour la retrouver ici, avec ses nouveautés.', '6 annonces', 'Triées par pertinence', 'Enregistrer', '/recherche/']);
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: join(out, 'favoris-recherches-vide-telephone.png') });
+  // Mon espace › Mes recherches : le même état vide, centré.
+  page = await open(empty, '/compte/?vue=recherches', `${P} Mes recherches vide`);
+  await page.waitForSelector('.fav-empty');
+  expectSame(`${P} Mes recherches vide`, 'texte', [await textOf(page, '.fav-empty h2'), await textOf(page, '.fav-empty a')], ['Aucune recherche enregistrée', 'Rechercher un bien']);
+  await page.screenshot({ path: join(out, 'mes-recherches-vide-telephone.png') });
+  await page.close();
+  await empty.close();
+}
+
+/** Nombres de résultats des recherches affichés, dans un conteneur donné. */
+async function waitForSearchCountsIn(page, container, name) {
+  try {
+    await page.waitForFunction((selector) => {
+      const buttons = [...document.querySelectorAll(`${selector} .run-button`)];
+      return buttons.length > 0 && buttons.every((button) => !button.textContent.includes('Relancer la recherche'));
+    }, container, { timeout: 8000 });
+  } catch {
+    problems.push(`${name} : nombre de résultats des recherches non affiché`);
   }
 }
 
@@ -1812,7 +1971,7 @@ try {
   await page.waitForFunction(() => document.querySelector('.dfav-total')?.textContent?.trim() === '1 sur 2 biens', null, { timeout: 4000 })
     .catch(async () => problems.push(`Favoris : recherche « villeur », compteur « ${await page.textContent('.dfav-total')} »`));
   await page.screenshot({ path: join(out, 'favoris-recherche-ordinateur.png') });
-  await page.click('.dfav-tab >> nth=1');
+  await page.click('.dfav .fav-tab >> nth=1');
   await page.waitForSelector('.dfav-searches .saved-search');
   if (!page.url().includes('onglet=recherches')) problems.push(`Favoris : l'onglet Recherches n'est pas dans l'adresse (${page.url()})`);
   await page.screenshot({ path: join(out, 'favoris-recherches-ordinateur.png'), fullPage: true });
@@ -2318,23 +2477,25 @@ try {
   // 360 px, conversation sur tout le reste), une seule colonne en dessous ; actions envoyées au serveur simulé comme l'app
   // les envoie, temps réel, « En ligne », demandes de visite, à 1440 × 960 puis 1024 × 768 ; horloge figée au vendredi
   // 6 novembre 2026, 10 h 50 à Paris. Captures pour Romain : 3-messages-*.png.
-  const chatContext = async ({ width = 1440, height = 960, account = {}, signedIn = true, phone = false, reducedMotion = 'no-preference' } = {}) => {
+  const chatContext = async ({ width = 1440, height = 960, account = {}, signedIn = true, phone = false, reducedMotion = 'no-preference', slow = {} } = {}) => {
     const context = await browser.newContext(phone ? { ...devices['iPhone 13'], locale: 'fr-FR', timezoneId: 'Europe/Paris', reducedMotion }
       : { viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR', timezoneId: 'Europe/Paris', reducedMotion });
     await context.clock.setFixedTime(CHAT_NOW);
-    const server = await mock(context, { signedIn, listingRows: [...listings, ...HOME_LISTINGS], account });
+    const server = await mock(context, { signedIn, listingRows: [...listings, ...HOME_LISTINGS], account, slow });
     const chat = chatState();
     await mockMessaging(context, chat, { signedIn });
     return { context, server, chat };
   };
   const A = chatId(1).toUpperCase();
   const rowLink = (n) => `.dm-list .dm-row[href="/messages/?c=${chatId(n)}"]`;
+  // Deuxième ligne, comme l'app (demande du 17/11) : la petite maison et le sous-titre de l'interlocuteur (bien et
+  // ville, ou nombre de membres d'un groupe).
   const INITIAL_ROWS = [
-    { name: 'Agence Démo Lyon', time: '10:45', listing: 'Appartement 3 pièces', preview: 'Bien reçu, je transmets votre offre au propriétaire.', unread: '1', greyPill: false },
-    { name: 'Visite groupée Lyon 2e', time: '09:12', listing: null, preview: 'Merci, à samedi !', unread: '3', greyPill: true },
+    { name: 'Agence Démo Lyon', time: '10:45', listing: 'Appartement 3 pièces · Lyon 2e', preview: 'Bien reçu, je transmets votre offre au propriétaire.', unread: '1', greyPill: false },
+    { name: 'Visite groupée Lyon 2e', time: '09:12', listing: '3 membres', preview: 'Merci, à samedi !', unread: '3', greyPill: true },
     // La demande de visite de Julien, plus récente que son dernier message, en tient lieu.
-    { name: 'Julien M.', time: 'Hier', listing: 'Appartement 2 pièces', preview: 'Demande de visite · sam. 7 nov. à 10:00', unread: '2', greyPill: false },
-    { name: 'Lucas G.', time: 'Mar.', listing: 'Maison familiale 5 pièces', preview: 'Nouvelle conversation', unread: null, greyPill: false },
+    { name: 'Julien M.', time: 'Hier', listing: 'Appartement 2 pièces · Lyon 6e', preview: 'Demande de visite · sam. 7 nov. à 10:00', unread: '2', greyPill: false },
+    { name: 'Lucas G.', time: 'Mar.', listing: 'Maison familiale 5 pièces · Écully', preview: 'Nouvelle conversation', unread: null, greyPill: false },
     { name: 'Compte supprimé', time: '27 oct.', listing: 'Studio rénové', preview: 'Vous : Merci, je reviens vers vous rapidement.', unread: null, greyPill: false },
   ];
   const ALL_NAMES = INITIAL_ROWS.map((row) => row.name);
@@ -2379,21 +2540,21 @@ try {
       };
     });
     expectSame(M, 'mise en page', layout, {
-      side: 360, main: width - 360, top: 72, bottom: height, pageScroll: 0, overflowX: 0, footer: false, active: 'page', search: 44, tabs: [32, 32, 32],
-      font: 'Nidalo Inter', rowAvatar: 48,
+      side: 360, main: width - 360, top: 72, bottom: height, pageScroll: 0, overflowX: 0, footer: false, active: 'page', search: 44, tabs: [38, 38, 38],
+      font: 'Nidalo Inter', rowAvatar: 46,
     });
     expectSame(M, 'en-tête de la colonne', [await textOf(page, '.dm-side-head h1'), await page.getAttribute('.dm-compose', 'aria-label'),
       await page.getAttribute('.dm-search input', 'placeholder')], ['Messages', 'Nouveau message', 'Rechercher une conversation']);
     expectSame(M, 'conversations', await inboxRows(page), INITIAL_ROWS);
     expectSame(M, 'filtres', await page.$$eval('.dm-tab', (els) => els.map((el) => [el.getAttribute('aria-label'), el.getAttribute('aria-pressed')])),
-      [['Toutes', 'true'], ['Non lues, 3', 'false'], ['Archivées', 'false']]);
+      [['Toutes, 5', 'true'], ['Non lues, 3', 'false'], ['Archivées, 1', 'false']]);
     // Aucune conversation n'est ouverte d'elle-même : aucune ligne n'est sélectionnée.
     if (await page.locator('.dm-row[aria-current="true"]').count()) problems.push(`${M} : une conversation est sélectionnée sans ?c=`);
     await chatShot(page, `3-messages-vide-${width}.png`);
 
     if (width === 1440) {
       // Filtres : non lues (sans les archivées), archivées, toutes.
-      for (const [label, names] of [['Non lues, 3', ['Agence Démo Lyon', 'Visite groupée Lyon 2e', 'Julien M.']], ['Archivées', ['Marc P.']], ['Toutes', ALL_NAMES]]) {
+      for (const [label, names] of [['Non lues, 3', ['Agence Démo Lyon', 'Visite groupée Lyon 2e', 'Julien M.']], ['Archivées, 1', ['Marc P.']], ['Toutes, 5', ALL_NAMES]]) {
         await page.click(`.dm-tab[aria-label="${label}"]`);
         await waitForRows(page, names, `${M} : filtre ${label}`);
         if ((await page.getAttribute(`.dm-tab[aria-label="${label}"]`, 'aria-pressed')) !== 'true') problems.push(`${M} : filtre ${label} non enfoncé`);
@@ -2410,14 +2571,17 @@ try {
       expectSame(M, 'recherche sans résultat', await textOf(page, '.dm-inbox-empty'), 'Aucune conversation trouvée Essayez un autre nom ou un autre titre d\'annonce.');
       await page.press('.dm-search input', 'Escape');
       await waitForRows(page, ALL_NAMES, `${M} : recherche vidée par Échap`);
-      // Clavier : de la recherche, Tab va aux filtres, avec un contour bleu visible.
+      // Clavier : de la recherche, Tab va à « Annuler » (la recherche ouverte, comme l'app), puis aux filtres, avec un
+      // contour bleu visible.
       await page.focus('.dm-search input');
+      await page.keyboard.press('Tab');
+      expectSame(M, 'focus au clavier sur « Annuler »', await page.evaluate(() => document.activeElement?.textContent ?? null), 'Annuler');
       await page.keyboard.press('Tab');
       expectSame(M, 'focus au clavier', await page.evaluate(() => {
         const el = document.activeElement;
         const style = getComputedStyle(el);
         return [el.getAttribute('aria-label'), style.outlineStyle, style.outlineWidth, style.outlineColor];
-      }), ['Toutes', 'solid', '3px', 'rgb(67, 91, 170)']);
+      }), ['Toutes, 5', 'solid', '3px', 'rgb(60, 92, 176)']);
     }
 
     // Ouvrir la conversation de l'agence : elle s'ouvre à droite sans recharger la page, est lue puis marquée lue une fois.
@@ -2434,7 +2598,7 @@ try {
     await waitForMessagesBadge(page, '5', `${M} : après l'ouverture`);
     if ((await page.evaluate(() => window.nidaloMarker)) !== 'même page') problems.push(`${M} : la page s'est rechargée à l'ouverture`);
     expectSame(M, 'lecture des messages', chatCalls(chat, 'messages', mark).map((call) => `${call.method} ${call.search}`),
-      [`GET ?select=id,conversation_id,sender_id,kind,client_id,content,created_at,expires_at,message_reactions(user_id,emoji,created_at)&conversation_id=eq.${A}&order=created_at.desc&limit=200`]);
+      [`GET ?select=id,conversation_id,sender_id,kind,client_id,content,created_at,expires_at,reply_to_id,forwarded,message_reactions(user_id,emoji,created_at)&conversation_id=eq.${A}&order=created_at.desc&limit=200`]);
     const pad = width >= 1280 ? 40 : 24;
     const opened = await page.evaluate(() => {
       const row = document.querySelector('.dm-row[aria-current="true"]');
@@ -2454,8 +2618,8 @@ try {
       };
     });
     expectSame(M, 'conversation ouverte', opened, {
-      row: 'Agence Démo Lyon', rowBackground: 'rgb(239, 242, 249)', unread: null,
-      sent: ['rgb(67, 91, 170)', 'rgb(255, 255, 255)', '18px 18px 6px'], received: ['rgb(255, 255, 255)', 'rgb(37, 44, 55)', '18px 18px 18px 6px'],
+      row: 'Agence Démo Lyon', rowBackground: 'rgb(238, 242, 250)', unread: null,
+      sent: ['rgb(60, 92, 176)', 'rgb(255, 255, 255)', '16px 16px 4px'], received: ['rgb(255, 255, 255)', 'rgb(36, 45, 56)', '16px 16px 16px 4px'],
       receivedLeft: [pad + 36], sentRight: [pad], gaps: ['14px', '4px'], avatars: opened.avatars.map(() => 28), fresh: 0,
     });
     expectSame(M, 'en-tête', [await textOf(page, '.dm-head-title'), await textOf(page, '.dm-head-sub'), await page.getAttribute('.dm-head-who', 'href'),
@@ -2500,7 +2664,7 @@ try {
       };
     });
     expectSame(M, 'zone de saisie', await composer(), {
-      band: ['12px', '24px', '16px', 'rgb(236, 234, 229)', 'rgb(255, 255, 255)'], plus: [44, 44], field: 52, send: [52, 52], sendColor: 'rgb(201, 206, 214)',
+      band: ['12px', '24px', '16px', 'rgb(236, 234, 230)', 'rgb(255, 255, 255)'], plus: [44, 44], field: 52, send: [52, 52], sendColor: 'rgb(201, 206, 214)',
       disabled: true, placeholder: 'Écrivez votre message…', labels: ['Ajouter une pièce jointe', 'Ajouter un émoji', 'Envoyer'], chip: 34,
     });
     const atBottom = await page.evaluate(() => { const el = document.querySelector('.dm-thread'); return el.scrollHeight - el.scrollTop - el.clientHeight; });
@@ -2518,20 +2682,22 @@ try {
         .catch(async () => problems.push(`${M} : « En ligne » non affiché (${await textOf(page, '.dm-head-sub')})`));
       expectSame(M, 'point vert', await page.$eval('.dm-head-sub .dm-online-dot', (el) => getComputedStyle(el).backgroundColor).catch(() => null), 'rgb(43, 182, 115)');
 
-      // Cœur (message_reactions, comme setReaction) : posé, puis retiré.
+      // Cœur (message_reactions, comme setReaction) : un double clic sur la bulle (le double toucher de l'app) le pose,
+      // ❤️ comme l'app ; un autre double clic le retire (demande du 17/11).
       const lastReceived = page.locator('.dm-msg:not(.is-out)').last();
       mark = chat.calls.length;
-      await lastReceived.locator('.dm-bubble').hover();
-      await lastReceived.locator('.dm-heart-button').click();
-      await lastReceived.locator('.dm-heart').waitFor({ timeout: 8000 }).catch(() => problems.push(`${M} : cœur non affiché`));
+      await lastReceived.locator('.dm-bubble').dblclick();
+      await lastReceived.locator('.dm-reaction-pill').waitFor({ timeout: 8000 }).catch(() => problems.push(`${M} : cœur non affiché`));
       const liked = await oneCall(chat, 'message_reactions', mark, `${M} : cœur`);
       if (liked) {
-        expectSame(M, 'cœur posé', [liked.method, liked.search, liked.body], ['POST', '?on_conflict=message_id,user_id', { message_id: messageId(7).toUpperCase(), emoji: '♥' }]);
+        expectSame(M, 'cœur posé', [liked.method, liked.search, liked.body], ['POST', '?on_conflict=message_id,user_id', { message_id: messageId(7).toUpperCase(), emoji: '❤️' }]);
         if (!liked.prefer.includes('resolution=merge-duplicates')) problems.push(`${M} : cœur sans fusion (Prefer « ${liked.prefer} »)`);
       }
+      expectSame(M, 'pastille du cœur', [await lastReceived.locator('.dm-reaction-pill').getAttribute('aria-label').catch(() => null),
+        await page.evaluate(() => window.getSelection()?.toString() ?? '')], ['Réactions : ❤️, 1', '']);
       mark = chat.calls.length;
-      await lastReceived.locator('.dm-heart-button').click();
-      await lastReceived.locator('.dm-heart').waitFor({ state: 'detached', timeout: 8000 }).catch(() => problems.push(`${M} : cœur non retiré`));
+      await lastReceived.locator('.dm-bubble').dblclick();
+      await lastReceived.locator('.dm-reaction-pill').waitFor({ state: 'detached', timeout: 8000 }).catch(() => problems.push(`${M} : cœur non retiré`));
       const unliked = await oneCall(chat, 'message_reactions', mark, `${M} : cœur retiré`);
       if (unliked) expectSame(M, 'cœur retiré', [unliked.method, unliked.search], ['DELETE', `?message_id=eq.${messageId(7).toUpperCase()}&user_id=eq.${USER_ID.toUpperCase()}`]);
 
@@ -2541,7 +2707,7 @@ try {
         if (!call) return;
         const body = call.body ?? {};
         if (!UPPER_UUID.test(body.id ?? '') || body.client_id !== body.id) problems.push(`${M} : ${what} : identifiants ${body.id} / ${body.client_id}`);
-        expectSame(M, what, [call.method, call.search, body], ['POST', '?select=id,conversation_id,sender_id,kind,client_id,content,created_at,expires_at,message_reactions(user_id,emoji,created_at)',
+        expectSame(M, what, [call.method, call.search, body], ['POST', '?select=id,conversation_id,sender_id,kind,client_id,content,created_at,expires_at,reply_to_id,forwarded,message_reactions(user_id,emoji,created_at)',
           { id: body.id, conversation_id: A, client_id: body.id, content, preview }]);
         if (!call.prefer.includes('return=representation')) problems.push(`${M} : ${what} : Prefer « ${call.prefer} »`);
       };
@@ -2554,7 +2720,7 @@ try {
       expectSame(M, 'champ vide', await fieldHeight(), 50);
       mark = chat.calls.length;
       await page.fill('.dm-composer textarea', 'Merci, à jeudi ');
-      expectSame(M, 'envoi possible', [await page.isDisabled('.dm-send'), await page.$eval('.dm-send', (el) => getComputedStyle(el).backgroundColor)], [false, 'rgb(67, 91, 170)']);
+      expectSame(M, 'envoi possible', [await page.isDisabled('.dm-send'), await page.$eval('.dm-send', (el) => getComputedStyle(el).backgroundColor)], [false, 'rgb(60, 92, 176)']);
       await page.click('.dm-emoji');
       await page.waitForSelector('.dm-emoji-panel');
       expectSame(M, 'panneau des émojis', [await page.getAttribute('.dm-emoji', 'aria-expanded'), await page.locator('.dm-emoji-panel button').count()], ['true', 32]);
@@ -3091,7 +3257,7 @@ try {
       const voiceReads = [];
       voicePage.on('request', (request) => { if (request.method() === 'GET' && request.url().includes(`/object/sign/message-attachments/${VOICE_PATH}`)) voiceReads.push(request.url()); });
       await voicePage.waitForSelector('.dm-list .dm-row');
-      await voicePage.click('.dm-tab[aria-label="Archivées"]');
+      await voicePage.click('.dm-tab[aria-label="Archivées, 1"]');
       await waitForRows(voicePage, ['Marc P.'], `${V} : archivées`);
       expectSame(V, 'aperçu du vocal dans la liste', (await inboxRows(voicePage))[0]?.preview, '🎤 Message vocal (0:03)');
       await voicePage.click(rowLink(3));
@@ -3213,6 +3379,416 @@ try {
     await nameDesk.close();
   }
 
+  // Réponses, transferts et réactions, comme l'app (demande du 17/11) : dans A, l'agence a transféré un message
+  // (« Transféré »), le compte a répondu à son dernier message (la citation, recouverte de 10 px par la bulle) et
+  // l'agence y a mis un cœur ; un ancien « ♥ » compte comme ❤️ ; dans le groupe, Camille répond à un message supprimé
+  // depuis. Le double clic (le double toucher de l'app) pose ou retire ❤️ ; le clic droit, le bouton « … » ou l'appui
+  // long ouvrent la barre d'emojis et le menu (Répondre, Transférer, Copier). Colonnes de l'app : reply_to_id (réponse)
+  // et forwarded (transfert), refusées par le trigger du serveur quand il le faut. Captures : 3-messages-reponses-*.png.
+  const chatLine = (n, conversationId, senderId, createdAt, text, fields = {}) => ({
+    id: messageId(n), conversation_id: conversationId, sender_id: senderId, kind: 'text', client_id: messageId(n), content: chatText(text),
+    created_at: createdAt, expires_at: null, message_reactions: [], preview: text, ...fields,
+  });
+  const FORWARDED_TEXT = 'Les charges de copropriété sont de 180 € par mois, eau froide comprise.';
+  const replyChat = (chat) => {
+    chat.messages.find((item) => item.id === messageId(3)).message_reactions = [{ user_id: AGENT_ID, emoji: '♥', created_at: '2026-11-05T17:30:00Z' }];
+    chat.messages.push(
+      chatLine(9, chatId(1), AGENT_ID, '2026-11-06T09:47:00Z', FORWARDED_TEXT, { forwarded: true }),
+      chatLine(10, chatId(1), USER_ID, '2026-11-06T09:48:00Z', 'Merci beaucoup, j\'attends son retour.', {
+        reply_to_id: messageId(7), message_reactions: [{ user_id: AGENT_ID, emoji: '❤️', created_at: '2026-11-06T09:49:00Z' }],
+      }),
+      chatLine(35, chatId(4), CAMILLE_ID, '2026-11-06T08:20:00Z', 'Oui, je confirme pour samedi.', { reply_to_id: messageId(30) }),
+    );
+  };
+  const REPLY_SHOWN = { forwarded: null, header: 'Vous avez répondu à Agence', quote: 'Bien reçu, je transmets votre offre au propriétaire.', deleted: false, pill: 'Réactions : ❤️, 1' };
+  /** Ligne d'un message du fil. */
+  const msgRow = (page, n) => page.locator(`.dm-msg[data-message-id="${messageId(n)}"]`);
+  /** Autour d'une bulle : « Transféré », en-tête et citation d'une réponse, pastille des réactions. */
+  const messageAround = (page, n) => page.evaluate((id) => {
+    const row = document.querySelector(`.dm-msg[data-message-id="${id}"]`);
+    const text = (selector) => row?.querySelector(selector)?.textContent.replace(/\s+/g, ' ').trim() ?? null;
+    return row ? {
+      forwarded: text('.dm-forwarded'), header: text('.dm-reply-head'), quote: text('.dm-quote'), deleted: Boolean(row.querySelector('.dm-quote.is-deleted')),
+      pill: row.querySelector('.dm-reaction-pill')?.getAttribute('aria-label') ?? null,
+    } : null;
+  }, messageId(n));
+  /** Barre d'emojis et menu d'un message (clic droit, ou « … » au survol) : emojis, emoji enfoncé, actions. */
+  const messageMenu = async (page, n, how = 'clic droit') => {
+    const body = msgRow(page, n).locator('.dm-interactive-body');
+    if (how === 'clic droit') await body.click({ button: 'right' });
+    else {
+      await body.hover();
+      await msgRow(page, n).locator('.dm-more-button').click();
+    }
+    await page.waitForSelector('dialog.dm-focus[open] .dm-focus-menu', { timeout: 8000 }).catch(() => problems.push(`menu du message ${n} (${how}) non ouvert`));
+    return page.evaluate(() => ({
+      emojis: [...document.querySelectorAll('dialog.dm-focus[open] .dm-focus-emoji')].map((el) => el.textContent),
+      pressed: [...document.querySelectorAll('dialog.dm-focus[open] .dm-focus-emoji[aria-pressed="true"]')].map((el) => el.getAttribute('aria-label')),
+      items: [...document.querySelectorAll('dialog.dm-focus[open] [role="menuitem"]')].map((el) => el.textContent.trim()),
+    }));
+  };
+  const menuClosed = (page, name) => page.waitForSelector('dialog.dm-focus[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${name} : le menu du message reste ouvert`));
+  const menuChoice = async (page, label, name) => {
+    await page.locator('dialog.dm-focus[open] .dm-focus-menu').getByRole('menuitem', { name: label, exact: true }).click();
+    await menuClosed(page, name);
+  };
+  const menuEmoji = async (page, selector, name) => {
+    await page.click(`dialog.dm-focus[open] .dm-focus-emoji${selector}`);
+    await menuClosed(page, name);
+  };
+  /** Pastille d'un message, attendue (`null` : aucune). */
+  const waitForPill = (page, n, want, name) => page.waitForFunction(([id, wanted]) => {
+    const pill = document.querySelector(`.dm-msg[data-message-id="${id}"] .dm-reaction-pill`);
+    return (pill?.getAttribute('aria-label') ?? null) === wanted;
+  }, [messageId(n), want], { timeout: 8000 }).catch(async () => problems.push(`${name} : pastille ${JSON.stringify((await messageAround(page, n))?.pill)} au lieu de ${JSON.stringify(want)}`));
+  /** Feuille « Réactions » : chaque personne, son emoji et « Retirer » pour la mienne ; ou son état vide. */
+  const reactionRows = (page) => page.evaluate(() => {
+    const sheet = document.querySelector('dialog.dm-reactions-sheet[open]');
+    if (!sheet) return null;
+    const rows = [...sheet.querySelectorAll('.dm-reaction-row')].map((el) => [el.querySelector('.dm-reaction-name')?.textContent ?? null,
+      el.querySelector('.dm-reaction-emoji')?.textContent ?? null, el.querySelector('button')?.textContent.trim() ?? null]);
+    return rows.length ? rows : sheet.querySelector('.dm-forward-empty')?.textContent ?? null;
+  });
+  /** Feuille « Transférer » : le message, les titres, les conversations (nom, sous-titre, cochée, grisée), l'envoi. */
+  const forwardSheet = (page) => page.evaluate(() => {
+    const sheet = document.querySelector('dialog.dm-forward-sheet[open]');
+    const send = sheet?.querySelector('.dm-forward-send');
+    return sheet ? {
+      preview: sheet.querySelector('.dm-forward-bubble')?.textContent.replace(/\s+/g, ' ') ?? null, labels: [...sheet.querySelectorAll('.dm-forward-label')].map((el) => el.textContent),
+      targets: [...sheet.querySelectorAll('.dm-forward-target')].map((el) => [el.querySelector('.dm-forward-name')?.textContent ?? null,
+        el.querySelector('.dm-forward-sub')?.textContent ?? null, el.getAttribute('aria-pressed'), el.disabled]),
+      empty: sheet.querySelector('.dm-forward-empty')?.textContent ?? null, send: [send?.textContent.trim() ?? null, send?.disabled ?? null],
+      max: sheet.querySelector('.dm-forward-max')?.textContent ?? null,
+    } : null;
+  });
+  const FORWARD_TARGETS = [
+    ['Visite groupée Lyon 2e', 'Groupe · 3 membres', 'false', false], ['Julien M.', 'Appartement 2 pièces · Lyon 6e', 'false', false],
+    ['Lucas G.', 'Maison familiale 5 pièces · Écully', 'false', false], ['Marc P.', 'Maison 4 pièces avec jardin · Caluire-et-Cuire', 'false', false],
+    ['Compte supprimé', 'Studio rénové · Lyon 8e', 'false', false],
+  ];
+  /** Un envoi de messages, sans ses identifiants (vérifiés à part : en majuscules, client_id = id). */
+  const sentWithoutIds = (call) => {
+    const { id, client_id: clientId, ...rest } = call.body ?? {};
+    return { ...rest, ids: UPPER_UUID.test(id ?? '') && clientId === id };
+  };
+  {
+    const M = 'messages réponses 1440';
+    const { context: replyDesk, chat } = await chatContext({ width: 1440, height: 960 });
+    replyChat(chat);
+    page = await open(replyDesk, `/messages/?c=${chatId(1)}`, 'messages-reponses-1440');
+    await page.waitForSelector('.dm-thread-inner .dm-day');
+    await msgRow(page, 10).locator('.dm-quote').waitFor({ timeout: 8000 }).catch(() => problems.push(`${M} : citation absente`));
+    expectSame(M, 'message transféré', await messageAround(page, 9), { forwarded: 'Transféré', header: null, quote: null, deleted: false, pill: null });
+    expectSame(M, 'réponse avec un cœur', await messageAround(page, 10), REPLY_SHOWN);
+    expectSame(M, 'ancien « ♥ »', (await messageAround(page, 3))?.pill, 'Réactions : ❤️, 1');
+    // Citation grise de 250 px au plus, recouverte de 10 px par la bulle ; pastille de 24 px, 10 px dans la bulle.
+    expectSame(M, 'citation et pastille', await page.evaluate((id) => {
+      const row = document.querySelector(`.dm-msg[data-message-id="${id}"]`);
+      const quote = row.querySelector('.dm-quote').getBoundingClientRect();
+      const bubble = row.querySelector('.dm-bubble').getBoundingClientRect();
+      const pill = row.querySelector('.dm-reaction-pill').getBoundingClientRect();
+      return {
+        quoteColor: getComputedStyle(row.querySelector('.dm-quote')).backgroundColor, quoteWidth: Math.round(quote.width), overlap: Math.round(quote.bottom - bubble.top),
+        pill: [Math.round(pill.left - bubble.left), Math.round(pill.top - bubble.bottom), Math.round(pill.height)],
+      };
+    }, messageId(10)), { quoteColor: 'rgb(237, 239, 243)', quoteWidth: 250, overlap: 10, pill: [10, -10, 24] });
+    // L'original cité est dans les messages lus : il n'est pas relu.
+    if (chatCalls(chat, 'messages').some((call) => call.search.includes('&id=eq.'))) problems.push(`${M} : original relu alors qu'il est affiché`);
+    expectSame(M, 'boutons et champs sans nom', await unnamedControls(page), []);
+    await chatShot(page, '3-messages-reponses-1440.png');
+    // La citation mène à l'original, qui s'éclaire un instant (scrollRequest de l'app).
+    await msgRow(page, 10).locator('.dm-quote').click();
+    await page.waitForFunction((id) => document.querySelector(`.dm-msg[data-message-id="${id}"] .dm-interactive.is-flashing`), messageId(7), { timeout: 4000 })
+      .catch(() => problems.push(`${M} : l'original cité ne s'éclaire pas`));
+    await page.waitForFunction((id) => !document.querySelector(`.dm-msg[data-message-id="${id}"] .dm-interactive.is-flashing`), messageId(7), { timeout: 4000 })
+      .catch(() => problems.push(`${M} : l'original cité reste éclairé`));
+
+    // Clic droit : la barre d'emojis et le menu ; Échap referme ; « … » au survol ouvre le même.
+    expectSame(M, 'menu du clic droit', await messageMenu(page, 4), { emojis: ['❤️', '👍', '😂', '😮', '😢', '🙏'], pressed: [], items: ['Répondre', 'Transférer', 'Copier'] });
+    await chatShot(page, '3-messages-menu-1440.png');
+    await page.keyboard.press('Escape');
+    await menuClosed(page, `${M} : Échap`);
+    expectSame(M, 'menu du bouton « … »', (await messageMenu(page, 4, '« … »')).items, ['Répondre', 'Transférer', 'Copier']);
+    // 👍 posé (message_reactions, comme setReaction), puis retiré depuis la barre, où il est enfoncé.
+    let mark = chat.calls.length;
+    await menuEmoji(page, '[aria-label="👍"]', `${M} : 👍`);
+    const thumbs = await oneCall(chat, 'message_reactions', mark, `${M} : 👍`);
+    if (thumbs) {
+      expectSame(M, '👍 posé', [thumbs.method, thumbs.search, thumbs.body], ['POST', '?on_conflict=message_id,user_id', { message_id: messageId(4).toUpperCase(), emoji: '👍' }]);
+      if (!thumbs.prefer.includes('resolution=merge-duplicates')) problems.push(`${M} : 👍 sans fusion (Prefer « ${thumbs.prefer} »)`);
+    }
+    await waitForPill(page, 4, 'Réactions : 👍, 1', `${M} : 👍`);
+    expectSame(M, 'barre avec 👍', (await messageMenu(page, 4)).pressed, ['👍, votre réaction : la retirer']);
+    mark = chat.calls.length;
+    await menuEmoji(page, '[aria-pressed="true"]', `${M} : 👍 retiré`);
+    const unthumbs = await oneCall(chat, 'message_reactions', mark, `${M} : 👍 retiré`);
+    if (unthumbs) expectSame(M, '👍 retiré', [unthumbs.method, unthumbs.search], ['DELETE', `?message_id=eq.${messageId(4).toUpperCase()}&user_id=eq.${USER_ID.toUpperCase()}`]);
+    await waitForPill(page, 4, null, `${M} : 👍 retiré`);
+
+    // « Réactions » (la pastille) : chaque personne et son emoji, la mienne en premier avec « Retirer » ; vide ensuite.
+    await msgRow(page, 10).locator('.dm-reaction-pill').click();
+    expectSame(M, 'feuille des réactions', [await dialogTitle(page, 'sheet'), await reactionRows(page)], ['Réactions', [['Agence Démo Lyon', '❤️', null]]]);
+    await page.click('dialog.dm-sheet[open] .dm-sheet-close');
+    await messageMenu(page, 10);
+    await menuEmoji(page, '[aria-label="😂"]', `${M} : 😂`);
+    await waitForPill(page, 10, 'Réactions : 😂 ❤️, 2', `${M} : 😂`);
+    expectSame(M, 'nombre de réactions', await msgRow(page, 10).locator('.dm-reaction-count').textContent().catch(() => null), '2');
+    await msgRow(page, 10).locator('.dm-reaction-pill').click();
+    expectSame(M, 'réactions avec la mienne', await reactionRows(page), [['Vous', '😂', 'Retirer'], ['Agence Démo Lyon', '❤️', null]]);
+    mark = chat.calls.length;
+    await page.click('dialog.dm-reactions-sheet[open] button[aria-label="Retirer ma réaction"]');
+    const removed = await oneCall(chat, 'message_reactions', mark, `${M} : « Retirer »`);
+    if (removed) expectSame(M, '« Retirer »', [removed.method, removed.search], ['DELETE', `?message_id=eq.${messageId(10).toUpperCase()}&user_id=eq.${USER_ID.toUpperCase()}`]);
+    await page.waitForFunction(() => document.querySelectorAll('dialog.dm-reactions-sheet[open] .dm-reaction-row').length === 1, null, { timeout: 8000 })
+      .catch(() => problems.push(`${M} : ma réaction reste dans la feuille`));
+    await page.click('dialog.dm-sheet[open] .dm-sheet-close');
+    await msgRow(page, 4).locator('.dm-bubble').dblclick();
+    await waitForPill(page, 4, 'Réactions : ❤️, 1', `${M} : cœur sur 4`);
+    await msgRow(page, 4).locator('.dm-reaction-pill').click();
+    expectSame(M, 'ma seule réaction', await reactionRows(page), [['Vous', '❤️', 'Retirer']]);
+    await page.click('dialog.dm-reactions-sheet[open] button[aria-label="Retirer ma réaction"]');
+    await page.waitForFunction(() => document.querySelector('dialog.dm-reactions-sheet[open] .dm-forward-empty')?.textContent === 'Aucune réaction', null, { timeout: 8000 })
+      .catch(async () => problems.push(`${M} : « Aucune réaction » absent (${JSON.stringify(await reactionRows(page))})`));
+    await page.click('dialog.dm-sheet[open] .dm-sheet-close');
+
+    // « Copier » : le texte du message dans le presse-papiers (un texte seulement).
+    await page.evaluate(() => {
+      window.nidaloCopied = null;
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text) => { window.nidaloCopied = text; } } });
+    });
+    await messageMenu(page, 4);
+    await menuChoice(page, 'Copier', `${M} : copier`);
+    expectSame(M, 'texte copié', await page.evaluate(() => window.nidaloCopied), 'Parfait, je vous confirme la visite pour jeudi à 18h.');
+
+    // « Répondre » : « Réponse à … » au-dessus du champ, qui prend le curseur ; l'envoi part avec reply_to_id
+    // (MessageInsert de l'app), puis la réponse cite son original.
+    await messageMenu(page, 4);
+    await menuChoice(page, 'Répondre', `${M} : répondre`);
+    await page.waitForSelector('.dm-reply-bar', { timeout: 8000 }).catch(() => problems.push(`${M} : barre de réponse absente`));
+    expectSame(M, 'barre de réponse', [await textOf(page, '.dm-reply-bar-title'), await textOf(page, '.dm-reply-bar-preview'),
+      await page.evaluate(() => document.activeElement?.matches('.dm-composer textarea') ?? false)], ['Réponse à Agence Démo Lyon', 'Parfait, je vous confirme la visite pour jeudi à 18h.', true]);
+    await chatShot(page, '3-messages-reponse-en-cours-1440.png');
+    mark = chat.calls.length;
+    await page.fill('.dm-composer textarea', 'Très bien, à jeudi.');
+    await page.keyboard.press('Enter');
+    const replied = await oneCall(chat, 'messages', mark, `${M} : réponse`, (call) => call.method === 'POST');
+    if (replied) {
+      expectSame(M, 'réponse envoyée', [replied.search, sentWithoutIds(replied)], ['?select=id,conversation_id,sender_id,kind,client_id,content,created_at,expires_at,reply_to_id,forwarded,message_reactions(user_id,emoji,created_at)',
+        { conversation_id: A, content: chatText('Très bien, à jeudi.'), preview: 'Très bien, à jeudi.', reply_to_id: messageId(4).toUpperCase(), ids: true }]);
+    }
+    await page.waitForFunction(() => [...document.querySelectorAll('.dm-bubble.is-out .dm-text')].at(-1)?.textContent === 'Très bien, à jeudi.', null, { timeout: 8000 })
+      .catch(() => problems.push(`${M} : la réponse n'apparaît pas`));
+    expectSame(M, 'réponse affichée', [await page.evaluate(() => {
+      const row = [...document.querySelectorAll('.dm-msg.is-out')].at(-1);
+      return [row?.querySelector('.dm-reply-head')?.textContent.trim() ?? null, row?.querySelector('.dm-quote')?.textContent.trim() ?? null];
+    }), await page.locator('.dm-reply-bar').count(), await page.inputValue('.dm-composer textarea')],
+    [['Vous avez répondu à Agence', 'Parfait, je vous confirme la visite pour jeudi à 18h.'], 0, '']);
+    // ✕ annule une réponse commencée.
+    await messageMenu(page, 9);
+    await menuChoice(page, 'Répondre', `${M} : répondre au transfert`);
+    expectSame(M, 'réponse au message transféré', await textOf(page, '.dm-reply-bar-preview'), FORWARDED_TEXT);
+    await page.click('.dm-reply-bar-cancel');
+    await page.waitForSelector('.dm-reply-bar', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${M} : « Annuler la réponse » sans effet`));
+
+    // « Transférer » : les conversations récentes, sans celle d'origine ; recherche ; le message part dans chacune avec
+    // forwarded = true (sans reply_to_id), puis « Message transféré ».
+    await messageMenu(page, 9);
+    await menuChoice(page, 'Transférer', `${M} : transférer`);
+    expectSame(M, 'transfert', [await dialogTitle(page, 'sheet'), await forwardSheet(page)], ['Transférer', {
+      preview: FORWARDED_TEXT, labels: ['Message', 'Récentes'], targets: FORWARD_TARGETS, empty: null, send: ['Envoyer à 1 conversation', true], max: '5 conversations au plus',
+    }]);
+    await page.fill('dialog.dm-forward-sheet[open] input[aria-label="Rechercher une conversation"]', 'bonjour');
+    expectSame(M, 'transfert : aucune conversation', [(await forwardSheet(page))?.targets, (await forwardSheet(page))?.empty], [[], 'Aucune conversation']);
+    await page.fill('dialog.dm-forward-sheet[open] input[aria-label="Rechercher une conversation"]', 'julien');
+    expectSame(M, 'transfert : recherche', (await forwardSheet(page))?.targets.map((target) => target[0]), ['Julien M.']);
+    await page.fill('dialog.dm-forward-sheet[open] input[aria-label="Rechercher une conversation"]', '');
+    await page.click('dialog.dm-forward-sheet[open] .dm-forward-target:has-text("Visite groupée Lyon 2e")');
+    await page.click('dialog.dm-forward-sheet[open] .dm-forward-target:has-text("Julien M.")');
+    const chosen = await forwardSheet(page);
+    expectSame(M, 'deux conversations cochées', [chosen?.targets.map((target) => target[2]), chosen?.send], [['true', 'true', 'false', 'false', 'false'], ['Envoyer à 2 conversations', false]]);
+    await chatShot(page, '3-messages-transfert-1440.png');
+    mark = chat.calls.length;
+    await page.click('dialog.dm-forward-sheet[open] .dm-forward-send');
+    await waitForCompareNotice(page, { text: 'Message transféré', action: null }, `${M} : transfert`);
+    await page.waitForSelector('dialog.dm-forward-sheet[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${M} : « Transférer » reste ouvert`));
+    expectSame(M, 'messages transférés', chatCalls(chat, 'messages', mark).filter((call) => call.method === 'POST').map(sentWithoutIds),
+      [chatId(4), chatId(2)].map((id) => ({ conversation_id: id.toUpperCase(), content: chatText(FORWARDED_TEXT), preview: FORWARDED_TEXT, forwarded: true, ids: true })));
+    expectSame(M, 'liste après le transfert', (await inboxRows(page)).slice(0, 2).map((row) => [row.name, row.preview]),
+      [['Julien M.', `Vous : ${FORWARDED_TEXT}`], ['Visite groupée Lyon 2e', `Vous : ${FORWARDED_TEXT}`]]);
+    // Des photos : recopiées dans le dossier de la conversation d'arrivée (même nom, en JPEG, comme l'app), puis le
+    // message qui les cite, transféré.
+    await messageMenu(page, 2).then((menu) => expectSame(M, 'menu des photos', menu.items, ['Répondre', 'Transférer']));
+    await menuChoice(page, 'Transférer', `${M} : transférer les photos`);
+    await page.click('dialog.dm-forward-sheet[open] .dm-forward-target:has-text("Lucas G.")');
+    mark = chat.calls.length;
+    const uploads = chat.uploads.length;
+    await page.click('dialog.dm-forward-sheet[open] .dm-forward-send');
+    await waitForCompareNotice(page, { text: 'Message transféré', action: null }, `${M} : photos transférées`);
+    const photosForwarded = await oneCall(chat, 'messages', mark, `${M} : photos transférées`, (call) => call.method === 'POST');
+    const copies = chat.uploads.slice(uploads);
+    expectSame(M, 'photos recopiées', copies.map((upload) => {
+      const file = upload.parts.find((part) => part.filename !== null);
+      return [upload.path, upload.headers['x-upsert'], file?.type ?? null, file?.body.subarray(0, 3).toString('hex') ?? null];
+    }), AGENT_PHOTOS.map((path) => [`${chatId(5)}/${path.split('/')[1]}`, 'false', 'image/jpeg', 'ffd8ff']));
+    if (photosForwarded) {
+      expectSame(M, 'message des photos transférées', sentWithoutIds(photosForwarded), {
+        conversation_id: chatId(5).toUpperCase(), forwarded: true, preview: '📷 2 photos', ids: true, content: { attachments: { _0: AGENT_PHOTOS.map((path, index) => ({
+          id: `0B6D1F2A-3C4E-4F5A-9B6C-7D8E9F0A1B0${index + 1}`, kind: 'photo', fileName: 'Photo.jpg', storagePath: `${chatId(5)}/${path.split('/')[1]}`, byteCount: 182000,
+        })) } },
+      });
+    }
+
+    // Dans le groupe : la réponse de Camille cite un message supprimé depuis ; l'original est relu une fois par son
+    // identifiant (comme message(id:) de l'app), puis « Message supprimé », qui ne mène nulle part.
+    mark = chat.calls.length;
+    await page.click(rowLink(4));
+    await page.waitForURL(`${base}/messages/?c=${chatId(4)}`);
+    await msgRow(page, 35).locator('.dm-quote.is-deleted').waitFor({ timeout: 8000 }).catch(() => problems.push(`${M} : « Message supprimé » absent`));
+    expectSame(M, 'original supprimé', [await messageAround(page, 35), await msgRow(page, 35).locator('.dm-quote').isDisabled().catch(() => null)],
+      [{ forwarded: null, header: 'Camille a répondu', quote: 'Message supprimé', deleted: true, pill: null }, true]);
+    expectSame(M, 'original relu', chatCalls(chat, 'messages', mark).filter((call) => call.search.includes('&id=eq.')).map((call) => `${call.method} ${call.search}`),
+      [`GET ?select=id,conversation_id,sender_id,kind,client_id,content,created_at,expires_at,reply_to_id,forwarded,message_reactions(user_id,emoji,created_at)&id=eq.${messageId(30).toUpperCase()}&limit=1`]);
+    await page.close();
+
+    // Une réponse dont l'original a disparu avant l'envoi (supprimé depuis l'iPhone) : le trigger refuse
+    // (message_reply_unavailable) ; l'avis de l'app, puis le brouillon et la réponse reviennent.
+    page = await open(replyDesk, `/messages/?c=${chatId(1)}`, 'messages-reponse-refusée');
+    await page.waitForSelector('.dm-thread-inner .dm-day');
+    await messageMenu(page, 1);
+    await menuChoice(page, 'Répondre', `${M} : répondre au premier message`);
+    chat.messages = chat.messages.filter((item) => item.id !== messageId(1));
+    mark = chat.calls.length;
+    await page.fill('.dm-composer textarea', 'Pouvez-vous m\'envoyer le plan ?');
+    await page.keyboard.press('Enter');
+    expectSame(M, 'réponse refusée', await noticeText(page, M), 'Le message auquel vous répondez n\'est plus disponible.');
+    const refused = await oneCall(chat, 'messages', mark, `${M} : réponse refusée`, (call) => call.method === 'POST');
+    if (refused) expectSame(M, 'réponse refusée envoyée', refused.body?.reply_to_id, messageId(1).toUpperCase());
+    expectSame(M, 'après le refus', [await page.inputValue('.dm-composer textarea'), await textOf(page, '.dm-reply-bar-preview')],
+      ['Pouvez-vous m\'envoyer le plan ?', 'Bonjour Claire, merci pour votre intérêt. Voici quelques photos du séjour et de la salle à manger.']);
+    await page.close();
+    await replyDesk.close();
+  }
+
+  // Sur téléphone : la même conversation ; double toucher pour ❤️, appui long (0,35 s) pour la barre et le menu.
+  {
+    const M = 'messages réponses téléphone';
+    const { context: replyPhone, chat } = await chatContext({ phone: true });
+    replyChat(chat);
+    page = await open(replyPhone, `/messages/?c=${chatId(1)}`, 'messages-reponses-telephone');
+    await page.waitForSelector('.dm-thread-inner .dm-day');
+    await msgRow(page, 10).locator('.dm-quote').waitFor({ timeout: 8000 }).catch(() => problems.push(`${M} : citation absente`));
+    expectSame(M, 'réponse avec un cœur', await messageAround(page, 10), REPLY_SHOWN);
+    expectSame(M, 'message transféré', (await messageAround(page, 9))?.forwarded, 'Transféré');
+    expectSame(M, 'boutons et champs sans nom', await unnamedControls(page), []);
+    await chatShot(page, '3-messages-reponses-telephone.png');
+    let mark = chat.calls.length;
+    const box = await msgRow(page, 7).locator('.dm-bubble').boundingBox();
+    await page.touchscreen.tap(box.x + 24, box.y + 16);
+    await page.touchscreen.tap(box.x + 24, box.y + 16);
+    const liked = await oneCall(chat, 'message_reactions', mark, `${M} : double toucher`);
+    if (liked) expectSame(M, 'double toucher', [liked.method, liked.body], ['POST', { message_id: messageId(7).toUpperCase(), emoji: '❤️' }]);
+    await waitForPill(page, 7, 'Réactions : ❤️, 1', `${M} : double toucher`);
+    const body = msgRow(page, 4).locator('.dm-interactive-body');
+    const at = await body.boundingBox();
+    const touch = { pointerType: 'touch', isPrimary: true, pointerId: 7, clientX: at.x + 20, clientY: at.y + 12 };
+    await body.dispatchEvent('pointerdown', touch);
+    await page.waitForSelector('dialog.dm-focus[open] .dm-focus-menu', { timeout: 4000 }).catch(() => problems.push(`${M} : l'appui long n'ouvre pas le menu`));
+    await body.dispatchEvent('pointerup', touch).catch(() => undefined);
+    expectSame(M, 'menu de l\'appui long', await page.$$eval('dialog.dm-focus[open] [role="menuitem"]', (els) => els.map((el) => el.textContent.trim())), ['Répondre', 'Transférer', 'Copier']);
+    await chatShot(page, '3-messages-menu-telephone.png');
+    await menuChoice(page, 'Répondre', `${M} : répondre`);
+    expectSame(M, 'barre de réponse', await textOf(page, '.dm-reply-bar-title'), 'Réponse à Agence Démo Lyon');
+    await chatShot(page, '3-messages-reponse-en-cours-telephone.png');
+    await page.close();
+    await replyPhone.close();
+  }
+
+  // Recherche ouverte, comme l'app (MessagingSearchView ; demande du 17/11) : « Votre activité immobilière » tant que
+  // rien n'est saisi, puis « Discussions liées aux annonces » : les conversations sur un bien, chaque fiche lue une
+  // fois, en même temps ; pendant leur lecture, le montant d'une vente et rien pour une location ; ensuite le prix des
+  // cartes. Une conversation de plus, sur la location de test (Studio meublé). Captures : 3-messages-recherche-1440.png
+  // et 3-messages-discussions-1440.png.
+  {
+    const M = 'messages recherche';
+    const RENT = listings[2];
+    const { context: searchDesk, server: searchServer, chat } = await chatContext({ width: 1440, height: 960, slow: { listings: 1500 } });
+    chat.conversations.push({ id: chatId(9), kind: 'listing', listing: RENT.id, buyer: USER_ID, seller: PRO_ID, other: PRO_ID, name: null, unread: 1, created_at: '2026-11-04T10:00:00Z' });
+    chat.participants.push({ conversation_id: chatId(9), user_id: USER_ID, role: 'member', left_at: null, last_read_at: '2026-11-04T10:00:00Z' },
+      { conversation_id: chatId(9), user_id: PRO_ID, role: 'member', left_at: null, last_read_at: '2026-11-04T10:05:00Z' });
+    chat.messages.push(chatLine(91, chatId(9), PRO_ID, '2026-11-04T10:05:00Z', 'Le studio est libre à partir du 1er décembre.'));
+    page = await open(searchDesk, '/messages/', 'messages-recherche');
+    await page.waitForSelector('.dm-list .dm-row');
+    if (await page.locator('.dm-activity, .dm-search-cancel').count()) problems.push(`${M} : recherche ouverte d'elle-même`);
+    await page.focus('.dm-search input');
+    await page.waitForSelector('.dm-activity', { timeout: 8000 }).catch(() => problems.push(`${M} : « Votre activité immobilière » absente`));
+    const activity = () => page.$$eval('.dm-activity-row', (els) => els.map((el) => [el.querySelector('.dm-activity-title')?.textContent ?? null,
+      el.querySelector('.dm-activity-count')?.textContent ?? null, el.getAttribute('href')]));
+    await page.waitForFunction(() => document.querySelectorAll('.dm-activity-count').length >= 3, null, { timeout: 8000 }).catch(() => undefined);
+    // « Toutes les conversations » n'est écrit que sur téléphone (sur ordinateur, la colonne est déjà la liste).
+    expectSame(M, 'activité immobilière', [await textOf(page, '.dm-activity h2'), await activity(), await textOf(page, '.dm-search-cancel'),
+      await page.locator('.dm-list-title').isVisible()], ['Votre activité immobilière', [['Annonces consultées récemment', null, '/compte/?vue=consultes'],
+      ['Biens favoris', '3', '/favoris/'], ['Mes recherches immobilières', '2', '/compte/?vue=recherches'], ['Discussions liées aux annonces', '6', null]], 'Annuler', false]);
+    await chatShot(page, '3-messages-recherche-1440.png');
+    // Une recherche saisie remplace l'activité ; vidée, l'activité revient.
+    await page.fill('.dm-search input', 'studio');
+    await waitForRows(page, ['Immo Démo Croix-Rousse', 'Compte supprimé'], `${M} : recherche « studio »`);
+    if (await page.locator('.dm-activity').count()) problems.push(`${M} : l'activité reste affichée pendant une recherche`);
+    await page.fill('.dm-search input', '');
+    await page.waitForSelector('.dm-activity', { timeout: 8000 }).catch(() => problems.push(`${M} : l'activité ne revient pas`));
+    const listingMark = searchServer.requests.length;
+    await page.click('.dm-activity-row:has-text("Discussions liées aux annonces")');
+    await page.waitForSelector('.dm-linked-row', { timeout: 8000 }).catch(() => problems.push(`${M} : discussions liées absentes`));
+    const linkedRows = () => page.$$eval('.dm-linked-row', (els) => els.map((el) => [el.querySelector('.dm-linked-title')?.textContent ?? null,
+      el.querySelector('.dm-linked-line')?.textContent ?? null, el.querySelector('.dm-linked-price')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+      el.querySelector('.dm-linked-unread')?.textContent ?? null, el.getAttribute('href')]));
+    const LINKED = [
+      ['Appartement 3 pièces', 'Lyon 2e · Agence Démo Lyon', '238 000 €', '1', `/messages/?c=${chatId(1)}`],
+      ['Appartement 2 pièces', 'Lyon 6e · Julien M.', '265 000 €', '2', `/messages/?c=${chatId(2)}`],
+      ['Studio meublé', 'Lyon 7e · Immo Démo Croix-Rousse', null, '1', `/messages/?c=${chatId(9)}`],
+      ['Maison familiale 5 pièces', 'Écully · Lucas G.', '545 000 €', null, `/messages/?c=${chatId(5)}`],
+      ['Maison 4 pièces avec jardin', 'Caluire-et-Cuire · Marc P.', '420 000 €', '2', `/messages/?c=${chatId(3)}`],
+      ['Studio rénové', 'Lyon 8e · Compte supprimé', '98 000 €', null, `/messages/?c=${chatId(6)}`],
+    ];
+    expectSame(M, 'discussions pendant la lecture des fiches', [await textOf(page, '.dm-linked-head h2'), await linkedRows()], ['Discussions liées aux annonces', LINKED]);
+    await page.waitForFunction(() => document.querySelectorAll('.dm-linked-price').length === 6, null, { timeout: 8000 })
+      .catch(() => problems.push(`${M} : prix de la location absent après la lecture`));
+    // La location : loyer charges comprises (640 € + 50 € de charges), comme les cartes de l'app.
+    expectSame(M, 'discussions', await linkedRows(), LINKED.map((row) => (row[0] === 'Studio meublé' ? [...row.slice(0, 2), '690 €/mois CC', ...row.slice(3)] : row)));
+    expectSame(M, 'fiches lues une fois chacune', searchServer.requests.slice(listingMark).filter((request) => request.table === 'listings')
+      .map((request) => /[?&]id=eq\.([^&]+)/.exec(request.search)?.[1] ?? request.search).sort(), [homeId(1), homeId(7), RENT.id, homeId(5), homeId(3), homeId(4)].sort());
+    await chatShot(page, '3-messages-discussions-1440.png');
+    // Retour à l'activité, puis « Annuler » referme la recherche.
+    await page.click('.dm-linked-back');
+    await page.waitForSelector('.dm-activity', { timeout: 8000 }).catch(() => problems.push(`${M} : « Retour » ne revient pas à l'activité`));
+    await page.click('.dm-search-cancel');
+    await page.waitForSelector('.dm-activity', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${M} : « Annuler » ne referme pas la recherche`));
+    expectSame(M, 'recherche refermée', [await page.locator('.dm-search-cancel').count(), await page.inputValue('.dm-search input')], [0, '']);
+    // Une discussion liée ouvre sa conversation.
+    await page.focus('.dm-search input');
+    await page.click('.dm-activity-row:has-text("Discussions liées aux annonces")');
+    await page.click(`.dm-linked-row[href="/messages/?c=${chatId(9)}"]`);
+    await page.waitForURL(`${base}/messages/?c=${chatId(9)}`);
+    await page.waitForSelector('section.dm-pane[aria-label="Conversation avec Immo Démo Croix-Rousse"]', { timeout: 8000 })
+      .catch(() => problems.push(`${M} : la discussion liée n'ouvre pas sa conversation`));
+    await page.close();
+    await searchDesk.close();
+
+    // Aucune conversation sur un bien : l'état vide de l'app.
+    const { context: emptyDesk, chat: emptyChat } = await chatContext({ width: 1440, height: 960 });
+    emptyChat.conversations = emptyChat.conversations.filter((conversation) => conversation.kind === 'group');
+    page = await open(emptyDesk, '/messages/', 'messages-recherche-vide');
+    await page.waitForSelector('.dm-list .dm-row');
+    await page.focus('.dm-search input');
+    await page.waitForSelector('.dm-activity');
+    expectSame(M, 'aucune discussion liée : compte', (await activity()).at(-1), ['Discussions liées aux annonces', null, null]);
+    await page.click('.dm-activity-row:has-text("Discussions liées aux annonces")');
+    expectSame(M, 'aucune discussion liée', await textOf(page, '.dm-linked .dm-inbox-empty'),
+      'Aucune discussion liée à un bien Touchez « Message » sur une annonce pour poser vos questions à l\'annonceur.');
+    await chatShot(page, '3-messages-discussions-vide-1440.png');
+    await page.close();
+    await emptyDesk.close();
+  }
+
   // Sous 1024 px (iPhone 13, 390 px) : une seule colonne, comme dans l'app, avec la police du téléphone. La liste
   // au-dessus de la barre du bas, puis la conversation en plein écran (barre cachée, saisie tout en bas) ; « Retour
   // aux conversations » revient à la liste. Captures : 3-messages-telephone-*.png.
@@ -3269,9 +3845,9 @@ try {
   // Favoris sur ordinateur (maquette 4), à 1440 × 900 et 1024 × 768, avec le compte de test et des annonces inventées :
   // une vente, une location, un investissement loué (rendement), un hôtel et une annonce retirée. Contenu et actions de
   // l'app (FavoritesView.swift, SavedSearchesView.swift). Captures pour Romain : 4-favoris-*.png.
-  const favContext = async (width, height, listingRows, account, signedIn = true) => {
+  const favContext = async (width, height, listingRows, account, signedIn = true, refuse = []) => {
     const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR' });
-    const mocked = await mock(context, { signedIn, listingRows, account });
+    const mocked = await mock(context, { signedIn, listingRows, account, refuse });
     return { context, server: mocked };
   };
   for (const [width, height] of [[1440, 900], [1024, 768]]) {
@@ -3282,12 +3858,12 @@ try {
       page = await open(context, '/favoris/', `${F} maquette`);
       await waitForFavorites(page, ['Appartement 2 pièces – Annemasse', 'Studio avec vue dégagée'], '2 biens sauvegardés', `${F} maquette`);
       await page.waitForSelector('.dfav-missing');
-      await page.waitForSelector('.dfav-dot');
+      await page.waitForSelector('.fav-tab-dot');
       await favoritePhotosLoaded(page, 2, `${F} maquette`);
       await checkBadges(page, mockupServer.state, `${F} maquette`);
       await favShot(page, `4-favoris-${width}.png`);
       if (width === 1440) {
-        await page.click('.dfav-tab >> nth=1');
+        await page.click('.dfav .fav-tab >> nth=1');
         await page.waitForSelector('.dfav-searches .saved-search');
         await waitForSearchCounts(page, `${F} maquette`);
         await favShot(page, '4-favoris-recherches-1440.png');
@@ -3299,22 +3875,24 @@ try {
     const { context: favDesk, server: favServer } = await favContext(width, height, FAV_LISTINGS, FAV_ACCOUNT);
     page = await open(favDesk, '/favoris/', F);
     await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', F);
-    await page.waitForSelector('.dfav-dot');
+    await page.waitForSelector('.fav-tab-dot');
     await favoritePhotosLoaded(page, 3, F);
     await checkChrome(page, F, { signedIn: true, margin: width >= 1280 ? 48 : 32 });
     await checkBadges(page, favServer.state, F);
     expectSame(F, 'en-tête', [await textOf(page, '.dfav-titles h1'), await textOf(page, '.dfav-titles p'), await page.getAttribute('.dfav-compare', 'aria-label'),
       await page.isDisabled('.dfav-compare'), await page.locator('.dfav-compare-count').count(), await page.getAttribute('.dtop-round[href="/favoris/"]', 'aria-current')],
     ['Vos favoris', 'Retrouvez vos biens favoris et vos recherches', 'Comparer vos favoris', false, 0, 'page']);
-    expectSame(F, 'onglets', await page.$$eval('.dfav-tab', (els) => els.map((el) => [el.firstChild?.nextSibling?.textContent ?? null, el.querySelector('.dfav-tab-count')?.textContent ?? null,
-      el.getAttribute('aria-label'), el.getAttribute('aria-pressed'), Boolean(el.querySelector('.dfav-dot'))])),
+    // Onglets de l'app (FavoritesTabs, demande du 17/11) : un seul sélecteur, la pastille bleue sous l'onglet choisi.
+    expectSame(F, 'onglets', await page.$$eval('.dfav .fav-tab', (els) => els.map((el) => [el.querySelector('.fav-tab-title')?.textContent ?? null, el.querySelector('.fav-tab-count')?.textContent ?? null,
+      el.getAttribute('aria-label'), el.getAttribute('aria-pressed'), Boolean(el.querySelector('.fav-tab-dot'))])),
     [['Favoris', null, null, 'true', false], ['Recherches', '(2)', 'Recherches, 2, nouveautés', 'false', true]]);
     expectSame(F, 'recherche, filtres et tri', [await page.getAttribute('.dfav-field input', 'placeholder'), await page.getAttribute('.dfav-field input', 'aria-label'),
       await page.getAttribute('.dfav-filters', 'aria-label'), await page.getAttribute('.dfav-sort select', 'aria-label'), await page.textContent('.dfav-sort > span'),
       await page.$$eval('.dfav-sort option', (els) => els.map((el) => [el.value, el.textContent]))],
     ['Ville, code postal, type de bien', 'Rechercher dans vos favoris', 'Filtres', 'Trier par', 'Pertinence',
       [['relevance', 'Pertinence'], ['priceAscending', 'Prix croissant'], ['priceDescending', 'Prix décroissant'], ['recentlyAdded', 'Ajout le plus récent']]]);
-    expectSame(F, 'catégories', await page.$$eval('.dfav-chip', (els) => els.map((el) => [el.textContent.trim(), el.getAttribute('aria-pressed')])),
+    // Catégories : les pavés de l'app avec « Tous » en premier (ModeSegmentedControl(selectionOrAll:)).
+    expectSame(F, 'catégories', await page.$$eval('.dfav-categories .mode-tab', (els) => els.map((el) => [el.textContent.trim(), el.getAttribute('aria-checked')])),
       [['Tous', 'true'], ['Résidentiel', 'false'], ['Location', 'false'], ['Investir', 'false'], ['Hôtels', 'false']]);
     expectSame(F, 'cartes', await favoriteCardsShown(page), FAV_CARDS);
     // L'annonce retirée vient après les cartes, comme dans l'app.
@@ -3330,35 +3908,37 @@ try {
         content: Math.round(box(document.querySelector('.dfav-inner')).width), columns: getComputedStyle(document.querySelector('.dfav-grid')).gridTemplateColumns.split(' ').length,
         widths: [...new Set(items.map((rect) => Math.round(rect.width)))], heights: new Set(items.map((rect) => Math.round(rect.height))).size,
         photos: [...new Set([...document.querySelectorAll('.dfav-photo')].map((photo) => Math.round(box(photo).height)))], field: Math.round(field.width),
-        chipsBesideField: [...document.querySelectorAll('.dfav-chip')].every((chip) => Math.abs(middle(box(chip)) - middle(field)) <= 2),
+        tilesBelowField: box(document.querySelector('.dfav-categories')).top >= field.bottom && Math.round(box(document.querySelector('.dfav-categories')).width) === 480,
         overflowX: document.documentElement.scrollWidth - innerWidth, footer: Boolean(document.querySelector('.dfoot')),
       };
     });
     expectSame(F, 'mise en page', favLayout, {
-      content: width === 1440 ? 1200 : 960, columns: 3, widths: [width === 1440 ? 384 : 307], heights: 1, photos: [220], field: 420, chipsBesideField: width === 1440, overflowX: 0, footer: true,
+      content: width === 1440 ? 1200 : 960, columns: 3, widths: [width === 1440 ? 384 : 307], heights: 1, photos: [220], field: 420, tilesBelowField: true, overflowX: 0, footer: true,
     });
     // Tailles de la maquette (titre 36/700, textes 15, titres de carte 17/700) et police Inter partout, boutons compris.
     const favFonts = await page.evaluate(() => {
       const font = (selector) => {
         const style = getComputedStyle(document.querySelector(selector));
+        // Inter du site sans rien de plus ; la police du système (pavés des catégories de l'app) : « système ».
+        if (style.fontFamily.startsWith('-apple-system')) return `${style.fontSize} ${style.fontWeight} système`;
         return `${style.fontSize} ${style.fontWeight}${style.fontFamily.startsWith('"Nidalo Inter"') ? '' : ` ${style.fontFamily}`}`;
       };
       return {
-        titre: font('.dfav-titles h1'), 'sous-titre': font('.dfav-titles p'), onglet: font('.dfav-tab'), champ: font('.dfav-field input'), catégorie: font('.dfav-chip'),
+        titre: font('.dfav-titles h1'), 'sous-titre': font('.dfav-titles p'), onglet: font('.dfav .fav-tab'), champ: font('.dfav-field input'), catégorie: font('.dfav-categories .mode-name'),
         nombre: font('.dfav-total'), tri: font('.dfav-sort'), 'titre de carte': font('.dfav-title'), infos: font('.dfav-details'), prix: font('.dfav-price strong'),
         'prix au m²': font('.dfav-per-meter'), rendement: font('.dfav-yield'), 'plus disponible': font('.dfav-missing-title'), Retirer: font('.dfav-missing-remove'),
       };
     });
     expectSame(F, 'polices', favFonts, {
-      titre: '36px 700', 'sous-titre': '15px 400', onglet: '15px 600', champ: '15px 400', catégorie: '15px 600', nombre: '15px 600', tri: '15px 600', 'titre de carte': '17px 700',
+      titre: '36px 700', 'sous-titre': '15px 400', onglet: '15px 600', champ: '15px 400', catégorie: '13px 600 système', nombre: '15px 600', tri: '15px 600', 'titre de carte': '17px 700',
       infos: '15px 400', prix: '20px 700', 'prix au m²': '14px 500', rendement: '14px 600', 'plus disponible': '18px 700', Retirer: '15px 600',
     });
     await favShot(page, `favoris-${width}.png`);
-    await page.click('.dfav-tab >> nth=1');
+    await page.click('.dfav .fav-tab >> nth=1');
     await page.waitForSelector('.dfav-searches .saved-search');
     await waitForSearchCounts(page, F);
     if (page.url() !== `${base}/favoris/?onglet=recherches`) problems.push(`${F} : adresse de l'onglet Recherches ${page.url()}`);
-    expectSame(F, 'onglet Recherches', [await page.$$eval('.dfav-tab', (els) => els.map((el) => el.getAttribute('aria-pressed'))), await page.locator('.dfav-tools, .dfav-grid').count()],
+    expectSame(F, 'onglet Recherches', [await page.$$eval('.dfav .fav-tab', (els) => els.map((el) => el.getAttribute('aria-pressed'))), await page.locator('.dfav-tools, .dfav-grid').count()],
       [['false', 'true'], 0]);
     expectSame(F, 'recherches', await page.$$eval('.dfav-searches .saved-search', (cards) => cards.map((card) => [card.querySelector('h3')?.textContent ?? null,
       card.querySelector('.saved-search-text p')?.textContent.replace(/\s+/g, ' ') ?? null, card.querySelector('.alerts-on, .alerts-off')?.textContent.trim() ?? null,
@@ -3394,9 +3974,9 @@ try {
       await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : « Tout afficher »`);
       if (await page.inputValue('.dfav-field input')) problems.push(`${B} : « Tout afficher » garde la recherche`);
       for (const [chip, titles] of [['Résidentiel', [FAV_FLAT]], ['Location', [FAV_STUDIO]], ['Investir', [FAV_T2]], ['Hôtels', [FAV_HOTEL]], ['Tous', FAV_ALL]]) {
-        await page.locator('.dfav-chip', { hasText: chip }).click();
+        await page.locator('.dfav-categories .mode-tab', { hasText: chip }).click();
         await waitForFavorites(page, titles, titles.length === 4 ? '4 biens sauvegardés' : `${titles.length} sur 4 biens`, `${B} : catégorie ${chip}`);
-        expectSame(B, `catégorie ${chip}`, await page.$$eval('.dfav-chip[aria-pressed="true"]', (els) => els.map((el) => el.textContent.trim())), [chip]);
+        expectSame(B, `catégorie ${chip}`, await page.$$eval('.dfav-categories .mode-tab[aria-checked="true"]', (els) => els.map((el) => el.textContent.trim())), [chip]);
       }
       for (const [sort, short, titles] of [['priceAscending', 'Prix ↑', [FAV_STUDIO, FAV_T2, FAV_FLAT, FAV_HOTEL]], ['priceDescending', 'Prix ↓', [FAV_HOTEL, FAV_FLAT, FAV_T2, FAV_STUDIO]],
         ['recentlyAdded', 'Récents', [FAV_STUDIO, FAV_HOTEL, FAV_T2, FAV_FLAT]], ['relevance', 'Pertinence', FAV_ALL]]) {
@@ -3408,10 +3988,13 @@ try {
       await page.selectOption('.dfav-sort select', 'priceDescending');
       await page.fill('.dfav-field input', 'lyon');
       await waitForFavorites(page, [FAV_FLAT, FAV_STUDIO], '2 sur 4 biens', `${B} : « lyon », prix décroissant`);
-      await page.locator('.dfav-chip', { hasText: 'Location' }).click();
+      // Les suggestions du champ couvrent les pavés, juste dessous : on quitte le champ avant de choisir la catégorie.
+      await page.locator('.dfav-field input').blur();
+      await page.waitForSelector('.dfav-suggestions', { state: 'detached', timeout: 4000 }).catch(() => problems.push(`${B} : les suggestions restent après avoir quitté le champ`));
+      await page.locator('.dfav-categories .mode-tab', { hasText: 'Location' }).click();
       await waitForFavorites(page, [FAV_STUDIO], '1 sur 4 biens', `${B} : « lyon », Location`);
       await page.fill('.dfav-field input', '');
-      await page.locator('.dfav-chip', { hasText: 'Tous' }).click();
+      await page.locator('.dfav-categories .mode-tab', { hasText: 'Tous' }).click();
       await page.selectOption('.dfav-sort select', 'relevance');
       await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : tout affiché`);
       // Filtres : ouverts sur la catégorie de la pastille (« Tous » : Résidentiel) ; appliqués aux favoris chargés.
@@ -3425,8 +4008,8 @@ try {
       await page.waitForSelector('dialog.filters-dialog', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${B} : les filtres restent ouverts`));
       await waitForFavorites(page, [FAV_FLAT], '1 sur 4 biens', `${B} : filtre « 3 pièces »`);
       expectSame(B, 'filtres appliqués', [await page.getAttribute('.dfav-filters', 'aria-label'), await textOf(page, '.dfav-filters-count'),
-        await page.$$eval('.dfav-chip[aria-pressed="true"]', (els) => els.map((el) => el.textContent.trim()))], ['Filtres, 1 actifs', '1', ['Résidentiel']]);
-      await page.locator('.dfav-chip', { hasText: 'Tous' }).click();
+        await page.$$eval('.dfav-categories .mode-tab[aria-checked="true"]', (els) => els.map((el) => el.textContent.trim()))], ['Filtres, 1 actifs', '1', ['Résidentiel']]);
+      await page.locator('.dfav-categories .mode-tab', { hasText: 'Tous' }).click();
       // « Tous » garde les filtres posés (FavoritesView : filteredIDs) : seuls les favoris qui y correspondent restent.
       await waitForFavorites(page, [FAV_FLAT], '1 sur 4 biens', `${B} : filtre gardé sur « Tous »`);
       await page.close();
@@ -3445,14 +4028,14 @@ try {
       await favCard(FAV_FLAT).locator('.dfav-card-compare').click();
       await waitForCompareNotice(page, { text: 'Ajouté à la comparaison', action: 'Voir' }, `${B} : ajout`);
       expectSame(B, 'après un ajout', [await comparedIds(), await roundButton(), await pressedCards(), await favCard(FAV_FLAT).locator('.dfav-card-compare').getAttribute('aria-label'),
-        await page.getAttribute('.dfav-toast-box a', 'href'), page.url()],
-      [{ ids: [favId(1)], referenceId: favId(1) }, ['Comparer, 1 bien', '1'], [FAV_FLAT], 'Retirer de la comparaison', '/comparer/', `${base}/favoris/`]);
+        await page.getAttribute('.app-toast-action', 'aria-label'), page.url()],
+      [{ ids: [favId(1)], referenceId: favId(1) }, ['Comparer, 1 bien', '1'], [FAV_FLAT], 'Retirer de la comparaison', 'Voir', `${base}/favoris/`]);
       await favCard(FAV_FLAT).locator('.dfav-card-compare').click();
       await waitForCompareNotice(page, { text: 'Retiré de la comparaison', action: null }, `${B} : retrait`);
       expectSame(B, 'après un retrait', [await comparedIds(), await roundButton(), await pressedCards()], [{ ids: [], referenceId: null }, ['Comparer vos favoris', null], []]);
       // Tous les favoris comptent, pas seulement la catégorie affichée (FavoritesView : sorted(listings)).
       await page.selectOption('.dfav-sort select', 'priceAscending');
-      await page.locator('.dfav-chip', { hasText: 'Hôtels' }).click();
+      await page.locator('.dfav-categories .mode-tab', { hasText: 'Hôtels' }).click();
       await waitForFavorites(page, [FAV_HOTEL], '1 sur 4 biens', `${B} : Hôtels, prix croissant`);
       await page.click('.dfav-compare');
       await page.waitForURL(`${base}/comparer/`).catch(() => problems.push(`${B} : le bouton rond n'ouvre pas /comparer/ (${page.url()})`));
@@ -3463,8 +4046,13 @@ try {
       // Un quatrième : refusé, « 3 biens maximum, retirez-en un » avec « Gérer » ; la comparaison ne change pas.
       await favCard(FAV_HOTEL).locator('.dfav-card-compare').click();
       await waitForCompareNotice(page, { text: '3 biens maximum, retirez-en un', action: 'Gérer' }, `${B} : quatrième bien`);
-      expectSame(B, 'quatrième bien', [await comparedIds(), await pressedCards(), await page.getAttribute('.dfav-toast-box a', 'href')],
-        [{ ids: [favId(2), favId(3), favId(1)], referenceId: favId(2) }, [FAV_T2, FAV_FLAT, FAV_STUDIO], '/comparer/']);
+      expectSame(B, 'quatrième bien', [await comparedIds(), await pressedCards(), await page.getAttribute('.app-toast-action', 'aria-label')],
+        [{ ids: [favId(2), favId(3), favId(1)], referenceId: favId(2) }, [FAV_T2, FAV_FLAT, FAV_STUDIO], 'Gérer']);
+      // « Gérer » ouvre Comparer, comme « Voir ».
+      await page.click('.app-toast-action');
+      await page.waitForURL(`${base}/comparer/`).catch(() => problems.push(`${B} : « Gérer » n'ouvre pas /comparer/ (${page.url()})`));
+      await page.goto(`${base}/favoris/`, { waitUntil: 'networkidle' });
+      await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : retour après « Gérer »`);
       // Retirer la référence la passe au premier qui reste ; l'hôtel a ensuite sa place.
       await favCard(FAV_STUDIO).locator('.dfav-card-compare').click();
       await waitForCompareNotice(page, { text: 'Retiré de la comparaison', action: null }, `${B} : retrait du studio`);
@@ -3479,20 +4067,73 @@ try {
       if (writes.length !== compareWrites) problems.push(`${B} : la comparaison a écrit au serveur ${JSON.stringify(writes.slice(compareWrites))}`);
       await page.close();
 
-      // Cœur et « Retirer » : FavoritesStore.toggle → DELETE favorites?listing_id=eq.<id> ; la carte quitte la grille.
+      // Cœur et « Retirer » : retrait annulable (FavoritesStore.removeUndoably, demande du 17/11). La carte part tout de
+      // suite, puis « Retiré des favoris » et « Annuler » (4 s) ; DELETE favorites?listing_id=eq.<id> ne part qu'à la fin
+      // du message, au retrait suivant (le premier devient définitif) ou quand la page est cachée ; « Annuler » remet la
+      // carte à sa place sans rien envoyer.
       page = await open(favDesk, '/favoris/', `${B} cœur`);
       await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : cœur`);
       let mark = writes.length;
       await favCard(FAV_FLAT).locator('.dfav-heart').click();
       await waitForFavorites(page, [FAV_T2, FAV_STUDIO, FAV_HOTEL], '3 biens sauvegardés', `${B} : après le cœur`);
-      await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${favId(1)}` }, null]], `${B} : cœur`);
+      await waitForRemovalNotice(page, `${B} : cœur`);
+      await page.waitForTimeout(2500);
+      expectSame(B, 'cœur : rien d\'envoyé pendant le message', writes.slice(mark), []);
+      await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${favId(1)}` }, null]], `${B} : cœur, fin du message`);
       if (page.url() !== `${base}/favoris/`) problems.push(`${B} : le cœur a ouvert ${page.url()}`);
+      // « Annuler » : le favori revient à sa place, rien ne part.
+      mark = writes.length;
+      await favCard(FAV_STUDIO).locator('.dfav-heart').click();
+      await waitForFavorites(page, [FAV_T2, FAV_HOTEL], '2 biens sauvegardés', `${B} : retrait du studio`);
+      await waitForRemovalNotice(page, `${B} : retrait du studio`);
+      await page.click('.app-toast-action');
+      await waitForFavorites(page, [FAV_T2, FAV_STUDIO, FAV_HOTEL], '3 biens sauvegardés', `${B} : « Annuler »`);
+      await page.waitForSelector('.app-toast', { state: 'detached', timeout: 4000 }).catch(() => problems.push(`${B} : le message reste après « Annuler »`));
+      expectSame(B, '« Annuler » : ordre « Ajout le plus récent »', await (async () => {
+        await page.selectOption('.dfav-sort select', 'recentlyAdded');
+        await page.waitForTimeout(200);
+        const titles = await favoriteTitles(page);
+        await page.selectOption('.dfav-sort select', 'relevance');
+        return titles;
+      })(), [FAV_STUDIO, FAV_HOTEL, FAV_T2]);
+      await page.waitForTimeout(4500);
+      expectSame(B, '« Annuler » : rien d\'envoyé', writes.slice(mark), []);
+      // Deux retraits de suite : le premier part au second ; « Annuler » ne remet que le dernier.
+      mark = writes.length;
+      await favCard(FAV_STUDIO).locator('.dfav-heart').click();
+      await waitForRemovalNotice(page, `${B} : premier de deux retraits`);
+      await favCard(FAV_HOTEL).locator('.dfav-heart').click();
+      await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${favId(2)}` }, null]], `${B} : second retrait`);
+      await waitForFavorites(page, [FAV_T2], '1 bien sauvegardé', `${B} : deux retraits`);
+      await page.click('.app-toast-action');
+      await waitForFavorites(page, [FAV_T2, FAV_HOTEL], '2 biens sauvegardés', `${B} : « Annuler » après deux retraits`);
+      // « Retirer » d'une annonce plus disponible : même message ; page cachée : le retrait part tout de suite.
       mark = writes.length;
       await page.click('.dfav-missing-remove');
       await page.waitForSelector('.dfav-missing', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${B} : « Retirer » laisse l'annonce plus disponible`));
-      await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${GONE_ID}` }, null]], `${B} : « Retirer »`);
-      expectSame(B, 'après les retraits', [await favoriteTitles(page), await textOf(page, '.dfav-total')], [[FAV_T2, FAV_STUDIO, FAV_HOTEL], '3 biens sauvegardés']);
+      await waitForRemovalNotice(page, `${B} : « Retirer »`);
+      expectSame(B, '« Retirer » : rien d\'envoyé tout de suite', writes.slice(mark), []);
+      await page.evaluate(() => {
+        Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${GONE_ID}` }, null]], `${B} : « Retirer », page cachée`);
+      await page.waitForSelector('.app-toast', { state: 'detached', timeout: 4000 }).catch(() => problems.push(`${B} : le message reste quand la page est cachée`));
+      expectSame(B, 'après les retraits', [await favoriteTitles(page), await textOf(page, '.dfav-total')], [[FAV_T2, FAV_HOTEL], '2 biens sauvegardés']);
       await page.close();
+      {
+        // Le serveur refuse le retrait : le favori revient à sa place (FavoritesStore.send → restore).
+        const { context: refusing } = await favContext(width, height, FAV_LISTINGS, FAV_ACCOUNT, true, ['DELETE favorites']);
+        page = await open(refusing, '/favoris/', `${B} retrait refusé`);
+        await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : retrait refusé`);
+        mark = writes.length;
+        await page.locator('.dfav-card', { has: page.locator('.dfav-title', { hasText: FAV_FLAT }) }).locator('.dfav-heart').click();
+        await waitForFavorites(page, [FAV_T2, FAV_STUDIO, FAV_HOTEL], '3 biens sauvegardés', `${B} : retrait refusé, carte partie`);
+        await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${favId(1)}` }, null]], `${B} : retrait refusé`);
+        await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : retrait refusé, carte revenue`);
+        await page.close();
+        await refusing.close();
+      }
 
       // Onglet Recherches : les actions de SavedSearchesView, envoyées comme l'app (AccountStore.save, deleteSearch,
       // markSearchViewed) : nom, critères et alertes ensemble, mise à jour par l'id.
@@ -3547,7 +4188,7 @@ try {
       await expectWrites(mark, [['DELETE', 'saved_searches', { id: `eq.${invest.id}` }, null]], `${B} : supprimer`);
       await page.waitForFunction(() => document.querySelectorAll('.dfav-searches .saved-search').length === 1, null, { timeout: 8000 })
         .catch(() => problems.push(`${B} : la recherche supprimée reste affichée`));
-      expectSame(B, 'après la suppression', [await textOf(page, '.dfav-tab-count'), await textOf(page, '.dfav-searches .saved-search h3')], ['(1)', 'Lyon centre']);
+      expectSame(B, 'après la suppression', [await textOf(page, '.dfav .fav-tab-count'), await textOf(page, '.dfav-searches .saved-search h3')], ['(1)', 'Lyon centre']);
       // Voir les résultats : la recherche est vue (last_viewed_at), puis ses résultats s'ouvrent.
       mark = writes.length;
       await searchCard(0).locator('.run-button').click();
@@ -3562,13 +4203,24 @@ try {
     await favDesk.close();
   }
   {
-    // Aucun favori : le texte de l'app et « Rechercher un bien » ; rien à comparer.
-    const { context } = await favContext(1440, 900, FAV_LISTINGS, { favorites: [] });
+    // Aucun favori : l'état vide illustré de l'app (FavoritesEmptyState, demande du 17/11), sans recherche, filtres ni
+    // catégories ; rien à comparer. Aucune recherche enregistrée : le même état, avec sa carte « 6 annonces ».
+    const { context } = await favContext(1440, 900, FAV_LISTINGS, { favorites: [], saved_searches: [] });
     page = await open(context, '/favoris/', 'favoris vide');
-    await page.waitForSelector('.dfav .account-empty');
-    expectSame('favoris vide', 'texte', [await textOf(page, '.dfav .account-empty h2'), await textOf(page, '.dfav .account-empty p'), await textOf(page, '.dfav .account-empty a'),
-      await page.getAttribute('.dfav .account-empty a', 'href'), await page.isDisabled('.dfav-compare'), await page.locator('.dfav-toolbar').count()],
-    ['Aucun favori pour l\'instant', 'Touchez le cœur d\'une annonce pour la retrouver ici et la comparer.', 'Rechercher un bien', '/recherche/', true, 0]);
+    await page.waitForSelector('.dfav .fav-empty');
+    expectSame('favoris vide', 'texte', [await textOf(page, '.dfav .fav-empty h2'), await textOf(page, '.dfav .fav-empty p'), await textOf(page, '.dfav .fav-empty a'),
+      await page.getAttribute('.dfav .fav-empty a', 'href'), await page.isDisabled('.dfav-compare'), await page.locator('.dfav-toolbar, .dfav-tools, .dfav-categories').count(),
+      await page.locator('.dfav .fav-empty .fav-ghost').count(), await page.getAttribute('.dfav .fav-empty-drawing', 'aria-hidden')],
+    ['Aucun favori pour l\'instant', 'Touchez le cœur d\'une annonce pour la retrouver ici et la comparer.', 'Rechercher un bien', '/recherche/', true, 0, 2, 'true']);
+    expectSame('favoris vide', 'onglets', await page.$$eval('.dfav .fav-tab', (els) => els.map((el) => [el.textContent.trim(), el.getAttribute('aria-label')])),
+      [['Favoris', null], ['Recherches', 'Recherches, 0']]);
+    await favShot(page, 'favoris-vide-1440.png');
+    await page.click('.dfav .fav-tab >> nth=1');
+    await page.waitForSelector('.dfav-searches .fav-empty');
+    expectSame('recherches vides', 'texte', [await textOf(page, '.dfav-searches .fav-empty h2'), await textOf(page, '.dfav-searches .fav-empty p'),
+      await textOf(page, '.dfav-searches .fav-empty-search-count'), await textOf(page, '.dfav-searches .fav-empty-save'), await page.getAttribute('.dfav-searches .fav-empty a', 'href')],
+    ['Aucune recherche enregistrée', 'Touchez Enregistrer sur une recherche pour la retrouver ici, avec ses nouveautés.', '6 annonces', 'Enregistrer', '/recherche/']);
+    await favShot(page, 'favoris-recherches-vides-1440.png');
     await page.close();
     await context.close();
   }
@@ -4405,6 +5057,7 @@ try {
   await page.screenshot({ path: join(out, 'favoris-telephone.png') });
   await page.screenshot({ path: join(out, 'favoris-telephone-long.png'), fullPage: true });
   page = await open(signedPhone, '/compte/?vue=informations', 'mes-informations-telephone');
+  await phoneFavorites();
   await page.waitForSelector('input[autocomplete="tel"]');
   await page.screenshot({ path: join(out, 'mes-informations-telephone-long.png'), fullPage: true });
   await signedPhone.close();

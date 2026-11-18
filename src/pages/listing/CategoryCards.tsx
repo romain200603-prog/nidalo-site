@@ -4,7 +4,10 @@ import { formatArea } from '../../lib/format';
 import { HotelPerformance, type Decimal, type RentalCost } from '../../lib/investment';
 import { capacity, cardEuros, cardEuros1, cardPercent, thin } from '../../lib/listing/money';
 import type { FinancingChoice, FinancingOptions, ProfitabilityBadge, ProfitabilityView } from '../../lib/listing/profitability';
+import { D } from '../../lib/investment/decimal';
+import { MONTH_COLORS, MonthBar } from '../../lib/listing/monthBar';
 import { ExtraIcon } from './icons';
+import { MonthTypeBar } from './MonthTypeBar';
 import {
   BADGES, SPEC_COLORS, SpecBanner, SpecBarRow, SpecBlockTitle, SpecBoxValue, SpecCard, SpecCardHeader, SpecFootnote,
   SpecNote, SpecResultBox, SpecSegmentRow, SpecSimulator, SpecTotalRow, SpecValueBox, SpecValueCaption, type Badge,
@@ -13,7 +16,7 @@ import {
 // Bloc propre à la catégorie, en haut de la fiche (ListingCategorySections.swift et ListingTopCards.swift) :
 // « Coût de la location » (Location), « Rentabilité hôtelière » (Hôtels) ou « Rentabilité » (vente avec loyer).
 
-const { blue, valueBlue, orange, grayBlue, green, red } = SPEC_COLORS;
+const { blue, valueBlue, orange, grayBlue, green, red, navy } = SPEC_COLORS;
 /** Longueur d'une barre (TopCardFormat.double(part / total)). */
 const ratio = (part: Decimal, total: Decimal) => (total.gt(0) ? part.dividedBy(total).toNumber() : 0);
 
@@ -32,7 +35,7 @@ export function RentalCostCard({ cost }: { cost: RentalCost }) {
   const perArea = cost.rentPerSquareMeter;
   return (
     <SpecCard labelledBy="cout-location">
-      <SpecCardHeader id="cout-location" icon={<ExtraIcon name="keyRound" />} title="Coût de la location" subtitle="Calculé à partir des informations de l’annonce" />
+      <SpecCardHeader id="cout-location" title="Coût de la location" subtitle="Calculé à partir des informations de l’annonce" />
       <SpecBanner
         left={{
           label: 'Loyer charges comprises', value: cardEuros(cc), unit: '/mois',
@@ -127,7 +130,7 @@ export function HotelSection({ figures }: { figures: HotelPerformance }) {
   return (
     <div className="spec-stack">
       <SpecCard labelledBy="rentabilite-hoteliere">
-        <SpecCardHeader id="rentabilite-hoteliere" icon={<ExtraIcon name="chartColumn" />} title="Rentabilité hôtelière"
+        <SpecCardHeader id="rentabilite-hoteliere" title="Rentabilité hôtelière"
           subtitle="Estimée à partir des performances indiquées par le vendeur" />
         <SpecBanner hotel left={{ label: 'Chiffre d’affaires annuel', value: cardEuros(figures.annualRevenue) }}
           right={{ label: 'EBITDA', value: cardEuros(figures.ebitda) }} />
@@ -197,31 +200,36 @@ export function ProfitabilityCard({ view, choice, options, onChange }: {
   options: FinancingOptions;
   onChange: (choice: FinancingChoice) => void;
 }) {
-  const largest = view.largestAmount;
+  // Carte de l'app (ProfitabilityCardBody, ListingTopCards.swift) : les rendements seuls dans le bandeau, le cash-flow
+  // sur fond neutre (seul le chiffre est en couleur), puis « Votre mois type » : une barre découpée en couleurs et les
+  // lignes avec leur carré ; le « Reste » sous la barre remplace l'ancienne ligne « Cash-flow ».
   const positive = view.cashFlow.gte(0);
-  const cashInk = positive ? green : red;
-  const cashFlowText = view.cashFlowText;
+  const cashInk = view.cashFlow.gt(0) ? green : view.cashFlow.lt(0) ? red : navy;
+  const isRent = (row: ProfitabilityView['rows'][number]) => row.id === 'collectedRent';
+  const rents = view.rows.filter(isRent);
+  const bar = new MonthBar(rents.reduce((sum, row) => sum.plus(row.amount), D(0)),
+    view.rows.filter((row) => !isRent(row)).map((row) => ({ id: row.id, kind: row.id, amount: row.amount.negated() })));
+  // Sous la barre : exactement le libellé de la ligne de loyer ; « Loyers encaissés » s'il y en a plusieurs.
+  const rentCaption = rents.length === 1 ? rents[0].label : 'Loyers encaissés';
   return (
     <SpecCard labelledBy="rentabilite">
-      <SpecCardHeader id="rentabilite" icon={<ExtraIcon name="chartColumn" />} title="Rentabilité" subtitle={view.source} />
-      <SpecBanner
-        left={{ label: 'Rendement brut', value: view.grossYield, unit: 'brut', detail: view.grossDetail }}
-        right={{ label: 'Rendement net', value: view.netYield, unit: 'net', detail: 'Charges, taxe et frais inclus' }}
-      />
-      <SpecValueBox title="Cash-flow mensuel" subtitle={view.financing} tone={positive ? 'positive' : 'negative'}>
-        <SpecBoxValue text={cashFlowText} color={cashInk} />
+      <SpecCardHeader id="rentabilite" title="Rentabilité" subtitle={view.source} />
+      <SpecBanner left={{ label: 'Rendement brut', value: view.grossYield }} right={{ label: 'Rendement net', value: view.netYield }} />
+      <SpecValueBox title="Cash-flow mensuel" subtitle={view.financing}>
+        <SpecBoxValue text={view.cashFlowText} color={cashInk} />
         <SpecValueCaption icon={positive ? <ExtraIcon name="arrowUpRight" /> : <Icon name="arrowDownRight" />}
           text={positive ? 'Autofinancé' : 'Effort d’épargne'} color={cashInk} />
       </SpecValueBox>
 
-      <SpecBlockTitle title="Votre mois type" legend={[['Entrées', blue], ['Sorties', orange]]} />
-      <div className="spec-rows">
+      <SpecBlockTitle title="Votre mois type" />
+      <MonthTypeBar bar={bar} cashFlow={view.cashFlow} rentCaption={rentCaption} />
+      <div className="spec-rows spec-month-rows">
         {view.rows.map((row) => (
           <SpecBarRow key={row.id} label={row.label} detail={row.info} badge={row.badge ? ROW_BADGES[row.badge] : null} amount={cardEuros(row.amount, true)}
-            ratio={ratio(row.amount.abs(), largest)} color={row.amount.gte(0) ? blue : orange} />
+            showsBar={false} amountColor={isRent(row) ? green : navy}
+            marker={isRent(row) ? MONTH_COLORS.collectedRent : bar.segmentKind(row.id) ? MONTH_COLORS[row.id] : ''} />
         ))}
       </div>
-      <SpecTotalRow label="Cash-flow" amount={cashFlowText} color={positive ? green : red} />
       {view.notes.length > 0 && (
         <div className="spec-notes">
           {view.notes.map((note) => <SpecNote key={note} text={note} />)}

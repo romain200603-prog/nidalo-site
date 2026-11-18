@@ -527,6 +527,81 @@ async function partShot(page, selector, file) {
   await page.$eval('.action-bar', (bar) => { bar.style.visibility = ''; });
 }
 
+/** Couleurs de « Votre mois type » (MonthlyBreakdown.Kind.monthColorHex de l'app), le reste en vert comme les loyers. */
+const MONTH_COLORS = {
+  collectedRent: 'rgb(47, 122, 78)', loan: 'rgb(60, 92, 176)', nonRecoverableCharges: 'rgb(235, 104, 52)', propertyTax: 'rgb(27, 175, 122)',
+  landlordInsurance: 'rgb(237, 161, 0)', managementFees: 'rgb(232, 123, 164)', maintenance: 'rgb(98, 80, 214)', reste: 'rgb(47, 122, 78)',
+};
+
+/**
+ * « Votre mois type » comme l'app (MonthTypeBar, demande du 17/11) : barre de 14, un segment par dépense dans l'ordre
+ * des lignes puis le reste, chacun de la couleur de sa sorte de ligne, 2 entre eux, la barre remplie ; dessous, le
+ * libellé du loyer et « Reste » (vert) ou « Effort d'épargne » (rouge, avec le trait où s'arrêtent les loyers) du
+ * cash-flow affiché ; devant chaque ligne, le carré de la couleur de son segment ; un seul texte lu pour la barre.
+ */
+async function checkMonthBar(page, name, { rentCaption }) {
+  const info = await page.evaluate(() => {
+    const plain = (text) => text?.replace(/[\u00a0\u202f]/g, ' ').trim() ?? null;
+    const bar = document.querySelector('.month-bar');
+    if (!bar) return null;
+    const track = bar.querySelector('.month-bar-track').getBoundingClientRect();
+    const flow = bar.querySelector('.month-bar-flow');
+    return {
+      height: track.height,
+      width: track.width,
+      segments: [...bar.querySelectorAll('.month-bar-segment')].map((el) => {
+        const box = el.getBoundingClientRect();
+        return { id: el.dataset.segment, left: box.left - track.left, right: box.right - track.left, color: getComputedStyle(el).backgroundColor };
+      }),
+      rows: [...document.querySelectorAll('.spec-month-rows .spec-bar-line')].map((line) => {
+        const marker = line.querySelector('.spec-row-marker');
+        return { label: plain(line.querySelector('.spec-bar-label')?.textContent), amount: plain(line.querySelector('.spec-bar-amount')?.textContent),
+          marker: marker ? getComputedStyle(marker).backgroundColor : null };
+      }),
+      bars: document.querySelectorAll('.spec-month-rows .spec-bar-track').length,
+      totals: bar.closest('.spec-card').querySelectorAll('.spec-total').length,
+      role: bar.getAttribute('role'),
+      label: plain(bar.getAttribute('aria-label')),
+      hidden: [...bar.children].every((child) => child.getAttribute('aria-hidden') === 'true'),
+      rent: plain(bar.querySelector('.month-bar-rent')?.textContent),
+      flow: plain(flow?.textContent),
+      flowColor: flow ? getComputedStyle(flow).color : null,
+      marker: Boolean(bar.querySelector('.month-bar-marker')),
+      cashFlow: plain(bar.closest('.spec-card').querySelector('.spec-value-box .spec-box-value')?.textContent),
+    };
+  });
+  if (!info) {
+    problems.push(`${name}: pas de barre « Votre mois type »`);
+    return;
+  }
+  expect(name, 'hauteur de la barre du mois type', info.height, 14);
+  const { segments } = info;
+  if (!segments.length) problems.push(`${name}: barre du mois type sans segment`);
+  for (const [index, segment] of segments.entries()) {
+    if (segment.color !== MONTH_COLORS[segment.id]) problems.push(`${name}: segment « ${segment.id} » en ${segment.color}`);
+    if (index > 0 && Math.abs(segment.left - segments[index - 1].right - 2) > 0.6) problems.push(`${name}: écart de ${(segment.left - segments[index - 1].right).toFixed(1)} avant « ${segment.id} »`);
+  }
+  if (segments.length && (Math.abs(segments[0].left) > 0.6 || Math.abs(segments.at(-1).right - info.width) > 0.6)) {
+    problems.push(`${name}: la barre du mois type n'est pas remplie (${segments[0].left.toFixed(1)} à ${segments.at(-1).right.toFixed(1)} sur ${info.width.toFixed(1)})`);
+  }
+  // Les carrés des lignes de dépense, dans l'ordre, sont les couleurs des segments ; sans carré, une ligne à 0 €.
+  const expenseMarkers = info.rows.slice(1).filter((row) => row.marker !== 'rgba(0, 0, 0, 0)').map((row) => row.marker);
+  expectJSON(name, 'carrés des lignes du mois type', expenseMarkers, segments.filter((segment) => segment.id !== 'reste').map((segment) => segment.color));
+  for (const row of info.rows.slice(1)) if (row.marker === 'rgba(0, 0, 0, 0)' && !/^[−-]?0 €$/.test(row.amount)) problems.push(`${name}: ligne « ${row.label} » (${row.amount}) sans carré`);
+  expectJSON(name, 'ligne du loyer', [info.rows[0]?.label, info.rows[0]?.marker], [rentCaption, MONTH_COLORS.collectedRent]);
+  expectJSON(name, 'lignes sans barre ni total « Cash-flow »', [info.bars, info.totals], [0, 0]);
+  expectJSON(name, 'barre lue d\'un seul texte', [info.role, info.hidden, /^Sur [\d ]+ € de loyers : .+, (reste|effort d’épargne) [\d ]+ €$/.test(info.label ?? '')], ['img', true, true]);
+  expect(name, 'libellé sous la barre', info.rent, rentCaption);
+  // Sous la barre, le cash-flow de la case en euros entiers (CategoryFormat.euros de l'app ; la case garde les centimes).
+  const value = Number((info.cashFlow ?? '').replace(/\/mois$/, '').replace('−', '-').replace(/[^\d,-]/g, '').replace(',', '.'));
+  const negative = value < 0;
+  const whole = Math.round(Math.abs(value));
+  const amount = `${whole === 0 ? '' : negative ? '−' : '+'}${whole.toLocaleString('fr-FR').replace(/[\u00a0\u202f]/g, ' ')} €`;
+  expect(name, 'reste sous la barre', info.flow, negative ? `Effort d’épargne ${amount}` : `Reste ${amount}`);
+  expectJSON(name, 'couleur du reste et trait des loyers', [info.flowColor, info.marker, segments.some((segment) => segment.id === 'reste')],
+    negative ? ['rgb(192, 57, 43)', true, false] : ['rgb(87, 121, 101)', false, whole > 0]);
+}
+
 /** Mini carte, carte plein écran, vue satellite, recentrage et itinéraire. */
 async function checkMap(page, name, { coordinate, approximate, shots }) {
   const section = page.locator('section[aria-labelledby="localisation"]');
@@ -904,11 +979,17 @@ try {
   await page.waitForSelector('.dl-main .spec-card');
   expect('investissement-ordinateur', 'catégorie', await page.textContent('.dl-category'), 'INVESTISSEMENT LOCATIF');
   expect('investissement-ordinateur', 'titre de la carte', await page.textContent('.dl-main .spec-card .spec-header h2'), 'Rentabilité');
+  await checkMonthBar(page, 'investissement-ordinateur', { rentCaption: 'Loyer encaissé' });
+  // Appartement vendu loué : « Vendu occupé » et « Loyer encaissé », comme l'app.
+  expectJSON('investissement-ordinateur', 'situation locative', await page.$$eval('.features-item', (rows) => rows.map((row) => [row.querySelector('dt').textContent, row.querySelector('dd').textContent.replace(/[\u00a0\u202f]/g, ' ')])
+    .filter(([title]) => ['Situation locative', 'Loyer encaissé', 'Loyer actuel', 'Fin du bail'].includes(title))), [['Situation locative', 'Vendu occupé'], ['Loyer encaissé', '850 €/mois']]);
   expect('investissement-ordinateur', 'interlocuteur', await page.textContent('.publisher-head'), /Agence Démo Immobilier.*PRO.*Votre contact : Paul Démo.*Lyon \(69002\).*2 annonces en ligne/);
   expect('investissement-ordinateur', 'agence de la colonne', await page.textContent('.dl-aside .dl-seller-text'), /^Agence Démo Immobilier\s*PRO\s*Votre contact : Paul Démo$/);
   await page.screenshot({ path: join(out, 'investissement-ordinateur-long.png'), fullPage: true });
   await checkSegment(page, 'investissement-ordinateur', { group: 'Durée', result: '.spec-simulator .spec-result-value' });
-  await checkSegment(page, 'investissement-ordinateur', { group: 'Apport', result: '.spec-total-amount' });
+  // La ligne « Cash-flow » est partie (demande du 17/11) : l'apport change le reste sous la barre du mois type.
+  await checkSegment(page, 'investissement-ordinateur', { group: 'Apport', result: '.month-bar-flow' });
+  await checkMonthBar(page, 'investissement-ordinateur', { rentCaption: 'Loyer encaissé' });
   await expectSignIn(page, 'investissement-ordinateur', 'Envoyer un message (agence)', '.dl-aside .dl-message');
   await page.close();
 
@@ -1018,6 +1099,8 @@ try {
   await ready(page, 'investissement-telephone');
   await common(page, 'investissement-telephone', { phone: true });
   await fitted(page, 'investissement-telephone');
+  await checkMonthBar(page, 'investissement-telephone', { rentCaption: 'Loyer encaissé' });
+  await partShot(page, '.spec-card', 'investissement-telephone-mois-type.png');
   await page.screenshot({ path: join(out, 'investissement-telephone.png') });
   await page.screenshot({ path: join(out, 'investissement-telephone-long.png'), fullPage: true });
   await partShot(page, '.listing-category', 'investissement-telephone-carte.png');

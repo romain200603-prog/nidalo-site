@@ -371,6 +371,7 @@ export function storageContentType(kind: AttachmentKind, ext: string): string {
     case 'heif': return 'image/heif';
     case 'mov': return 'video/quicktime';
     case 'mp4': case 'm4v': return 'video/mp4';
+    case 'm4a': return 'audio/mp4';
     case 'pdf': return 'application/pdf';
     case 'doc': return 'application/msword';
     case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';

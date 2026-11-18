@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import { formatPrice } from '../../lib/format';
 import { allowedActions, effectiveStatus, offerGapLabel, offerStatusLabel, type OfferAction, type OfferRow } from '../../lib/listing/offers';
@@ -7,13 +7,18 @@ import type { Message } from '../../lib/messages/api';
 import { fileExtension, isMedia, UNSUPPORTED_ATTACHMENT, type Attachment } from '../../lib/messages/content';
 import { clock, durationLabel, keepNumbersTogether, sizeLabel } from '../../lib/messages/format';
 import { sameId, type Conversation } from '../../lib/messages/inbox';
-import { profileOf, refreshAfterVisit, toggleHeart } from '../../lib/messages/store';
+import { canForward, canReply, DELETED_QUOTE, firstName, quoteText, replyHeader } from '../../lib/messages/interactions';
+import { loadQuotedOriginal, profileOf, quotedOriginal, quotedStore, react, refreshAfterVisit, toggleHeart } from '../../lib/messages/store';
 import { bubbleText, groupSender, mediaEntries, senderName, siteThreadDays, type SiteThreadRow } from '../../lib/messages/thread';
 import {
   acceptVisitRequest, openSlots, requestCardTitle, requestDateShort, requestDateWide, requestOutcome, requestPlaceLine, shownSlot,
   type ConversationVisitRequest,
 } from '../../lib/messages/visitRequests';
 import { avatarUrl } from '../../lib/account/profile';
+import { useStore } from '../../lib/account/session';
+import {
+  ForwardedLabel, InteractiveMessage, MessageMenu, myEmojiOn, ReactionsSheet, ReplyContext, type FocusedMessage, type FocusMenuItem,
+} from './MessageInteractions';
 import { ActionMenu, ConversationAvatar, CounterpartAvatar, Dialog, showIphoneOnly, useSignedUrl } from './parts';
 import { GifBubble, VoiceBubble } from './VoiceGif';
 
@@ -66,16 +71,42 @@ type ThreadProps = {
   /** Demandes de visite de la conversation (même annonce, mêmes deux personnes). */
   requests: ConversationVisitRequest[];
   me: string | null;
+  /** On peut écrire dans la conversation (pas bloquée, ni quittée, ni avec un compte supprimé) : « Répondre ». */
+  canWrite: boolean;
   onOfferAction: (offer: OfferRow, action: OfferAction) => void;
   onProposeSlots: (request: ConversationVisitRequest) => void;
+  onReply: (message: Message) => void;
+  onForward: (message: Message) => void;
 };
 
-export function Thread({ conversation, messages, offers, requests, me, onOfferAction, onProposeSlots }: ThreadProps) {
+/** Ce que les bulles d'un fil savent faire : gestes, menu, citations (demande du 17/11). */
+type Interactions = {
+  me: string | null;
+  canWrite: boolean;
+  messages: Message[];
+  flashed: string | null;
+  onMenu: (message: Message, outgoing: boolean, rect: DOMRect, preview: ReactNode) => void;
+  onShowReactions: (message: Message) => void;
+  onOpenQuote: (id: string) => void;
+};
+
+export function Thread({ conversation, messages, offers, requests, me, canWrite, onOfferAction, onProposeSlots, onReply, onForward }: ThreadProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const shownCount = useRef(-1);
   const [viewer, setViewer] = useState<number | null>(null);
+  const [focused, setFocused] = useState<FocusedMessage | null>(null);
+  const [reactionsOf, setReactionsOf] = useState<string | null>(null);
+  const [flashed, setFlashed] = useState<string | null>(null);
+  const flashTimers = useRef<number[]>([]);
+  useEffect(() => () => flashTimers.current.forEach((timer) => window.clearTimeout(timer)), []);
+  // Les originaux cités qui ne sont pas dans les messages lus : relus une fois, la citation suit.
+  useStore(quotedStore);
+  const replyKey = messages.map((message) => message.replyToId ?? '').join(',');
+  useEffect(() => {
+    for (const message of messages) if (message.replyToId) void loadQuotedOriginal(message.replyToId, messages);
+  }, [replyKey]); // Seulement quand une réponse arrive : les messages sont relus à chaque changement.
   const now = new Date();
   const days = siteThreadDays(messages, requests, now);
   // Ce qui est là à l'ouverture ne bouge pas ; ce qui arrive ensuite (reçu ou envoyé) apparaît en fondu.
@@ -112,6 +143,36 @@ export function Thread({ conversation, messages, offers, requests, me, onOfferAc
     if (index >= 0) setViewer(index);
   };
 
+  /** Clic sur une citation : l'original vient au centre, puis s'éclaire un instant (scrollRequest de l'app). */
+  const openQuote = (id: string) => {
+    const target = [...(scroller.current?.querySelectorAll<HTMLElement>('[data-message-id]') ?? [])].find((el) => sameId(el.dataset.messageId, id));
+    if (!target) return;
+    target.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    flashTimers.current.forEach((timer) => window.clearTimeout(timer));
+    flashTimers.current = [
+      window.setTimeout(() => setFlashed(id), 350),
+      window.setTimeout(() => setFlashed((current) => (current === id ? null : current)), 1250),
+    ];
+  };
+  const interactions: Interactions = {
+    me, canWrite, messages, flashed,
+    onMenu: (message, outgoing, rect, preview) => setFocused({ message, rect, outgoing, preview }),
+    onShowReactions: (message) => setReactionsOf(message.id),
+    onOpenQuote: openQuote,
+  };
+  const closeMenu = useCallback(() => setFocused(null), []);
+  const menuItems = (message: Message): FocusMenuItem[] => {
+    const items: FocusMenuItem[] = [];
+    const close = () => setFocused(null);
+    if (canWrite && canReply(message.content)) items.push({ label: 'Répondre', icon: 'reply', onSelect: () => { close(); onReply(message); } });
+    if (canForward(message.content)) items.push({ label: 'Transférer', icon: 'forward', onSelect: () => { close(); onForward(message); } });
+    if (message.content.kind === 'text') {
+      const text = message.content.text;
+      items.push({ label: 'Copier', icon: 'copy', onSelect: () => { void navigator.clipboard?.writeText(text).catch(() => undefined); close(); } });
+    }
+    return items;
+  };
+
   return (
     <div
       className="dm-thread"
@@ -139,11 +200,24 @@ export function Thread({ conversation, messages, offers, requests, me, onOfferAc
                 onOfferAction={onOfferAction}
                 onProposeSlots={onProposeSlots}
                 onOpenMedia={openMedia}
+                interactions={interactions}
               />
             ))}
           </section>
         ))}
       </div>
+      <MessageMenu
+        focused={focused}
+        myEmoji={myEmojiOn(focused?.message ?? null, me)}
+        items={focused ? menuItems(focused.message) : []}
+        onEmoji={(emoji) => {
+          const message = focused?.message;
+          setFocused(null);
+          if (message) void react(message.id, emoji);
+        }}
+        onClose={closeMenu}
+      />
+      <ReactionsSheet messageId={reactionsOf} conversation={conversation} me={me} onClose={() => setReactionsOf(null)} />
       <MediaViewer
         entries={entries}
         index={viewer}
@@ -196,7 +270,51 @@ function SenderAvatar({ conversation, senderId, shown }: { conversation: Convers
   );
 }
 
-function ThreadRowView({ row, fresh, conversation, offers, me, onOfferAction, onProposeSlots, onOpenMedia }: {
+/**
+ * Au-dessus d'une bulle : « Transféré », puis pour une réponse « Vous avez répondu à Sophie » et la citation (« … »
+ * pendant la lecture de l'original, « Message supprimé » s'il n'existe plus).
+ */
+function MessageContext({ message, outgoing, conversation, interactions }: {
+  message: Message;
+  outgoing: boolean;
+  conversation: Conversation;
+  interactions: Interactions;
+}) {
+  const replyId = message.replyToId;
+  if (!message.isForwarded && !replyId) return null;
+  const personName = (id: string | null) => groupSender(conversation, id)?.name ?? conversation.counterpart.name;
+  let reply: ReactNode = null;
+  if (replyId) {
+    const original = quotedOriginal(replyId, interactions.messages);
+    const quoted = original.status === 'found' ? original.message : null;
+    const replier = firstName(personName(message.senderId));
+    const header = quoted
+      ? replyHeader({
+        replierIsMe: outgoing, replierName: replier, quotedIsMine: sameId(quoted.senderId, interactions.me), quotedName: firstName(personName(quoted.senderId)),
+      })
+      : outgoing ? 'Vous avez répondu' : `${replier} a répondu`;
+    const text = original.status === 'loading' ? '…' : quoteText(quoted);
+    const deleted = original.status !== 'loading' && text === DELETED_QUOTE;
+    reply = (
+      <ReplyContext
+        header={header}
+        text={text}
+        deleted={deleted}
+        onOpen={() => {
+          if (quoted && interactions.messages.some((item) => sameId(item.id, replyId))) interactions.onOpenQuote(replyId);
+        }}
+      />
+    );
+  }
+  return (
+    <div className="dm-msg-context">
+      {message.isForwarded && <ForwardedLabel />}
+      {reply}
+    </div>
+  );
+}
+
+function ThreadRowView({ row, fresh, conversation, offers, me, onOfferAction, onProposeSlots, onOpenMedia, interactions }: {
   row: SiteThreadRow;
   /** Arrivé après l'ouverture : en fondu. */
   fresh: boolean;
@@ -206,6 +324,7 @@ function ThreadRowView({ row, fresh, conversation, offers, me, onOfferAction, on
   onOfferAction: (offer: OfferRow, action: OfferAction) => void;
   onProposeSlots: (request: ConversationVisitRequest) => void;
   onOpenMedia: (attachment: Attachment) => void;
+  interactions: Interactions;
 }) {
   const { item, startsGroup, endsGroup } = row;
   const outgoing = sameId(item.senderId, me);
@@ -255,15 +374,33 @@ function ThreadRowView({ row, fresh, conversation, offers, me, onOfferAction, on
     );
   }
 
+  // Bulle avec ses gestes (double clic, menu) et sa pastille ; le menu en montre une copie à sa place.
+  const interactive = (bubble: () => ReactNode) => (
+    <InteractiveMessage
+      message={message}
+      flashing={sameId(interactions.flashed, message.id)}
+      onHeart={() => void toggleHeart(message.id)}
+      onMenu={(rect) => interactions.onMenu(message, outgoing, rect, bubble())}
+      onShowReactions={() => interactions.onShowReactions(message)}
+    >
+      {bubble()}
+    </InteractiveMessage>
+  );
+  const context = <MessageContext message={message} outgoing={outgoing} conversation={conversation} interactions={interactions} />;
+  const reacted = message.reactions.length > 0 ? ' has-reaction' : '';
+
   if (content.kind === 'attachments') {
     // Photos et documents portent l'heure ; vocal, lieu et contact l'ont juste en dessous.
     const statusBelow = content.items.some((item) => item.kind === 'audio' || item.kind === 'location' || item.kind === 'contact');
     return (
-      <div className={`dm-msg${outgoing ? ' is-out' : ''}${spacing}`}>
+      <div className={`dm-msg${outgoing ? ' is-out' : ''}${spacing}${reacted}`} data-message-id={message.id}>
         {name}
+        {context}
         <div className="dm-msg-line">
           {avatar}
-          <AttachmentBubble items={content.items} caption={content.caption} outgoing={outgoing} message={message} onOpenMedia={onOpenMedia} />
+          {interactive(() => (
+            <AttachmentBubble items={content.items} caption={content.caption} outgoing={outgoing} message={message} onOpenMedia={onOpenMedia} />
+          ))}
         </div>
         {statusBelow && <StatusLabel time={message.createdAt} outgoing={outgoing} read={message.isRead} className="dm-msg-status" />}
       </div>
@@ -271,55 +408,25 @@ function ThreadRowView({ row, fresh, conversation, offers, me, onOfferAction, on
   }
 
   return (
-    <div className={`dm-msg${outgoing ? ' is-out' : ''}${spacing}${message.reaction ? ' has-reaction' : ''}`}>
+    <div className={`dm-msg${outgoing ? ' is-out' : ''}${spacing}${reacted}`} data-message-id={message.id}>
       {name}
+      {context}
       <div className="dm-msg-line">
         {avatar}
-        <Bubble message={message} outgoing={outgoing} />
+        {interactive(() => <Bubble message={message} outgoing={outgoing} />)}
       </div>
     </div>
   );
 }
 
-/** Bulle de texte : appui long (0,35 s) ou bouton cœur pour aimer ; le cœur posé en pastille ; l'heure dedans. */
+/** Bulle de texte : blanche à gauche, bleue à droite ; l'heure (et les coches) dedans, en bas à droite. */
 function Bubble({ message, outgoing }: { message: Message; outgoing: boolean }) {
-  const timer = useRef<number | null>(null);
-  const stop = () => {
-    if (timer.current !== null) window.clearTimeout(timer.current);
-    timer.current = null;
-  };
-  useEffect(() => stop, []);
-  const liked = message.reaction !== null;
   return (
     <div className="dm-bubble-wrap">
-      <div
-        className={`dm-bubble${outgoing ? ' is-out' : ''}`}
-        onPointerDown={(event) => {
-          if (event.button !== 0) return;
-          stop();
-          timer.current = window.setTimeout(() => {
-            timer.current = null;
-            void toggleHeart(message.id);
-          }, 350);
-        }}
-        onPointerUp={stop}
-        onPointerLeave={stop}
-        onPointerCancel={stop}
-      >
+      <div className={`dm-bubble${outgoing ? ' is-out' : ''}`}>
         <span className="dm-text">{keepNumbersTogether(bubbleText(message.content))}</span>
         <Meta time={message.createdAt} outgoing={outgoing} read={message.isRead} />
       </div>
-      {liked && <span className="dm-heart" role="img" aria-label="Aimé"><Icon name="heart" /></span>}
-      <button
-        type="button"
-        className={`dm-heart-button${liked ? ' is-on' : ''}`}
-        aria-label={liked ? 'Retirer le cœur' : 'Aimer'}
-        aria-pressed={liked}
-        title={liked ? 'Retirer le cœur' : 'Aimer'}
-        onClick={() => void toggleHeart(message.id)}
-      >
-        <Icon name="heart" />
-      </button>
     </div>
   );
 }

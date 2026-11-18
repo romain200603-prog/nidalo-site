@@ -52,7 +52,10 @@ const request = (overrides: Partial<Row> = {}) => visitRequestFrom(requestRow(ov
 
 function message(id: string, createdAt: Date, senderId: string | null = AGENT, kind: 'text' | 'system' = 'text'): Message {
   const content = kind === 'system' ? { kind: 'system' as const, text: 'Groupe créé' } : { kind: 'text' as const, text: 'Bonjour' };
-  return { id, conversationId: 'c1', senderId, clientId: id, content, createdAt, expiresAt: null, reaction: null, isRead: false };
+  return {
+    id, conversationId: 'c1', senderId, clientId: id, content, createdAt, expiresAt: null, reaction: null, reactions: [], isRead: false,
+    replyToId: null, isForwarded: false, raw: null,
+  };
 }
 
 describe('Libellés de temps de la page Messages', () => {
