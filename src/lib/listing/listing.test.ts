@@ -6,7 +6,7 @@ import { capacity, cardEuros, cardEuros1, cardPercent, signedCents } from './mon
 import { initials, memberSince, publicName, publisherFrom } from './publisher';
 import {
   buyerFees, energyLines, feesLabel, featureRows, floorLabel, footnote, headerFacts, hotelActivity, leaseDuration, priceFeesNote, priceSecondary,
-  rentalRows, saleCondition,
+  rentalRows, saleCondition, soldOccupiedLabel,
 } from './rows';
 import { arrondissement, placeLine } from '../listings';
 import { shareText } from './share';
@@ -161,12 +161,27 @@ describe('Textes de la fiche', () => {
     const rows = featureRows(row);
     expect(rows.map(([t]) => t)).toEqual([
       'Type de bien', 'Surface habitable', 'Pièces', 'Chambres', 'Étage', 'Ascenseur', 'Extérieur', 'Stationnement', 'Construction', 'Cave', 'État',
-      'Situation locative', 'Loyer actuel', 'Fin du bail', 'Charges', 'Taxe foncière',
+      'Situation locative', 'Loyer encaissé', 'Charges', 'Taxe foncière',
     ]);
+    // Vendu occupé : la fin du bail est dans la situation locative, plus de ligne « Fin du bail ».
     expect(Object.fromEntries(rows)).toMatchObject({
-      'Étage': '2e étage sur 5', 'Extérieur': 'Balcon', 'Stationnement': 'Aucun', 'Situation locative': 'Loué', 'Fin du bail': 'décembre 2027',
-      'Loyer actuel': `1${s}400${nb}€/mois`, 'Taxe foncière': `900${nb}€/an`,
+      'Étage': '2e étage sur 5', 'Extérieur': 'Balcon', 'Stationnement': 'Aucun', 'Situation locative': 'Vendu occupé · bail jusqu\'au 12/2027',
+      'Loyer encaissé': `1${s}400${nb}€/mois`, 'Taxe foncière': `900${nb}€/an`,
     });
+  });
+
+  it('vendu occupé : appartement ou maison vendus loués (LotSearchTests.soldOccupiedLabel)', () => {
+    const leased = { isLeased: true, currentMonthlyRent: 750, leaseEndDate: '2027-08-01T00:00:00Z' };
+    expect(soldOccupiedLabel(testRow({ rental_info: leased }))).toBe('Vendu occupé · bail jusqu\'au 08/2027');
+    expect(soldOccupiedLabel(testRow({ rental_info: { isLeased: true, currentMonthlyRent: 750 } }))).toBe('Vendu occupé');
+    expect(soldOccupiedLabel(testRow({ property_type: 'house', rental_info: { isLeased: true, currentMonthlyRent: 900 } }))).toBe('Vendu occupé');
+    // Inchangés : appartement libre, location, local, immeuble.
+    expect(soldOccupiedLabel(testRow({ rental_info: { isLeased: false } }))).toBeNull();
+    expect(soldOccupiedLabel(testRow({ transaction: 'rent', rental_info: leased }))).toBeNull();
+    expect(soldOccupiedLabel(testRow({ property_type: 'commercial', rental_info: leased }))).toBeNull();
+    expect(soldOccupiedLabel(testRow({ property_type: 'building', rental_info: leased }))).toBeNull();
+    // Libre : « Libre », sans loyer ni fin de bail.
+    expect(Object.fromEntries(featureRows(testRow({ rental_info: { isLeased: false } })))['Situation locative']).toBe('Libre');
   });
 
   it('copropriété d’une vente : nombre de lots et procédure en cours', () => {

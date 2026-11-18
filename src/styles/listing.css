@@ -2,20 +2,21 @@
    « Coût de la location » et « Rentabilité hôtelière » suivent la maquette de 480 px ramenée à l'écran par --k. */
 
 /* --k : maquette de 480 px ramenée au téléphone (393/480, comme Spec.k de l'app) ; à sa taille dès que la carte a la
-   place. Couleurs des cartes de catégorie : celles de `Spec` dans l'app (SpecCardComponents.swift). */
+   place. Couleurs des cartes de catégorie : celles de `Spec` dans l'app (SpecCardComponents.swift), qui reprend
+   depuis la fiche refaite les couleurs de l'app (bleu marine, gris, bleu Nidalo, fond de page, contours). */
 .listing {
   --k: 0.81875;
-  --spec-navy: #0C144C;
-  --spec-gray: #5C606C;
-  --spec-blue: #3B58B7;
-  --spec-value-blue: #2F4BA6;
-  --spec-rule: #EDF0F4;
-  --spec-card-border: #E9ECF0;
-  --spec-circle: #EBF0FB;
+  --spec-navy: #242D38;
+  --spec-gray: #75808B;
+  --spec-blue: #3C5CB0;
+  --spec-value-blue: #3C5CB0;
+  --spec-rule: #F2F0EC;
+  --spec-card-border: #ECEAE6;
+  --spec-circle: #EEF2FA;
   --spec-banner-label: #DCE3F3;
-  --spec-light-box: #F2F5FD;
-  --spec-light-border: #DCE3F6;
-  --spec-track: #E8ECF5;
+  --spec-light-box: #FAF9F6;
+  --spec-light-border: #ECEAE6;
+  --spec-track: #F2F0EC;
 }
 @media (min-width: 600px) { .listing { --k: 1; } }
 
@@ -171,14 +172,12 @@ a.visit-card { color: inherit; text-decoration: none; }
 .spec-stack { display: flex; flex-direction: column; gap: calc(14px * var(--k)); }
 .spec-card { background: #FFFFFF; border: 1px solid var(--spec-card-border); border-radius: calc(24px * var(--k)); padding: calc(21px * var(--k) - 1px); color: var(--spec-navy); }
 .spec-header { display: flex; align-items: center; gap: calc(14px * var(--k)); }
-.spec-header-icon { flex: none; width: calc(46px * var(--k)); height: calc(46px * var(--k)); display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--spec-circle); color: var(--spec-navy); }
-.spec-header-icon .icon { width: calc(21px * var(--k)); height: calc(21px * var(--k)); }
 .spec-header-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: calc(2px * var(--k)); }
 .spec-header h2 { color: var(--spec-navy); font-size: calc(24px * var(--k)); font-weight: 800; letter-spacing: -0.02em; line-height: calc(30px * var(--k)); }
 .spec-header p { margin: 0; color: var(--spec-gray); font-size: calc(14.5px * var(--k)); font-weight: 500; line-height: calc(20px * var(--k)); }
 .spec-card-title { color: var(--spec-navy); font-size: calc(20px * var(--k)); font-weight: 800; letter-spacing: -0.01em; line-height: calc(26px * var(--k)); }
 
-.spec-banner { margin-top: calc(16px * var(--k)); display: flex; align-items: flex-start; padding: calc(18px * var(--k)) calc(20px * var(--k)); border-radius: calc(22px * var(--k)); background: linear-gradient(180deg, #294182, #253979); color: #FFFFFF; }
+.spec-banner { margin-top: calc(16px * var(--k)); display: flex; align-items: flex-start; padding: calc(18px * var(--k)) calc(20px * var(--k)); border-radius: calc(22px * var(--k)); background: var(--spec-blue); color: #FFFFFF; }
 .spec-banner-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: calc(4px * var(--k)); }
 .spec-banner-left { padding-right: calc(16px * var(--k)); box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.22); }
 .spec-banner-hotel .spec-banner-left { padding-right: calc(14px * var(--k)); }
@@ -196,8 +195,6 @@ a.visit-card { color: inherit; text-decoration: none; }
 .spec-banner-hotel .spec-banner-unit { font-size: calc(15em / 27); }
 
 .spec-value-box { margin-top: calc(12px * var(--k)); display: flex; align-items: center; gap: calc(12px * var(--k)); padding: calc(17px * var(--k) - 1px) calc(19px * var(--k) - 1px); border: 1px solid var(--spec-light-border); border-radius: calc(18px * var(--k)); background: var(--spec-light-box); }
-.spec-value-box.is-positive { background: #ECFAF7; border-color: #CBEBDF; }
-.spec-value-box.is-negative { background: #FCF3F4; border-color: #EDD6D9; }
 .spec-value-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: calc(2px * var(--k)); }
 .spec-value-title { color: var(--spec-navy); font-size: calc(16px * var(--k)); font-weight: 800; line-height: calc(22px * var(--k)); }
 .spec-value-subtitle { color: var(--spec-gray); font-size: calc(14px * var(--k)); font-weight: 500; line-height: calc(19px * var(--k)); font-variant-numeric: tabular-nums; }
@@ -223,9 +220,27 @@ a.visit-card { color: inherit; text-decoration: none; }
 .spec-bar-track { height: calc(9px * var(--k)); }
 .spec-bar-track span { display: block; height: 100%; border-radius: 0 calc(5px * var(--k)) calc(5px * var(--k)) 0; transition: width 0.45s ease-out; }
 .spec-badge { flex: none; display: inline-flex; align-items: center; height: calc(26px * var(--k)); padding: 0 calc(10px * var(--k)); border-radius: 999px; font-size: calc(13px * var(--k)); font-weight: 700; white-space: nowrap; }
-.spec-badge-listing { background: #E9EEFA; color: var(--spec-blue); }
-.spec-badge-legal { background: #EFF2F6; color: #3E4A59; }
-.spec-badge-simulation { background: #E8EEFB; color: var(--spec-blue); }
+.spec-badge-listing { background: #EEF2FA; color: var(--spec-blue); }
+.spec-badge-legal { background: #F2F0EC; color: #5B6571; }
+.spec-badge-simulation { background: #EEF2FA; color: var(--spec-blue); }
+
+/* « Votre mois type » (MonthTypeBar de l'app) : barre de 14 à 16 sous le titre, segments posés à leur place (2 entre
+   eux), bouts arrondis ; trait bleu marine de 2 × 20 où s'arrêtent les loyers ; dessous, à 8, le libellé du loyer
+   (12,5 moyen gris) et « Reste » ou « Effort d'épargne » (12,5 gras). Puis les lignes, à 20, avec leur carré de 10. */
+.month-bar { margin-top: calc(16px * var(--k)); display: flex; flex-direction: column; gap: calc(8px * var(--k)); }
+.month-bar-track { position: relative; height: 14px; }
+.month-bar-empty { position: absolute; inset: 0; border-radius: 7px; background: var(--spec-track); }
+.month-bar-segment { position: absolute; top: 0; height: 14px; transition: left 0.3s ease-out, width 0.3s ease-out; }
+.month-bar-marker { position: absolute; top: -3px; width: 2px; height: 20px; border-radius: 1px; background: var(--spec-navy); transition: left 0.3s ease-out; }
+.month-bar-captions { display: flex; align-items: center; gap: calc(8px * var(--k)); font-size: calc(12.5px * var(--k)); white-space: nowrap; }
+.month-bar-rent { flex: 1; min-width: 0; overflow: hidden; color: var(--spec-gray); font-weight: 500; text-overflow: ellipsis; }
+.month-bar-flow { flex: none; display: inline-flex; align-items: center; gap: calc(4px * var(--k)); font-weight: 700; font-variant-numeric: tabular-nums; }
+.month-bar-flow .icon { width: calc(13px * var(--k)); height: calc(13px * var(--k)); }
+.spec-month-rows { margin-top: calc(20px * var(--k)); }
+.spec-row-marker { flex: none; width: 10px; height: 10px; margin-right: calc(4px * var(--k)); border-radius: 2.5px; }
+@media (prefers-reduced-motion: reduce) {
+  .month-bar-segment, .month-bar-marker { transition: none; }
+}
 
 .spec-total { margin-top: calc(18px * var(--k)); padding-top: calc(16px * var(--k)); border-top: 1px solid var(--spec-rule); display: flex; align-items: center; gap: calc(6px * var(--k)); min-height: calc(46px * var(--k) + 1px); }
 .spec-total-label { color: var(--spec-navy); font-size: calc(17px * var(--k)); font-weight: 800; line-height: calc(30px * var(--k)); white-space: nowrap; }
