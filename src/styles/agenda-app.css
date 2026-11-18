@@ -26,8 +26,9 @@
   .app-agenda-plus:hover .app-agenda-plus-circle { background: #E2E8F6; }
 }
 
-/* Onglets : piste #F2F0EC (coins 16, 4 de marge), onglets de 38 ; le choisi sur fond blanc (coins 12, ombre légère), en
-   gras ; le nombre dans un rond de 20, bleu sur l'onglet choisi. Changement d'onglet en 0,25 s, comme l'app. */
+/* Onglets : piste #F2F0EC (coins 16, 4 de marge), onglets de 38 ; le choisi sur fond blanc (coins 12, ombre légère :
+   flou CSS = 2 × le rayon de l'app, comme sur l'accueil), en gras ; le nombre dans un rond de 20, bleu sur l'onglet
+   choisi. Changement d'onglet en 0,25 s, comme l'app. */
 .app-agenda-tabs { display: flex; margin-top: 16px; padding: 4px; border-radius: 16px; background: var(--app-segment); }
 .app-agenda-tab {
   display: inline-flex; flex: 1 1 0; align-items: center; justify-content: center; gap: 7px; min-width: 0; height: 38px; margin: 0;
@@ -36,7 +37,7 @@
   transition: background-color 0.25s ease, box-shadow 0.25s ease, color 0.25s ease;
 }
 .app-agenda-tab-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.app-agenda-tab[aria-selected="true"] { background: #FFFFFF; color: var(--app-navy); font-weight: 700; box-shadow: 0 1px 4px rgba(36, 45, 56, 0.08); }
+.app-agenda-tab[aria-selected="true"] { background: #FFFFFF; color: var(--app-navy); font-weight: 700; box-shadow: 0 1px 8px rgba(36, 45, 56, 0.08); }
 .app-agenda-tab-count {
   display: inline-flex; flex: none; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 4px;
   border-radius: 10px; background: rgba(255, 255, 255, 0.7); color: var(--app-text-secondary); font: 700 11.5px/1 var(--app-font);
@@ -67,11 +68,11 @@
 }
 .app-agenda-retry:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
 
-/* Carte d'une visite : blanche, coins 22, bordure fine et ombre très légère, 16 de marge ; 12 entre le haut, le trait
-   et les boutons. */
+/* Carte d'une visite : blanche, coins 22, bordure fine et ombre très légère (nidaloShadowCard : rayon 8, flou CSS de
+   16), 16 de marge ; 12 entre le haut, le trait et les boutons. */
 .app-visit {
   position: relative; display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--app-border);
-  border-radius: 22px; background: #FFFFFF; box-shadow: 0 2px 8px rgba(36, 45, 56, 0.04);
+  border-radius: 22px; background: #FFFFFF; box-shadow: 0 2px 16px rgba(36, 45, 56, 0.04);
 }
 /* Demande : toute la carte ouvre son écran ; les boutons restent au-dessus. */
 .app-visit-open { position: absolute; inset: 0; z-index: 0; border-radius: 22px; -webkit-tap-highlight-color: transparent; }
