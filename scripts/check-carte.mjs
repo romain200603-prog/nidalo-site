@@ -708,6 +708,9 @@ if (!before) {
     .catch(() => undefined);
   expectSame(N, 'ligne de la recherche', [tidy(await page.textContent('.saved-search-text p')), tidy(await page.textContent('.saved-search .run-button'))],
     ['Résidentiel · Zone dessinée · Jusqu\'à 400 000 €', 'Voir les 3 résultats']);
+  // L'onglet arrive en glissant (fav-panel-in) : capture une fois l'animation finie.
+  await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== 'running'
+    || animation.effect?.getComputedTiming().endTime === Infinity), null, { timeout: 3000 }).catch(() => undefined);
   await page.screenshot({ path: join(out, 'zone-recherche-enregistree.png') });
   await page.click('.saved-search .run-button');
   await page.waitForURL(/\/recherche\//, { timeout: 6000 }).catch(() => problems.push(`${N} : la recherche ne s'ouvre pas`));
