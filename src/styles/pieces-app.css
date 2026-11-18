@@ -279,3 +279,9 @@ span.criterion-chip-label { cursor: default; }
 .app-tone-blue { --tone-bg: #EFF2F9; --tone-ink: #435BAA; }
 .app-tone-red { --tone-bg: #FCE9E9; --tone-ink: #C2413E; }
 .app-tone-gray { --tone-bg: #F1F0EC; --tone-ink: #5D6470; }
+
+/* Barre d'étapes (StepProgressBar) : un segment arrondi de 4 par étape, 4 entre eux ; bleu jusqu'à l'étape en cours,
+   piste #F2F0EC ensuite. */
+.app-step-bar { display: flex; gap: 4px; }
+.app-step-bar > span { flex: 1; height: 4px; border-radius: 2px; background: var(--app-segment); transition: background-color var(--app-duration) var(--app-ease); }
+.app-step-bar > span.is-done { background: var(--app-brand); }

@@ -5202,6 +5202,106 @@ try {
   await page.screenshot({ path: join(out, 'mes-informations-telephone-long.png'), fullPage: true });
   await signedPhone.close();
 
+  // « Quel est votre profil ? » comme l'app (étape 3), pour un compte tout neuf : « Étape 2 sur 2 » et sa barre, les deux
+  // cartes de choix, « Avec ce compte » (trois lignes du type choisi), les justificatifs, la réassurance et « Continuer en
+  // tant que… » ; sur téléphone, sans barre du bas et le bouton toujours en bas de l'écran. « Continuer » enregistre le
+  // type comme avant (profiles.account_type) ; le retour déconnecte. À 390 et 320 px, et à 1440 px.
+  for (const [device, size] of [['iPhone 13', null], ['iPhone SE', null], [null, [1440, 900]]]) {
+    const P = `profil ${device ?? `${size[0]} px`}`;
+    const suffix = device === 'iPhone SE' ? '-320' : device === null ? `-${size[0]}` : '';
+    const context = await browser.newContext(device ? { ...devices[device], locale: 'fr-FR' } : { viewport: { width: size[0], height: size[1] }, locale: 'fr-FR' });
+    await context.addInitScript(() => { try { localStorage.setItem('nidalo.newAccount', '1'); } catch { /* stockage indisponible */ } });
+    await mock(context, { signedIn: true });
+    page = await open(context, '/compte/', P);
+    await page.getByRole('heading', { name: 'Quel est votre profil ?' }).waitFor({ timeout: 8000 }).catch(() => problems.push(`${P} : écran absent`));
+    const screen = async () => page.evaluate(() => {
+      const text = (element) => element?.textContent.replace(/\s+/g, ' ').trim() ?? null;
+      return {
+        top: [text(document.querySelector('.app-profile-top .app-round')) === '' ? document.querySelector('.app-profile-top .app-round').getAttribute('aria-label') : null,
+          text(document.querySelector('.app-profile-step-text')),
+          [...document.querySelectorAll('.app-step-bar > span')].map((segment) => segment.classList.contains('is-done'))],
+        titles: [text(document.querySelector('.app-profile-title')), text(document.querySelector('.app-profile-subtitle'))],
+        cards: [...document.querySelectorAll('.app-type-cards [role="radio"]')].map((card) => [text(card.querySelector('.app-type-title')),
+          text(card.querySelector('.app-type-detail')), card.getAttribute('aria-checked')]),
+        rows: [text(document.querySelector('.app-profile-label')), [...document.querySelectorAll('.app-profile-benefits-list:not(.is-leaving) .app-row')]
+          .map((row) => [text(row.querySelector('.app-row-title')), text(row.querySelector('.app-row-subtitle')), row.querySelector('.app-row-tile').className.replace('app-row-tile is-', ''),
+            row.tagName, row.querySelector('.app-row-chevron') !== null])],
+        bottom: [text(document.querySelector('.app-profile-papers')), text(document.querySelector('.app-profile-note')), text(document.querySelector('.app-profile-continue'))],
+      };
+    });
+    const wanted = (type) => ({
+      top: ['Retour', 'Étape 2 sur 2', [true, true]],
+      titles: ['Quel est votre profil ?', 'Choisissez le type de compte qui correspond à votre situation.'],
+      cards: [['Particulier', 'Je recherche un bien, je loue, je vends ou je souhaite investir.', String(type === 'individual')],
+        ['Professionnel', 'Agence, promoteur, mandataire ou gestionnaire immobilier.', String(type === 'professional')]],
+      rows: ['Avec ce compte', type === 'individual'
+        ? [['Mon projet immobilier', 'Critères, budget et dossier', 'green', 'DIV', false], ['Mon agenda de visites', 'Demandes, rappels et comptes rendus', 'blue', 'DIV', false],
+          ['Contrats et location', 'Bail, quittances, états des lieux, offres', 'teal', 'DIV', false]]
+        : [['Annonces et mandats', 'Diffusion, suivi et statistiques', 'blue', 'DIV', false], ['Contacts et ventes', 'Acquéreurs, vendeurs, compromis signés', 'blue', 'DIV', false],
+          ['Équipe et profil agence', 'Collaborateurs et page de l\'agence', 'blue', 'DIV', false]]],
+      bottom: [type === 'individual' ? 'Aucun justificatif à fournir' : 'À fournir ensuite : Kbis, carte professionnelle, RCP', 'Modifiable à tout moment depuis Mon compte',
+        type === 'individual' ? 'Continuer en tant que particulier' : 'Continuer en tant que professionnel'],
+    });
+    expectSame(P, 'particulier', await screen(), wanted('individual'));
+    // Téléphone : pas de barre du bas, le bouton en bas de l'écran (même la page défilée) ; ordinateur : à la suite.
+    const place = () => page.evaluate(() => [getComputedStyle(document.querySelector('.tabbar')).display,
+      Math.round(document.querySelector('.app-profile-bottom').getBoundingClientRect().bottom) - innerHeight, getComputedStyle(document.querySelector('.app-profile-bottom')).position]);
+    if (device) {
+      expectSame(P, 'bas de l\'écran', await place(), ['none', 0, 'sticky']);
+      await phoneFits(page, P);
+    } else {
+      expectSame(P, 'bas de la page', (await place()).slice(2), ['static']);
+      if ((await contentWidth(page, '.account-wrap')) !== 640) problems.push(`${P} : colonne de ${await contentWidth(page, '.account-wrap')} px au lieu de 640`);
+    }
+    if (device === 'iPhone 13') {
+      // Mesures de l'app : retour de 44, barre de 4, cartes aux coins de 22, carré d'icône de 42, rond coché de 24, bouton de 52 (coins 12).
+      expectSame(P, 'mesures', await page.evaluate(() => {
+        const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+        const style = (selector) => getComputedStyle(document.querySelector(selector));
+        return [Math.round(box('.app-profile-top .app-round').width), Math.round(box('.app-step-bar > span').height), style('.app-type-card').borderRadius,
+          Math.round(box('.app-type-icon').width), Math.round(box('.app-type-card.is-selected .app-type-check').width), Math.round(box('.app-profile-continue').height),
+          style('.app-profile-continue').borderRadius];
+      }), [44, 4, '22px', 42, 24, 52, '12px']);
+    }
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: join(out, `profil-particulier${suffix}.png`) });
+    await page.getByRole('radio', { name: /Professionnel/ }).click();
+    await page.waitForFunction(() => !document.querySelector('.app-profile-benefits-list.is-leaving'), null, { timeout: 4000 }).catch(() => problems.push(`${P} : liste quittée restée`));
+    expectSame(P, 'professionnel', await screen(), wanted('professional'));
+    if (device) {
+      // Tout en bas de la page : le bas de l'écran reste visible en entier, posé au-dessus du pied de page du site.
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await page.waitForTimeout(300);
+      expectSame(P, 'bas de l\'écran, page défilée', await page.evaluate(() => {
+        const bar = document.querySelector('.app-profile-bottom').getBoundingClientRect();
+        return [getComputedStyle(document.querySelector('.tabbar')).display, bar.top >= 0 && bar.bottom <= innerHeight,
+          bar.bottom <= document.querySelector('footer.footer').getBoundingClientRect().top];
+      }), ['none', true, true]);
+      await phoneFits(page, `${P} (professionnel)`);
+      await page.evaluate(() => window.scrollTo(0, 0));
+    }
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: join(out, `profil-professionnel${suffix}.png`) });
+    // « Continuer en tant que professionnel » : le type enregistré, comme avant, puis Mon compte.
+    const before = writes.length;
+    await page.getByRole('button', { name: /Continuer/ }).click();
+    await page.getByRole('heading', { name: 'Quel est votre profil ?' }).waitFor({ state: 'detached', timeout: 8000 }).catch(() => problems.push(`${P} : l'écran ne se ferme pas`));
+    expectSame(P, 'type enregistré', writes.slice(before).map((write) => [write.method, write.table, write.search, write.body]),
+      [['PATCH', 'profiles', `?id=eq.${USER_ID}`, { account_type: 'professional' }]]);
+    expectSame(P, 'compte tout neuf', await page.evaluate(() => localStorage.getItem('nidalo.newAccount')), null);
+    await page.close();
+    // Retour : déconnexion, comme l'app ; l'écran de connexion revient.
+    if (device === 'iPhone 13') {
+      page = await open(context, '/compte/', `${P} retour`);
+      await page.getByRole('heading', { name: 'Quel est votre profil ?' }).waitFor({ timeout: 8000 }).catch(() => problems.push(`${P} : écran absent au retour`));
+      await page.getByRole('button', { name: 'Retour', exact: true }).click();
+      await page.waitForSelector('.signin-card', { timeout: 8000 }).catch(() => problems.push(`${P} : le retour ne déconnecte pas`));
+      expectSame(P, 'retour', [await page.locator('.app-profile-step').count(), await page.evaluate(() => localStorage.getItem('nidalo.newAccount'))], [0, null]);
+      await page.close();
+    }
+    await context.close();
+  }
+
   // Notifications sur téléphone (demande de Romain du 14 novembre) : l'écran de l'ordinateur, ouvert depuis Mon compte,
   // à 390 px (iPhone 13) et 320 px (iPhone SE). Sans compte, son message et aucune demande ; avec le compte, les lignes
   // et leurs liens, un clic marque la notification lue, « Tout lire » toutes, et une nouvelle notification arrive en
