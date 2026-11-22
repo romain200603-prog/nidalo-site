@@ -4765,7 +4765,8 @@ try {
       await dialogTitle(page);
       await alertButton(page, 'Se déconnecter');
       await waitFor(() => space.logouts.length > 0, `${D} : appel au serveur`);
-      expectSame(D, 'appel', space.logouts, [{ method: 'POST', search: '?scope=global' }]);
+      // Comme l'app (n° 122) : seulement ce navigateur ; les autres appareils restent connectés.
+      expectSame(D, 'appel', space.logouts, [{ method: 'POST', search: '?scope=local' }]);
       await page.waitForSelector('.signin-card', { timeout: 8000 }).catch(() => problems.push(`${D} : la carte de connexion ne s'affiche pas`));
       expectSame(D, 'page après la déconnexion', [await page.locator('.dsp').count(), await page.evaluate(() => {
         try { return Object.keys(localStorage).filter((key) => key.startsWith('sb-')).length; } catch { return null; }
