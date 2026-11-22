@@ -279,15 +279,18 @@ function alignAssetDetails(draft: PublishDraft): PublishDraft {
   return { ...draft, assetDetails };
 }
 
-/** Choisit la catégorie : transaction et type de bien suivent, les détails d'un autre type sont retirés. */
+/**
+ * Choisit la catégorie : transaction et type de bien suivent, les détails d'un autre type sont retirés. Rien de la
+ * saisie n'est vidé (n° 79) : les loyers restent, la publication n'envoie que ce que la catégorie affiche ; seul le prix
+ * change de sens entre une vente et une location.
+ */
 export function selectCategory(draft: PublishDraft, category: PublishCategory): PublishDraft {
   const types = categoryTypes(category);
-  let next: PublishDraft = { ...draft, category, transaction: categoryTransaction(category), isMixedBuilding: false };
+  const transaction = categoryTransaction(category);
+  let next: PublishDraft = { ...draft, category, transaction, isMixedBuilding: false };
   if (next.propertyType !== null && !types.includes(next.propertyType)) next.propertyType = null;
   if (types.length === 1) next.propertyType = types[0];
-  if (next.transaction === 'rent' && next.rentalInfo) {
-    next.rentalInfo = { ...next.rentalInfo, currentMonthlyRent: null, potentialMonthlyRent: null };
-  }
+  if (draft.transaction !== null && draft.transaction !== transaction) next.price = null;
   next = alignAssetDetails(next);
   return next;
 }
@@ -426,6 +429,7 @@ export function stepIsComplete(draft: PublishDraft, step: PublishStep, now = new
       if (isDwelling(type) && (draft.rooms ?? 0) <= 0) return false;
       if (type === 'hotel' && (hotelOfDraft(draft)?.rooms ?? 0) <= 0) return false;
       if (requiresEnergyDiagnostic(type) && draft.energy.energyClass === null) return false;
+      if (energyDetailIssues(draft).length > 0) return false;
       if (rentalBanMessage(draft, now) !== null) return false;
       if (mixedBuildingIncomplete(draft)) return false;
       return true;
@@ -437,7 +441,22 @@ export function stepIsComplete(draft: PublishDraft, step: PublishStep, now = new
 /** Champ à compléter d'une étape, repéré dans l'écran pour y mener la personne. */
 export type StepIssue =
   | 'propertyType' | 'postalCode' | 'city' | 'price' | 'livingArea' | 'landArea' | 'rooms' | 'hotelRooms' | 'mixedBuilding'
-  | 'energyClass' | 'rentalEnergyClass' | 'coOwnershipProcedure' | 'agencyFeesPayer' | 'photos' | 'title' | 'description';
+  | 'energyClass' | 'climateClass' | 'energyCost' | 'rentalEnergyClass' | 'coOwnershipProcedure' | 'agencyFeesPayer' | 'photos' | 'title'
+  | 'description';
+
+/**
+ * Logement avec une classe DPE : la classe GES et les deux montants des dépenses d'énergie sont obligatoires (n° 84,
+ * PublishValidation.featureErrors). Rien de plus pour un bien non soumis au DPE ; un immeuble se décrit lot par lot dans
+ * l'app, la règle ne le vise pas. `missingRequiredFields` ne change pas, comme dans l'app.
+ */
+export function energyDetailIssues(draft: PublishDraft): ('climateClass' | 'energyCost')[] {
+  const { energyClass, climateClass, annualEnergyCostMin, annualEnergyCostMax } = draft.energy;
+  if (!isDwelling(draft.propertyType) || energyClass === null) return [];
+  const issues: ('climateClass' | 'energyCost')[] = [];
+  if (climateClass === null) issues.push('climateClass');
+  if (annualEnergyCostMin === null || annualEnergyCostMax === null) issues.push('energyCost');
+  return issues;
+}
 
 /**
  * Champs qui empêchent de quitter l'étape, dans l'ordre de l'écran : les mêmes règles que stepIsComplete (la liste est
@@ -465,6 +484,7 @@ export function stepIssues(draft: PublishDraft, step: PublishStep, now = new Dat
       if (type === 'hotel' && (hotelOfDraft(draft)?.rooms ?? 0) <= 0) issues.push('hotelRooms');
       if (mixedBuildingIncomplete(draft)) issues.push('mixedBuilding');
       if (requiresEnergyDiagnostic(type) && draft.energy.energyClass === null) issues.push('energyClass');
+      issues.push(...energyDetailIssues(draft));
       if (rentalBanMessage(draft, now) !== null) issues.push('rentalEnergyClass');
       break;
     case 'finance':
@@ -532,6 +552,23 @@ export function currentAnnualRent(draft: PublishDraft): number | null {
   if (total !== null) return total;
   const monthly = draft.rentalInfo?.currentMonthlyRent ?? null;
   return monthly === null ? null : monthly * 12;
+}
+
+/**
+ * Montant saisi à l'année et enregistré au mois (AnnualAmount de l'app) : le mois est l'année ÷ 12, au centime ; l'année
+ * affichée est le mois × 12, ramenée à l'euro quand l'écart ne vient que de l'arrondi du mois (au plus 6 centimes) :
+ * 100 000 €/an enregistrés 8 333,33 €/mois se relisent 100 000, pas 99 999,96 (n° 82).
+ */
+export function monthlyFromAnnual(annual: number | null): number | null {
+  return annual === null ? null : round(annual / 12, 2);
+}
+
+export function annualFromMonthly(monthly: number | null): number | null {
+  if (monthly === null) return null;
+  const annual = monthly * 12;
+  const whole = Math.round(annual);
+  // Marge d'un milliardième : le calcul en nombres à virgule de JavaScript ne doit pas faire dépasser 0,06.
+  return Math.abs(annual - whole) <= 0.06 + 1e-9 ? whole : round(annual, 2);
 }
 
 /** Rendement brut = loyers annuels actuels hors charges ÷ prix de vente (fraction). */

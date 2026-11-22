@@ -52,24 +52,62 @@ export async function loadListingForEdit(id: string): Promise<Loaded> {
 }
 
 export type SaveResult =
-  | { ok: true; draft: PublishDraft; listingStatus: string }
+  /**
+   * `listingStatus` : statut relu sur le serveur ; `null` quand la relecture a encore échoué après un nouvel essai :
+   * l'annonce est enregistrée quand même (n° 80), le brouillon garde alors ses photos telles quelles.
+   */
+  | { ok: true; draft: PublishDraft; listingStatus: string | null }
   /** `refusal` : message du serveur (P0001), affiché dans « Publication refusée ». */
   | { ok: false; message: string; refusal: boolean };
 
 class Refused extends Error {}
 
-function failure(error: unknown, fallback: string): SaveResult {
+/**
+ * Demande qui n'a pas pu partir (hors ligne, serveur injoignable), comme LoadFailure.isOffline de l'app. PostgREST la
+ * rend sous forme d'objet simple (« TypeError: Failed to fetch »), pas d'erreur : son message est lu aussi.
+ */
+export function isOffline(error: unknown): boolean {
+  if (isNetworkError(error)) return true;
+  const message = (error as { message?: unknown } | null)?.message;
+  return typeof message === 'string' && /Failed to fetch|NetworkError|Load failed|fetch failed/i.test(message);
+}
+
+type Mode = 'draft' | 'publish' | 'edit';
+
+function failure(error: unknown, mode: Mode): SaveResult {
   if (error instanceof Refused) return { ok: false, message: error.message, refusal: true };
-  if (isNetworkError(error)) return { ok: false, message: NETWORK_MESSAGE, refusal: false };
+  // Pas de réseau : « Publier » et « Enregistrer » le disent avec les mots de l'app (n° 80).
+  if (isOffline(error)) return { ok: false, message: OFFLINE[mode], refusal: false };
   const { code, message } = (error ?? {}) as { code?: string; message?: string };
   if (code === 'P0001' && message) return { ok: false, message, refusal: true };
   if (code && ['23514', '23502', '22001', '22P02', '22003'].includes(code)) return { ok: false, message: REFUSED_MESSAGE, refusal: false };
-  return { ok: false, message: fallback, refusal: false };
+  return { ok: false, message: FAILED[mode], refusal: false };
 }
 
-const PUBLISH_FAILED = 'L\'annonce n\'a pas pu être publiée. Vérifiez les champs signalés puis réessayez.';
-const EDIT_FAILED = 'Les modifications n\'ont pas pu être enregistrées. Vérifiez les champs signalés puis réessayez.';
-const DRAFT_FAILED = 'Le brouillon n\'a pas pu être enregistré. Réessayez dans un instant.';
+const FAILED: Record<Mode, string> = {
+  publish: 'L\'annonce n\'a pas pu être publiée. Vérifiez les champs signalés puis réessayez.',
+  edit: 'Les modifications n\'ont pas pu être enregistrées. Vérifiez les champs signalés puis réessayez.',
+  draft: 'Le brouillon n\'a pas pu être enregistré. Réessayez dans un instant.',
+};
+
+/** Sans réseau (PublishFlowView.publish) ; le brouillon, qui n'existe que sur le site, garde le message du compte. */
+export const OFFLINE: Record<Mode, string> = {
+  publish: 'L\'annonce n\'a pas pu être publiée. Vérifiez votre connexion, puis réessayez.',
+  edit: 'Les modifications n\'ont pas pu être enregistrées. Vérifiez votre connexion, puis réessayez.',
+  draft: NETWORK_MESSAGE,
+};
+
+/** Attente avant le second essai de relecture, comme l'app (1,5 s). */
+export const REREAD_DELAY_MS = 1_500;
+
+/** Annonce relue après l'enregistrement : un second essai après 1,5 s, sinon `null` (n° 80). */
+async function reread(id: string): Promise<Extract<Loaded, { status: 'ready' }> | null> {
+  const first = await loadListingForEdit(id);
+  if (first.status === 'ready') return first;
+  await new Promise((resolve) => setTimeout(resolve, REREAD_DELAY_MS));
+  const second = await loadListingForEdit(id);
+  return second.status === 'ready' ? second : null;
+}
 
 /**
  * Enregistre l'annonce : `draft` (brouillon, jamais mis en ligne), `publish` (nouvelle annonce ou brouillon : en
@@ -79,15 +117,14 @@ const DRAFT_FAILED = 'Le brouillon n\'a pas pu être enregistré. Réessayez dan
  */
 export async function saveListing(
   source: PublishDraft,
-  mode: 'draft' | 'publish' | 'edit',
+  mode: Mode,
   { onProgress, ownerId = null }: { onProgress?: (sent: number, total: number) => void; ownerId?: string | null } = {},
 ): Promise<SaveResult> {
   const userId = currentUserId();
   if (!userId) return { ok: false, message: 'Votre session a expiré. Reconnectez-vous.', refusal: false };
   // Auteur envoyé seulement pour l'annonce d'un collègue : pour les miennes, rien ne change (le serveur met le mien).
   const author = ownerId && ownerId.toLowerCase() !== userId.toLowerCase() ? ownerId : null;
-  const fallback = mode === 'draft' ? DRAFT_FAILED : mode === 'edit' ? EDIT_FAILED : PUBLISH_FAILED;
-  if (mode !== 'draft' && missingRequiredFields(source).length > 0) return { ok: false, message: fallback, refusal: false };
+  if (mode !== 'draft' && missingRequiredFields(source).length > 0) return { ok: false, message: FAILED[mode], refusal: false };
   try {
     const existing = await supabase.from('listings').select('id, status').eq('id', source.id).limit(1);
     if (existing.error) throw existing.error;
@@ -121,15 +158,16 @@ export async function saveListing(
       const online = await supabase.from('listings').update({ status: 'active' }).eq('id', source.id);
       if (online.error) throw online.error;
     }
-    const reloaded = await loadListingForEdit(source.id);
-    if (reloaded.status !== 'ready') throw new Error('Annonce introuvable après l\'enregistrement.');
-    void loadMyListings();
-    if (agencyListingsStore.get().status !== 'none') void loadAgencyListings();
-    // Les champs saisis restent ceux de l'écran ; seules les photos deviennent celles du serveur.
-    return { ok: true, draft: { ...source, photos: reloaded.draft.photos }, listingStatus: reloaded.listingStatus };
   } catch (error) {
-    return failure(error, fallback);
+    return failure(error, mode);
   }
+  // Enregistrée : c'est une réussite, même si la relecture échoue ensuite (n° 80).
+  const reloaded = await reread(source.id);
+  void loadMyListings();
+  if (agencyListingsStore.get().status !== 'none') void loadAgencyListings();
+  if (!reloaded) return { ok: true, draft: source, listingStatus: null };
+  // Les champs saisis restent ceux de l'écran ; seules les photos deviennent celles du serveur.
+  return { ok: true, draft: { ...source, photos: reloaded.draft.photos }, listingStatus: reloaded.listingStatus };
 }
 
 /**

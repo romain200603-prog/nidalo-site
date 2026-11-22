@@ -1,15 +1,20 @@
+import { createClient } from '@supabase/supabase-js';
 import { describe, expect, it } from 'vitest';
+import { groupDigits, parseGrouped, pastedAmount } from '../../components/NumberField';
+import { groupedInput, inputAmount } from '../account/projectEditor';
 import {
-  buildingOfDraft, coOwnershipLotsIssue, coOwnershipNeedsProcedure, emptyBuilding, emptyHotel, emptyRental, energyCostHint, flatRateWarning, hotelOfDraft, inventoryFeeIssue, missingRequiredFields,
+  annualFromMonthly, buildingOfDraft, coOwnershipLotsIssue, coOwnershipNeedsProcedure, emptyBuilding, emptyHotel, emptyRental, energyCostHint, energyDetailIssues, flatRateWarning,
+  hotelOfDraft, inventoryFeeIssue, missingRequiredFields, monthlyFromAnnual,
   energyPriceYearIssue, newDraft, rentalAvailability, rentalBanMessage, rentalChargesLabel, saleChargesLabel, selectCategory, selectSubtype, showsCoOwnership, showsEnergyCosts, showsInventoryFee,
-  showsRentControl, stepIsComplete, stepIssues, subtypes, tenantShareWarning, PUBLISH_CATEGORIES, PUBLISH_STEPS,
+  showsRentControl, stepIsComplete, stepIssues, subtypes, tenantShareWarning, PUBLISH_CATEGORIES, PUBLISH_STEPS, STEP_TITLES,
   type PropertyType, type PublishDraft,
 } from './draft';
 import {
-  canSaveDraft, firstIssue, furthestAtStart, guideForRequired, hasChanges, initialStep, previewRow, recapRows, sameDraft, stepOfIssue,
+  canSaveDraft, firstIssue, furthestAtStart, guideForRequired, hasChanges, initialStep, previewRow, publishIssues, recapRows, sameDraft, stepOfIssue, stepsToComplete,
 } from './flow';
 import { availability } from '../cardContent';
 import { CATEGORY_DISPLAY_ORDER, CATEGORY_SUBTITLES, CATEGORY_TITLES } from './labels';
+import { isOffline, OFFLINE, REREAD_DELAY_MS } from './save';
 import { appDecodingProblems, assetJson, availableFromDate, dateToDay, dayToDate, draftFromRow, listingWrite } from './serialize';
 import { proposedDescription, proposedTitle } from './writing';
 
@@ -20,7 +25,7 @@ const NOW = new Date('2026-11-07T12:00:00Z');
 const plain = (s: string) => s.replace(/[\u00a0\u202f]/g, ' ');
 const photo = { kind: 'stored', id: 'p1', storagePath: 'u/l/p1.jpg', width: 1200, height: 900 } as const;
 
-/** Appartement à vendre, complet. */
+/** Appartement à vendre, complet (un logement avec un DPE a aussi son GES et ses dépenses d'énergie, n° 84). */
 function flat(): PublishDraft {
   const base = selectSubtype(selectCategory(newDraft('a0000000-0000-4000-8000-000000000001'), 'residential'), subtypes('residential')[0]);
   return {
@@ -28,7 +33,7 @@ function flat(): PublishDraft {
     address: { street: '12 rue Mercière', postalCode: '69002', city: 'Lyon', inseeCode: '69382' },
     coordinate: { latitude: 45.7616, longitude: 4.8321 },
     price: 320_000, livingArea: 62, rooms: 3, bedrooms: 2, floor: 2, hasElevator: true, outdoorSpaces: ['balcony'],
-    energy: { ...base.energy, energyClass: 'C', climateClass: 'B' },
+    energy: { ...base.energy, energyClass: 'C', climateClass: 'B', annualEnergyCostMin: 1_080, annualEnergyCostMax: 1_500 },
     photos: [photo], title: 'Appartement 3 pièces – Lyon', description: 'Bel appartement traversant.',
   };
 }
@@ -409,7 +414,8 @@ describe('étapes : revenir librement et mener aux champs à compléter', () => 
     list.push(
       { ...full, address: null, coordinate: null }, { ...full, address: { ...full.address!, postalCode: '' } }, { ...full, address: { ...full.address!, city: ' ' } },
       { ...full, price: null }, { ...full, price: 0 }, { ...full, livingArea: null }, { ...full, rooms: null }, { ...full, photos: [] },
-      { ...full, energy: { ...full.energy, energyClass: null } }, { ...full, title: ' ' }, { ...full, description: '' },
+      { ...full, energy: { ...full.energy, energyClass: null } }, { ...full, energy: { ...full.energy, climateClass: null } },
+      { ...full, energy: { ...full.energy, annualEnergyCostMax: null } }, { ...full, title: ' ' }, { ...full, description: '' },
       { ...full, agencyFeesAmount: 9_000 }, { ...full, coOwnershipLots: 12 }, { ...full, coOwnershipLots: 12, agencyFeesAmount: 9_000, price: null },
       { ...selectCategory(full, 'rental'), energy: { ...full.energy, energyClass: 'G' } },
       { ...flatInvest(3), assetDetails: { kind: 'building', building: { ...(buildingOfDraft(flatInvest(3)) ?? emptyBuilding()), residentialUnits: 4, commercialUnits: 0 } } },
@@ -468,5 +474,130 @@ describe('étapes : revenir librement et mener aux champs à compléter', () => 
     expect(furthestAtStart(flat(), 'draft', 'main', NOW)).toBe(PUBLISH_STEPS.length - 1);
     expect(furthestAtStart({ ...flat(), price: null }, 'draft', 'media', NOW)).toBe(PUBLISH_STEPS.indexOf('media'));
     expect(furthestAtStart({ ...flat(), price: null }, 'active', 'main', NOW)).toBe(PUBLISH_STEPS.length - 1);
+  });
+});
+
+describe('comme l’app : changements de Publier du 19 novembre (n° 79 à 84, 188, 242)', () => {
+  const hotel = (rooms: number | null, scope: 'wallsOnly' | 'wallsAndBusiness' = 'wallsAndBusiness'): PublishDraft => ({
+    ...selectCategory(flat(), 'hotel'),
+    assetDetails: { kind: 'hotel', hotel: { ...emptyHotel(), rooms, scope } },
+  });
+
+  it('n° 79 : changer de catégorie ne vide rien, sauf le prix entre une vente et une location', () => {
+    const invest = selectSubtype(selectCategory(flat(), 'investment'), subtypes('investment')[0]);
+    const leased: PublishDraft = {
+      ...invest, price: 250_000, rentalInfo: { ...emptyRental(), isLeased: true, currentMonthlyRent: 800, potentialMonthlyRent: 900 },
+    };
+    const residential = selectCategory(leased, 'residential');
+    expect([residential.price, residential.rentalInfo?.currentMonthlyRent, residential.rentalInfo?.potentialMonthlyRent, residential.propertyType])
+      .toEqual([250_000, 800, 900, 'apartment']);
+    const rental = selectCategory(residential, 'rental');
+    expect([rental.price, rental.rentalInfo?.currentMonthlyRent, rental.rentalInfo?.potentialMonthlyRent]).toEqual([null, 800, 900]);
+    // Entre deux ventes, ou entre deux locations, le prix reste ; une première catégorie ne vide rien non plus.
+    expect(selectCategory(leased, 'hotel').price).toBe(250_000);
+    expect(selectCategory({ ...rental, price: 950 }, 'rental').price).toBe(950);
+    expect(selectCategory({ ...newDraft('x'), price: 120_000 }, 'rental').price).toBe(120_000);
+  });
+
+  it('n° 79 : la publication et l’aperçu d’un bien Résidentiel ne transmettent aucun loyer', () => {
+    const invest = selectSubtype(selectCategory(flat(), 'investment'), subtypes('investment')[0]);
+    const leased: PublishDraft = { ...invest, rentalInfo: { ...emptyRental(), isLeased: true, currentMonthlyRent: 800 } };
+    expect(listingWrite(leased, { insert: false }).rental_info).toEqual({ currentMonthlyRent: 800, isLeased: true });
+    const residential = selectCategory(leased, 'residential');
+    const write = listingWrite(residential, { insert: true });
+    expect([write.publish_category, write.rental_info]).toEqual(['residential', null]);
+    expect(appDecodingProblems(write)).toEqual([]);
+    expect(previewRow(residential, 'u', NOW)?.rental_info).toBeNull();
+    // Le brouillon à l'écran garde le loyer : revenir à Investissement le retrouve.
+    expect(listingWrite(selectCategory(residential, 'investment'), { insert: false }).rental_info).toEqual({ currentMonthlyRent: 800, isLeased: true });
+  });
+
+  it('n° 80 : une demande qui n’a pas pu partir est « sans réseau », avec les messages de l’app', async () => {
+    const unreachable = createClient('https://exemple.supabase.co', 'cle-de-test', {
+      global: { fetch: async () => { throw new TypeError('Failed to fetch'); } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    // PostgREST rend l'échec sous forme d'objet simple, pas d'erreur.
+    const { error } = await unreachable.from('listings').insert({ id: 'x' });
+    expect(error instanceof Error).toBe(false);
+    expect(isOffline(error)).toBe(true);
+    expect(isOffline(new TypeError('Failed to fetch'))).toBe(true);
+    expect([isOffline({ code: 'P0001', message: 'Le DPE est obligatoire.' }), isOffline({ code: '23514', message: 'violates check constraint' }), isOffline(null)])
+      .toEqual([false, false, false]);
+    expect([OFFLINE.publish, OFFLINE.edit]).toEqual([
+      'L\'annonce n\'a pas pu être publiée. Vérifiez votre connexion, puis réessayez.',
+      'Les modifications n\'ont pas pu être enregistrées. Vérifiez votre connexion, puis réessayez.',
+    ]);
+    expect(REREAD_DELAY_MS).toBe(1_500);
+  });
+
+  it('n° 81 : la vérification suit le contrôle de « Publier » : une étape refusée s’affiche « <étape> : à compléter »', () => {
+    // Hôtel sans nombre de chambres : aucun champ manquant, mais « Publier » refuse l'étape 3.
+    const noRooms = hotel(null);
+    expect(missingRequiredFields(noRooms, NOW)).toEqual([]);
+    expect(firstIssue(noRooms, 'review', NOW)).toEqual({ step: 'features', field: 'hotelRooms' });
+    expect(stepsToComplete(noRooms, NOW)).toEqual([{ step: 'features', field: 'hotelRooms' }]);
+    expect(`${STEP_TITLES.features} : à compléter`).toBe('Caractéristiques : à compléter');
+    // L'étape refusée reste listée quand d'autres champs manquent ailleurs ; une étape qui a déjà une ligne de champ, non.
+    const noGes: PublishDraft = { ...flat(), photos: [], energy: { ...flat().energy, climateClass: null } };
+    expect(missingRequiredFields(noGes, NOW)).toEqual(['photos']);
+    expect(stepsToComplete(noGes, NOW)).toEqual([{ step: 'features', field: 'climateClass' }]);
+    expect(stepsToComplete({ ...noGes, livingArea: null }, NOW)).toEqual([]);
+    // Complète : « Prête à publier » (rien à lister) exactement quand « Publier » ne refuse rien.
+    expect([stepsToComplete(flat(), NOW), publishIssues(flat(), NOW)]).toEqual([[], []]);
+    // Le prix vérifié à l'étape « Prix et finances » reste un champ de l'étape 2, sans doublon.
+    expect(publishIssues({ ...flat(), price: null, energy: { ...flat().energy, climateClass: null } }, NOW))
+      .toEqual([{ step: 'main', field: 'price' }, { step: 'features', field: 'climateClass' }]);
+  });
+
+  it('n° 82 : un loyer annuel enregistré au mois se relit à l’euro près (AnnualAmount)', () => {
+    expect(monthlyFromAnnual(100_000)).toBe(8_333.33);
+    expect(annualFromMonthly(8_333.33)).toBe(100_000);
+    expect(annualFromMonthly(monthlyFromAnnual(1_000))).toBe(1_000);
+    expect(annualFromMonthly(monthlyFromAnnual(1_234_567))).toBe(1_234_567);
+    // Écart plus grand que l'arrondi du mois : le montant au centime, comme le test de l'app.
+    expect(annualFromMonthly(83.38)).toBe(1_000.56);
+    expect(annualFromMonthly(950)).toBe(11_400);
+    expect([annualFromMonthly(null), monthlyFromAnnual(null)]).toEqual([null, null]);
+    // Le loyer de l'exploitant des murs s'écrit au mois dans les informations locatives.
+    const walls: PublishDraft = { ...hotel(12, 'wallsOnly'), rentalInfo: { ...emptyRental(), isLeased: true, currentMonthlyRent: monthlyFromAnnual(100_000) } };
+    expect(listingWrite(walls, { insert: false }).rental_info).toEqual({ currentMonthlyRent: 8333.33, isLeased: true });
+  });
+
+  it('n° 84 : un logement avec un DPE demande aussi le GES et les deux dépenses d’énergie, à l’étape 3', () => {
+    const energy = flat().energy;
+    const noGes: PublishDraft = { ...flat(), energy: { ...energy, climateClass: null } };
+    expect(stepIssues(noGes, 'features', NOW)).toEqual(['climateClass']);
+    const neither: PublishDraft = { ...flat(), energy: { ...energy, climateClass: null, annualEnergyCostMin: null } };
+    expect(stepIssues(neither, 'features', NOW)).toEqual(['climateClass', 'energyCost']);
+    expect(stepIsComplete(neither, 'features', NOW)).toBe(false);
+    expect([stepOfIssue('climateClass'), stepOfIssue('energyCost')]).toEqual(['features', 'features']);
+    // Rien de plus sans DPE choisi : seule la classe DPE est demandée ; et missingRequiredFields ne change pas.
+    expect(stepIssues({ ...neither, energy: { ...neither.energy, energyClass: null } }, 'features', NOW)).toEqual(['energyClass']);
+    expect(missingRequiredFields(neither, NOW)).toEqual([]);
+    // Maison et location de logement : la même règle, avant l'interdiction de louer.
+    expect(stepIssues(selectSubtype(neither, subtypes('residential')[1]), 'features', NOW)).toEqual(['climateClass', 'energyCost']);
+    const rent: PublishDraft = { ...selectSubtype(selectCategory(neither, 'rental'), subtypes('rental')[0]), energy: { ...neither.energy, energyClass: 'G' } };
+    expect(stepIssues(rent, 'features', NOW)).toEqual(['climateClass', 'energyCost', 'rentalEnergyClass']);
+    // Local, bureaux, immeuble (décrit lot par lot dans l'app) ou hôtel : rien de plus.
+    const invest = (index: number) => ({ ...selectSubtype(selectCategory(neither, 'investment'), subtypes('investment')[index]), energy: neither.energy });
+    expect([invest(2), invest(4), invest(5), { ...hotel(12), energy: neither.energy }].map(energyDetailIssues)).toEqual([[], [], [], []]);
+  });
+
+  it('n° 188 : « Hôtel 1 chambre » au singulier', () => {
+    expect([proposedTitle(hotel(1)), proposedTitle(hotel(24))]).toEqual(['Hôtel 1 chambre – Lyon', 'Hôtel 24 chambres – Lyon']);
+  });
+
+  it('n° 242 : un montant en euros collé avec des points de milliers (GroupedNumberInput.pastedAmount)', () => {
+    expect(['250.000', '1.250.000', '250.000,50', ' 250.000 € ', '\u202f1.250.000\u00a0€\n'].map(pastedAmount))
+      .toEqual(['250000', '1250000', '250000,50', '250000', '1250000']);
+    // Les autres textes collés restent tels quels.
+    for (const text of ['62.5', '1.5', '12.34.56', '06.12.34.56.78', '250 000', '1250.000', ' 62.5 ']) expect(pastedAmount(text)).toBe(text);
+    // Puis la mise en forme habituelle : 250 000 dans Publier comme dans les filtres de la recherche.
+    expect(plain(groupedInput(pastedAmount('250.000')))).toBe('250 000');
+    expect(inputAmount(pastedAmount('250.000,50'))).toBe(250_000.5);
+    expect(parseGrouped(groupDigits(pastedAmount('1.250.000 €'), false, false))).toBe(1_250_000);
+    // Sans collage, rien ne change : « 250.000 » tapé se lit toujours avec une virgule décimale.
+    expect([inputAmount('250.000'), parseGrouped(groupDigits('250.000', true, false))]).toEqual([250, 250]);
   });
 });

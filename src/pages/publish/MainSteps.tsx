@@ -6,7 +6,8 @@ import { PlaceField } from '../../components/PlaceField';
 import { scopeLabel } from '../../lib/listingJson';
 import { placeSuggestions, streetSuggestions, type PlaceSuggestion } from '../../lib/places';
 import {
-  buildingOfDraft, CONDITIONS, emptyBuilding, emptyHotel, energyCostHint, energyPriceYearIssue, hotelOfDraft, HOTEL_SCOPES, isDwelling, isSubtypeSelected,
+  buildingOfDraft, CONDITIONS, emptyBuilding, emptyHotel, energyCostHint, energyDetailIssues, energyPriceYearIssue, hotelOfDraft, HOTEL_SCOPES, isDwelling,
+  isSubtypeSelected,
   mixedBuildingIncomplete, OFFICE_EQUIPMENT, PARKING_TYPES, postalCodeOf, cityOf, rentalBanMessage, rentalBanYear,
   requiresEnergyDiagnostic, selectCategory, selectSubtype, showsEnergyCosts, subtypes, totalUnits,
   type Address, type BuildingDraft, type CommercialDraft, type EnergyDraft, type HotelDraft, type LandDraft, type OfficeDraft,
@@ -131,6 +132,8 @@ async function communeSuggestions(raw: string, limit = 6, signal?: AbortSignal):
 }
 
 export const ADDRESS_NOT_FOUND = 'Adresse introuvable. Vérifiez le code postal et la ville.';
+/** La vérification de l'adresse a échoué faute de réseau, pas parce qu'elle est introuvable (n° 80). */
+export const ADDRESS_OFFLINE = 'L\'adresse n\'a pas pu être vérifiée. Vérifiez votre connexion, puis réessayez.';
 
 export function MainStep({ draft, update, showsErrors, addressError }: StepProps & { addressError: string | null }) {
   const postalCode = postalCodeOf(draft);
@@ -254,6 +257,8 @@ export function FeaturesStep({ draft, update, showsErrors }: StepProps) {
   const ban = rentalBanMessage(draft);
   const energy = draft.energy.energyClass;
   const banYear = rentalBanYear(energy);
+  // Logement avec une classe DPE : GES et dépenses d'énergie obligatoires (n° 84).
+  const energyIssues = energyDetailIssues(draft);
   return (
     <>
       <Card title="Surfaces">
@@ -334,17 +339,22 @@ export function FeaturesStep({ draft, update, showsErrors }: StepProps) {
         <Card title="Performance énergétique">
           <EnergyClassChoice title="DPE (classe énergie)" value={energy} onChange={(value) => setEnergy({ energyClass: value })} guide="energyClass" />
           {showsErrors && energy === null && <ErrorLine>Le DPE est obligatoire pour ce type de bien.</ErrorLine>}
-          <EnergyClassChoice title="GES (classe climat)" value={draft.energy.climateClass} onChange={(value) => setEnergy({ climateClass: value })} />
+          <EnergyClassChoice title="GES (classe climat)" value={draft.energy.climateClass} onChange={(value) => setEnergy({ climateClass: value })}
+            guide="climateClass" />
+          {showsErrors && energyIssues.includes('climateClass') && <ErrorLine>Le GES est obligatoire pour ce logement.</ErrorLine>}
           <Amount label="Consommation (facultatif)" value={draft.energy.primaryEnergyConsumption} unit="kWh/m²/an" integer
             onChange={(value) => setEnergy({ primaryEnergyConsumption: value })} />
           {showsEnergyCosts(type) && (
             <>
-              <div className="dsc-pair">
+              <div className="dsc-pair" data-guide="energyCost">
                 <Amount label="Dépenses d'énergie minimum" value={draft.energy.annualEnergyCostMin} unit="€/an"
                   onChange={(value) => setEnergy({ annualEnergyCostMin: value })} />
                 <Amount label="Dépenses d'énergie maximum" value={draft.energy.annualEnergyCostMax} unit="€/an"
                   onChange={(value) => setEnergy({ annualEnergyCostMax: value })} />
               </div>
+              {showsErrors && energyIssues.includes('energyCost') && (
+                <ErrorLine>Les dépenses d'énergie minimum et maximum sont obligatoires pour ce logement.</ErrorLine>
+              )}
               <InfoLine>
                 {energyCostHint(draft.energy) ?? "Estimation des dépenses annuelles d'énergie indiquée sur le DPE, obligatoire dans l'annonce d'un logement."}
               </InfoLine>

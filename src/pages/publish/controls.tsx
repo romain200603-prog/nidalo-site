@@ -1,5 +1,6 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type ReactNode } from 'react';
 import { ChoiceChip, InfoLine } from '../../components/FilterControls';
+import { pastedAmount } from '../../components/NumberField';
 import { AMOUNT_INVALID, amountText, groupedInput, inputAmount } from '../../lib/account/projectEditor';
 import { DPE_COLORS } from '../../lib/labels';
 import { ENERGY_CLASSES, type EnergyClass } from '../../lib/search';
@@ -61,7 +62,7 @@ function offsetAfterSignificant(formatted: string, count: number): number {
 /**
  * Montant ou nombre à la française (AmountField) : vide = non renseigné, milliers espacés pendant la frappe avec le
  * curseur à sa place, saisie en % pour une fraction (`percent`), nombre entier (`integer`), sans espaces pour une
- * année (`groups` à false).
+ * année (`groups` à false). Un montant en euros collé avec des points de milliers (« 250.000 ») se lit 250 000.
  */
 export function Amount({ label, value, onChange, unit, percent = false, integer = false, groups = true, issue = null, guide }: {
   label: string;
@@ -94,7 +95,25 @@ export function Amount({ label, value, onChange, unit, percent = false, integer 
 
   function handle(event: ChangeEvent<HTMLInputElement>) {
     const raw = event.target.value;
-    const count = significantCount(raw, event.target.selectionStart ?? raw.length);
+    apply(raw, event.target.selectionStart ?? raw.length);
+  }
+
+  /** Collage dans un champ en euros : le texte transformé sert à la mise en forme et au curseur (n° 242). */
+  function paste(event: ClipboardEvent<HTMLInputElement>) {
+    if (!unit.includes('€')) return;
+    const pasted = event.clipboardData.getData('text');
+    const amount = pastedAmount(pasted);
+    if (amount === pasted) return;
+    event.preventDefault();
+    const field = event.currentTarget;
+    const start = field.selectionStart ?? field.value.length;
+    const end = field.selectionEnd ?? start;
+    apply(`${field.value.slice(0, start)}${amount}${field.value.slice(end)}`, start + amount.length);
+  }
+
+  /** Texte tapé ou collé : mis en forme, curseur gardé après les mêmes chiffres, valeur transmise. */
+  function apply(raw: string, selection: number) {
+    const count = significantCount(raw, selection);
     let formatted = groupedInput(raw, false, groups);
     // Nombre entier (étage, lots, année…) : pas de virgule.
     if (integer) formatted = formatted.replace(/,.*$/, '');
@@ -111,7 +130,7 @@ export function Amount({ label, value, onChange, unit, percent = false, integer 
       <label htmlFor={id}>{label}</label>
       <div className="number-input">
         <input ref={input} id={id} type="text" inputMode={integer ? 'numeric' : 'decimal'} autoComplete="off" placeholder={EMPTY}
-          value={text} onChange={handle} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+          value={text} onChange={handle} onPaste={paste} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
           aria-invalid={message ? true : undefined} aria-describedby={message ? `${id}-erreur` : undefined} />
         {unit && <span className="unit" aria-hidden="true">{unit}</span>}
       </div>

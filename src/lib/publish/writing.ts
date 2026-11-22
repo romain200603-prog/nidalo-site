@@ -19,7 +19,8 @@ export function proposedTitle(draft: PublishDraft): string {
   const parts = [type];
   if (draft.rooms !== null && isDwelling(draft.propertyType)) parts[0] = `${type} ${plural(draft.rooms, 'pièce')}`;
   const hotel = hotelOfDraft(draft);
-  if (hotel?.rooms != null) parts[0] = `Hôtel ${hotel.rooms} chambres`;
+  // « Hôtel 1 chambre » au singulier (n° 188).
+  if (hotel?.rooms != null) parts[0] = `Hôtel ${plural(hotel.rooms, 'chambre')}`;
   const city = draft.address?.city ?? '';
   if (city !== '') parts.push(city);
   return parts.join(' – ');
