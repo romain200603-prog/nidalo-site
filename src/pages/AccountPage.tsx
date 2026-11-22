@@ -41,8 +41,8 @@ import '../styles/account.css';
  * ensuite nettoyée. Après Google ou Apple, on retrouve la page d'où l'on était parti, sauf un compte tout neuf : il
  * choisit d'abord son profil ici, comme après la confirmation d'un e-mail.
  */
-function useEmailLink(): { checked: boolean; error: string | null } {
-  const [state, setState] = useState<{ checked: boolean; error: string | null }>({ checked: false, error: null });
+function useEmailLink(): { checked: boolean; error: string | null; fromProvider: boolean } {
+  const [state, setState] = useState<{ checked: boolean; error: string | null; fromProvider: boolean }>({ checked: false, error: null, fromProvider: false });
   useEffect(() => {
     const url = new URL(window.location.href);
     const hash = new URLSearchParams(url.hash.slice(1));
@@ -55,11 +55,11 @@ function useEmailLink(): { checked: boolean; error: string | null } {
     };
     if (linkError) {
       clean();
-      setState({ checked: true, error: fromProvider !== null ? providerMessage(fromProvider.provider) : linkError });
+      setState({ checked: true, error: fromProvider !== null ? providerMessage(fromProvider.provider) : linkError, fromProvider: fromProvider !== null });
       return;
     }
     if (!code) {
-      setState({ checked: true, error: null });
+      setState({ checked: true, error: null, fromProvider: false });
       return;
     }
     openLink(code)
@@ -70,11 +70,12 @@ function useEmailLink(): { checked: boolean; error: string | null } {
           window.location.replace(fromProvider.to);
           return;
         }
-        setState({ checked: true, error: null });
+        setState({ checked: true, error: null, fromProvider: false });
       })
       .catch((error: unknown) => setState({
         checked: true,
         error: fromProvider !== null && !isNetworkError(error) ? providerMessage(fromProvider.provider) : authMessage(error),
+        fromProvider: fromProvider !== null,
       }))
       .finally(clean);
   }, []);
@@ -107,7 +108,17 @@ function AccountContent() {
   if (session.status === 'loading' || !link.checked) return <Spinner />;
   // Comme la cloche de l'app, l'écran Notifications s'ouvre aussi sans compte, avec son message.
   if (view === 'notifications' && session.status === 'signedOut' && !link.error) return <NotificationsScreen signedIn={false} />;
-  if (session.status === 'signedOut') return <SignInCard linkError={link.error} notice={invitation !== null ? <InvitationIntro /> : undefined} />;
+  // Retour de Google ou d'Apple sans connexion : le message sur l'accueil, sous les boutons ; lien d'e-mail refusé :
+  // l'étape « Ravi de vous revoir », avec le message.
+  if (session.status === 'signedOut') {
+    return (
+      <SignInCard
+        linkError={link.fromProvider ? null : link.error}
+        providerError={link.fromProvider ? link.error : null}
+        notice={invitation !== null ? <InvitationIntro /> : undefined}
+      />
+    );
+  }
   if (recovery) return <SignInCard recovery onPasswordSaved={() => refresh((n) => n + 1)} />;
   if (account.status === 'error') {
     return (

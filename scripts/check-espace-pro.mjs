@@ -2729,13 +2729,19 @@ try {
     const page = await open(context, `/compte/?vue=equipes&invitation=${TOKEN_BELLECOUR.toUpperCase()}`, N);
     await page.locator('.team-intro').waitFor();
     const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('nidalo.teamInvitation') ?? 'null')?.token ?? null);
-    expectSame(N, 'carte de connexion', [tidy(await page.locator('.signin-title').textContent()), tidy(await page.locator('.team-intro').textContent()), await stored()], [
-      'Bienvenue sur NIDALO',
+    expectSame(N, 'carte de connexion', [tidy(await page.locator('.signin-card h1').textContent()), tidy(await page.locator('.team-intro').textContent()), await stored()], [
+      'Votre prochain bien commence ici.',
       'Une agence vous invite à rejoindre son équipe. Connectez-vous ou créez votre compte : l\'invitation s\'ouvrira ensuite.',
       TOKEN_BELLECOUR,
     ]);
     await shot(page, 'equipes-telephone-connexion.png');
     expectSame(N, 'sans compte', teamCalls(state, 0), 0);
+    // Écran de connexion de l'app : « Continuer avec l'e-mail », puis l'étape « Ravi de vous revoir », qui rappelle
+    // l'invitation.
+    await page.getByRole('button', { name: 'Continuer avec l\'e-mail' }).click();
+    await page.getByRole('heading', { name: 'Ravi de vous revoir' }).waitFor();
+    expectSame(N, 'étape e-mail', tidy(await page.locator('.auth-step-head .team-intro').textContent().catch(() => null)),
+      'Une agence vous invite à rejoindre son équipe. Connectez-vous ou créez votre compte : l\'invitation s\'ouvrira ensuite.');
     await page.getByLabel('Adresse e-mail', { exact: true }).fill(USER_EMAIL);
     await page.getByLabel('Mot de passe', { exact: true }).fill('mot-de-passe-de-test');
     await page.getByRole('button', { name: 'Se connecter', exact: true }).click();

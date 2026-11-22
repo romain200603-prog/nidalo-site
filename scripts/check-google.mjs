@@ -196,7 +196,7 @@ try {
     const context = await browser.newContext({ ...devices['iPhone 13'] });
     const state = await mock(context, { fresh: true });
     const page = await open(context, '/compte/', name);
-    await page.locator('.signin-card .provider-google').click();
+    await page.locator('.signin-card .auth-google').click();
     await page.getByRole('heading', { name: 'Quel est votre profil ?' }).waitFor({ timeout: 8000 })
       .catch(async () => problems.push(`${name} : « Quel est votre profil ? » absent (${page.url()} ; ${tidy(await page.locator('main').textContent().catch(() => '')).slice(0, 300)} ; échanges ${state.exchanges.length} ; départs ${state.authorize.length})`));
     checkDeparture(name, state);
@@ -220,7 +220,7 @@ try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const state = await mock(context, { fresh: false });
     const page = await open(context, '/favoris/', name);
-    await page.locator('.signin-card .provider-google').click();
+    await page.locator('.signin-card .auth-google').click();
     await page.waitForURL((url) => url.pathname === '/favoris/' && state.exchanges.length === 1, { timeout: 8000 })
       .catch(() => problems.push(`${name} : pas de retour sur Favoris (${page.url()})`));
     await page.waitForLoadState('networkidle');
@@ -240,9 +240,11 @@ try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const state = await mock(context, { back: { error: 'access_denied', error_code: 'access_denied', error_description: 'The user denied access' } });
     const page = await open(context, '/compte/', name);
-    await page.locator('.signin-card .provider-google').click();
-    await page.locator('.signin-card .signin-error').waitFor({ timeout: 8000 }).catch(() => {});
-    check(tidy(await page.locator('.signin-card .signin-error').textContent().catch(() => null)) === GOOGLE_MESSAGE, `${name} : message « ${tidy(await page.locator('.signin-error').textContent().catch(() => ''))} »`);
+    await page.locator('.signin-card .auth-google').click();
+    await page.locator('.signin-card .auth-error').waitFor({ timeout: 8000 }).catch(() => {});
+    check(tidy(await page.locator('.signin-card .auth-error').textContent().catch(() => null)) === GOOGLE_MESSAGE, `${name} : message « ${tidy(await page.locator('.auth-error').textContent().catch(() => ''))} »`);
+    // Comme l'app : le message reste sur l'accueil (Apple, Google, e-mail), sous les boutons.
+    check(await page.locator('.signin-card .auth-welcome .auth-error').count() === 1, `${name} : message ailleurs que sur l'accueil de la connexion`);
     check(new URL(page.url()).search === '', `${name} : adresse non nettoyée ${new URL(page.url()).search}`);
     check(state.exchanges.length === 0, `${name} : échange de code sans code`);
     await context.close();
@@ -254,9 +256,11 @@ try {
     const context = await browser.newContext({ ...devices['iPhone 13'] });
     await mock(context, { refuse: 'flow_state_not_found' });
     const page = await open(context, '/compte/', name, { expectedErrors: 1 });
-    await page.locator('.signin-card .provider-google').click();
-    await page.locator('.signin-card .signin-error').waitFor({ timeout: 8000 }).catch(() => {});
-    check(tidy(await page.locator('.signin-card .signin-error').textContent().catch(() => null)) === GOOGLE_MESSAGE, `${name} : message « ${tidy(await page.locator('.signin-error').textContent().catch(() => ''))} »`);
+    await page.locator('.signin-card .auth-google').click();
+    await page.locator('.signin-card .auth-error').waitFor({ timeout: 8000 }).catch(() => {});
+    check(tidy(await page.locator('.signin-card .auth-error').textContent().catch(() => null)) === GOOGLE_MESSAGE, `${name} : message « ${tidy(await page.locator('.auth-error').textContent().catch(() => ''))} »`);
+    // Comme l'app : le message reste sur l'accueil (Apple, Google, e-mail), sous les boutons.
+    check(await page.locator('.signin-card .auth-welcome .auth-error').count() === 1, `${name} : message ailleurs que sur l'accueil de la connexion`);
     await context.close();
   }
 
@@ -266,8 +270,8 @@ try {
     const context = await browser.newContext({ ...devices['iPhone 13'] });
     const state = await mock(context, { back: { code: 'code-apple' }, fresh: true, provider: 'apple' });
     const page = await open(context, '/compte/', name);
-    check(tidy(await page.locator('.signin-card .provider-apple').textContent()) === 'Continuer avec Apple', `${name} : bouton Apple « ${tidy(await page.locator('.provider-apple').textContent())} »`);
-    await page.locator('.signin-card .provider-apple').click();
+    check(tidy(await page.locator('.signin-card .auth-apple').textContent()) === 'Continuer avec Apple', `${name} : bouton Apple « ${tidy(await page.locator('.auth-apple').textContent())} »`);
+    await page.locator('.signin-card .auth-apple').click();
     await page.getByRole('heading', { name: 'Quel est votre profil ?' }).waitFor({ timeout: 8000 })
       .catch(async () => problems.push(`${name} : « Quel est votre profil ? » absent (${page.url()} ; ${tidy(await page.locator('main').textContent().catch(() => '')).slice(0, 300)} ; échanges ${state.exchanges.length} ; départs ${state.authorize.length})`));
     check(await page.locator('.alert-dialog').count() === 0, `${name} : une fenêtre s'ouvre au lieu de partir vers Apple`);
@@ -293,7 +297,7 @@ try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const state = await mock(context, { back: { code: 'code-apple' }, fresh: false, provider: 'apple' });
     const page = await open(context, '/favoris/', name);
-    await page.locator('.signin-card .provider-apple').click();
+    await page.locator('.signin-card .auth-apple').click();
     await page.waitForURL((url) => url.pathname === '/favoris/' && state.exchanges.length === 1, { timeout: 8000 })
       .catch(() => problems.push(`${name} : pas de retour sur Favoris (${page.url()})`));
     await page.waitForLoadState('networkidle');
@@ -312,9 +316,10 @@ try {
     const context = await browser.newContext({ ...devices['iPhone 13'] });
     const state = await mock(context, { back: { error: 'access_denied', error_code: 'access_denied', error_description: 'user_cancelled_authorize' }, provider: 'apple' });
     const page = await open(context, '/compte/', name);
-    await page.locator('.signin-card .provider-apple').click();
-    await page.locator('.signin-card .signin-error').waitFor({ timeout: 8000 }).catch(() => {});
-    check(tidy(await page.locator('.signin-card .signin-error').textContent().catch(() => null)) === APPLE_MESSAGE, `${name} : message « ${tidy(await page.locator('.signin-error').textContent().catch(() => ''))} »`);
+    await page.locator('.signin-card .auth-apple').click();
+    await page.locator('.signin-card .auth-error').waitFor({ timeout: 8000 }).catch(() => {});
+    check(tidy(await page.locator('.signin-card .auth-error').textContent().catch(() => null)) === APPLE_MESSAGE, `${name} : message « ${tidy(await page.locator('.auth-error').textContent().catch(() => ''))} »`);
+    check(await page.locator('.signin-card .auth-welcome .auth-error').count() === 1, `${name} : message ailleurs que sur l'accueil de la connexion`);
     check(new URL(page.url()).search === '', `${name} : adresse non nettoyée ${new URL(page.url()).search}`);
     check(state.exchanges.length === 0, `${name} : échange de code sans code`);
     check(state.authorize[0]?.searchParams.get('provider') === 'apple', `${name} : départ vers ${state.authorize[0]?.searchParams.get('provider')}`);
@@ -343,9 +348,12 @@ try {
     const expired = await browser.newContext({ ...devices['iPhone 13'] });
     await mock(expired);
     const page2 = await open(expired, '/compte/?error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired', `${name} expiré`);
-    await page2.locator('.signin-card .signin-error').waitFor({ timeout: 8000 }).catch(() => {});
-    const message = tidy(await page2.locator('.signin-card .signin-error').textContent().catch(() => null));
+    await page2.locator('.signin-card .auth-error').waitFor({ timeout: 8000 }).catch(() => {});
+    const message = tidy(await page2.locator('.signin-card .auth-error').textContent().catch(() => null));
     check(message === 'Ce lien a expiré ou a déjà servi. Demandez-en un nouveau.', `${name} expiré : message « ${message} »`);
+    // Lien d'e-mail refusé : l'étape « Ravi de vous revoir » (e-mail et mot de passe), avec le message.
+    const step = tidy(await page2.locator('.signin-card h1').textContent().catch(() => null));
+    check(step === 'Ravi de vous revoir', `${name} expiré : étape « ${step} »`);
     await expired.close();
   }
 } finally {

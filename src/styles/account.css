@@ -33,66 +33,9 @@
 .text-input[aria-invalid="true"] { border-color: var(--red); }
 .text-input:disabled { background: var(--page); color: var(--text-secondary); }
 
-/* ——— Carte de connexion (AuthView.swift) ——— */
-.signin { position: relative; width: 100%; max-width: 480px; margin: 0 auto; padding-bottom: 24px; }
-.account-wrap:has(> .signin), .favorites-wrap:has(> .favorites-signin) { padding-top: 0; }
-/* Bandeau bleu sous l'en-tête, sur toute la largeur (l'ombre peint les côtés sans élargir la page). */
-.signin-band { position: relative; height: 150px; background: var(--blue); box-shadow: 0 0 0 100vmax var(--blue); clip-path: inset(0 -100vmax); }
-.band-button { position: absolute; left: 0; top: 16px; display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.6); background: rgba(255, 255, 255, 0.16); color: #FFFFFF; cursor: pointer; }
-.band-button .icon { width: 20px; height: 20px; }
-.band-button:focus-visible { outline-color: #FFFFFF; border-radius: 50%; }
-.signin-app-icon { position: absolute; right: 0; top: 8px; width: 60px; height: 60px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18); }
-.signin-card { position: relative; margin-top: -42px; padding: 20px 16px 16px; border-radius: 26px; background: var(--card); box-shadow: 0 4px 16px rgba(10, 26, 68, 0.06); }
-.signin-title { font-size: 21px; font-weight: 800; }
-.signin-title-gap { margin-top: 12px; }
-.signin-subtitle { margin: 3px 0 0; color: var(--text-secondary); font-size: 13.5px; }
-.signin-subtitle strong { color: var(--ink); font-weight: 700; overflow-wrap: anywhere; }
-.signin-fields { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
-.signin-fields .field-error, .signin-fields .field-hint { margin-top: 5px; font-size: 12px; }
-.auth-field { display: flex; align-items: center; gap: 10px; height: 51px; padding: 0 6px 0 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--card); cursor: text; }
-.auth-field:focus-within { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(31, 91, 198, 0.18); }
-.auth-field.has-error { border-color: var(--red); }
-.auth-field > .icon { width: 19px; height: 19px; color: var(--icon); }
-.auth-field input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 16px; }
-.auth-field input::placeholder { color: var(--text-muted); }
-.auth-field input:focus { outline: none; }
-.eye-button { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex: none; border: 0; border-radius: 10px; background: transparent; color: var(--icon); cursor: pointer; }
-.eye-button .icon { width: 21px; height: 21px; }
-.signin-forgot { display: flex; justify-content: flex-end; margin-top: 10px; }
+/* ——— Message d'erreur des écrans du compte ———
+   L'écran de connexion a ses propres styles (styles/connexion-app.css). */
 .signin-error { margin: 10px 0 0; color: var(--red); font-size: 12.5px; font-weight: 500; }
-.signin-info { margin: 10px 0 0; color: var(--green); font-size: 13px; font-weight: 500; }
-.signin-small-row { display: flex; gap: 8px; margin-top: 10px; }
-.signin-small-row .small-button { flex: 1; }
-.signin-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 53px; margin-top: 13px; border: 0; border-radius: 14px; background: var(--blue); color: #FFFFFF; font-size: 16px; font-weight: 700; cursor: pointer; }
-.signin-primary:hover { background: var(--blue-press); }
-.signin-primary[disabled] { opacity: 0.7; cursor: default; }
-.signin-primary .icon { width: 18px; height: 18px; }
-.signin-create { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; text-align: center; }
-.signin-create p { margin: 0; color: var(--text-secondary); font-size: 13.5px; }
-.signin-secondary { height: 46px; border: 0; border-radius: 14px; background: var(--blue-soft); color: var(--blue); font-size: 15px; font-weight: 700; cursor: pointer; }
-.signin-divider { display: flex; align-items: center; gap: 12px; margin-top: 18px; color: var(--text-secondary); font-size: 12.5px; }
-.signin-divider::before, .signin-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-.signin-providers { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
-.provider { display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 51px; border-radius: 16px; font-size: 16px; font-weight: 600; cursor: pointer; }
-.provider-apple { border: 0; background: #000000; color: #FFFFFF; }
-.provider-google { border: 1px solid var(--border); background: var(--card); color: var(--ink); }
-.provider-logo { width: 19px; height: 19px; flex: none; }
-.signin-legal { margin: 14px 0 0; color: var(--text-secondary); font-size: 11.5px; text-align: center; }
-.signin-tips { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 0; padding: 12px; list-style: none; border-radius: 14px; background: var(--page); color: var(--text-secondary); font-size: 12.5px; }
-.signin-tips li { display: flex; align-items: flex-start; gap: 8px; }
-.signin-tips .icon { width: 16px; height: 16px; margin-top: 1px; color: var(--icon); }
-.signin-stack { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
-
-/* Fenêtre de connexion d'une action (favori, recherche enregistrée) */
-.signin-sheet { width: min(480px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); padding: 0; border: 0; border-radius: 26px; background: var(--page); color: var(--ink); overflow: auto; overscroll-behavior: contain; }
-.signin-sheet::backdrop { background: rgba(10, 26, 68, 0.45); }
-.signin-sheet .signin { max-width: none; padding: 0 16px 16px; }
-.signin-sheet .signin-band { margin: 0 -16px; padding: 0 16px; box-shadow: none; clip-path: none; }
-.signin-sheet .band-button { left: 16px; }
-.signin-sheet .signin-app-icon { right: 16px; top: 16px; }
-@media (max-width: 560px) {
-  .signin-sheet { width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; }
-}
 
 /* ——— Mon compte : page et briques (MySpaceComponents.swift) ——— */
 .account-wrap { max-width: 640px; padding-top: 8px; }

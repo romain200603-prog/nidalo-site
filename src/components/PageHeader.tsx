@@ -3,7 +3,7 @@ import { RoundButton } from './RoundButton';
 import '../styles/pieces-app.css';
 
 /** Arrivée depuis une autre page du site : le retour y ramène, comme le retour d'un écran poussé de l'app. */
-function cameFromSite(): boolean {
+export function cameFromSite(): boolean {
   try {
     return window.history.length > 1 && document.referrer !== '' && new URL(document.referrer).origin === window.location.origin;
   } catch {
