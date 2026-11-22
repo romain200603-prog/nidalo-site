@@ -1,7 +1,7 @@
 import { daysBetween, daySeparatorLabel, DISTANT_FUTURE } from './format';
 import type { Message } from './api';
 import { contentPreview, type Attachment, type MessageContent } from './content';
-import { sameId, type Conversation, type ListingSnapshot } from './inbox';
+import { isDeletedAccount, sameId, type Conversation, type ListingSnapshot } from './inbox';
 import type { ConversationVisitRequest } from './visitRequests';
 
 // Conversation ouverte, comme l'app : messages visibles (ConversationMessages.visible), jours et séries de bulles
@@ -48,9 +48,9 @@ export function needsFirstName({ conversation, messages, firstName }: { conversa
   return !conversation.isGroup && messages.length === 0 && !firstName.trim();
 }
 
-/** L'en-tête ouvre « Détails » : conversation à deux, avec un compte (canOpenContactProfile). */
+/** L'en-tête ouvre « Détails » : conversation à deux, avec un compte qui existe (canOpenContactProfile, n° 113). */
 export function canOpenDetails(conversation: Conversation): boolean {
-  return !conversation.isGroup && conversation.counterpart.name !== 'Compte supprimé' && !!conversation.otherUserId;
+  return !conversation.isGroup && !isDeletedAccount(conversation) && !!conversation.otherUserId;
 }
 
 // MARK: - Médias et fichiers (SharedMedia)

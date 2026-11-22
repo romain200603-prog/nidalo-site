@@ -10,6 +10,7 @@ import { Icon } from './Icon';
 import type { IconName } from './iconPaths';
 import { PageHeader } from './PageHeader';
 import { SignInSheet } from './account/SignInSheet';
+import { badgeText, messagesLabel, useTabBarBadge } from '../lib/badges';
 import { CONTACT_EMAIL } from '../lib/config';
 import { useDesktop } from '../lib/desktop';
 import { PATHS } from '../lib/paths';
@@ -58,8 +59,17 @@ export function Header({ section }: { section: Section }) {
   );
 }
 
-/** Barre du bas sur téléphone, comme l'app : Accueil · Favoris · + · Messages · Mon compte. */
+/** Fiche d'une annonce : la barre du bas y est masquée (hidesTabBar de l'app), sa pastille n'est pas lue. */
+function isListingPage(): boolean {
+  return typeof window !== 'undefined' && window.location.pathname.startsWith('/annonce/');
+}
+
+/**
+ * Barre du bas sur téléphone, comme l'app : Accueil · Favoris · + · Messages · Mon compte, avec la pastille des
+ * messages non lus sur Messages (« 99+ » au-delà de 99, n° 44). La page Messages lit déjà ses non-lus en direct.
+ */
 export function TabBar({ section }: { section: Section }) {
+  const unread = useTabBarBadge(section !== 'messages' && !isListingPage());
   return (
     <nav className="tabbar" aria-label="Menu">
       <a href={PATHS.home} aria-current={current(section === 'home' || section === 'search')}>
@@ -75,8 +85,11 @@ export function TabBar({ section }: { section: Section }) {
           <Icon name="plus" />
         </span>
       </a>
-      <a href={PATHS.messages} aria-current={current(section === 'messages')}>
-        <Icon name="messages" />
+      <a href={PATHS.messages} aria-current={current(section === 'messages')} aria-label={unread > 0 ? messagesLabel(unread) : undefined}>
+        <span className="tabbar-icon">
+          <Icon name="messages" />
+          {unread > 0 && <span className="tabbar-badge" aria-hidden="true">{badgeText(unread, 99)}</span>}
+        </span>
         Messages
       </a>
       <a href={PATHS.account} aria-current={current(section === 'account')}>

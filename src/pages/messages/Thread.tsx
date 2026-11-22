@@ -73,11 +73,19 @@ type ThreadProps = {
   me: string | null;
   /** On peut écrire dans la conversation (pas bloquée, ni quittée, ni avec un compte supprimé) : « Répondre ». */
   canWrite: boolean;
+  /** Messages plus anciens à lire en remontant (n° 19). */
+  hasOlder: boolean;
+  onLoadOlder: () => Promise<boolean>;
   onOfferAction: (offer: OfferRow, action: OfferAction) => void;
   onProposeSlots: (request: ConversationVisitRequest) => void;
   onReply: (message: Message) => void;
   onForward: (message: Message) => void;
 };
+
+/** « En bas » : à moins de 120 px du bas, comme l'app (n° 104). */
+const NEAR_BOTTOM = 120;
+/** Haut de la liste : la page d'avant est demandée à moins de 400 px du haut (n° 19). */
+const NEAR_TOP = 400;
 
 /** Ce que les bulles d'un fil savent faire : gestes, menu, citations (demande du 17/11). */
 type Interactions = {
@@ -90,11 +98,19 @@ type Interactions = {
   onOpenQuote: (id: string) => void;
 };
 
-export function Thread({ conversation, messages, offers, requests, me, canWrite, onOfferAction, onProposeSlots, onReply, onForward }: ThreadProps) {
+export function Thread({
+  conversation, messages, offers, requests, me, canWrite, hasOlder, onLoadOlder, onOfferAction, onProposeSlots, onReply, onForward,
+}: ThreadProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
-  const shownCount = useRef(-1);
+  // Premier et dernier message affichés, et date du dernier : ce qui a changé depuis le dernier affichage.
+  const edges = useRef<{ first: string | null; last: string | null; lastAt: number } | null>(null);
+  // Page plus ancienne demandée (n° 19) : le premier message affiché, la première bulle et sa place sous le haut de la
+  // liste, la hauteur et la position du défilement ; ce que l'on voit reste à sa place quand la page arrive.
+  const anchor = useRef<{ first: string; bubble: string | null; offset: number; height: number; top: number } | null>(null);
+  // Une page qui n'a rien apporté (hors ligne) n'est redemandée qu'en remontant de nouveau, comme l'app.
+  const armed = useRef(true);
   const [viewer, setViewer] = useState<number | null>(null);
   const [focused, setFocused] = useState<FocusedMessage | null>(null);
   const [reactionsOf, setReactionsOf] = useState<string | null>(null);
@@ -109,22 +125,91 @@ export function Thread({ conversation, messages, offers, requests, me, canWrite,
   }, [replyKey]); // Seulement quand une réponse arrive : les messages sont relus à chaque changement.
   const now = new Date();
   const days = siteThreadDays(messages, requests, now);
-  // Ce qui est là à l'ouverture ne bouge pas ; ce qui arrive ensuite (reçu ou envoyé) apparaît en fondu.
-  const known = useRef<Set<string> | null>(null);
-  known.current ??= new Set(days.flatMap((day) => day.rows.map((row) => row.item.key)));
+  // Ce qui est là à l'ouverture ne bouge pas ; ce qui arrive ensuite (reçu ou envoyé) apparaît en fondu. Les pages
+  // plus anciennes, lues en remontant, arrivent sans fondu.
+  const known = useRef<{ keys: Set<string>; from: number } | null>(null);
+  known.current ??= {
+    keys: new Set(days.flatMap((day) => day.rows.map((row) => row.item.key))),
+    from: days[0]?.rows[0]?.item.at.getTime() ?? -Infinity,
+  };
+  const isFresh = (item: SiteThreadRow['item']) => !!known.current && !known.current.keys.has(item.key) && item.at.getTime() >= known.current.from;
   const entries = mediaEntries(messages);
   const offersKey = (offers ?? []).map((offer) => `${offer.id}${offer.status}`).join(',');
   const requestsKey = requests.map((request) => `${request.id}${request.status}`).join(',');
 
-  // À l'ouverture : directement en bas ; à chaque nouveau message (ou carte changée) : en bas, en douceur.
+  const firstMessage = messages[0] ?? null;
+  const lastMessage = messages.length ? messages[messages.length - 1] : null;
+  const smooth = (): ScrollBehavior => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
+
+  /** Repère du haut de la liste : la première bulle et sa place sous le haut, la hauteur et la position du défilement. */
+  const measure = (first: string) => {
+    const el = scroller.current;
+    if (!el) return null;
+    const bubble = el.querySelector<HTMLElement>('[data-message-id]');
+    return {
+      first,
+      bubble: bubble?.dataset.messageId ?? null,
+      offset: bubble ? bubble.getBoundingClientRect().top - el.getBoundingClientRect().top : 0,
+      height: el.scrollHeight,
+      top: el.scrollTop,
+    };
+  };
+
+  /** Près du haut : la page d'avant, une à la fois ; le haut de la liste est noté pour rester à sa place (n° 19). */
+  const loadOlder = () => {
+    if (!hasOlder || !firstMessage || anchor.current || !armed.current) return;
+    const kept = measure(firstMessage.id);
+    if (!kept) return;
+    anchor.current = kept;
+    void onLoadOlder().then((added) => {
+      if (!added) armed.current = false;
+      // La page arrivée est déjà affichée et remise en place ; si rien de visible n'est arrivé, le repère est libéré.
+      requestAnimationFrame(() => {
+        if (anchor.current === kept) anchor.current = null;
+      });
+    });
+  };
+
+  // À l'ouverture : directement en bas. Ensuite (n° 104), un nouveau message descend la liste seulement si elle était
+  // déjà en bas ou s'il vient de moi ; une suppression ou un message éphémère qui disparaît ne la fait pas bouger. Une
+  // page plus ancienne ajoutée au-dessus garde à sa place ce que l'on voyait (n° 19).
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el) return;
-    const first = shownCount.current < 0;
-    shownCount.current = messages.length;
-    stick.current = true;
-    el.scrollTo({ top: el.scrollHeight, behavior: first ? 'auto' : 'smooth' });
-  }, [messages.length, offersKey, requestsKey]);
+    const before = edges.current;
+    edges.current = { first: firstMessage?.id ?? null, last: lastMessage?.id ?? null, lastAt: lastMessage?.createdAt.getTime() ?? -Infinity };
+    if (!before) {
+      stick.current = true;
+      el.scrollTop = el.scrollHeight;
+    } else {
+      const kept = anchor.current;
+      if (kept && sameId(before.first, kept.first) && !sameId(kept.first, firstMessage?.id)) {
+        anchor.current = null;
+        const bubble = kept.bubble ? [...el.querySelectorAll<HTMLElement>('[data-message-id]')].find((item) => item.dataset.messageId === kept.bubble) : null;
+        el.scrollTop = bubble
+          ? el.scrollTop + bubble.getBoundingClientRect().top - el.getBoundingClientRect().top - kept.offset
+          : kept.top + el.scrollHeight - kept.height;
+      }
+      if (lastMessage && !sameId(before.last, lastMessage.id) && lastMessage.createdAt.getTime() > before.lastAt
+        && (stick.current || sameId(lastMessage.senderId, me))) {
+        stick.current = true;
+        el.scrollTo({ top: el.scrollHeight, behavior: smooth() });
+      }
+    }
+    // Tout tient sans défiler : rien ne permettrait de remonter, la page d'avant est lue tout de suite.
+    if (el.scrollHeight <= el.clientHeight) loadOlder();
+  }, [firstMessage?.id, lastMessage?.id]);
+
+  // Cartes d'offre ou de demande de visite qui arrivent ou changent : en bas seulement si la liste y était (n° 104).
+  const cardsShown = useRef(false);
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!cardsShown.current) {
+      cardsShown.current = true;
+      return;
+    }
+    if (el && stick.current) el.scrollTo({ top: el.scrollHeight, behavior: smooth() });
+  }, [offersKey, requestsKey]);
 
   // Les images arrivent après les bulles : la liste reste collée en bas si on y était.
   useEffect(() => {
@@ -179,12 +264,22 @@ export function Thread({ conversation, messages, offers, requests, me, canWrite,
       ref={scroller}
       onScroll={(event) => {
         const el = event.currentTarget;
-        stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+        stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM;
+        if (el.scrollTop >= NEAR_TOP) armed.current = true;
+        // Page demandée : le repère suit le défilement, pour que ce que l'on voit reste en place quand elle arrive.
+        const kept = anchor.current;
+        if (kept) Object.assign(kept, measure(kept.first));
+        else if (el.scrollTop < NEAR_TOP) loadOlder();
       }}
     >
       <div className="dm-thread-inner" ref={content}>
         {days.length === 0 && (
-          <p className="dm-thread-empty">Présentez-vous et posez vos questions sur le bien : votre message part directement au vendeur.</p>
+          // Le texte sur le bien seulement pour la personne qui achète ou loue, dans une conversation d'annonce (n° 98).
+          <p className="dm-thread-empty">
+            {conversation.listing && !conversation.isGroup && !conversation.isSellerSide
+              ? 'Présentez-vous et posez vos questions sur le bien : votre message part directement au vendeur.'
+              : 'Écrivez votre premier message.'}
+          </p>
         )}
         {days.map((day) => (
           <section key={day.key} className="dm-day" aria-label={day.label}>
@@ -193,7 +288,7 @@ export function Thread({ conversation, messages, offers, requests, me, canWrite,
               <ThreadRowView
                 key={row.item.key}
                 row={row}
-                fresh={!known.current?.has(row.item.key)}
+                fresh={isFresh(row.item)}
                 conversation={conversation}
                 offers={offers}
                 me={me}
@@ -291,6 +386,7 @@ function MessageContext({ message, outgoing, conversation, interactions }: {
     const header = quoted
       ? replyHeader({
         replierIsMe: outgoing, replierName: replier, quotedIsMine: sameId(quoted.senderId, interactions.me), quotedName: firstName(personName(quoted.senderId)),
+        isSamePerson: sameId(message.senderId, quoted.senderId),
       })
       : outgoing ? 'Vous avez répondu' : `${replier} a répondu`;
     const text = original.status === 'loading' ? '…' : quoteText(quoted);
@@ -592,6 +688,8 @@ function AttachmentBubble({ items, caption, outgoing, message, onOpenMedia }: {
           case 'gif': return (
             <GifBubble key={item.id} item={item} status={<StatusLabel time={message.createdAt} outgoing={outgoing} read={message.isRead} className="is-on-image" />} />
           );
+          // Sorte venue d'une version plus récente de l'app (n° 30) : le message neutre de l'app.
+          case 'unsupported': return <p key={item.id} className={`dm-caption is-unsupported${outgoing ? ' is-out' : ''}`}>{UNSUPPORTED_ATTACHMENT}</p>;
           default: return null;
         }
       })}

@@ -27,7 +27,9 @@ describe('Réponse (MessageReply)', () => {
     expect(replyHeader({ replierIsMe: false, replierName: 'Sophie', quotedIsMine: true, quotedName: 'Vous' })).toBe('Sophie vous a répondu');
     expect(replyHeader({ replierIsMe: false, replierName: 'Marc', quotedIsMine: false, quotedName: 'Sophie' })).toBe('Marc a répondu à Sophie');
     expect(replyHeader({ replierIsMe: true, replierName: 'Vous', quotedIsMine: true, quotedName: 'Vous' })).toBe('Vous vous êtes répondu');
-    expect(replyHeader({ replierIsMe: false, replierName: 'Marc', quotedIsMine: false, quotedName: 'Marc' })).toBe('Marc s\'est répondu');
+    expect(replyHeader({ replierIsMe: false, replierName: 'Marc', quotedIsMine: false, quotedName: 'Marc', isSamePerson: true })).toBe('Marc s\'est répondu');
+    // Deux personnes du même prénom : les identifiants décident, pas les noms (n° 241).
+    expect(replyHeader({ replierIsMe: false, replierName: 'Marie', quotedIsMine: false, quotedName: 'Marie' })).toBe('Marie a répondu à Marie');
     expect(replyComposerTitle(false, 'Sophie Martin')).toBe('Réponse à Sophie Martin');
     expect(replyComposerTitle(true, 'Vous')).toBe('Réponse à vous-même');
     expect(canReply({ kind: 'system', text: 'Groupe créé' })).toBe(false);

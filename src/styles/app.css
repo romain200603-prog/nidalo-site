@@ -105,6 +105,15 @@ img { max-width: 100%; }
   .tabbar .icon { width: 24px; height: 24px; }
   .tabbar .plus { width: 48px; height: 48px; border-radius: 16px; background: var(--blue); color: #FFFFFF; display: inline-flex; align-items: center; justify-content: center; margin: 0 auto; }
   .tabbar .plus .icon { width: 26px; height: 26px; }
+  /* Pastille des messages non lus (AppTabBar, n° 44) : capsule rouge à liseré blanc en haut à droite de l'icône, de
+     largeur libre, « 99+ » au-delà de 99. */
+  .tabbar-icon { position: relative; display: inline-flex; }
+  .tabbar-badge {
+    position: absolute; left: calc(50% + 12px); top: 2px; transform: translate(-50%, -50%);
+    min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 999px;
+    background: var(--heart); box-shadow: 0 0 0 1.5px #FFFFFF; color: #FFFFFF;
+    font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
   body { padding-bottom: calc(var(--tabbar-height) + env(safe-area-inset-bottom)); }
 }
 

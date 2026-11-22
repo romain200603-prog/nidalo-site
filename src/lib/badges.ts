@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { isNewAccount } from './account/auth';
@@ -10,6 +10,8 @@ import { loadNotifications, notificationsStore, unreadNotificationCount } from '
 // - Notifications : notifications non lues du serveur (NotificationStore.swift:23, cloche de HomeView.swift:303-324).
 // Elles suivent le temps réel (MessagingRealtime.swift, AppContainer.swift:207-221) et se relisent quand l'onglet
 // redevient visible, comme l'app au retour au premier plan (RootTabView.swift:59-67).
+// Sur téléphone, la barre d'onglets du bas a la pastille Messages de l'app (AppTabBar, n° 44) : lue à l'ouverture de
+// chaque page et au retour sur l'onglet ; en direct seulement sur la page Messages.
 
 /** Ce que l'on lit d'une ligne de my_conversations (is_archived vient de conversation_preferences, joint par le serveur). */
 export type ConversationUnreadRow = { unread_count?: number | null; is_archived?: boolean | null };
@@ -19,9 +21,12 @@ export function unreadMessagesTotal(rows: ConversationUnreadRow[]): number {
   return rows.filter((row) => !(row.is_archived ?? false)).reduce((sum, row) => sum + (row.unread_count ?? 0), 0);
 }
 
-/** Texte d'une pastille : la cloche passe à « 9+ » au-delà de 9 (HomeView.swift:311) ; Messages affiche le nombre (AppTabBar.swift:48). */
-export function badgeText(count: number, capped: boolean): string {
-  return capped && count > 9 ? '9+' : String(count);
+/**
+ * Texte d'une pastille : la cloche passe à « 9+ » au-delà de 9 (HomeView.swift:311), Messages à « 99+ » au-delà de 99
+ * (AppTabBar.swift:48, n° 44).
+ */
+export function badgeText(count: number, cap: 9 | 99): string {
+  return count > cap ? `${cap}+` : String(count);
 }
 
 /** Libellés lus par les lecteurs d'écran, ceux de l'app (AppTabBar.swift:91-95, HomeView.swift:323). */
@@ -251,4 +256,53 @@ export function useBadges(): Badges {
     messages: shown ? messages : 0,
     notifications: shown && notifications.status === 'ready' ? unreadNotificationCount(notifications.items) : 0,
   };
+}
+
+/** Barre d'onglets du bas : affichée sous 761 px (styles/app.css). */
+const TAB_BAR_QUERY = '(max-width: 760px)';
+
+function tabBarQuery(): MediaQueryList | null {
+  try {
+    return typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(TAB_BAR_QUERY) : null;
+  } catch {
+    return null;
+  }
+}
+
+function onTabBarChange(listener: () => void): () => void {
+  const query = tabBarQuery();
+  if (!query) return () => undefined;
+  query.addEventListener('change', listener);
+  return () => query.removeEventListener('change', listener);
+}
+
+/**
+ * Pastille Messages de la barre d'onglets du téléphone (AppTabBar, n° 44) : seulement avec un compte, et pas pendant
+ * le choix du profil d'un compte neuf (showsUnreadBadge). Les non-lus sont lus une fois à l'ouverture de la page, puis
+ * au retour sur l'onglet et au retour par « Précédent » (page gardée en mémoire par le navigateur). `reads` faux : la
+ * page les lit déjà elle-même, en direct (Messages), ou masque la barre (fiche d'une annonce, hidesTabBar).
+ */
+export function useTabBarBadge(reads: boolean): number {
+  const session = useSession();
+  const userId = session.status === 'signedIn' ? session.userId : null;
+  const shown = userId !== null && !isNewAccount();
+  const visible = useSyncExternalStore(onTabBarChange, () => tabBarQuery()?.matches ?? false, () => false);
+  useEffect(() => {
+    if (!shown || !reads || !visible) return undefined;
+    void loadUnreadMessages();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void loadUnreadMessages();
+    };
+    const onShow = (event: PageTransitionEvent) => {
+      if (event.persisted) void loadUnreadMessages();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pageshow', onShow);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pageshow', onShow);
+    };
+  }, [shown, reads, visible, userId]);
+  const messages = useStore(unreadMessagesStore);
+  return shown ? messages : 0;
 }

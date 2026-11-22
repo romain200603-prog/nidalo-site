@@ -9,6 +9,7 @@ import { searchNormalized } from '../places';
 const capitalized = (text: string) => text.charAt(0).toLocaleUpperCase('fr-FR') + text.slice(1);
 const weekdayShort = new Intl.DateTimeFormat('fr-FR', { weekday: 'short' });
 const dayMonthWide = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long' });
+const dayMonthYearWide = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
 const dayMonthShort = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
 const dayMonthYearShort = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -30,12 +31,16 @@ export function clock(date: Date): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-/** « 10:42 » aujourd'hui, « Hier », « Mar. » dans la semaine, sinon « 12 juin » (MessageTime.listLabel). */
+/**
+ * « 10:42 » aujourd'hui, « Hier », « Mar. » dans la semaine, sinon « 12 juin », et « 12 juin 2025 » pour une autre
+ * année (MessageTime.listLabel, n° 220).
+ */
 export function listLabel(date: Date, now: Date = new Date()): string {
   const days = daysBetween(date, now);
   if (days === 0) return clock(date);
   if (days === 1) return 'Hier';
   if (days < 7) return capitalized(weekdayShort.format(date));
+  if (date.getFullYear() !== now.getFullYear()) return dayMonthYearWide.format(date);
   return dayMonthWide.format(date);
 }
 
@@ -134,12 +139,18 @@ export function looksLikePhoneNumber(text: string): boolean {
   return trimmed.replace(/\D/g, '').length >= 2;
 }
 
-/** Dix chiffres commençant par 0, ou `null` si la saisie n'est pas un numéro français complet (PhoneNumber.normalized). */
+/**
+ * Dix chiffres commençant par 0, ou `null` si la saisie n'est pas un numéro français complet (PhoneNumber.normalized).
+ * « +33 (0)6 12 34 56 78 » et « 0033 (0)6… » : après l'indicatif, le « 0 » entre parenthèses est retiré (n° 239).
+ */
 export function normalizedPhoneNumber(text: string): string | null {
   if (!PHONE_CHARACTERS.test(text)) return null;
   let digits = text.replace(/\D/g, '');
+  let replaced = true;
   if (digits.startsWith('0033')) digits = `0${digits.slice(4)}`;
   else if (text.trim().startsWith('+33') || (digits.startsWith('33') && digits.length === 11)) digits = `0${digits.slice(2)}`;
+  else replaced = false;
+  if (replaced && digits.startsWith('00')) digits = digits.slice(1);
   if (digits.length !== 10 || !digits.startsWith('0') || digits.charAt(1) === '0') return null;
   return digits;
 }
@@ -149,7 +160,10 @@ export function formattedPhoneNumber(normalized: string): string {
   return normalized.match(/.{1,2}/g)?.join(' ') ?? '';
 }
 
-/** Saisie mise en forme pendant la frappe, par paires (PhoneNumber.typing), 15 chiffres au plus. */
+/**
+ * Saisie mise en forme pendant la frappe, par paires (PhoneNumber.typing), 15 chiffres au plus ; le « 0 » tapé après
+ * « +33 » est retiré (n° 239).
+ */
 export function typingPhoneNumber(text: string): string {
   const digits = text.replace(/\D/g, '').slice(0, 15);
   if (!text.trim().startsWith('+')) return formattedPhoneNumber(digits);
@@ -157,7 +171,8 @@ export function typingPhoneNumber(text: string): string {
     const rest = formattedPhoneNumber(digits.slice(2));
     return `+${digits.slice(0, 2)}${rest ? ` ${rest}` : ''}`;
   }
-  const national = digits.slice(2);
+  let national = digits.slice(2);
+  if (national.startsWith('0')) national = national.slice(1);
   const first = national.charAt(0);
   if (!first) return `+${digits}`;
   const rest = formattedPhoneNumber(national.slice(1));

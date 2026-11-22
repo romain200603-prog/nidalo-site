@@ -19,18 +19,19 @@ function isNotificationsScreen(): boolean {
   return window.location.pathname === PATHS.account && new URLSearchParams(window.location.search).get('vue') === 'notifications';
 }
 
-function RoundLink({ href, icon, label, count = 0, capped = false, active = false }: {
+/** `cap` : la pastille passe à « 9+ » (cloche) ou « 99+ » (Messages, n° 44) au-delà. */
+function RoundLink({ href, icon, label, count = 0, cap = 99, active = false }: {
   href: string;
   icon: IconName;
   label: string;
   count?: number;
-  capped?: boolean;
+  cap?: 9 | 99;
   active?: boolean;
 }) {
   return (
     <a className="dtop-round" href={href} aria-label={label} aria-current={current(active)}>
       <Icon name={icon} />
-      {count > 0 && <span className="dtop-badge" aria-hidden="true">{badgeText(count, capped)}</span>}
+      {count > 0 && <span className="dtop-badge" aria-hidden="true">{badgeText(count, cap)}</span>}
     </a>
   );
 }
@@ -73,7 +74,7 @@ export function DesktopHeader({ section }: { section: Section }) {
           </a>
           <RoundLink href={PATHS.favorites} icon="heart" label="Favoris" active={section === 'favorites'} />
           <RoundLink href={PATHS.messages} icon="messageSquareText" label={messagesLabel(badges.messages)} count={badges.messages} active={section === 'messages'} />
-          <RoundLink href={accountPath('notifications')} icon="bell" label={notificationsLabel(badges.notifications)} count={badges.notifications} capped active={onNotifications} />
+          <RoundLink href={accountPath('notifications')} icon="bell" label={notificationsLabel(badges.notifications)} count={badges.notifications} cap={9} active={onNotifications} />
           <SpaceLink active={section === 'account' && !onNotifications} />
         </div>
       </div>

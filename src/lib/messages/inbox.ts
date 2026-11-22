@@ -1,6 +1,6 @@
 import { photoUrl } from '../listings';
 import { searchNormalized } from '../places';
-import { contentPreview, decodeContent, type MessageContent } from './content';
+import { contentPreview, messageContent, type MessageContent } from './content';
 import { matchesWords, normalizedPhoneNumber } from './format';
 
 // Boîte de réception, comme l'app : lignes de my_conversations (SupabaseMessagingRepository.inbox et
@@ -84,6 +84,8 @@ export type Counterpart = {
   phone: string | null;
   /** Photo d'un groupe ou d'une communauté (bucket privé message-attachments). */
   imagePath: string | null;
+  /** Compte supprimé (conversation à deux sans autre personne) : reconnu à ce drapeau, pas à son nom (n° 113). */
+  isDeletedAccount?: boolean;
 };
 
 export type ListingSnapshot = {
@@ -190,7 +192,7 @@ export function conversationFrom(row: ServerInboxRow, {
   let communityId: string | null = null;
   if (isGroup) {
     counterpart = {
-      name: row.group_name ?? 'Groupe', subtitle: `${row.member_count ?? 0} membres`, kind: 'group', phone: null,
+      name: row.group_name ?? 'Groupe', subtitle: membersLabel(row.member_count ?? 0), kind: 'group', phone: null,
       imagePath: row.group_image_path ?? null,
     };
     members = participants
@@ -216,7 +218,7 @@ export function conversationFrom(row: ServerInboxRow, {
       imagePath: null,
     };
   } else {
-    counterpart = { name: 'Compte supprimé', subtitle: listing?.title ?? '', kind: 'individual', phone: null, imagePath: null };
+    counterpart = { name: 'Compte supprimé', subtitle: listing?.title ?? '', kind: 'individual', phone: null, imagePath: null, isDeletedAccount: true };
   }
   const lastAt = date(row.last_message_at);
   let lastMessage: LastMessage | null = null;
@@ -225,7 +227,8 @@ export function conversationFrom(row: ServerInboxRow, {
     lastMessage = {
       id: row.last_message_id,
       senderId: row.last_message_sender_id ?? null,
-      content: decodeContent(row.last_message_content),
+      // Contenu illisible : « Message non pris en charge », comme dans le fil (n° 30).
+      content: messageContent(row.last_message_content),
       createdAt: lastAt,
       isRead: sameId(row.last_message_sender_id, me) && !!otherRead && otherRead.getTime() >= lastAt.getTime(),
     };
@@ -254,6 +257,16 @@ export function conversationFrom(row: ServerInboxRow, {
     sellerId: row.seller_id,
     otherLastReadAt: isGroup ? null : date(row.other_last_read_at),
   };
+}
+
+/** « 1 membre », « 3 membres » : le pluriel seulement au-delà de un (n° 112). */
+export function membersLabel(count: number): string {
+  return `${count} ${count > 1 ? 'membres' : 'membre'}`;
+}
+
+/** Conversation à deux avec un compte supprimé (isDeletedAccount de l'app, n° 113). */
+export function isDeletedAccount(conversation: Pick<Conversation, 'isGroup' | 'counterpart'>): boolean {
+  return !conversation.isGroup && conversation.counterpart.isDeletedAccount === true;
 }
 
 /** Dernière activité : dernier message, sinon création (Conversation.lastActivity). */
@@ -321,8 +334,26 @@ export type Contact = {
   professional: ProfessionalContactRow | null;
 };
 
+/** Clé d'un contact par son nom : agences, autres professionnels et comptes supprimés (contactKey(for: counterpart)). */
 export function contactKey(counterpart: Counterpart): string {
   return `${counterpart.kind}|${searchNormalized(counterpart.name)}`;
+}
+
+const accountKey = (kind: CounterpartKind, userId: string) => `${kind}|id:${userId.toLowerCase()}`;
+
+/**
+ * Clé du contact d'une conversation (n° 140) : un particulier dont le compte existe se reconnaît à l'identifiant de
+ * son compte, et deux particuliers du même nom restent deux contacts ; les autres, à leur nom.
+ */
+export function conversationContactKey(conversation: Pick<Conversation, 'counterpart' | 'otherUserId'>): string {
+  const { counterpart, otherUserId } = conversation;
+  if (counterpart.kind !== 'individual' || counterpart.isDeletedAccount || !otherUserId) return contactKey(counterpart);
+  return accountKey(counterpart.kind, otherUserId);
+}
+
+/** Clé d'un compte trouvé par son numéro : un particulier par son identifiant, les autres par leur nom (n° 140). */
+export function accountContactKey(account: { userId: string; counterpart: Counterpart }): string {
+  return account.counterpart.kind === 'individual' ? accountKey('individual', account.userId) : contactKey(account.counterpart);
 }
 
 function professionalCounterpart(row: ProfessionalContactRow): Counterpart {
@@ -341,7 +372,7 @@ const byName = (a: Contact, b: Contact) => {
 export function contactsFrom(conversations: Conversation[], professionals: ProfessionalContactRow[] = []): Contact[] {
   const groups = new Map<string, Conversation[]>();
   for (const conversation of conversations.filter((item) => !item.isGroup)) {
-    const key = contactKey(conversation.counterpart);
+    const key = conversationContactKey(conversation);
     groups.set(key, [...(groups.get(key) ?? []), conversation]);
   }
   const byKey = new Map<string, ProfessionalContactRow>();

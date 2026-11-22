@@ -4,7 +4,8 @@
 
 import { durationLabel } from './format';
 
-export type AttachmentKind = 'photo' | 'video' | 'document' | 'location' | 'contact' | 'audio' | 'gif';
+/** `unsupported` : sorte inconnue de cette version (envoyée par une version plus récente), lue sans erreur (n° 30). */
+export type AttachmentKind = 'photo' | 'video' | 'document' | 'location' | 'contact' | 'audio' | 'gif' | 'unsupported';
 
 export const DOCUMENT_CATEGORIES = [
   'energyDiagnostic', 'asbestos', 'lead', 'otherDiagnostic', 'technicalReport', 'floorPlan', 'propertyPhotos',
@@ -58,6 +59,10 @@ const number = (value: unknown): number | null => (typeof value === 'number' && 
 
 const KINDS: readonly AttachmentKind[] = ['photo', 'video', 'document', 'location', 'contact', 'audio', 'gif'];
 
+const newAttachmentId = () => (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+  ? crypto.randomUUID().toUpperCase()
+  : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`);
+
 /** Niveaux d'un vocal : nombres de 0 à 100 ([UInt8] de Swift), ou octets en base64 (Data de Swift). */
 function levels(value: unknown): number[] | null {
   let raw: number[] = [];
@@ -72,13 +77,19 @@ function levels(value: unknown): number[] | null {
   return raw.length ? raw.slice(0, 200).map((level) => Math.min(100, Math.max(0, level))) : null;
 }
 
+/**
+ * Pièce jointe lue sans erreur, comme l'init tolérant de MessageAttachment (n° 30) : sans nom ni taille, vides ; sorte
+ * absente ou inconnue, `unsupported` ; catégorie inconnue, aucune ; sans identifiant, un nouveau.
+ */
 function attachment(value: unknown): Attachment | null {
   if (!isObject(value)) return null;
-  const id = text(value.id);
   const kind = text(value.kind) as AttachmentKind | null;
-  const fileName = text(value.fileName);
-  if (!id || !kind || !KINDS.includes(kind) || fileName === null) return null;
-  const item: Attachment = { id, kind, fileName, byteCount: number(value.byteCount) ?? 0 };
+  const item: Attachment = {
+    id: text(value.id) || newAttachmentId(),
+    kind: kind && KINDS.includes(kind) ? kind : 'unsupported',
+    fileName: text(value.fileName) ?? '',
+    byteCount: number(value.byteCount) ?? 0,
+  };
   const storagePath = text(value.storagePath);
   if (storagePath) item.storagePath = storagePath;
   const thumbnailPath = text(value.thumbnailPath);
@@ -110,10 +121,14 @@ function attachment(value: unknown): Attachment | null {
   return item;
 }
 
+/** Les sortes de MessageContent (les clés que l'app sait lire). */
+const CONTENT_KEYS = ['text', 'image', 'visitProposal', 'visitConfirmation', 'visitConfirmed', 'photos', 'file', 'offer', 'attachments', 'system'];
+
 /** Contenu lu d'une ligne de messages (`{"text":{"_0":"…"}}`, `{"attachments":{"_0":[…],"caption":"…"}}`…). */
 export function decodeContent(raw: unknown): MessageContent {
   if (!isObject(raw)) return { kind: 'unknown' };
-  const [key] = Object.keys(raw);
+  const keys = Object.keys(raw);
+  const key = keys.find((item) => CONTENT_KEYS.includes(item)) ?? keys[0];
   const body = raw[key];
   const payload = isObject(body) ? body : {};
   switch (key) {
@@ -144,6 +159,48 @@ export function decodeContent(raw: unknown): MessageContent {
   }
 }
 
+// MARK: - Lecture tolérante (TolerantMessageContent, n° 30)
+
+/** Message neutre d'un contenu illisible (autre version, mal formé), comme l'app. */
+export const UNSUPPORTED_MESSAGE = 'Message non pris en charge';
+
+const UUID_TEXT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isText = (value: unknown) => typeof value === 'string';
+const isOptional = (value: unknown, check: (item: unknown) => boolean) => value === undefined || value === null || check(value);
+const isInteger = (value: unknown) => typeof value === 'number' && Number.isInteger(value);
+const isUuid = (value: unknown) => typeof value === 'string' && UUID_TEXT.test(value);
+const isDate = (value: unknown) => (typeof value === 'string' && !Number.isNaN(Date.parse(value))) || (typeof value === 'number' && Number.isFinite(value));
+
+/**
+ * Le contenu se lit-il comme MessageContent de l'app (Codable de Swift) ? Exactement une sorte connue, son objet et ses
+ * valeurs obligatoires du bon type ; une pièce jointe se lit toujours dès qu'elle est un objet (init tolérant).
+ */
+export function isReadableContent(raw: unknown): boolean {
+  if (!isObject(raw)) return false;
+  const keys = Object.keys(raw).filter((key) => CONTENT_KEYS.includes(key));
+  if (keys.length !== 1) return false;
+  const body = raw[keys[0]];
+  if (!isObject(body)) return false;
+  switch (keys[0]) {
+    case 'text':
+    case 'system': return isText(body._0);
+    case 'image': return isObject(body._0) && isText(body._0.storagePath) && isOptional(body._0.width, isInteger) && isOptional(body._0.height, isInteger);
+    case 'visitProposal':
+    case 'visitConfirmation': return isUuid(body.visitId);
+    case 'visitConfirmed': return isDate(body.slot) && isText(body.address);
+    case 'photos': return Array.isArray(body._0) && body._0.every(isText) && isInteger(body.moreCount);
+    case 'file': return isText(body.name);
+    case 'offer': return isUuid(body.offerId);
+    case 'attachments': return Array.isArray(body._0) && body._0.every(isObject) && isOptional(body.caption, isText);
+    default: return false;
+  }
+}
+
+/** Contenu d'un message lu du serveur : illisible, il devient le message neutre « Message non pris en charge ». */
+export function messageContent(raw: unknown): MessageContent {
+  return isReadableContent(raw) ? decodeContent(raw) : { kind: 'system', text: UNSUPPORTED_MESSAGE };
+}
+
 /** JSON d'un texte, tel que l'app l'écrit (cas `text(String)` de MessageContent). */
 export function textContent(value: string): Json {
   return { text: { _0: value } };
@@ -171,6 +228,7 @@ export function attachmentsPreview(items: Attachment[], caption: string | null):
       case 'contact': return `👤 ${only.fileName}`;
       case 'audio': return only.durationSeconds !== undefined ? `🎤 Message vocal (${durationLabel(only.durationSeconds)})` : '🎤 Message vocal';
       case 'gif': return '🎞️ GIF';
+      case 'unsupported': return '📎 Pièce jointe';
     }
   }
   // Aucune pièce lisible (sorte venue d'une version plus récente de l'app) : jamais « 0 photos ».
@@ -314,15 +372,33 @@ export function lowerExtension(fileName: string): string {
 }
 
 /** Ce qui empêche l'envoi d'un fichier (AttachmentPolicy.issue puis message(for:)), ou `null`. */
-export function attachmentIssue(kind: 'photo' | 'video' | 'document', fileName: string, byteCount: number, size: (bytes: number) => string): string | null {
+export function attachmentIssue(kind: 'photo' | 'video' | 'document', fileName: string, byteCount: number): string | null {
   const ext = lowerExtension(fileName);
   const allowed = kind === 'photo' ? PHOTO_EXTENSIONS : kind === 'video' ? VIDEO_EXTENSIONS : DOCUMENT_EXTENSIONS;
   if (!allowed.includes(ext)) {
     return `Format non accepté (${ext ? ext.toUpperCase() : 'sans extension'}). Envoyez une photo, une vidéo ou un document (PDF, Word, Excel…).`;
   }
   if (byteCount <= 0) return 'Ce fichier est vide.';
-  if (byteCount > MAX_BYTES[kind]) return `Fichier trop volumineux : ${size(MAX_BYTES[kind])} au maximum.`;
+  if (byteCount > MAX_BYTES[kind]) return tooLargeText(MAX_BYTES[kind]);
   return null;
+}
+
+/** Limite comptée en Mo de 1 024 × 1 024 octets, comme les limites elles-mêmes : « 25 Mo » (n° 244). */
+export function tooLargeText(maxBytes: number): string {
+  return `Fichier trop volumineux : ${Math.floor(maxBytes / MIB)} Mo au maximum.`;
+}
+
+/** Plus gros fichier que le dossier du serveur accepte : 52 428 800 octets, la limite des documents (n° 94). */
+export const SERVER_MAX_BYTES = MAX_BYTES.document;
+
+/**
+ * Fichier trop gros pour le dossier du serveur (n° 94) : le texte de l'app pour une vidéo, celui des documents sinon.
+ * Le site ne recompresse pas une vidéo : sa taille est celle du fichier choisi.
+ */
+export function serverTooLargeText(contentType: string): string {
+  return contentType.startsWith('video/')
+    ? 'Vidéo trop volumineuse : 50 Mo au maximum après compression. Essayez une vidéo plus courte.'
+    : tooLargeText(SERVER_MAX_BYTES);
 }
 
 export const CONTENT_MISMATCH = 'Le contenu de ce fichier ne correspond pas à son format : il n\'a pas été envoyé.';
@@ -348,15 +424,9 @@ export function contentMatches(fileName: string, header: Uint8Array): boolean {
     case 'docx': case 'xlsx': case 'pptx': case 'odt': case 'ods': case 'odp': return zip;
     case 'doc': case 'xls': case 'ppt': return ole;
     case 'rtf': return starts(ascii('{\\rtf'));
-    case 'txt': case 'csv': {
-      if (header.includes(0)) return false;
-      try {
-        new TextDecoder('utf-8', { fatal: true }).decode(header);
-        return true;
-      } catch {
-        return false;
-      }
-    }
+    // Texte : marque d'ordre UTF-16 (FF FE ou FE FF), ou aucun octet nul ; tout encodage accepté (UTF-8 coupé en fin
+    // d'extrait, Windows-1252…) (n° 141).
+    case 'txt': case 'csv': return starts([0xff, 0xfe]) || starts([0xfe, 0xff]) || !header.includes(0);
     default: return false;
   }
 }

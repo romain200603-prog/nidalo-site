@@ -265,6 +265,9 @@ a.dm-banner:hover .dm-banner-link { text-decoration: underline; }
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* Une page plus ancienne ajoutée au-dessus garde ce que l'on voit à sa place : la page s'en charge elle-même
+     (Thread.tsx, n° 19), sans l'ancrage du navigateur, qui ne le ferait pas partout de la même façon. */
+  overflow-anchor: none;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000000 28px);
   mask-image: linear-gradient(to bottom, transparent 0, #000000 28px);
 }

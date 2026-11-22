@@ -124,6 +124,10 @@ export function showIphoneOnly(title: string) {
   noticeStore.set({ kind: 'iphone', title });
 }
 
+/**
+ * Avis (domiaAlert de l'app) et « Dans l'app iPhone pour l'instant » : des alertes, que seul leur bouton ferme, ni
+ * Échap ni un clic à l'extérieur (n° 45). Les confirmations et les feuilles de choix gardent leur fermeture.
+ */
 export function NoticeDialogs() {
   const notice = useStore(noticeStore);
   const close = () => noticeStore.set(null);
@@ -131,7 +135,7 @@ export function NoticeDialogs() {
   const id = useId();
   return (
     <>
-      <Dialog open={notice?.kind === 'notice'} onClose={close} className="alert-dialog dm-dialog" labelledBy={`${id}-avis`}>
+      <Dialog open={notice?.kind === 'notice'} onClose={close} className="alert-dialog dm-dialog" labelledBy={`${id}-avis`} dismissible={false}>
         <div className="alert-body">
           <h2 id={`${id}-avis`}>{notice?.kind === 'notice' ? notice.text : ''}</h2>
           <div className="alert-actions">
@@ -145,6 +149,7 @@ export function NoticeDialogs() {
         title={notice?.kind === 'iphone' ? notice.title : ''}
         message={IPHONE_ONLY}
         actions={[{ label: 'Fermer', onClick: close, tone: 'primary' }]}
+        dismissible={false}
       />
     </>
   );

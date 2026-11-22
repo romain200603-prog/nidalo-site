@@ -81,8 +81,10 @@ export function publisherFrom(profile: PublicProfileRow | null, listingCreatedAt
     };
   }
   const since = memberSince(profile?.member_since ?? listingCreatedAt);
+  // Le nom tel que le serveur l'envoie (déjà réglé selon « Afficher mon nom complet ») ; raccourci par le site
+  // seulement s'il manque (PublisherKind.serverName, n° 24).
   return {
-    isProfessional: false, name: publicName(displayName), lines: since ? [since] : [],
+    isProfessional: false, name: displayName.trim() || publicName(displayName), lines: since ? [since] : [],
     avatarUrl: avatarUrl(profile?.avatar_path ?? null), phone: null, feeScheduleUrl: null,
   };
 }

@@ -9,14 +9,16 @@ import { visitDateLong } from '../../lib/listing/visits';
 import { fetchProfiles, upcomingVisits, type ConversationVisit, type Message } from '../../lib/messages/api';
 import { CATEGORY_LABELS, documentIcon } from '../../lib/messages/content';
 import { durationLabel, muteLabel, shortDateWithYear, sizeLabel } from '../../lib/messages/format';
-import { isMuted, sameId, type Conversation, type ProfileRow } from '../../lib/messages/inbox';
-import { profileOf, setArchived, setMuted, updateSettings } from '../../lib/messages/store';
+import { isDeletedAccount, isMuted, sameId, type Conversation, type ProfileRow } from '../../lib/messages/inbox';
+import { profileOf, updateSettings } from '../../lib/messages/store';
 import {
   bannerLocation, callState, EMPTY_MEDIA_TEXT, linkTitle, mediaEntries, mediaPreview, MUTE_OPTIONS, mutedUntil, muteNotice, senderName,
   sharedItems, videoState, visitState, visibleMessages, type ActionState, type ListingAvailability, type SharedItem,
 } from '../../lib/messages/thread';
 import { accountPath, listingPath, videoVisitPath } from '../../lib/paths';
-import { BlockDialog, CallDialog, DELETED_ACCOUNT, directMenuItems, ReportSheet, unblockWithNotice } from './actions';
+import {
+  BlockDialog, CallDialog, directMenuItems, ReportSheet, SETTING_FAILED, toggleArchived, toggleFavorite, toggleMuted, unblockWithNotice,
+} from './actions';
 import { listingStore, loadListingRow, type ListingRowState } from './listingRow';
 import { ActionMenu, CounterpartAvatar, PublisherBadge, showIphoneOnly, showNotice, useSignedUrl } from './parts';
 import { navigate, type MediaTab } from './route';
@@ -139,7 +141,7 @@ export function DetailsView({ conversation, messages, visits, blocked, me }: Det
               icon={muted ? 'bell' : 'bellOff'}
               title={muted ? 'Réactiver' : 'Silencieux'}
               state={{ enabled: true }}
-              onClick={() => void setMuted(conversation.id, !muted)}
+              onClick={() => void toggleMuted(conversation)}
             />
           </div>
 
@@ -216,7 +218,7 @@ export function DetailsView({ conversation, messages, visits, blocked, me }: Det
                       const until = mutedUntil(option.value);
                       void updateSettings(conversation.id, (current) => ({ ...current, mutedUntil: until ? until.toISOString() : null }))
                         .then(() => showNotice(muteNotice(option.value)))
-                        .catch(() => showNotice('Le réglage n\'a pas pu être enregistré. Réessayez.'));
+                        .catch(() => showNotice(SETTING_FAILED));
                     },
                   }))}
                 >
@@ -231,12 +233,7 @@ export function DetailsView({ conversation, messages, visits, blocked, me }: Det
                   type="button"
                   className="dm-action-row"
                   aria-pressed={conversation.isFavorite}
-                  onClick={() => {
-                    const adding = !conversation.isFavorite;
-                    void updateSettings(conversation.id, (current) => ({ ...current, isFavorite: adding }))
-                      .catch(() => undefined)
-                      .then(() => showNotice(adding ? 'Conversation ajoutée aux favoris.' : 'Conversation retirée des favoris.'));
-                  }}
+                  onClick={() => void toggleFavorite(conversation, 'Conversation ajoutée aux favoris.', 'Conversation retirée des favoris.')}
                 >
                   <span className="dm-row-icon"><Icon name="heart" /></span>
                   <span className="dm-action-text"><span>{conversation.isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}</span></span>
@@ -249,12 +246,12 @@ export function DetailsView({ conversation, messages, visits, blocked, me }: Det
           <DetailsSection title="Confidentialité">
             <ul className="dm-card dm-rows">
               <li>
-                <button type="button" className="dm-action-row" onClick={() => void setArchived(conversation.id, !conversation.isArchived)}>
+                <button type="button" className="dm-action-row" onClick={() => void toggleArchived(conversation)}>
                   <span className="dm-row-icon"><Icon name="archive" /></span>
                   <span className="dm-action-text"><span>{conversation.isArchived ? 'Désarchiver la conversation' : 'Archiver la conversation'}</span></span>
                 </button>
               </li>
-              {counterpart.name !== DELETED_ACCOUNT && other && (
+              {!isDeletedAccount(conversation) && other && (
                 <li>
                   <button type="button" className="dm-action-row" onClick={() => (isBlocked ? void unblockWithNotice(other) : setBlocking(true))}>
                     <span className="dm-row-icon"><Icon name="ban" /></span>
