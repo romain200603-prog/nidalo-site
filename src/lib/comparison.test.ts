@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-  compareListings, comparisonItem, criterionValue, deltaText, estimatedMonthlyPayment, noteText, valueText,
+  compareListings, comparisonItem, criterionValue, deltaText, estimatedMonthlyPayment, noteText, projectDownPayment, valueText,
 } from './comparison';
+import { emptyCriteria, newProject } from './account/projectEditor';
+import { D } from './investment/decimal';
+import { FinancingSimulation } from './investment/financingSimulation';
+import { profitabilityFor, profitabilityView, STANDARD_CHOICE } from './listing/profitability';
 import { testRow } from './testRows';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -22,8 +26,9 @@ describe('Comparaison des biens (ListingComparison)', () => {
     const comparison = compareListings([comparisonItem(apartment, null), comparisonItem(larger, null)], 0);
     expect(comparison.kind).toBe('purchase');
     expect(comparison.isMixed).toBe(false);
+    // Sans loyer, le moteur ne donne pas de mensualité (comme la fiche) : la ligne « Mensualité (est.) » est omise.
     expect(comparison.rows.map((row) => row.criterion)).toEqual([
-      'price', 'livingArea', 'pricePerSquareMeter', 'rooms', 'bedrooms', 'energyClass', 'annualPropertyTax', 'monthlyCharges', 'estimatedMonthlyPayment',
+      'price', 'livingArea', 'pricePerSquareMeter', 'rooms', 'bedrooms', 'energyClass', 'annualPropertyTax', 'monthlyCharges',
     ]);
     const price = comparison.rows[0];
     expect(price.deltas).toEqual([null, { difference: -10000, assessment: 'favorable' }]);
@@ -76,10 +81,53 @@ describe('Comparaison des biens (ListingComparison)', () => {
     expect(comparison.analyses[0].warnings).toEqual([{ kind: 'rentalBan', letter: 'G', year: 2025 }, { kind: 'rentFreeze', letter: 'G' }]);
   });
 
-  it('mensualité estimée : 10 % d\'apport, 25 ans, assurance comprise, à l\'euro', () => {
-    expect(estimatedMonthlyPayment(250000)).toBe(1183);
-    expect(comparisonItem(testRow({ property_type: 'hotel' }), null).estimatedMonthlyPayment).toBeNull();
+  it('mensualité estimée : celle de la fiche (FinancingSimulation.standard, mois type), à l\'euro (n° 65)', () => {
+    // Exactement la « Mensualité estimée » de la carte Rentabilité de la fiche, avec les choix standard.
+    const fiche = profitabilityView(profitabilityFor(leased)!, STANDARD_CHOICE)!;
+    expect(estimatedMonthlyPayment(leased)).toBe(fiche.monthlyPayment.rounded(0).toNumber());
+    expect(estimatedMonthlyPayment(leased)).toBe(1137);
+    expect(comparisonItem(leased, null).estimatedMonthlyPayment).toBe(1137);
+    // Apport du projet : il paie d'abord les frais, le crédit finance le reste ; achat au comptant : aucun crédit.
+    expect(estimatedMonthlyPayment(leased, D(50000))).toBe(917);
+    expect(comparisonItem(leased, null, D(50000)).estimatedMonthlyPayment).toBe(917);
+    expect(estimatedMonthlyPayment(leased, FinancingSimulation.cashPurchase)).toBe(0);
+    // Sans loyer, le moteur ne calcule pas (try? de l'app) ; ni hôtel, ni location.
+    expect(estimatedMonthlyPayment(apartment)).toBeNull();
+    expect(comparisonItem(apartment, null).estimatedMonthlyPayment).toBeNull();
+    expect(comparisonItem(testRow({ property_type: 'hotel', rental_info: { isLeased: true, currentMonthlyRent: 700 } }), null).estimatedMonthlyPayment).toBeNull();
     expect(comparisonItem(rental, null).estimatedMonthlyPayment).toBeNull();
+  });
+
+  it('apport du projet (ProjectDownPayment) : celui de la catégorie, comptant, rien pour une location', () => {
+    const project = (kind: 'buy' | 'rent' | 'invest' | 'hotel', change: (criteria: ReturnType<typeof emptyCriteria>) => void) => {
+      const criteria = emptyCriteria();
+      change(criteria);
+      return { ...newProject('p'), kind, criteria };
+    };
+    expect(projectDownPayment(null)).toBeNull();
+    expect(projectDownPayment(newProject('p'))).toBeNull();
+    expect(projectDownPayment(project('buy', (c) => { c.residential.downPayment = 40000; }))?.toNumber()).toBe(40000);
+    expect(projectDownPayment(project('buy', (c) => { c.residential.downPayment = 0; }))).toBeNull();
+    expect(projectDownPayment(project('buy', (c) => { c.investment.downPayment = 40000; }))).toBeNull();
+    expect(projectDownPayment(project('invest', (c) => { c.investment.downPayment = 30000; }))?.toNumber()).toBe(30000);
+    expect(projectDownPayment(project('invest', (c) => { c.investment.financing = 'cash'; c.investment.downPayment = 30000; })))
+      .toBe(FinancingSimulation.cashPurchase);
+    expect(projectDownPayment(project('hotel', (c) => { c.hotel.downPayment = 200000; }))?.toNumber()).toBe(200000);
+    expect(projectDownPayment(project('rent', (c) => { c.residential.downPayment = 40000; }))).toBeNull();
+  });
+
+  it('alertes DPE de location : logements et immeubles seulement (n° 145)', () => {
+    const shop = testRow({ id: id(6), transaction: 'rent', property_type: 'commercial', publish_category: 'rental', price: 1400, living_area: 80, rooms: null, energy_class: 'G', rental_info: { isLeased: false } });
+    const flat = testRow({ id: id(7), transaction: 'rent', property_type: 'apartment', publish_category: 'rental', price: 900, living_area: 45, energy_class: 'G', rental_info: { isLeased: false } });
+    const comparison = compareListings([comparisonItem(shop, 'rent'), comparisonItem(flat, 'rent')]);
+    expect(comparison.kind).toBe('rental');
+    expect(comparison.analyses[0].warnings.map((note) => note.kind)).not.toContain('rentalBan');
+    expect(comparison.analyses[0].warnings.map((note) => note.kind)).not.toContain('rentFreeze');
+    expect(comparison.analyses[1].warnings.map((note) => note.kind)).toEqual(['rentalBan', 'rentFreeze']);
+    // Un immeuble contient des logements : ses alertes restent.
+    const building = testRow({ id: id(8), transaction: 'rent', property_type: 'building', price: 4800, living_area: 300, energy_class: 'G', rental_info: { isLeased: false } });
+    const kinds = compareListings([comparisonItem(building, 'rent'), comparisonItem(shop, 'rent')]).analyses[0].warnings.map((note) => note.kind);
+    expect(kinds).toEqual(['rentalBan', 'rentFreeze']);
   });
 });
 
@@ -101,7 +149,12 @@ describe('Libellés et formats (CompareFormatting)', () => {
 
   it('écarts', () => {
     expect(deltaText(-10000, 'price')).toBe('− 10 000 €');
-    expect(deltaText(0.007, 'grossYield')).toBe('+ 0,7 % pt');
+    // En points, une décimale, sans « % » (n° 163) ; égalité au chiffre pair, comme ICU.
+    expect(deltaText(0.007, 'grossYield')).toBe('+ 0,7 pt');
+    expect(deltaText(0.012, 'estimatedNetYield')).toBe('+ 1,2 pt');
+    expect(deltaText(-0.03, 'grossYield')).toBe('− 3,0 pt');
+    expect(deltaText(0.0025, 'grossYield')).toBe('+ 0,2 pt');
+    expect(deltaText(0.0015, 'grossYield')).toBe('+ 0,2 pt');
     expect(deltaText(8, 'livingArea')).toBe('+ 8 m²');
     expect(deltaText(-2, 'energyClass')).toBe('− 2 classes');
     expect(deltaText(1, 'energyClass')).toBe('+ 1 classe');

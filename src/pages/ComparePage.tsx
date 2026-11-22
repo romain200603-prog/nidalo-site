@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Icon } from '../components/Icon';
 import { Page } from '../components/Layout';
+import { OfflineState } from '../components/OfflineState';
 import { ListingPhoto } from '../components/PhotoPager';
 import { SoonCard } from '../components/SoonCard';
+import { editableProjectStore, loadEditableProject } from '../lib/account/projectEditor';
+import { useSession, useStore } from '../lib/account/session';
 import { clearCompare, COMPARE_MAX, removeFromCompare, setCompareReference, useCompare } from '../lib/compare';
 import {
-  compareListings, comparisonItem, CRITERION_LABELS, deltaText, isEstimate, noteText, valueText, type Comparison,
+  compareListings, comparisonItem, CRITERION_LABELS, deltaText, isEstimate, noteText, projectDownPayment, valueText, type Comparison,
   type ComparisonAnalysis, type ComparisonRow, type ComparisonValue,
 } from '../lib/comparison';
 import { useDesktop } from '../lib/desktop';
@@ -172,26 +175,46 @@ function CompareTable({ comparison, mode }: { comparison: Comparison; mode: Sear
   );
 }
 
+/**
+ * Apport du projet du compte pour « Mensualité (est.) » (container.account.project dans l'app, n° 65) : `undefined`
+ * tant que la session ou le projet se lisent ; `null` sans compte, sans apport, ou si le projet n'a pas pu être lu.
+ */
+function useProjectDownPayment() {
+  const session = useSession();
+  const project = useStore(editableProjectStore);
+  const userId = session.status === 'signedIn' ? session.userId : null;
+  useEffect(() => {
+    if (userId) void loadEditableProject();
+  }, [userId]);
+  return useMemo(() => {
+    if (session.status === 'loading') return undefined;
+    if (!userId || project.status === 'error') return null;
+    return project.status === 'ready' ? projectDownPayment(project.project) : undefined;
+  }, [session.status, userId, project]);
+}
+
 function DesktopCompare({ mode }: { mode: SearchMode | null }) {
   const compare = useCompare();
   const { rows, loading, retry } = useComparedListings(compare.ids);
+  const downPayment = useProjectDownPayment();
   const [confirmClear, setConfirmClear] = useState(false);
 
   const comparison = useMemo(() => {
     const items = compare.ids
       .map((id) => rows.get(id))
       .filter((row): row is ListingRow => !!row && row !== 'error')
-      .map((row) => comparisonItem(row, mode));
+      .map((row) => comparisonItem(row, mode, downPayment ?? null));
     const index = items.findIndex((item) => item.id === compare.referenceId);
     return compareListings(items, index >= 0 ? index : 0);
-  }, [compare.ids, compare.referenceId, rows, mode]);
+  }, [compare.ids, compare.referenceId, rows, mode, downPayment]);
 
   const failed = compare.ids.some((id) => rows.get(id) === 'error');
   const nothing = !loading && comparison.items.length === 0;
   // Vide aussi quand aucun des biens n'existe plus (ils quittent la comparaison).
   const empty = compare.ids.length === 0 || (nothing && !failed);
   const unavailable = !empty && nothing && failed;
-  const waiting = !empty && loading && comparison.items.length === 0;
+  // Le tableau attend aussi l'apport du projet : la mensualité ne change pas sous les yeux.
+  const waiting = !empty && !unavailable && ((loading && comparison.items.length === 0) || downPayment === undefined);
 
   return (
     <div className="wrap wrap-narrow cmp">
@@ -215,15 +238,8 @@ function DesktopCompare({ mode }: { mode: SearchMode | null }) {
         </div>
       )}
       {waiting && <div className="cmp-loading" role="status" aria-busy="true"><span className="cmp-spinner" aria-hidden="true" />Chargement…</div>}
-      {unavailable && (
-        // Comme la fiche quand le serveur ne répond pas : le message et « Réessayer ».
-        <div className="cmp-empty cmp-error" role="alert">
-          <span className="cmp-empty-icon" aria-hidden="true"><Icon name="triangleAlert" /></span>
-          <h2>Comparaison indisponible</h2>
-          <p>Impossible de charger les biens. Réessayez dans un instant.</p>
-          <button type="button" className="cmp-discover" onClick={retry}>Réessayer</button>
-        </div>
-      )}
+      {/* Aucun bien lu (pas de connexion, serveur qui ne répond pas) : l'état commun de l'app (n° 64). */}
+      {unavailable && <OfflineState className="cmp-error" onRetry={retry} />}
       {!empty && !waiting && !unavailable && (
         <div className="cmp-content">
           {comparison.isMixed && (

@@ -71,6 +71,8 @@
   .cmp-empty p { max-width: 420px; margin: 0; color: var(--d-grey); font-size: 15px; line-height: 22px; }
   .cmp-discover { display: inline-flex; align-items: center; height: 48px; padding: 0 24px; border: 0; border-radius: 14px; background: var(--d-blue); color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 700; text-decoration: none; cursor: pointer; }
   .cmp-discover:hover { background: var(--d-blue-hover); }
+  /* « Pas de connexion Internet » (n° 64) : l'état commun de l'app (OfflineState), dans la carte blanche de la page. */
+  .cmp-error.app-offline { margin-top: 24px; padding: 48px 32px; border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; }
 
   .cmp-loading { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 48px; color: var(--d-grey); font-size: 15px; }
   .cmp-spinner { width: 20px; height: 20px; border: 2px solid var(--d-blue-line); border-top-color: var(--d-blue); border-radius: 50%; animation: cmp-spin 0.8s linear infinite; }

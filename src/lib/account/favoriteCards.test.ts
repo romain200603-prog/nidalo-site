@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  categoryIncludes, favoriteCard, favoriteDetails, favoriteSuggestions, floorLabel, matchesText, relevanceOrder,
+  categoryIncludes, favoriteCard, favoriteDetails, favoriteSuggestions, floorLabel, listingCategoryMode, matchesText, relevanceOrder,
   savedCountText, sortFavorites,
 } from './favoriteCards';
 import { testRow } from '../testRows';
@@ -8,7 +8,9 @@ import { testRow } from '../testRows';
 describe('cartes des favoris (FavoriteCardText de l’app)', () => {
   it('écrit l’étage comme l’app', () => {
     expect(floorLabel(0)).toBe('Rez-de-chaussée');
-    expect(floorLabel(-1)).toBe('Rez-de-chaussée');
+    // Étage négatif : « Sous-sol », comme partout dans l'app (n° 238).
+    expect(floorLabel(-1)).toBe('Sous-sol');
+    expect(floorLabel(-2)).toBe('Sous-sol');
     expect(floorLabel(1)).toBe('1er étage');
     expect(floorLabel(3)).toBe('3e étage');
   });
@@ -30,6 +32,29 @@ describe('cartes des favoris (FavoriteCardText de l’app)', () => {
       asset_details: { land: { _0: { zoning: 'UB', buildability: { floorArea: 300, documentReference: 'PLU 2024' } } } },
     });
     expect(favoriteDetails(row, 'land')).toBe('Lyon · 740 m² · Constructible 300 m²');
+  });
+
+  it('terrain à louer : la surface du terrain, comme un terrain (n° 144)', () => {
+    const row = testRow({ transaction: 'rent', property_type: 'land', publish_category: 'rental', living_area: 0, land_area: 1200, rooms: null, floor: null });
+    expect(favoriteDetails(row, 'rental').replace(/[\u00A0\u202F]/g, ' ')).toBe('Lyon · 1 200 m²');
+  });
+
+  it('la carte suit la catégorie de l’annonce (PublishCategory.of, n° 174)', () => {
+    expect(listingCategoryMode(testRow({ transaction: 'rent', publish_category: 'rental' }))).toBe('rent');
+    expect(listingCategoryMode(testRow({ publish_category: 'investment' }))).toBe('invest');
+    expect(listingCategoryMode(testRow({ publish_category: 'residential', rental_info: { isLeased: true, currentMonthlyRent: 800 } }))).toBe('buy');
+    // Catégorie absente ou qui ne propose pas ce type : celle de la transaction et du type.
+    expect(listingCategoryMode(testRow({ publish_category: null, rental_info: { isLeased: true, currentMonthlyRent: 800 } }))).toBe('invest');
+    expect(listingCategoryMode(testRow({ publish_category: 'residential', property_type: 'building' }))).toBe('invest');
+    expect(listingCategoryMode(testRow({ publish_category: 'rental', property_type: 'hotel' }))).toBe('hotel');
+    expect(listingCategoryMode(testRow({ publish_category: null, property_type: 'land' }))).toBe('buy');
+    expect(listingCategoryMode(testRow({ publish_category: null, property_type: 'parking' }))).toBeNull();
+    // Une vente Résidentiel au loyer potentiel reste une carte de vente (avant : présentée en investissement).
+    const potential = favoriteCard(testRow({ price: 200000, rental_info: { isLeased: false, potentialMonthlyRent: 900 } }));
+    expect(potential.content.kind).toBe('purchase');
+    expect(potential.grossYield).toBeNull();
+    const investment = favoriteCard(testRow({ price: 200000, publish_category: 'investment', rental_info: { isLeased: false, potentialMonthlyRent: 900 } }));
+    expect(investment.content.kind).toBe('investment');
   });
 
   it('range chaque fiche dans sa catégorie', () => {
@@ -94,5 +119,6 @@ describe('cartes des favoris (FavoriteCardText de l’app)', () => {
     expect(savedCountText(1, 1)).toBe('1 bien sauvegardé');
     expect(savedCountText(3, 3)).toBe('3 biens sauvegardés');
     expect(savedCountText(2, 3)).toBe('2 sur 3 biens');
+    expect(savedCountText(0, 1)).toBe('0 sur 1 bien');
   });
 });

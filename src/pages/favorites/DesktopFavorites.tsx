@@ -5,6 +5,7 @@ import { FavoritesEmptyState } from '../../components/FavoritesEmptyState';
 import { ModeTabs } from '../../components/ModeTabs';
 import { Icon } from '../../components/Icon';
 import { Page } from '../../components/Layout';
+import { OfflineState } from '../../components/OfflineState';
 import { PhotoPager } from '../../components/PhotoPager';
 import { HeartIcon } from '../../components/account/HeartButton';
 import { SignInCard } from '../../components/account/SignInCard';
@@ -132,7 +133,8 @@ function MissingCard({ id }: { id: string }) {
   );
 }
 
-function DesktopFavorites({ items }: { items: Favorite[] }) {
+/** `offline` : favoris du compte non lus (pas de connexion…) : « Pas de connexion Internet » à la place de l'état vide. */
+function DesktopFavorites({ items, offline = false }: { items: Favorite[]; offline?: boolean }) {
   const [loaded, retry] = useFavoriteCards(items);
   const searches = useStore(savedSearchesStore);
   const searchItems = searches.status === 'ready' ? searches.items : [];
@@ -211,14 +213,8 @@ function DesktopFavorites({ items }: { items: Favorite[] }) {
   if (loaded.status === 'loading') {
     list = <Spinner />;
   } else if (loaded.status === 'error') {
-    list = (
-      <EmptyState
-        icon="triangleAlert"
-        title="Vos favoris n'ont pas pu être chargés"
-        text={loaded.message}
-        action={<button type="button" className="btn btn-light" onClick={retry}>Réessayer</button>}
-      />
-    );
+    // Fiches non lues : « Pas de connexion Internet » (n° 54) ; « Réessayer » les relit, avec la roue.
+    list = <OfflineState onRetry={retry} />;
   } else if (cards.length === 0 && loaded.missing.length > 0) {
     list = <div className="dfav-grid">{loaded.missing.map((id) => <MissingCard key={id} id={id} />)}</div>;
   } else if (cards.length === 0) {
@@ -275,6 +271,11 @@ function DesktopFavorites({ items }: { items: Favorite[] }) {
         {tab === 'searches' ? (
           <div key="searches" className="dfav-searches fav-tab-panel">
             <SavedSearchesList embedded counts={counts} />
+          </div>
+        ) : items.length === 0 && offline ? (
+          // Favoris du compte non lus : la coupure, pas « Aucun favori » (n° 54) ; « Réessayer » relit les favoris.
+          <div key="offline" className="fav-tab-panel fav-empty-place-favorites dfav-empty-place">
+            <OfflineState onRetry={() => void loadFavorites(true, true)} />
           </div>
         ) : items.length === 0 ? (
           // Aucun favori : ni recherche, ni filtres, ni catégories (ils reviennent avec le premier favori).
@@ -342,7 +343,12 @@ function DesktopFavorites({ items }: { items: Favorite[] }) {
               </button>
             </div>
 
-            <ModeTabs includesAll mode={modeOfCategory(category)} onChange={(mode) => setCategory(mode ? categoryOfMode(mode) : 'all')}
+            {/* Une pastille (sauf « Tous ») choisit aussi la catégorie des filtres (n° 53). */}
+            <ModeTabs includesAll mode={modeOfCategory(category)}
+              onChange={(mode) => {
+                setCategory(mode ? categoryOfMode(mode) : 'all');
+                if (mode) setFilterMode(mode);
+              }}
               className="mode-tabs-card dfav-categories" />
 
             {/* Filtres actifs (avec le lieu) : le libellé ouvre les filtres, la croix retire le critère. */}
@@ -408,20 +414,8 @@ function DesktopFavoritesBody() {
     );
   }
   if (session.status === 'loading') return <div className="dfav"><div className="dfav-inner"><Spinner /></div></div>;
-  if (favorites.status === 'error') {
-    return (
-      <div className="dfav">
-        <div className="dfav-inner">
-          <EmptyState
-            icon="triangleAlert"
-            title="Vos favoris n'ont pas pu être chargés"
-            text="Vérifiez votre connexion, puis réessayez."
-            action={<button type="button" className="btn btn-light" onClick={() => void loadFavorites(true)}>Réessayer</button>}
-          />
-        </div>
-      </div>
-    );
-  }
+  // Favoris du compte non lus : l'en-tête et les onglets restent, « Pas de connexion Internet » à la place de la liste.
+  if (favorites.status === 'error') return <DesktopFavorites items={[]} offline />;
   if (favorites.status !== 'ready') return <div className="dfav"><div className="dfav-inner"><Spinner /></div></div>;
   return <DesktopFavorites items={favorites.items} />;
 }

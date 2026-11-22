@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardContent, compactAmount, formatFacts, formatShortFact, homeTypeLine, shortDay, shortFacts } from './cardContent';
+import { cardContent, cardLocation, compactAmount, formatFact, formatFacts, formatShortFact, homeTypeLine, shortDay, shortFacts } from './cardContent';
 import type { ListingRow } from './listings';
 import type { SearchMode } from './labels';
 import type { Highlights } from './search';
@@ -65,6 +65,22 @@ describe('fiches', () => {
     const office = card(row({ property_type: 'office', price: 540000, living_area: 210, rooms: null, rental_info: { isLeased: false },
       asset_details: { office: { _0: { workstations: 24, parkingSpaces: 6 } } } }), null);
     expect(office.facts).toEqual([{ kind: 'vacant' }, { kind: 'workstations', value: 24 }, { kind: 'parkingSpaces', value: 6 }]);
+  });
+
+  it('singuliers : « 1 chambre », « 1 poste » (n° 149, 163)', () => {
+    expect(formatFact({ kind: 'hotelRooms', value: 1 }, now).text).toBe('1 chambre');
+    expect(formatFact({ kind: 'hotelRooms', value: 28 }, now).text).toBe('28 chambres');
+    expect(formatFact({ kind: 'workstations', value: 1 }, now).text).toBe('1 poste');
+    expect(formatFact({ kind: 'workstations', value: 24 }, now).text).toBe('24 postes');
+  });
+
+  it('terrain à louer : la surface du terrain, pas « 0 m² » (n° 144)', () => {
+    const land = row({ transaction: 'rent', property_type: 'land', publish_category: 'rental', price: 300, living_area: 0, land_area: 1200, rooms: null, energy_class: null });
+    const c = card(land, 'rent');
+    expect(c.kind).toBe('rental');
+    expect(c.area).toBe(1200);
+    expect(cardLocation('Lyon 2e', c).replace(/[\u00A0\u202F]/g, ' ')).toBe('Lyon 2e · 1 200 m²');
+    expect(card(row({ transaction: 'rent', property_type: 'land', living_area: 0, land_area: null }), 'rent').area).toBeNull();
   });
 
   it('terrain : seulement l’urbanisme documenté', () => {
@@ -157,6 +173,9 @@ describe('petite ligne de l’accueil', () => {
   it('montants courts, jour court et ligne du type', () => {
     expect(compactAmount(680_000).replace(/[\u00A0\u202F]/g, ' ')).toBe('680 k€');
     expect(compactAmount(2_000_000).replace(/[\u00A0\u202F]/g, ' ')).toBe('2 M€');
+    // Arrondi aux milliers d'abord : 999 600 € donne « 1 M€ », pas « 1 000 k€ » (n° 153).
+    expect(compactAmount(999_600).replace(/[\u00A0\u202F]/g, ' ')).toBe('1 M€');
+    expect(compactAmount(999_499).replace(/[\u00A0\u202F]/g, ' ')).toBe('999 k€');
     expect(shortDay(new Date(2026, 11, 1))).toBe('1er déc.');
     expect(shortDay(new Date(2026, 11, 4))).toBe('4 déc.');
     expect(homeTypeLine({ property_type: 'apartment', rooms: 3, living_area: 62 }).replace(/[\u00A0\u202F]/g, ' ')).toBe('Appartement 3 pièces · 62 m²');

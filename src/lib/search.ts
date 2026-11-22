@@ -1,3 +1,4 @@
+import { formatSignedAmount } from './format';
 import { assetDetails, int, rentalInfo, scopeLabel, sourced, type HotelScope } from './listingJson';
 import type { PropertyType, SearchMode } from './labels';
 import { LISTING_COLUMNS, PUBLIC_STATUSES, type ListingRow } from './listings';
@@ -168,7 +169,10 @@ export type Highlights = {
   text?: { grossYield: string; netYield: string; monthlyCashFlow: string; monthlyRentFromYield: string };
 };
 
+/** Lignes d'une page du serveur (SupabaseListingRepository.fetchLimit). */
 export const FETCH_LIMIT = 500;
+/** Plafond des lignes lues pour une recherche, en pages de FETCH_LIMIT (SupabaseListingRepository.maxRows, n° 49). */
+export const MAX_ROWS = 5_000;
 
 /** Tris proposés par mode, dans l'ordre de l'app (SearchViewModel.sortOptions). */
 export function sortOptions(mode: SearchMode): SortOrder[] {
@@ -527,6 +531,19 @@ export function pricePerSquareMeter(row: Pick<ListingRow, 'transaction' | 'livin
   return Math.round(Number(row.price) / area);
 }
 
+/** Surface comparée au critère : celle du terrain pour un terrain, la surface habitable sinon (SearchQuery.searchedArea, n° 9). */
+export function searchedArea(row: Pick<ListingRow, 'property_type' | 'living_area' | 'land_area'>): number {
+  return row.property_type === 'land' ? Number(row.land_area ?? 0) : Number(row.living_area);
+}
+
+/**
+ * Le critère de surface n'est envoyé au serveur (colonne `living_area`) que si aucun terrain ne peut être trouvé : la
+ * surface d'un terrain est sa surface de terrain, vérifiée ensuite dans le navigateur (filtersLivingAreaOnServer, n° 9).
+ */
+export function filtersLivingAreaOnServer(draft: SearchDraft): boolean {
+  return !propertyTypesFor(draft).includes('land');
+}
+
 /**
  * L'annonce correspond-elle à la recherche ? (SearchMatching.swift : bornes incluses, critère absent ignoré,
  * donnée inconnue exclue ; en Investir, une annonce sans indicateurs est exclue.)
@@ -545,7 +562,7 @@ export function matches(row: ListingRow, draft: SearchDraft, highlights: Highlig
   }
   const price = Number(row.price);
   if (!inRange(price, range(draft.priceMin, draft.priceMax))) return false;
-  if (!inRange(Number(row.living_area), range(draft.livingAreaMin, draft.livingAreaMax))) return false;
+  if (!inRange(searchedArea(row), range(draft.livingAreaMin, draft.livingAreaMax))) return false;
   const isRent = draft.mode === 'rent';
   // En location, pièces, chambres et ameublement ne concernent que les logements ;
   // le DPE, seulement les biens qui y sont soumis (pas un parking ni un terrain).
@@ -648,46 +665,76 @@ export function sortResults(results: Result[], sort: SortOrder): Result[] {
   return [...results].sort(compare);
 }
 
+/**
+ * Pages suivantes tant que le serveur rend une page pleine, jusqu'à `maxRows` lignes (matchingSummaries de l'app,
+ * n° 49) ; `readPage(from, to)` lit les lignes de `from` à `to` comprises. Une ligne déjà lue (même identifiant, si
+ * une annonce a changé de place entre deux pages) n'est gardée qu'une fois.
+ */
+export async function readPages<T extends { id: string }>(
+  readPage: (from: number, to: number) => Promise<T[]>, pageSize = FETCH_LIMIT, maxRows = MAX_ROWS,
+): Promise<T[]> {
+  const rows: T[] = [];
+  const seen = new Set<string>();
+  let read = 0;
+  while (read < maxRows) {
+    const page = await readPage(read, read + pageSize - 1);
+    read += page.length;
+    for (const row of page) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      rows.push(row);
+    }
+    if (page.length < pageSize) break;
+  }
+  return rows;
+}
+
 /** Annonces publiées qui passent les filtres simples, lues sur le serveur (comme matchingSummaries). */
 export async function fetchCandidates(draft: SearchDraft): Promise<ListingRow[]> {
-  let request = supabase
-    .from('listings')
-    .select(LISTING_COLUMNS)
-    .in('status', [...PUBLIC_STATUSES])
-    .eq('transaction', transactionFor(draft.mode))
-    .in('property_type', propertyTypesFor(draft));
-  const [priceMin, priceMax] = range(draft.priceMin, draft.priceMax);
-  if (priceMin !== null) request = request.gte('price', priceMin);
-  if (priceMax !== null) request = request.lte('price', priceMax);
-  const [areaMin] = range(draft.livingAreaMin, draft.livingAreaMax);
-  if (areaMin !== null) request = request.gte('living_area', areaMin);
-  // Hôtels : les chambres sont lues dans les détails de l'annonce, pas sur le serveur (voir hotelRoomCount).
-  if (draft.mode !== 'hotel') {
-    const [roomsMin, roomsMax] = range(draft.roomsMin, draft.roomsMax);
-    if (roomsMin !== null) request = request.gte('rooms', roomsMin);
-    if (roomsMax !== null) request = request.lte('rooms', roomsMax);
-  }
-  const location = locationFor(draft);
-  let box: BoundingBox | null = null;
-  if (location.kind === 'area') box = location.box;
-  else if (location.kind === 'around') box = boxAround(location.center, location.radiusMeters);
-  else if (location.kind === 'city' && location.postalCode) request = request.like('postal_code', `${location.postalCode.replace(/[^0-9A-Za-z]/g, '')}%`);
-  if (box) {
-    const [west, south, east, north] = box;
-    request = request.gte('public_latitude', south).lte('public_latitude', north)
-      .gte('public_longitude', west).lte('public_longitude', east);
-  }
-  const ordered = (() => {
-    switch (effectiveSort(draft)) {
-      case 'priceAscending': return request.order('price', { ascending: true });
-      case 'priceDescending': return request.order('price', { ascending: false });
-      case 'pricePerSquareMeterAscending': return request.order('price_per_square_meter', { ascending: true });
+  const sort = effectiveSort(draft);
+  // Requête neuve pour chaque page (le constructeur garde ses paramètres).
+  const pageRequest = () => {
+    let request = supabase
+      .from('listings')
+      .select(LISTING_COLUMNS)
+      .in('status', [...PUBLIC_STATUSES])
+      .eq('transaction', transactionFor(draft.mode))
+      .in('property_type', propertyTypesFor(draft));
+    const [priceMin, priceMax] = range(draft.priceMin, draft.priceMax);
+    if (priceMin !== null) request = request.gte('price', priceMin);
+    if (priceMax !== null) request = request.lte('price', priceMax);
+    // Terrain possible : sa surface (surface du terrain) est vérifiée ensuite par `matches`.
+    const [areaMin] = range(draft.livingAreaMin, draft.livingAreaMax);
+    if (areaMin !== null && filtersLivingAreaOnServer(draft)) request = request.gte('living_area', areaMin);
+    // Hôtels : les chambres sont lues dans les détails de l'annonce, pas sur le serveur (voir hotelRoomCount).
+    if (draft.mode !== 'hotel') {
+      const [roomsMin, roomsMax] = range(draft.roomsMin, draft.roomsMax);
+      if (roomsMin !== null) request = request.gte('rooms', roomsMin);
+      if (roomsMax !== null) request = request.lte('rooms', roomsMax);
+    }
+    const location = locationFor(draft);
+    let box: BoundingBox | null = null;
+    if (location.kind === 'area') box = location.box;
+    else if (location.kind === 'around') box = boxAround(location.center, location.radiusMeters);
+    else if (location.kind === 'city' && location.postalCode) request = request.like('postal_code', `${location.postalCode.replace(/[^0-9A-Za-z]/g, '')}%`);
+    if (box) {
+      const [west, south, east, north] = box;
+      request = request.gte('public_latitude', south).lte('public_latitude', north)
+        .gte('public_longitude', west).lte('public_longitude', east);
+    }
+    switch (sort) {
+      // Prix égaux : l'identifiant départage, pour que les pages ne se chevauchent pas (n° 49).
+      case 'priceAscending': return request.order('price', { ascending: true }).order('id', { ascending: false });
+      case 'priceDescending': return request.order('price', { ascending: false }).order('id', { ascending: false });
+      case 'pricePerSquareMeterAscending': return request.order('price_per_square_meter', { ascending: true }).order('id', { ascending: false });
       default: return request.order('published_at', { ascending: false }).order('id', { ascending: false });
     }
-  })();
-  const { data, error } = await ordered.limit(FETCH_LIMIT);
-  if (error) throw error;
-  return (data as unknown as ListingRow[] | null) ?? [];
+  };
+  return readPages(async (from, to) => {
+    const { data, error } = await pageRequest().range(from, to);
+    if (error) throw error;
+    return (data as unknown as ListingRow[] | null) ?? [];
+  });
 }
 
 /** Recherche complète : serveur, puis indicateurs et correspondance fine dans le navigateur, puis tri. */
@@ -1008,20 +1055,19 @@ const TYPE_NAMES: Record<PropertyType, string> = {
   office: 'Bureaux', parking: 'Parking', hotel: 'Hôtel', other: 'Autre',
 };
 
-const roundPercent = (value: number) => `${thousands.format(value)} %`;
 const shortDay = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
 
-/** « 7 % », « 6,5 % » : rendement de l'accueil (SearchCriterionOptions.yieldLabel). */
-function yieldPercent(percent: number): string {
+/**
+ * « 7 % », « 6,5 % » : une décimale quand il y en a une, sinon aucune. Rendement de l'accueil
+ * (SearchCriterionOptions.yieldLabel) et pourcentages des pastilles (SearchDraft.percentLabel, n° 162).
+ */
+export function yieldPercent(percent: number): string {
   const digits = Number.isInteger(percent) ? 0 : 1;
   return `${new Intl.NumberFormat('fr-FR', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(percent)} %`;
 }
 
-/** Montant signé d'un cash-flow : « +120 € », « −85 € », « 0 € » (Formatters.signedAmount). */
-function signedEuros(value: number): string {
-  const formatted = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Math.abs(value));
-  return value > 0 ? `+${formatted}` : value < 0 ? `−${formatted}` : formatted;
-}
+/** Étage d'une pastille : « rez-de-chaussée », « 1er », « 3e » (n° 163). */
+const floorChipLabel = (floor: number) => (floor === 0 ? 'rez-de-chaussée' : floor === 1 ? '1er' : `${floor}e`);
 
 /** Pastilles des critères appliqués, dans l'ordre de l'app (le lieu est dans le champ). */
 export function filterChips(draft: SearchDraft): FilterChip[] {
@@ -1029,7 +1075,8 @@ export function filterChips(draft: SearchDraft): FilterChip[] {
   const add = (id: string, label: string | null, remove: (d: SearchDraft) => SearchDraft) => { if (label) chips.push({ id, label, remove }); };
   const { mode } = draft;
   const invest = mode === 'invest';
-  if (draft.radiusKm !== null) add('radius', `Rayon : ${draft.radiusKm} km`, (d) => ({ ...d, radiusKm: null }));
+  // Rayon appliqué seulement autour d'un centre (n° 57).
+  if (draft.radiusKm !== null && searchCenter(draft) !== null) add('radius', `Rayon : ${draft.radiusKm} km`, (d) => ({ ...d, radiusKm: null }));
   const perMonth = mode === 'rent';
   const budget = rangeLabel(draft.priceMin, draft.priceMax, perMonth ? (n) => euroFormat.format(n) : compactPrice);
   add('budget', budget && `${perMonth ? 'Loyer' : 'Budget'} : ${budget}`, (d) => ({ ...d, priceMin: null, priceMax: null }));
@@ -1060,7 +1107,7 @@ export function filterChips(draft: SearchDraft): FilterChip[] {
       add('operatingIncome', `Résultat d'exploitation : ${compactPrice(draft.minOperatingIncome)} min`, (d) => ({ ...d, minOperatingIncome: null }));
     }
     if (draft.minOccupancyRatePercent !== null && validPercent(draft.minOccupancyRatePercent)) {
-      add('occupancy', `Occupation : ${roundPercent(draft.minOccupancyRatePercent)} min`, (d) => ({ ...d, minOccupancyRatePercent: null }));
+      add('occupancy', `Occupation : ${yieldPercent(draft.minOccupancyRatePercent)} min`, (d) => ({ ...d, minOccupancyRatePercent: null }));
     }
   }
   if (mode !== 'hotel') {
@@ -1074,9 +1121,9 @@ export function filterChips(draft: SearchDraft): FilterChip[] {
   }
   if (invest) {
     if (draft.minNetYieldPercent !== null && validPercent(draft.minNetYieldPercent)) {
-      add('net', `Net : ${roundPercent(draft.minNetYieldPercent)}`, (d) => ({ ...d, minNetYieldPercent: null }));
+      add('net', `Net : ${yieldPercent(draft.minNetYieldPercent)}`, (d) => ({ ...d, minNetYieldPercent: null }));
     }
-    if (draft.minMonthlyCashFlow !== null) add('cashflow', `Cash-flow : ${signedEuros(draft.minMonthlyCashFlow)}`, (d) => ({ ...d, minMonthlyCashFlow: null }));
+    if (draft.minMonthlyCashFlow !== null) add('cashflow', `Cash-flow : ${formatSignedAmount(draft.minMonthlyCashFlow)}`, (d) => ({ ...d, minMonthlyCashFlow: null }));
     if (draft.downPayment !== null) add('downPayment', `Apport : ${compactPrice(draft.downPayment)}`, (d) => ({ ...d, downPayment: null }));
     if (draft.maxWorksAmount !== null) {
       add('works', draft.maxWorksAmount === 0 ? 'Sans travaux' : `Travaux : ${compactPrice(draft.maxWorksAmount)} max`, (d) => ({ ...d, maxWorksAmount: null }));
@@ -1089,9 +1136,13 @@ export function filterChips(draft: SearchDraft): FilterChip[] {
     if (draft.vacantOnly) add('vacant', 'Bien libre', (d) => ({ ...d, vacantOnly: false }));
     if (draft.mixedBuilding) add('investmentKind', 'Immeuble mixte', (d) => withInvestmentKind(d, 'classic'));
     if (draft.requiresDeclaredRent) add('declaredRent', 'Loyer déclaré', (d) => ({ ...d, requiresDeclaredRent: false }));
+    // Lots (SearchDraft.lotsLabel) ; « Lots vacants » a sa pastille même quand son champ est caché : elle le montre et
+    // le retire (n° 58).
+    if (draft.minUnits !== null) add('lots', `Lots : ${draft.minUnits} min`, (d) => ({ ...d, minUnits: null }));
+    if (draft.maxVacantUnits !== null) add('maxVacantUnits', `Lots vacants : ${draft.maxVacantUnits} max`, (d) => ({ ...d, maxVacantUnits: null }));
   }
   if (draft.worstEnergyClass !== null) add('energy', energyRangeLabel(draft.worstEnergyClass), (d) => ({ ...d, worstEnergyClass: null }));
-  const floors = rangeLabel(draft.floorMin, draft.floorMax, (n) => `${n}e`);
+  const floors = rangeLabel(draft.floorMin, draft.floorMax, floorChipLabel);
   add('floorRange', floors && `Étage : ${floors}`, (d) => ({ ...d, floorMin: null, floorMax: null }));
   const years = rangeLabel(draft.yearBuiltMin, draft.yearBuiltMax, (n) => String(n));
   add('year', years && `Construction : ${years}`, (d) => ({ ...d, yearBuiltMin: null, yearBuiltMax: null }));
