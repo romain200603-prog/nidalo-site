@@ -8,20 +8,23 @@ import {
 } from '../../lib/messages/api';
 import { formattedPhoneNumber, looksLikePhoneNumber, normalizedPhoneNumber, typingPhoneNumber } from '../../lib/messages/format';
 import {
-  alphabetical, contactDetail, contactKey, contactMatches, contactsFrom, sectionLetter, type Contact, type Conversation,
+  accountContactKey, alphabetical, contactDetail, contactMatches, contactsFrom, sectionLetter, type Contact, type Conversation,
 } from '../../lib/messages/inbox';
 import { loadProfessionals, professionalsStore } from '../../lib/messages/store';
 import { PATHS } from '../../lib/paths';
-import { CounterpartAvatar, Sheet, showIphoneOnly } from './parts';
+import { CounterpartAvatar, Sheet, showIphoneOnly, showNotice } from './parts';
 import { navigate } from './route';
 
 // « Nouvelle discussion » (NewConversationView.swift) : recherche, actions rapides, contacts fréquents puis tous les
-// contacts par lettre ; « Nouveau contact » cherche un compte NIDALO par son numéro (AddContactView.swift). Les
+// contacts par lettre ; « Nouveau contact » cherche un compte Nidalo par son numéro (AddContactView.swift). Les
 // coordonnées des contacts ne sont jamais affichées. Groupes, communautés et diffusions : dans l'app iPhone.
+
+/** Contact ou compte dont la conversation n'a pas pu s'ouvrir (n° 109). */
+export const OPEN_FAILED = 'La conversation n\'a pas pu s\'ouvrir. Vérifiez votre connexion.';
 
 /**
  * Conversation d'un contact : sa plus récente, sinon une conversation directe avec l'agence, créée une seule fois
- * par le serveur (start_direct_conversation) ; rien si elle n'a pas pu être ouverte, comme l'app.
+ * par le serveur (start_direct_conversation) ; `false` si elle n'a pas pu être ouverte (l'écran le dit, n° 109).
  */
 export async function openContact(contact: Contact): Promise<boolean> {
   const latest = contact.conversations[0];
@@ -63,7 +66,9 @@ export function ContactsList({ contacts, showsLastMessage, onOpened }: {
                 busy.current = true;
                 const opened = await openContact(contact);
                 busy.current = false;
+                // L'app le dit dans son bandeau ; sur le site, une fenêtre, au-dessus de la feuille ouverte (n° 109).
                 if (opened) onOpened?.();
+                else showNotice(OPEN_FAILED);
               }}
             >
               <CounterpartAvatar counterpart={contact.counterpart} size={44} />
@@ -94,8 +99,9 @@ export function PhoneHint({ text }: { text: string }) {
 type Lookup = { status: 'searching' } | { status: 'found'; row: PhoneAccountRow } | { status: 'notFound' } | { status: 'failed'; message: string | null };
 
 /**
- * Compte NIDALO d'un numéro complet (PhoneLookupCard) : find_account_by_phone, puis « Écrire » ouvre la conversation
- * directe, existante ou nouvelle (start_phone_conversation). Seul le nom du compte s'affiche.
+ * Compte Nidalo d'un numéro complet (PhoneLookupCard) : find_account_by_phone, puis « Écrire » ouvre la conversation
+ * directe, existante ou nouvelle (start_phone_conversation). Seul le nom du compte s'affiche. Un particulier est déjà
+ * parmi les contacts si l'on a une conversation avec son compte, jamais pour un autre du même nom (n° 140).
  */
 export function PhoneLookupCard({ phone, contacts, onOpened }: { phone: string; contacts: Contact[]; onOpened?: () => void }) {
   const [lookup, setLookup] = useState<Lookup>({ status: 'searching' });
@@ -110,12 +116,12 @@ export function PhoneLookupCard({ phone, contacts, onOpened }: { phone: string; 
     return () => { cancelled = true; };
   }, [phone, attempt]);
 
-  const subtitle = lookup.status === 'searching' ? 'Recherche d\'un compte NIDALO…'
-    : lookup.status === 'found' ? 'Compte NIDALO trouvé'
-      : lookup.status === 'notFound' ? 'Aucun compte NIDALO avec ce numéro'
+  const subtitle = lookup.status === 'searching' ? 'Recherche d\'un compte Nidalo…'
+    : lookup.status === 'found' ? 'Compte Nidalo trouvé'
+      : lookup.status === 'notFound' ? 'Aucun compte Nidalo avec ce numéro'
         : lookup.message ?? 'La recherche n\'a pas pu aboutir. Vérifiez votre connexion.';
   const account = lookup.status === 'found' ? phoneAccount(lookup.row) : null;
-  const isContact = account ? contacts.some((contact) => contact.id === contactKey(account.counterpart)) : false;
+  const isContact = account ? contacts.some((contact) => contact.id === accountContactKey(account)) : false;
 
   const write = async () => {
     if (opening) return;
@@ -126,7 +132,8 @@ export function PhoneLookupCard({ phone, contacts, onOpened }: { phone: string; 
       navigate({ conversationId: id });
       onOpened?.();
     } catch {
-      // Comme l'app : la conversation ne s'ouvre pas.
+      // Comme l'app : la conversation ne s'ouvre pas, et l'écran le dit (n° 109).
+      showNotice(OPEN_FAILED);
     }
     setOpening(false);
   };
@@ -168,7 +175,7 @@ export function PhoneLookupCard({ phone, contacts, onOpened }: { phone: string; 
 const QUICK_ACTIONS: { key: 'group' | 'community' | 'contact' | 'broadcast'; icon: IconName; title: string; hint: string }[] = [
   { key: 'group', icon: 'users', title: 'Nouveau groupe', hint: 'Une conversation avec plusieurs personnes' },
   { key: 'community', icon: 'community', title: 'Nouvelle communauté', hint: 'Rassembler autour d\'un projet ou d\'un thème' },
-  { key: 'contact', icon: 'userPlus', title: 'Nouveau contact', hint: 'Par son numéro, s\'il a un compte NIDALO' },
+  { key: 'contact', icon: 'userPlus', title: 'Nouveau contact', hint: 'Par son numéro, s\'il a un compte Nidalo' },
   { key: 'broadcast', icon: 'megaphone', title: 'Nouvelle diffusion', hint: 'Un même message, envoyé séparément à chacun' },
 ];
 
@@ -294,7 +301,7 @@ function NewConversationMain({ contacts, query, setQuery, onAddContact, onOpened
   );
 }
 
-/** « Nouveau contact » : numéro saisi par paires ; un numéro complet cherche le compte NIDALO. */
+/** « Nouveau contact » : numéro saisi par paires ; un numéro complet cherche le compte Nidalo. */
 function AddContact({ contacts, onOpened }: { contacts: Contact[]; onOpened: () => void }) {
   const [text, setText] = useState('');
   const phone = normalizedPhoneNumber(text);
@@ -302,7 +309,7 @@ function AddContact({ contacts, onOpened }: { contacts: Contact[]; onOpened: () 
     <div className="dm-new-body">
       <p className="dm-info-line">
         <Icon name="info" />
-        Saisissez le numéro de téléphone de la personne. Si elle a un compte NIDALO, elle rejoint vos contacts. Son numéro n'est jamais affiché aux autres.
+        Saisissez le numéro de téléphone de la personne. Si elle a un compte Nidalo, elle rejoint vos contacts. Son numéro n'est jamais affiché aux autres.
       </p>
       <label className="dm-search dm-new-search">
         <Icon name="phone" />

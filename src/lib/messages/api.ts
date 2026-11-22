@@ -1,6 +1,6 @@
 import { appDate } from '../appDates';
 import { supabase } from '../supabase';
-import { decodeContent, type MessageContent } from './content';
+import { messageContent, type MessageContent } from './content';
 import type { CommunityRow, Counterpart, ParticipantRow, ProfessionalContactRow, ProfileRow, ServerInboxRow } from './inbox';
 import { sameId, upper } from './inbox';
 import { normalizedEmoji, type Reaction } from './interactions';
@@ -13,7 +13,7 @@ import { normalizedEmoji, type Reaction } from './interactions';
 export const MESSAGE_COLUMNS = 'id, conversation_id, sender_id, kind, client_id, content, created_at, expires_at, reply_to_id, forwarded, message_reactions(user_id, emoji, created_at)';
 /** Colonnes lues des membres d'une conversation (ParticipantRow). */
 export const PARTICIPANT_COLUMNS = 'conversation_id, user_id, role, left_at, last_read_at';
-/** Messages lus à l'ouverture d'une conversation : les 200 derniers (MessagingStore.loadMessages). */
+/** Page de messages : les 200 derniers à l'ouverture, puis 200 de plus en remontant (MessagingStore.pageSize, n° 19). */
 export const MESSAGE_PAGE = 200;
 
 export type ReactionRow = { user_id: string; emoji: string; created_at: string };
@@ -90,7 +90,8 @@ export function messageFrom(row: MessageRow, me: string | null, readAt: Date | n
     conversationId: row.conversation_id,
     senderId: row.sender_id,
     clientId: row.client_id ?? row.id,
-    content: decodeContent(row.content),
+    // Contenu illisible (autre version, mal formé) : « Message non pris en charge », les autres lignes restent (n° 30).
+    content: messageContent(row.content),
     createdAt,
     expiresAt: row.expires_at ? new Date(row.expires_at) : null,
     reaction: (mine ?? latest) ? normalizedEmoji((mine ?? latest).emoji) : null,
@@ -157,10 +158,23 @@ export async function fetchBlockedIds(): Promise<Set<string>> {
 
 // MARK: - Messages
 
-/** Les 200 derniers messages, du plus ancien au plus récent, et la dernière lecture des autres (messages(…)). */
-export async function fetchMessages(conversationId: string, me: string | null): Promise<Message[]> {
-  const { data, error } = await supabase.from('messages').select(MESSAGE_COLUMNS).eq('conversation_id', upper(conversationId))
-    .order('created_at', { ascending: false }).limit(MESSAGE_PAGE);
+/**
+ * Borne d'une page plus ancienne, comme l'app (`before + 1 s`, puis ISO8601Format, sans fractions de seconde) : toute
+ * la seconde du plus ancien message affiché est relue ; les messages déjà affichés qui reviennent sont écartés par leur
+ * identifiant.
+ */
+export function olderThan(before: Date): string {
+  return new Date(before.getTime() + 1000).toISOString().replace(/\.\d+Z$/, 'Z');
+}
+
+/**
+ * 200 messages, du plus ancien au plus récent, et la dernière lecture des autres (messages(…)) : les derniers, ou ceux
+ * d'avant `before` (page plus ancienne, n° 19).
+ */
+export async function fetchMessages(conversationId: string, me: string | null, before: Date | null = null): Promise<Message[]> {
+  let query = supabase.from('messages').select(MESSAGE_COLUMNS).eq('conversation_id', upper(conversationId));
+  if (before) query = query.lt('created_at', olderThan(before));
+  const { data, error } = await query.order('created_at', { ascending: false }).limit(MESSAGE_PAGE);
   if (error) throw error;
   const members = await supabase.from('conversation_participants').select(PARTICIPANT_COLUMNS).eq('conversation_id', upper(conversationId));
   if (members.error) throw members.error;
@@ -282,9 +296,10 @@ export async function blockUser(userId: string): Promise<void> {
   if (error && error.code !== '23505') throw error;
 }
 
-/** Débloque ; un échec est ignoré, comme dans l'app (`try?`). */
+/** Débloque ; un échec remonte, comme dans l'app (n° 28) : le compte reste bloqué et l'écran le dit. */
 export async function unblockUser(userId: string, me: string): Promise<void> {
-  await supabase.from('user_blocks').delete().eq('blocker_id', upper(me)).eq('blocked_id', upper(userId));
+  const { error } = await supabase.from('user_blocks').delete().eq('blocker_id', upper(me)).eq('blocked_id', upper(userId));
+  if (error) throw error;
 }
 
 /** Motifs proposés, dans l'ordre de la feuille de signalement (ReportSheet.reasons, ReportReason.label). */

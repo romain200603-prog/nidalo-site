@@ -11,11 +11,11 @@ import {
 import { sortedPhotos } from '../../lib/listings';
 import type { Message } from '../../lib/messages/api';
 import { keepNumbersTogether, lastSeenLabel } from '../../lib/messages/format';
-import { groupSummary, sameId, type Conversation, type ListingSnapshot } from '../../lib/messages/inbox';
+import { groupSummary, isDeletedAccount, sameId, type Conversation, type ListingSnapshot } from '../../lib/messages/inbox';
 import { lotsLabel } from '../../lib/messages/listingBar';
 import { isOnline } from '../../lib/messages/presence';
 import {
-  loadOffers, loadVisitRequests, refreshAfterOffer, refreshAfterVisit, unblock, type Loadable, type ThreadState,
+  loadOffers, loadOlderMessages, loadVisitRequests, refreshAfterOffer, refreshAfterVisit, unblock, type Loadable, type ThreadState,
 } from '../../lib/messages/store';
 import { callState, canOpenDetails, visibleMessages } from '../../lib/messages/thread';
 import {
@@ -25,7 +25,7 @@ import { listingPath } from '../../lib/paths';
 import { hotelPerformanceOf } from '../listing/data';
 import { OfferScreen } from '../listing/OfferScreen';
 import { VisitRequestScreen } from '../listing/VisitRequestScreen';
-import { BlockDialog, CallDialog, DELETED_ACCOUNT, groupMenuItems, headerMenuItems, ReportSheet } from './actions';
+import { BlockDialog, CallDialog, groupMenuItems, headerMenuItems, ReportSheet } from './actions';
 import { Composer, type Suggestion } from './Composer';
 import { ForwardSheet } from './MessageInteractions';
 import { listingStore, loadListingRow, loadLots, lotsStore } from './listingRow';
@@ -75,7 +75,7 @@ export function ConversationPane({ conversation, thread, offers, visitRequests, 
   const requests = requestsIn(visitRequests, conversation);
   const other = conversation.otherUserId;
   const isBlocked = !conversation.isGroup && !!other && blocked.has(other.toLowerCase());
-  const canWrite = !isBlocked && !conversation.hasLeft && (conversation.isGroup || conversation.counterpart.name !== DELETED_ACCOUNT);
+  const canWrite = !isBlocked && !conversation.hasLeft && !isDeletedAccount(conversation);
   const listing = conversation.listing;
   // Fiche du bien lue pour la barre de l'annonce : rendement, formulaire de visite, carte « Rentabilité » de l'offre.
   const rows = useStore(listingStore);
@@ -206,6 +206,8 @@ export function ConversationPane({ conversation, thread, offers, visitRequests, 
           requests={requests}
           me={me}
           canWrite={canWrite}
+          hasOlder={!thread.complete}
+          onLoadOlder={() => loadOlderMessages(conversation.id)}
           onOfferAction={onOfferAction}
           onProposeSlots={setProposing}
           onReply={setReplyingTo}
@@ -229,7 +231,7 @@ export function ConversationPane({ conversation, thread, offers, visitRequests, 
       <BlockDialog open={blocking} userId={other} onClose={() => setBlocking(false)} />
       <ReportSheet
         open={reporting}
-        title={conversation.isGroup ? 'Signaler le groupe' : 'Signaler la conversation'}
+        title={!conversation.isGroup ? 'Signaler la conversation' : conversation.communityId ? 'Signaler la communauté' : 'Signaler le groupe'}
         conversationId={conversation.id}
         onClose={() => setReporting(false)}
       />
@@ -392,7 +394,7 @@ function BottomBar({ conversation, isBlocked, messages, suggestions, onMakeOffer
       </div>
     );
   }
-  if (!conversation.isGroup && conversation.counterpart.name === DELETED_ACCOUNT) {
+  if (isDeletedAccount(conversation)) {
     return <div className="dm-bottom-line"><span>Compte supprimé : cette conversation est en lecture seule.</span></div>;
   }
   if (conversation.hasLeft) return <div className="dm-bottom-line"><span>Vous avez quitté le groupe</span></div>;

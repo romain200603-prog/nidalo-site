@@ -47,6 +47,18 @@ const manual = (over: Partial<ContactRow>): ContactRow => ({
 });
 
 describe('Mes contacts', () => {
+  it('« Nouveau » suit le premier échange, pas le dernier message (n° 231)', () => {
+    // Conversation créée il y a un mois, dernier message hier : pas « Nouveau ».
+    const old = conversation({ created_at: '2026-10-08T09:00:00Z', last_message_at: '2026-11-07T10:00:00Z' });
+    expect(buildContacts({ me: ME, conversations: [old], visits: [], offers: [], profiles, rows: [], now: NOW })[0].isNew).toBe(false);
+    // Conversation créée hier : « Nouveau ».
+    const recent = conversation({ created_at: '2026-11-07T09:00:00Z', last_message_at: '2026-11-07T10:00:00Z' });
+    expect(buildContacts({ me: ME, conversations: [recent], visits: [], offers: [], profiles, rows: [], now: NOW })[0].isNew).toBe(true);
+    // Une offre plus ancienne de la même personne compte comme premier échange.
+    const withOffer = buildContacts({ me: ME, conversations: [recent], visits: [], offers: [offer({})], profiles, rows: [], now: NOW });
+    expect(withOffer[0].isNew).toBe(false);
+  });
+
   it('réunit les échanges d\'une même personne, du plus récent au plus ancien', () => {
     const [claire, ...rest] = buildContacts({
       me: ME, conversations: [conversation({})], visits: [], offers: [offer({})], profiles, rows: [], now: NOW,

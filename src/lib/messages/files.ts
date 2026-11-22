@@ -2,9 +2,8 @@ import { supabase } from '../supabase';
 import { cleanPhoto, PHOTO_SIDE } from '../cleanPhoto';
 import {
   attachmentIssue, CONTENT_MISMATCH, contentMatches, DOCUMENT_EXTENSIONS, lowerExtension, PHOTO_EXTENSIONS, photoExtension,
-  storageContentType, type Attachment, type AttachmentKind, type DocumentCategory,
+  SERVER_MAX_BYTES, serverTooLargeText, storageContentType, type Attachment, type AttachmentKind, type DocumentCategory,
 } from './content';
-import { sizeLabel } from './format';
 
 // Fichiers des pièces jointes, comme l'app : préparation avant envoi (Features/Messages/Attachments/AttachmentImport.swift,
 // Data/LocalAttachmentStorage.swift) puis envoi dans le bucket privé message-attachments, au chemin
@@ -53,7 +52,9 @@ export async function pendingMedia(file: File): Promise<PendingFile> {
       item.previewUrl = URL.createObjectURL(frame.thumbnail);
       item.durationSeconds = frame.duration;
     }
-    item.error = attachmentIssue('video', item.fileName, item.byteCount, sizeLabel);
+    // Le site ne recompresse pas une vidéo : au-delà de la limite du serveur (50 Mo), elle ne partira pas (n° 94).
+    item.error = attachmentIssue('video', item.fileName, item.byteCount)
+      ?? (item.byteCount > SERVER_MAX_BYTES ? serverTooLargeText(storageContentType('video', ext)) : null);
     return item;
   }
   const ext = photoExtension(await header(file, 16), /heic|heif/i.test(file.type));
@@ -61,7 +62,7 @@ export async function pendingMedia(file: File): Promise<PendingFile> {
     id: newId(), kind: 'photo', fileName: `Photo.${ext}`, file, byteCount: file.size, category: null, previewUrl: URL.createObjectURL(file),
     durationSeconds: null, error: null,
   };
-  item.error = attachmentIssue('photo', item.fileName, item.byteCount, sizeLabel);
+  item.error = attachmentIssue('photo', item.fileName, item.byteCount);
   return item;
 }
 
@@ -69,7 +70,7 @@ export async function pendingMedia(file: File): Promise<PendingFile> {
 export function pendingDocument(file: File, category: DocumentCategory | null): PendingFile {
   return {
     id: newId(), kind: 'document', fileName: file.name, file, byteCount: file.size, category, previewUrl: null,
-    durationSeconds: null, error: attachmentIssue('document', file.name, file.size, sizeLabel),
+    durationSeconds: null, error: attachmentIssue('document', file.name, file.size),
   };
 }
 
@@ -214,14 +215,17 @@ export function storagePath(conversationId: string, name: string): string {
 /**
  * Envoi d'un fichier ; « déjà envoyé » (409, envoi rejoué) est un succès, comme dans l'app (put). supabase-js envoie
  * un Blob en multipart avec le type du Blob (pas `contentType`) : le fichier part donc avec le type de l'app, comme
- * le formulaire multipart du SDK Swift.
+ * le formulaire multipart du SDK Swift. Plus gros que la limite du serveur, ou refusé pour sa taille (413) : le texte
+ * de la taille, pas celui de la connexion (n° 94).
  */
 async function put(path: string, data: Blob, contentType: string): Promise<void> {
+  if (data.size > SERVER_MAX_BYTES) throw new Error(serverTooLargeText(contentType));
   const body = data.type === contentType ? data : new Blob([data], { type: contentType });
   const { error } = await supabase.storage.from(ATTACHMENT_BUCKET).upload(path, body, { cacheControl: '3600', contentType });
   if (!error) return;
-  const { statusCode, error: code } = error as unknown as { statusCode?: string | number; error?: string };
+  const { statusCode, error: code, message } = error as unknown as { statusCode?: string | number; error?: string; message?: string };
   if (String(statusCode) === '409' || code === 'Duplicate') return;
+  if (String(statusCode) === '413' || /allowed size|too large/i.test(message ?? '')) throw new Error(serverTooLargeText(contentType));
   throw new Error(UPLOAD_FAILURE);
 }
 
@@ -231,7 +235,7 @@ async function put(path: string, data: Blob, contentType: string): Promise<void>
  * JPEG comme une photo (sans lieu ni EXIF), autre document tel quel.
  */
 export async function uploadPending(item: PendingFile, conversationId: string): Promise<Attachment> {
-  const issue = attachmentIssue(item.kind, item.fileName, item.file.size, sizeLabel);
+  const issue = attachmentIssue(item.kind, item.fileName, item.file.size);
   if (issue) throw new Error(issue);
   const ext = lowerExtension(item.fileName);
   if (!contentMatches(item.fileName, await header(item.file))) throw new Error(CONTENT_MISMATCH);

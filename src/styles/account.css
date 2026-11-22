@@ -143,6 +143,7 @@
 .delete-card p { margin: 0; color: var(--text-secondary); font-size: 14px; }
 .delete-card .delete-note { color: var(--text-muted); font-size: 12.5px; }
 .delete-card .btn { width: 100%; }
+.delete-card .btn[aria-disabled="true"] { opacity: 0.5; cursor: default; }
 .danger-button { display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 50px; border: 0; border-radius: 14px; background: var(--red); color: #FFFFFF; font-size: 16px; font-weight: 700; cursor: pointer; }
 .danger-button[disabled] { opacity: 0.7; cursor: default; }
 

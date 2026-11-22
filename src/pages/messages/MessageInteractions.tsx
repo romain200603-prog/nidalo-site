@@ -7,13 +7,12 @@ import { useStore } from '../../lib/account/session';
 import type { Message } from '../../lib/messages/api';
 import { contentPreview } from '../../lib/messages/content';
 import { keepNumbersTogether } from '../../lib/messages/format';
-import { matchesListSearch, sameId, type Conversation } from '../../lib/messages/inbox';
+import { isDeletedAccount, matchesListSearch, membersLabel, sameId, type Conversation } from '../../lib/messages/inbox';
 import {
   forwardSendTitle, forwardTargets, MAX_FORWARD_TARGETS, myReaction, QUICK_REACTIONS, reactionSummary, toggledTarget,
 } from '../../lib/messages/interactions';
 import { blockedStore, forwardMessage, inboxStore, profileOf, removeMyReaction, threadStore } from '../../lib/messages/store';
 import { senderName } from '../../lib/messages/thread';
-import { DELETED_ACCOUNT } from './actions';
 import { ConversationAvatar, CounterpartAvatar, Dialog, Sheet, showNotice } from './parts';
 
 // Répondre, réagir, transférer, comme l'app (Features/Messages/MessageInteractionViews.swift ; demande du 17/11) :
@@ -356,23 +355,25 @@ const FORWARD_FAILED = 'Le message n\'a pas pu être transféré. Réessayez.';
 
 /** « Pro » (bleu clair) ou « Particulier » (gris clair) ; rien pour un groupe, une communauté ou un compte supprimé. */
 export function AccountPill({ conversation, proOnly = false }: { conversation: Conversation; proOnly?: boolean }) {
-  const { kind, name } = conversation.counterpart;
-  if (conversation.isGroup || kind === 'group' || kind === 'community' || name === DELETED_ACCOUNT) return null;
+  const { kind } = conversation.counterpart;
+  if (conversation.isGroup || kind === 'group' || kind === 'community' || isDeletedAccount(conversation)) return null;
   const pro = kind === 'agency';
   if (proOnly && !pro) return null;
   return <span className={`dm-account-pill${pro ? ' is-pro' : ''}`} aria-label={pro ? 'Professionnel' : 'Particulier'}>{pro ? 'Pro' : 'Particulier'}</span>;
 }
 
-/** Ligne d'une conversation proposée : « Groupe · 3 membres », sinon l'annonce et sa ville, sinon le rôle. */
+/** Ligne d'une conversation proposée : « Groupe · 3 membres » (« 1 membre », n° 112), sinon l'annonce et sa ville, sinon le rôle. */
 function targetSubtitle(conversation: Conversation): string {
-  if (conversation.isGroup) return `Groupe · ${conversation.members.length} membres`;
+  if (conversation.isGroup) return `Groupe · ${membersLabel(conversation.members.length)}`;
   if (conversation.listing) return [conversation.listing.title, conversation.listing.city].filter((part) => part !== '').join(' · ');
   return conversation.counterpart.subtitle;
 }
 
 /**
  * « Transférer » : le message, la recherche, les conversations récentes à cocher (5 au plus), puis « Envoyer à 2
- * conversations ». Parti : la fenêtre se ferme et « Message transféré » s'affiche en bas.
+ * conversations ». Parti partout : la fenêtre se ferme et « Message transféré » s'affiche en bas. Parti dans une
+ * partie seulement : la fenêtre reste, « Message transféré dans 1 conversation sur 3. Réessayez pour les autres. », et
+ * seules les conversations qui ne l'ont pas reçu restent cochées (n° 211).
  */
 export function ForwardSheet({ message, originId, me, onClose }: { message: Message | null; originId: string; me: string | null; onClose: () => void }) {
   return (
@@ -395,11 +396,15 @@ function ForwardForm({ message, originId, me, onClose }: { message: Message; ori
   const send = async () => {
     if (!selection.length || sending) return;
     setSending(true);
-    const outcome = await forwardMessage(message, selection);
+    const targets = selection;
+    const outcome = await forwardMessage(message, targets);
     setSending(false);
-    if (outcome.sent > 0) {
+    if (outcome.failed.length === 0) {
       onClose();
       showToast({ icon: 'check', text: 'Message transféré' });
+    } else if (outcome.sent > 0) {
+      setSelection(outcome.failed);
+      showNotice(`Message transféré dans ${outcome.sent} conversation${outcome.sent > 1 ? 's' : ''} sur ${targets.length}. Réessayez pour les autres.`);
     } else {
       showNotice(outcome.refusal ?? FORWARD_FAILED);
     }

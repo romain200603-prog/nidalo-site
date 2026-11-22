@@ -254,11 +254,13 @@ function myConversations(state) {
     };
   });
 }
-/** Pastilles attendues d'après les données simulées : règles de l'app (archivées exclues ; « 9+ » pour la cloche). */
+/** Pastilles attendues d'après les données simulées : règles de l'app (archivées exclues ; « 9+ » pour la cloche, « 99+ » pour Messages). */
 function expectedBadges(state) {
   const messages = myConversations(state).filter((row) => !row.is_archived).reduce((sum, row) => sum + row.unread_count, 0);
   const notifications = state.notifications.filter((row) => NOTIFICATION_KINDS.includes(row.kind) && row.read_at === null).length;
-  return { messages, notifications, messagesText: String(messages), notificationsText: notifications > 9 ? '9+' : String(notifications) };
+  return {
+    messages, notifications, messagesText: messages > 99 ? '99+' : String(messages), notificationsText: notifications > 9 ? '9+' : String(notifications),
+  };
 }
 /** Demandes des pastilles et des notifications (my_conversations, notifications, mark_notifications_read), avec la largeur de la page. */
 const badgeRequests = [];
@@ -278,6 +280,16 @@ function pagePath(request) {
 /** Écran de Mon compte qui a envoyé une demande (paramètre « vue » de son adresse), ou null. */
 function pageView(request) {
   try { return new URL(request.frame().url()).searchParams.get('vue'); } catch { return null; }
+}
+
+/**
+ * Pastille Messages de la barre d'onglets du téléphone (AppTabBar de l'app, n° 44) : avec un compte, my_conversations
+ * sans paramètre, lu à l'ouverture d'une page qui montre la barre (sous 761 px) ; jamais sur la fiche d'une annonce,
+ * qui la masque.
+ */
+function tabBarBadgeRead(request, table, body, width, signedIn) {
+  return signedIn && table === 'rpc/my_conversations' && request.method() === 'POST' && width !== null && width < 761
+    && pagePath(request) !== '/annonce/' && (body === null || body === '' || (typeof body === 'object' && Object.keys(body).length === 0));
 }
 
 /**
@@ -322,7 +334,7 @@ async function mock(context, { signedIn = false, listingRows = listings, account
       const width = pageWidth(request);
       badgeRequests.push({ table, method: request.method(), search: url.search, body, width, signedIn });
       if (width !== null && width < 1024 && !contactsRead(request, table) && !messagesPage(request) && !notificationsScreen(request, table)
-        && !homeBell(request, table) && !accountBell(request, table)) {
+        && !homeBell(request, table) && !accountBell(request, table) && !tabBarBadgeRead(request, table, body, width, signedIn)) {
         problems.push(`téléphone : ${table} demandé (rien ne doit changer sous 1024 px)`);
       }
       if (!signedIn) {
@@ -351,6 +363,11 @@ async function mock(context, { signedIn = false, listingRows = listings, account
       }
       if (!signedIn) problems.push(`sans compte : ${table} demandé`);
       else if (!['rpc/my_offers', 'rpc/my_visit_requests', 'agenda_visits'].includes(table)) problems.push(`${table} appelé sans action de la personne`);
+      return json(route, 200, []);
+    }
+    if (table === 'rpc/my_visit_sessions') {
+      // Créneaux ouverts de Mon agenda : aucune séance ici (voir mockSpace). Rien sans compte.
+      if (!signedIn) problems.push(`sans compte : ${table} demandé`);
       return json(route, 200, []);
     }
     if (/^rpc\/(my_team_agency|my_agency_team|agency_invites|agency_invite_preview)$/.test(table)) {
@@ -572,6 +589,40 @@ async function checkChrome(page, name, { signedIn, margin }) {
   }
 }
 
+/**
+ * Pastille Messages de la barre d'onglets du téléphone (AppTabBar, n° 44) = non-lus du serveur simulé (archivées
+ * exclues), « 99+ » au-delà de 99, et le libellé de l'app pour les lecteurs d'écran.
+ */
+async function checkTabBarBadge(page, state, name) {
+  const { messages, messagesText } = expectedBadges(state);
+  const want = messages ? messagesText : '';
+  try {
+    await page.waitForFunction((target) => (document.querySelector('.tabbar a[href="/messages/"] .tabbar-badge')?.textContent ?? '') === target, want, { timeout: 8000 });
+  } catch {
+    const shown = await page.evaluate(() => document.querySelector('.tabbar a[href="/messages/"] .tabbar-badge')?.textContent ?? '');
+    problems.push(`${name} : pastille Messages de la barre d'onglets « ${shown} » au lieu de « ${want} »`);
+    return;
+  }
+  const label = await page.getAttribute('.tabbar a[href="/messages/"]', 'aria-label');
+  if (label !== (messages ? `Messages, ${messages} non lus` : null)) problems.push(`${name} : libellé de l'onglet Messages « ${label} »`);
+  if (!messages) return;
+  // Capsule rouge (#E5383B) à liseré blanc, en haut à droite de l'icône : dans la largeur de l'onglet, sous le haut de
+  // la barre (elle dépasse le lien, centré dans la barre, comme la pastille de l'app dépasse l'icône).
+  const look = await page.evaluate(() => {
+    const badge = document.querySelector('.tabbar a[href="/messages/"] .tabbar-badge');
+    const icon = document.querySelector('.tabbar a[href="/messages/"] .icon').getBoundingClientRect();
+    const tab = document.querySelector('.tabbar a[href="/messages/"]').getBoundingClientRect();
+    const bar = document.querySelector('.tabbar').getBoundingClientRect();
+    const box = badge.getBoundingClientRect();
+    return {
+      color: getComputedStyle(badge).backgroundColor, height: Math.round(box.height),
+      rightOfCenter: box.left + box.width / 2 > icon.left + icon.width / 2, aboveCenter: box.top + box.height / 2 < icon.top + icon.height / 2,
+      inside: box.left >= tab.left && box.right <= tab.right && box.top >= bar.top,
+    };
+  });
+  expectSame(name, 'pastille de la barre d\'onglets', look, { color: 'rgb(229, 56, 59)', height: 16, rightOfCenter: true, aboveCenter: true, inside: true });
+}
+
 /** Pastilles de la barre du haut = données du serveur simulé (archivées exclues, sortes inconnues ignorées). */
 async function checkBadges(page, state, name) {
   const expected = expectedBadges(state);
@@ -611,12 +662,16 @@ async function checkApplyButton(page, name) {
     problems.push(`${name} : bouton « ${await page.textContent('dialog[open] .filters-apply .btn')} »`);
   }
 }
+/** Messages de console attendus pendant une coupure simulée (une demande abandonnée exprès) : pas un problème du site. */
+const expectedConsole = new Set();
+
 async function open(context, path, name) {
   const page = await context.newPage();
   page.on('console', (msg) => {
     const text = msg.text();
     // La page 404 répond exprès avec le code 404 : Chrome le signale dans la console, ce n'est pas une erreur du site.
     if (name.startsWith('404') && /status of 404/.test(text)) return;
+    if ([...expectedConsole].some((pattern) => pattern.test(text))) return;
     // Écriture refusée exprès par le serveur simulé (`refuse`, ou le trigger des réponses : 400) : Chrome signale aussi
     // le refus dans la console.
     if (/refusé/.test(name) && /status of 40[03]/.test(text)) return;
@@ -886,6 +941,8 @@ function chatFiltered(rows, params) {
   for (const [column, value] of params) {
     if (['select', 'order', 'limit', 'offset', 'on_conflict', 'columns'].includes(column)) continue;
     if (value.startsWith('eq.')) result = result.filter((row) => sameChatId(row[column], value.slice(3)));
+    // Page plus ancienne (n° 19) : created_at=lt.<date>, comparée comme une date, comme PostgreSQL.
+    else if (value.startsWith('lt.')) result = result.filter((row) => Date.parse(row[column]) < Date.parse(value.slice(3)));
     else if (value.startsWith('in.(') && value.endsWith(')')) {
       const allowed = value.slice(4, -1).split(',').map((item) => item.replace(/^"|"$/g, '').toLowerCase());
       result = result.filter((row) => allowed.includes(String(row[column]).toLowerCase()));
@@ -983,6 +1040,11 @@ function chatRespond(chat, reply, { table, method, params, body, single }) {
         }
         if (body.forwarded === true && !FORWARDABLE_KEYS.includes(Object.keys(body.content ?? {})[0])) {
           return reply(400, { code: 'P0001', message: 'Ce message ne peut pas être transféré.', details: null, hint: 'message_forward_invalid' });
+        }
+        // Même identifiant qu'un message déjà enregistré (renvoi d'un envoi dont la réponse s'est perdue, n° 99) : la clé
+        // primaire refuse (23505), le site relit le message déjà là.
+        if (chat.messages.some((item) => sameChatId(item.id, body.id))) {
+          return reply(409, { code: '23505', message: 'duplicate key value violates unique constraint "messages_pkey"', details: null, hint: null });
         }
         // L'expéditeur et l'heure viennent du serveur ; les identifiants reviennent en minuscules (type uuid).
         const row = {
@@ -1120,15 +1182,25 @@ async function mockMessaging(context, chat, { signedIn = true } = {}) {
     const headers = await request.allHeaders();
     const width = pageWidth(request);
     chat.calls.push({ table, method: request.method(), search: decodeURIComponent(url.search), body, prefer: headers.prefer ?? '', width, path: pagePath(request), writesBefore: writes.length });
-    // Sur téléphone, seule la page Messages lit la messagerie.
-    if (width !== null && width < 1024 && pagePath(request) !== '/messages/') problems.push(`téléphone : ${table} demandé hors de la page Messages`);
+    // Sur téléphone, seule la page Messages lit la messagerie ; ailleurs, la pastille de la barre d'onglets lit ses non-lus.
+    if (width !== null && width < 1024 && pagePath(request) !== '/messages/' && !tabBarBadgeRead(request, table, body, width, signedIn)) {
+      problems.push(`téléphone : ${table} demandé hors de la page Messages`);
+    }
     if (chat.slow[table]) await new Promise((resolve) => setTimeout(resolve, chat.slow[table]));
     const reply = (status, value) => route.fulfill({ status, contentType: 'application/json', headers: cors, body: value === undefined ? '' : JSON.stringify(value) });
     if (!signedIn) {
       problems.push(`sans compte : ${table} demandé`);
       return reply(200, []);
     }
-    return chatRespond(chat, reply, { table, method: request.method(), params: url.searchParams, body, single: (headers.accept ?? '').includes('vnd.pgrst.object') });
+    const asked = { table, method: request.method(), params: url.searchParams, body, single: (headers.accept ?? '').includes('vnd.pgrst.object') };
+    // Panne simulée par une vérification (chat.fail) : la réponse d'erreur ; `stored`, le serveur a fait le travail mais
+    // sa réponse ne revient pas (coupure pendant l'envoi).
+    const failure = chat.fail?.(asked) ?? null;
+    if (failure) {
+      if (failure.stored) await chatRespond(chat, () => undefined, asked);
+      return reply(failure.status, failure.body ?? { message: 'Service Unavailable' });
+    }
+    return chatRespond(chat, reply, asked);
   });
   await context.route(/^https:\/\/izzsoitqtzzswkpvdozd\.supabase\.co\/storage\/v1\/object\/(sign\/)?message-attachments\//, async (route) => {
     const request = route.request();
@@ -1250,6 +1322,15 @@ async function noticeText(page, name) {
   else await alertButton(page, 'OK');
   await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${name} : l'avis reste ouvert`));
   return text;
+}
+
+/** Une alerte ne se ferme que par ses boutons (n° 45) : ni Échap, ni un clic à côté de la fenêtre. */
+async function alertStaysOpen(page, name) {
+  await page.waitForSelector('dialog.alert-dialog[open]', { timeout: 8000 }).catch(() => undefined);
+  await page.keyboard.press('Escape');
+  await page.mouse.click(4, 4);
+  await page.waitForTimeout(300);
+  if (!(await page.locator('dialog.alert-dialog[open]').count())) problems.push(`${name} : l'alerte se ferme sans ses boutons`);
 }
 
 /** « Dans l'app iPhone pour l'instant » : titre de l'action, message, puis « Fermer ». */
@@ -1600,6 +1681,45 @@ const SPACE_REQUESTS = [{
   ],
   mode: 'onSite', message: null, status: 'pending', accepted_slot: null, proposed_slots: null, created_at: '2026-11-05T18:00:00',
 }];
+/** Maison de Claire à Écully (inventée), sur laquelle elle ouvre des créneaux et reçoit une demande de visite. */
+const SPACE_HOUSE = { listingId: 'A2000000-0000-4000-8000-000000000001', title: 'Maison familiale 5 pièces', price: 520000, transaction: 'sale', city: 'Écully', coverPath: null };
+/**
+ * Créneaux ouverts par Claire (my_visit_sessions) : deux séances à venir (l'une au format brut de Postgres), une
+ * annulée et une finie, qui ne s'affichent pas.
+ */
+const SPACE_SESSIONS = [
+  { id: 'A3000000-0000-4000-8000-000000000001', listing_id: SPACE_HOUSE.listingId, listing_snapshot: SPACE_HOUSE, starts_at: '2026-11-12T09:00:00+00:00',
+    ends_at: '2026-11-12T11:00:00+00:00', status: 'open', booked_count: 3, total_places: 8 },
+  { id: 'A3000000-0000-4000-8000-000000000002', listing_id: SPACE_HOUSE.listingId, listing_snapshot: SPACE_HOUSE, starts_at: '2026-11-07 13:00:00+00',
+    ends_at: '2026-11-07 14:00:00.123456+00', status: 'open', booked_count: 0, total_places: 4 },
+  { id: 'A3000000-0000-4000-8000-000000000003', listing_id: SPACE_HOUSE.listingId, listing_snapshot: SPACE_HOUSE, starts_at: '2026-11-14T09:00:00+00:00',
+    ends_at: '2026-11-14T10:00:00+00:00', status: 'cancelled', booked_count: 0, total_places: 4 },
+  { id: 'A3000000-0000-4000-8000-000000000004', listing_id: SPACE_HOUSE.listingId, listing_snapshot: SPACE_HOUSE, starts_at: '2026-11-05T09:00:00+00:00',
+    ends_at: '2026-11-05T10:00:00+00:00', status: 'open', booked_count: 2, total_places: 4 },
+];
+const SPACE_REQUESTER_ID = 'a1000000-0000-4000-8000-0000000000e5';
+/** Demande de visite reçue par Claire pour sa maison, un seul créneau proposé (my_visit_requests). */
+const SPACE_RECEIVED_REQUEST = {
+  id: 'F0000000-0000-4000-8000-000000000002', listing_id: SPACE_HOUSE.listingId, listing_snapshot: SPACE_HOUSE,
+  requester: { userId: SPACE_REQUESTER_ID.toUpperCase(), name: 'Julie B.', kind: 'individual' },
+  recipient: { userId: USER_ID.toUpperCase(), name: 'Claire M.', kind: 'individual' },
+  slots: [{ id: 'S1', start: '2026-11-13T09:00:00.000', durationMinutes: 45 }],
+  mode: 'onSite', message: null, status: 'pending', accepted_slot: null, proposed_slots: null, created_at: '2026-11-05T19:00:00',
+};
+/** Conversations de la maison dans my_conversations : deux avec Julie (la plus récente l'emporte), une avec une autre personne. */
+const spaceHouseConversation = (n, buyer, createdAt, lastMessageAt) => ({
+  conversation_id: `c2000000-0000-4000-8000-00000000000${n}`, kind: 'listing', listing_id: SPACE_HOUSE.listingId.toLowerCase(), listing_snapshot: SPACE_HOUSE,
+  buyer_id: buyer, seller_id: USER_ID, created_by: buyer, created_at: createdAt, joined_at: createdAt, other_user_id: buyer, last_message_sender_id: buyer,
+  last_message_preview: 'Bonjour, la maison est-elle toujours disponible ?', last_message_at: lastMessageAt, my_role: 'member', left_at: null, last_read_at: null,
+  is_archived: false, is_favorite: false, muted_until: null, saves_photos: false, cleared_at: null, other_last_read_at: null, member_count: 2, unread_count: 0,
+  last_message_id: null, last_message_kind: 'text', last_message_content: null, group_name: null, group_details: null, group_image_path: null,
+  group_purpose: null, ephemeral_seconds: null,
+});
+const SPACE_HOUSE_CONVERSATIONS = [
+  spaceHouseConversation(7, SPACE_REQUESTER_ID, '2026-10-20T09:00:00Z', null),
+  spaceHouseConversation(8, SPACE_REQUESTER_ID, '2026-10-21T09:00:00Z', '2026-11-04T18:00:00Z'),
+  spaceHouseConversation(9, 'a1000000-0000-4000-8000-0000000000e6', '2026-10-22T09:00:00Z', '2026-11-05T18:00:00Z'),
+];
 const SPACE_PROJECT_ID = 'C0000000-0000-4000-8000-000000000001';
 /** Projet du compte de chaque sorte (ProjectServerRow), critères tels que l'app les écrit. */
 const spaceProject = (fields) => ({ user_id: USER_ID, id: SPACE_PROJECT_ID, city: '', purpose: null, completed_steps: [], shared_with_contacts: false, ...fields });
@@ -1628,11 +1748,12 @@ const SPACE_SOLD = { ...HOME_LISTINGS[2], status: 'sold' };
 const SPACE_VIEWED = [SPACE_SOLD.id, listings[0].id, listings[2].id, listings[1].id];
 const SPACE_LISTING_ROWS = [...listings, SPACE_SOLD];
 /** Demandes servies par mockSpace ; les autres vont au serveur simulé général. */
-const SPACE_TABLES = ['real_estate_projects', 'agenda_visits', 'rpc/my_visit_requests', 'rpc/public_profiles', 'rpc/my_conversations', 'listing_locations'];
+const SPACE_TABLES = ['real_estate_projects', 'agenda_visits', 'rpc/my_visit_requests', 'rpc/my_visit_sessions', 'rpc/public_profiles', 'rpc/my_conversations',
+  'listing_locations'];
 
 function spaceState(fields = {}) {
   return {
-    project: structuredClone(SPACE_PROJECTS.buy), visits: structuredClone(SPACE_VISITS), requests: structuredClone(SPACE_REQUESTS),
+    project: structuredClone(SPACE_PROJECTS.buy), visits: structuredClone(SPACE_VISITS), requests: structuredClone(SPACE_REQUESTS), sessions: [],
     conversations: null, myListings: null, calls: [], logouts: [], ...fields,
   };
 }
@@ -1675,6 +1796,8 @@ async function mockSpace(context, space) {
         return reply(route, 201);
       case 'rpc/my_visit_requests':
         return reply(route, 200, space.requests);
+      case 'rpc/my_visit_sessions':
+        return reply(route, 200, space.sessions);
       case 'rpc/public_profiles': {
         const wanted = (body?.user_ids ?? []).map((id) => String(id).toLowerCase());
         return reply(route, 200, SPACE_PROFILES.filter((profile) => wanted.includes(profile.user_id.toLowerCase())));
@@ -1800,8 +1923,8 @@ function viewedRows(page) {
     row.querySelector('.dsc-viewed-link')?.getAttribute('href') ?? null]));
 }
 
-/** Liste des biens consultés gardée dans l'onglet (sessionStorage). */
-const viewedStorage = (page) => page.evaluate(() => sessionStorage.getItem('nidalo.consultes'));
+/** Liste des biens consultés du compte de test, gardée dans ce navigateur (une liste par compte, n° 114). */
+const viewedStorage = (page) => page.evaluate((owner) => localStorage.getItem(`nidalo.consultes.${owner}`), USER_ID);
 
 /**
  * Capture d'un écran à barre d'actions collante (Mon projet) : la fenêtre prend la hauteur de la page, sinon la
@@ -2017,6 +2140,47 @@ try {
   await page.waitForSelector('.my-listing');
   await page.screenshot({ path: join(out, 'mes-annonces-ordinateur.png'), fullPage: true });
   await page.close();
+  // Mes annonces : « Publiée le » donne la date de publication, sinon « Mise à jour le » (n° 223) ; l'onglet vidé par
+  // « Republier » disparaît et la page revient sur « Toutes » (n° 120).
+  {
+    const L = 'Mes annonces';
+    const owned = [
+      { ...listings[2], owner_id: USER_ID, status: 'active', published_at: '2026-11-04T08:00:00Z', updated_at: '2026-11-05T17:00:00Z' },
+      { ...listings[1], owner_id: USER_ID, status: 'archived', published_at: '2026-10-20T08:00:00Z', updated_at: '2026-11-02T09:00:00Z' },
+      { ...listings[0], owner_id: USER_ID, status: 'active', published_at: null, updated_at: '2026-11-01T09:00:00Z' },
+    ];
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'fr-FR', timezoneId: 'Europe/Paris' });
+    await mock(context, { signedIn: true });
+    const patches = [];
+    await context.route(/^https:\/\/izzsoitqtzzswkpvdozd\.supabase\.co\/rest\/v1\/listings\?/, (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const reply = (body) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body) });
+      if (request.method() === 'GET' && url.searchParams.get('owner_id') === `eq.${USER_ID}`) return reply(owned);
+      if (request.method() === 'PATCH') {
+        const row = owned.find((item) => `eq.${item.id}` === url.searchParams.get('id'));
+        patches.push([url.searchParams.get('id'), request.postDataJSON()]);
+        if (row) Object.assign(row, request.postDataJSON());
+        return reply(row ? [{ id: row.id }] : []);
+      }
+      return route.fallback();
+    });
+    page = await open(context, '/compte/?vue=annonces', 'mes-annonces-onglets');
+    await page.waitForSelector('.my-listing');
+    const tabsShown = () => page.$$eval('.my-listings-tabs .select-chip', (chips) => chips.map((chip) => [chip.textContent.trim(), chip.getAttribute('aria-selected')]));
+    expectSame(L, 'dates', await page.$$eval('.my-listing-date', (lines) => lines.map((line) => line.textContent)),
+      ['Publiée le 4 novembre', 'Mise à jour le 2 novembre', 'Mise à jour le 1 novembre']);
+    await page.click('.my-listings-tabs .select-chip:has-text("Suspendues")');
+    expectSame(L, 'onglet Suspendues', [await tabsShown(), await page.locator('.my-listing').count()],
+      [[['Toutes 3', 'false'], ['En ligne 2', 'false'], ['Suspendues 1', 'true']], 1]);
+    await page.getByRole('button', { name: 'Republier' }).click();
+    await page.waitForFunction(() => document.querySelector('.my-listings-tabs .select-chip.is-selected')?.textContent.trim() === 'Toutes 3', null, { timeout: 8000 })
+      .catch(() => problems.push(`${L} : après « Republier », la page ne revient pas sur « Toutes »`));
+    expectSame(L, 'après « Republier »', [patches, await tabsShown(), await page.locator('.my-listing').count(), await page.locator('.account-empty').count()],
+      [[[`eq.${listings[1].id}`, { status: 'active' }]], [['Toutes 3', 'true'], ['En ligne 3', 'false']], 3, 0]);
+    await page.close();
+    await context.close();
+  }
 
   // Favoris : deux annonces chargées, une retirée, la recherche dans les favoris, l'onglet Recherches.
   // À 1440 px, la page de l'ordinateur (maquette 4, classes .dfav-*) ; voir aussi « Favoris sur ordinateur » plus bas.
@@ -2199,6 +2363,14 @@ try {
     live.state.conversations[0].unread_count = 1;
     await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
     await checkBadges(page, live.state, `retour sur l'onglet ${width}`);
+    // Plus de 99 messages non lus : « 99+ », comme l'app (n° 44) ; la cloche reste à « 9+ ».
+    live.state.conversations[0].unread_count = 120;
+    live.pushChange('messages');
+    await checkBadges(page, live.state, `plus de 99 non lus ${width}`);
+    if (width === 1440) await page.screenshot({ path: join(out, `barre-haut-${width}-99-plus.png`), clip: { x: 0, y: 0, width, height: 72 } });
+    live.state.conversations[0].unread_count = 1;
+    live.pushChange('messages');
+    await checkBadges(page, live.state, `retour à 1 non lu ${width}`);
     await page.close();
 
     page = await open(member, '/compte/?vue=notifications', `notifications-${width}`);
@@ -2447,14 +2619,21 @@ try {
     const H = `accueil téléphone ${signedIn ? 'connecté' : 'sans compte'}`;
     const phoneHome = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
     const phoneServer = await mock(phoneHome, { signedIn, listingRows: HOME_LISTINGS, account: HOME_PROJECT });
-    await phoneHome.addInitScript((id) => { try { sessionStorage.setItem('nidalo.consultes', JSON.stringify([id])); } catch { /* indisponible */ } }, homeId(7));
+    // Biens consultés du compte, gardés dans ce navigateur (une liste par compte, n° 114) : lus seulement avec ce compte
+    // connecté. L'ancienne liste de l'onglet (sessionStorage) n'est plus lue.
+    await phoneHome.addInitScript(([id, owner]) => {
+      try {
+        localStorage.setItem(`nidalo.consultes.${owner}`, JSON.stringify([id]));
+        sessionStorage.setItem('nidalo.consultes', JSON.stringify([id]));
+      } catch { /* indisponible */ }
+    }, [homeId(7), USER_ID]);
     page = await open(phoneHome, '/', `accueil-telephone-lectures-${signedIn ? 'connecte' : 'sans-compte'}`);
-    await page.waitForSelector('#consultes', { timeout: 8000 }).catch(() => undefined);
+    if (signedIn) await page.waitForSelector('#consultes', { timeout: 8000 }).catch(() => undefined);
     await page.waitForSelector('#similaires', { timeout: 8000 }).catch(() => undefined);
     if (signedIn) await page.waitForSelector('.home-resume', { timeout: 8000 }).catch(() => undefined);
     await page.waitForTimeout(600);
-    expectSame(H, 'sections', await page.locator('.home-app h2').allTextContents(),
-      ['Opportunités du moment', 'Explorer par ville', 'Consultés récemment', 'Biens similaires à vos recherches', 'Nouveautés', 'Baisses de prix']);
+    expectSame(H, 'sections', await page.locator('.home-app h2').allTextContents(), ['Opportunités du moment', 'Explorer par ville',
+      ...(signedIn ? ['Consultés récemment'] : []), 'Biens similaires à vos recherches', 'Nouveautés', 'Baisses de prix']);
     // Par section, les cartes telles qu'affichées : [classe, taille, photo, pastille, cœurs, ancien prix barré].
     const sectionKinds = await page.evaluate(() => Object.fromEntries(['opportunites', 'consultes', 'similaires', 'nouveautes', 'baisses'].map((id) => {
       const size = (el) => {
@@ -2471,7 +2650,7 @@ try {
     })));
     expectSame(H, 'cartes des sections', sectionKinds, {
       opportunites: ['home-listing-card 248 248×156  1 -'],
-      consultes: ['compact-card 296×112 88×80 - 0 -'],
+      consultes: signedIn ? ['compact-card 296×112 88×80 - 0 -'] : [],
       similaires: ['similar-card 170 170×100  1 -'],
       nouveautes: ['compact-card 296×112 88×80 hlc-new 1 -'],
       baisses: ['compact-card 296×112 88×80 hlc-drop 0 barré'],
@@ -2487,9 +2666,12 @@ try {
     }))]);
     expectSame(H, 'carte compacte [photo à gauche, en haut, lignes, lignes dans la carte]', compactLayout, ['8 16 4 true']);
     const viewedIds = await page.locator('section:has(#consultes) article a.stretched').evaluateAll((links) => links.map((link) => new URL(link.href).searchParams.get('id')));
-    expectSame(H, 'consultés', viewedIds, [homeId(7)]);
-    expectSame(H, 'consultés [titre, lieu, prix]', await page.$eval('section:has(#consultes) article', (article) => ['.home-card-title', '.home-card-location', '.home-card-price']
-      .map((selector) => article.querySelector(selector)?.textContent?.replace(/\s/g, ' '))), ['Appartement 2 pièces', 'Lyon 6e · 45 m²', '265 000 €']);
+    expectSame(H, 'consultés', viewedIds, signedIn ? [homeId(7)] : []);
+    if (signedIn) {
+      expectSame(H, 'consultés [titre, lieu, prix]', await page.$eval('section:has(#consultes) article', (article) => ['.home-card-title', '.home-card-location', '.home-card-price']
+        .map((selector) => article.querySelector(selector)?.textContent?.replace(/\s/g, ' '))), ['Appartement 2 pièces', 'Lyon 6e · 45 m²', '265 000 €']);
+    }
+    expectSame(H, 'ancienne liste de l\'onglet effacée', await page.evaluate(() => sessionStorage.getItem('nidalo.consultes')), null);
     // Baisses de prix : la baisse et l'ancien prix de l'annonce. Biens similaires : le rendement brut seulement sur les
     // annonces qui ont un loyer (les seules à avoir leurs chiffres).
     const euros = (value) => `${new Intl.NumberFormat('fr-FR').format(value)} €`.replace(/\s/g, ' ');
@@ -2928,7 +3110,8 @@ try {
       await page.click('dialog[open] .dm-choice:has-text("Fraude immobilière ou arnaque")');
       await page.fill('#dm-report-details', '  Demande de virement avant la visite.  ');
       await page.click('dialog[open] button:text-is("Enregistrer le signalement")');
-      expectSame(M, 'avis du signalement', await noticeText(page, M), 'Signalement transmis à l’équipe NIDALO.');
+      await alertStaysOpen(page, `${M} : avis du signalement`);
+      expectSame(M, 'avis du signalement', await noticeText(page, M), 'Signalement envoyé à l\'équipe Nidalo.');
       const report = await oneCall(chat, 'reports', mark, `${M} : signaler`);
       if (report) {
         if (!UPPER_UUID.test(report.body?.id ?? '')) problems.push(`${M} : identifiant du signalement ${report.body?.id}`);
@@ -3159,14 +3342,14 @@ try {
         await page.click(`dialog[open] .dm-quick-actions .dm-action-row:has-text("${title}")`);
         await iphoneOnly(page, `${M} : nouvelle discussion`, title);
       }
-      // « Nouveau contact » : le compte NIDALO d'un numéro (find_account_by_phone), puis « Écrire » (start_phone_conversation).
+      // « Nouveau contact » : le compte Nidalo d'un numéro (find_account_by_phone), puis « Écrire » (start_phone_conversation).
       await page.click('dialog[open] .dm-quick-actions .dm-action-row:has-text("Nouveau contact")');
       expectSame(M, 'nouveau contact', await dialogTitle(page, 'sheet'), 'Nouveau contact');
       mark = chat.calls.length;
       await page.fill('dialog[open] input[aria-label="Numéro de téléphone"]', '0639985678');
       await page.waitForSelector('dialog[open] .dm-phone-account');
       expectSame(M, 'compte trouvé', [await page.inputValue('dialog[open] input[aria-label="Numéro de téléphone"]'), await textOf(page, 'dialog[open] .dm-phone-card')],
-        ['06 39 98 56 78', '06 39 98 56 78 Compte NIDALO trouvé NL Nina L. Particulier Ajouter aux contacts Écrire']);
+        ['06 39 98 56 78', '06 39 98 56 78 Compte Nidalo trouvé NL Nina L. Particulier Ajouter aux contacts Écrire']);
       const lookup = await oneCall(chat, 'rpc/find_account_by_phone', mark, `${M} : nouveau contact`);
       if (lookup) expectSame(M, 'recherche du numéro', lookup.body, { p_phone: NINA_PHONE });
       await page.click('dialog[open] .dm-phone-actions button:text-is("Ajouter aux contacts")');
@@ -3851,6 +4034,253 @@ try {
     await emptyDesk.close();
   }
 
+  // Étape 6, Messages comme l'app : plus de 200 messages (n° 19) ; les 200 derniers à l'ouverture, puis 200 de plus en
+  // remontant, bornés à la seconde qui suit le plus ancien affiché (lt., comme l'app), sans doublon, et ce que l'on voyait
+  // reste à sa place ; une fois tout lu, plus rien n'est demandé. Pendant la lecture plus haut, un message reçu ne fait
+  // pas descendre la liste ; le sien, si (n° 104). À 1440 px et sur téléphone. Captures : 3-messages-anciens-*.png.
+  {
+    const OLD_COUNT = 450;
+    const oldStart = Date.parse('2026-10-20T08:00:00Z');
+    const oldText = (index) => `Message ${index + 1} de l'historique`;
+    const oldAt = (index) => new Date(oldStart + index * 1_200_000).toISOString();
+    const pageCalls = (chat, from) => chatCalls(chat, 'messages', from)
+      .filter((call) => call.method === 'GET' && call.search.includes(`conversation_id=eq.${chatId(2).toUpperCase()}`) && call.search.includes('limit=200'));
+    const threadTexts = (page) => page.$$eval('.dm-thread .dm-text', (els) => els.map((el) => el.textContent));
+    for (const [label, size] of [['1440', { width: 1440, height: 960 }], ['390', { phone: true }]]) {
+      const M = `messages anciens ${label}`;
+      const { context: oldContext, server: oldServer, chat } = await chatContext(size);
+      for (let index = 0; index < OLD_COUNT; index += 1) {
+        chat.messages.push(chatLine(1000 + index, chatId(2), index % 2 === 0 ? OTHER_ID : USER_ID, oldAt(index), oldText(index)));
+      }
+      let mark = chat.calls.length;
+      page = await open(oldContext, `/messages/?c=${chatId(2)}`, `messages-anciens-${label}`);
+      await page.waitForSelector('.dm-visit-actions');
+      const opening = pageCalls(chat, mark);
+      expectSame(M, 'ouverture', [opening.length, opening.some((call) => call.search.includes('created_at=lt.')), (await threadTexts(page))[0]], [1, false, oldText(254)]);
+      // En haut du fil : la page d'avant ; la bulle du haut ne bouge pas.
+      for (const [step, oldest, first] of [[1, 254, 55], [2, 55, 0]]) {
+        mark = chat.calls.length;
+        const before = await page.evaluate(() => {
+          const thread = document.querySelector('.dm-thread');
+          thread.scrollTop = 0;
+          const bubble = thread.querySelector('[data-message-id]');
+          return { id: bubble.dataset.messageId, top: bubble.getBoundingClientRect().top };
+        });
+        await page.waitForFunction((text) => document.querySelector('.dm-thread .dm-text')?.textContent === text, oldText(first), { timeout: 8000 })
+          .catch(() => problems.push(`${M} : page ${step} : les messages plus anciens n'arrivent pas`));
+        const bound = new Date(Date.parse(oldAt(oldest)) + 1000).toISOString().replace(/\.\d+Z$/, 'Z');
+        expectSame(M, `page ${step}`, pageCalls(chat, mark).map((call) => new URLSearchParams(call.search).get('created_at')), [`lt.${bound}`]);
+        await page.waitForTimeout(200);
+        const after = await page.evaluate((id) => document.querySelector(`.dm-thread [data-message-id="${id}"]`)?.getBoundingClientRect().top ?? null, before.id);
+        if (after === null || Math.abs(after - before.top) > 2) problems.push(`${M} : page ${step} : la bulle du haut passe de ${Math.round(before.top)} à ${after === null ? 'rien' : Math.round(after)}`);
+      }
+      const ids = await page.$$eval('.dm-thread [data-message-id]', (els) => els.map((el) => el.dataset.messageId));
+      const texts = await threadTexts(page);
+      expectSame(M, 'tout l\'historique, sans doublon', [ids.length === new Set(ids).size, texts.filter((text) => text.endsWith('de l\'historique')).length], [true, OLD_COUNT]);
+      mark = chat.calls.length;
+      await page.evaluate(() => { document.querySelector('.dm-thread').scrollTop = 0; });
+      await page.waitForTimeout(500);
+      expectSame(M, 'tout est lu : plus rien de demandé en haut', pageCalls(chat, mark).length, 0);
+      // Lecture plus haut : un message de Julien arrive ; la liste ne bouge pas, et les pages lues restent.
+      await page.evaluate(() => { const thread = document.querySelector('.dm-thread'); thread.scrollTop = Math.round(thread.scrollHeight / 2); });
+      await page.waitForTimeout(300);
+      const reading = await page.evaluate(() => document.querySelector('.dm-thread').scrollTop);
+      chat.messages.push(chatLine(1600, chatId(2), OTHER_ID, chatClock(chat), 'Je passe demain matin, si cela vous convient.'));
+      chat.conversations[1].unread += 1;
+      oldServer.pushChange('messages');
+      await page.waitForFunction(() => [...document.querySelectorAll('.dm-thread .dm-text')].at(-1)?.textContent === 'Je passe demain matin, si cela vous convient.', null, { timeout: 8000 })
+        .catch(() => problems.push(`${M} : le message reçu n'apparaît pas`));
+      await page.waitForTimeout(700);
+      const kept = await page.evaluate(() => document.querySelector('.dm-thread').scrollTop);
+      if (Math.abs(kept - reading) > 2) problems.push(`${M} : la liste passe de ${reading} à ${kept} quand un message arrive pendant la lecture`);
+      expectSame(M, 'pages gardées après le message reçu', (await threadTexts(page))[0], oldText(0));
+      await chatShot(page, `3-messages-anciens-${label}.png`);
+      // Son propre message : la liste descend jusqu'à lui.
+      await page.fill('.dm-composer textarea', 'Très bien, à demain matin.');
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(() => {
+        const thread = document.querySelector('.dm-thread');
+        return [...thread.querySelectorAll('.dm-text')].at(-1)?.textContent === 'Très bien, à demain matin.' && thread.scrollHeight - thread.scrollTop - thread.clientHeight < 4;
+      }, null, { timeout: 8000 }).catch(() => problems.push(`${M} : son propre message ne fait pas descendre la liste`));
+      await page.close();
+      await oldContext.close();
+    }
+  }
+
+  // Étape 6 : les échecs dits comme l'app, et rien en double. Envoi dont la réponse se perd : le texte revient, le
+  // renvoi reprend le même identifiant et le message n'apparaît qu'une fois (n° 99) ; envoi raté pendant que l'on écrit
+  // la suite : le texte raté passe devant (n° 208) ; transfert en partie (n° 211) ; blocage et déblocage refusés
+  // (n° 28) ; archive refusée, remise comme avant (n° 210) ; pièces jointes renvoyées sans être renvoyées au dossier ;
+  // vidéo de plus de 50 Mo (n° 94) ; contenu illisible (n° 30) ; fil vide du vendeur (n° 98).
+  {
+    const M = 'messages échecs';
+    const threadTexts = (page) => page.$$eval('.dm-thread .dm-text', (els) => els.map((el) => el.textContent));
+    const { context: failDesk, chat } = await chatContext({ width: 1440, height: 960 });
+    const unavailable = { status: 503, body: { message: 'Service Unavailable' } };
+    // Chrome note dans la console les refus simulés (503) et le doublon reconnu par le serveur au renvoi (409).
+    const refusals = /status of (409|503)/;
+    expectedConsole.add(refusals);
+    const posts = (from, filter = () => true) => chatCalls(chat, 'messages', from).filter((call) => call.method === 'POST' && filter(call));
+    // Un message écrit par une version plus récente de l'app, que cette version ne sait pas lire (n° 30).
+    chat.messages.push({ ...chatLine(29, chatId(3), MARC_ID, '2026-11-02T10:10:00Z', ''), content: { text: { _0: 42 } }, preview: 'Nouveauté' });
+    page = await open(failDesk, `/messages/?c=${chatId(1)}`, 'messages-echecs');
+    await page.waitForSelector('.dm-thread-inner .dm-day');
+
+    // Réponse perdue : le serveur a enregistré le message, le site ne le sait pas.
+    chat.fail = ({ table, method }) => (table === 'messages' && method === 'POST' ? { ...unavailable, stored: true } : null);
+    let mark = chat.calls.length;
+    await page.fill('.dm-composer textarea', 'Je confirme ma venue jeudi.');
+    await page.keyboard.press('Enter');
+    expectSame(M, 'envoi sans réponse', await noticeText(page, M), 'Le message n\'a pas pu être envoyé. Réessayez.');
+    expectSame(M, 'texte rendu', await page.inputValue('.dm-composer textarea'), 'Je confirme ma venue jeudi.');
+    chat.fail = null;
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => [...document.querySelectorAll('.dm-thread .dm-text')].at(-1)?.textContent === 'Je confirme ma venue jeudi.', null, { timeout: 8000 })
+      .catch(() => problems.push(`${M} : le message renvoyé n'apparaît pas`));
+    await page.waitForTimeout(300);
+    const sent = posts(mark);
+    expectSame(M, 'renvoi : même identifiant', [sent.length, new Set(sent.map((call) => call.body?.client_id)).size, new Set(sent.map((call) => call.body?.id)).size], [2, 1, 1]);
+    expectSame(M, 'renvoi : un seul message', [
+      chat.messages.filter((item) => item.content?.text?._0 === 'Je confirme ma venue jeudi.').length,
+      (await threadTexts(page)).filter((text) => text === 'Je confirme ma venue jeudi.').length,
+    ], [1, 1]);
+
+    // Envoi raté pendant que l'on écrit la suite.
+    chat.fail = ({ table, method }) => (table === 'messages' && method === 'POST' ? unavailable : null);
+    chat.slow = { messages: 1200 };
+    await page.fill('.dm-composer textarea', 'Le parking est-il compris ?');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.querySelector('.dm-composer textarea')?.value === '', null, { timeout: 4000 }).catch(() => undefined);
+    await page.type('.dm-composer textarea', 'Et la cave ?');
+    expectSame(M, 'envoi raté pendant la saisie', await noticeText(page, M), 'Le message n\'a pas pu être envoyé. Réessayez.');
+    expectSame(M, 'texte raté devant la suite', await page.inputValue('.dm-composer textarea'), 'Le parking est-il compris ? Et la cave ?');
+    chat.slow = {};
+    await page.fill('.dm-composer textarea', '');
+
+    // Transfert vers deux conversations, l'une ne répond pas : la fenêtre reste, seule l'autre reste cochée.
+    chat.fail = ({ table, method, body }) => (table === 'messages' && method === 'POST' && sameChatId(body?.conversation_id, chatId(2)) ? unavailable : null);
+    await messageMenu(page, 7);
+    await menuChoice(page, 'Transférer', `${M} : transférer`);
+    await page.click('dialog.dm-forward-sheet[open] .dm-forward-target:has-text("Visite groupée Lyon 2e")');
+    await page.click('dialog.dm-forward-sheet[open] .dm-forward-target:has-text("Julien M.")');
+    mark = chat.calls.length;
+    await page.click('dialog.dm-forward-sheet[open] .dm-forward-send');
+    await page.waitForSelector('dialog.alert-dialog[open]', { timeout: 8000 }).catch(() => undefined);
+    await chatShot(page, '3-messages-transfert-en-partie-1440.png');
+    expectSame(M, 'transfert en partie', await noticeText(page, M), 'Message transféré dans 1 conversation sur 2. Réessayez pour les autres.');
+    const left = await forwardSheet(page);
+    expectSame(M, 'transfert : celle qui n\'a rien reçu reste cochée', [left?.targets.filter((target) => target[2] === 'true').map((target) => target[0]), left?.send],
+      [['Julien M.'], ['Envoyer à 1 conversation', false]]);
+    chat.fail = null;
+    await page.click('dialog.dm-forward-sheet[open] .dm-forward-send');
+    await waitForCompareNotice(page, { text: 'Message transféré', action: null }, `${M} : transfert repris`);
+    expectSame(M, 'transferts', posts(mark).map((call) => [call.body?.conversation_id, call.body?.forwarded]),
+      [[chatId(4).toUpperCase(), true], [chatId(2).toUpperCase(), true], [chatId(2).toUpperCase(), true]]);
+
+    // Blocage, puis déblocage, sans réponse du serveur : le message de l'app, et rien ne change.
+    chat.fail = ({ table, method }) => (table === 'user_blocks' && method !== 'GET' ? unavailable : null);
+    await headerMenu(page, 'Bloquer');
+    await alertButton(page, 'Bloquer');
+    expectSame(M, 'blocage refusé', await noticeText(page, M), 'Le blocage n\'a pas pu être enregistré. Vérifiez votre connexion.');
+    expectSame(M, 'menu après le blocage refusé', await headerMenu(page), ['Archiver', 'Signaler', 'Bloquer']);
+    chat.fail = null;
+    await headerMenu(page, 'Bloquer');
+    await alertButton(page, 'Bloquer');
+    expectSame(M, 'blocage', await noticeText(page, M), 'Compte bloqué.');
+    chat.fail = ({ table, method }) => (table === 'user_blocks' && method !== 'GET' ? unavailable : null);
+    await headerMenu(page, 'Débloquer');
+    expectSame(M, 'déblocage refusé', await noticeText(page, M), 'Le déblocage n\'a pas pu être enregistré. Vérifiez votre connexion.');
+    expectSame(M, 'menu après le déblocage refusé', await headerMenu(page), ['Archiver', 'Signaler', 'Débloquer']);
+    chat.fail = null;
+    await headerMenu(page, 'Débloquer');
+    expectSame(M, 'déblocage', await noticeText(page, M), 'Compte débloqué.');
+
+    // Archive refusée : la conversation revient où elle était, et l'avis de l'app.
+    chat.fail = ({ table, method }) => (table === 'conversation_preferences' && method === 'POST' ? unavailable : null);
+    await headerMenu(page, 'Archiver');
+    expectSame(M, 'archive refusée', await noticeText(page, M), 'La modification n\'a pas pu être enregistrée.');
+    expectSame(M, 'après l\'archive refusée', [await headerMenu(page), (await rowNames(page)).includes('Agence Démo Lyon')], [['Archiver', 'Signaler', 'Bloquer'], true]);
+    chat.fail = null;
+
+    // Une photo envoyée au dossier, puis le message qui ne part pas : « Réessayer » ne renvoie pas la photo, et le
+    // message refait est le même (même identifiant).
+    chat.fail = ({ table, method }) => (table === 'messages' && method === 'POST' ? unavailable : null);
+    mark = chat.calls.length;
+    const uploads = chat.uploads.length;
+    await page.click('.dm-plus');
+    const [photoChooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('dialog[open] .dm-sources button[aria-label="Photos et vidéos"]')]);
+    await photoChooser.setFiles({ name: 'cuisine.jpg', mimeType: 'image/jpeg', buffer: photos['photo2.jpg'] });
+    await page.waitForSelector('dialog.dm-preview-sheet[open] .dm-tile img');
+    await page.click('dialog.dm-preview-sheet[open] .dm-pill');
+    await page.waitForSelector('dialog.dm-preview-sheet[open] .dm-error', { timeout: 8000 }).catch(() => problems.push(`${M} : pièce jointe : pas d'erreur affichée`));
+    expectSame(M, 'pièce jointe : message refusé', [await textOf(page, 'dialog.dm-preview-sheet[open] .dm-error'), await textOf(page, 'dialog.dm-preview-sheet[open] .dm-pill')],
+      ['La pièce jointe n\'a pas pu être envoyée. Vérifiez votre connexion et réessayez.', 'Réessayer']);
+    chat.fail = null;
+    await page.click('dialog.dm-preview-sheet[open] .dm-pill');
+    await page.waitForSelector('dialog.dm-preview-sheet[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${M} : pièce jointe : la feuille reste ouverte`));
+    const attachmentPosts = posts(mark);
+    expectSame(M, 'pièce jointe renvoyée', [chat.uploads.length - uploads, attachmentPosts.length, new Set(attachmentPosts.map((call) => call.body?.client_id)).size,
+      new Set(attachmentPosts.map((call) => JSON.stringify(call.body?.content))).size], [1, 2, 1, 1]);
+
+    // Vidéo de plus de 50 Mo : refusée dès le choix, avec le texte de l'app (le site ne la recompresse pas).
+    await page.click('.dm-plus');
+    const [videoChooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('dialog[open] .dm-sources button[aria-label="Photos et vidéos"]')]);
+    // Fichier fabriqué dans la page : 50 Mo et un octet, sans passer par le disque.
+    await videoChooser.element().evaluate((element) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([new Uint8Array(52_428_801)], 'visite.mp4', { type: 'video/mp4' }));
+      element.files = transfer.files;
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await page.waitForSelector('dialog.dm-preview-sheet[open] .dm-tile-error', { timeout: 15000 }).catch(() => problems.push(`${M} : vidéo trop lourde : pas d'erreur`));
+    expectSame(M, 'vidéo trop lourde', [await textOf(page, 'dialog.dm-preview-sheet[open] .dm-tile-error'), await page.isDisabled('dialog.dm-preview-sheet[open] .dm-pill')],
+      ['Vidéo trop volumineuse : 50 Mo au maximum après compression. Essayez une vidéo plus courte.', true]);
+    await chatShot(page, '3-messages-video-trop-lourde-1440.png');
+    await page.click('dialog.dm-preview-sheet[open] .dm-sheet-close').catch(() => page.keyboard.press('Escape'));
+    await page.waitForSelector('dialog.dm-preview-sheet[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${M} : vidéo trop lourde : la feuille reste ouverte`));
+
+    // Contenu illisible : « Message non pris en charge », les autres messages restent.
+    await page.goto(`${base}/messages/?c=${chatId(3)}`, { waitUntil: 'networkidle' });
+    await page.waitForSelector('.dm-thread-inner .dm-day');
+    expectSame(M, 'contenu illisible', [await page.$$eval('.dm-thread .dm-system', (els) => els.map((el) => el.textContent)), (await threadTexts(page)).length],
+      [['Message non pris en charge'], 2]);
+    await chatShot(page, '3-messages-non-pris-en-charge-1440.png');
+    await page.close();
+    await failDesk.close();
+    expectedConsole.delete(refusals);
+  }
+
+  // Étape 6 : la boîte de réception sans réseau (n° 95) : l'écran « Pas de connexion Internet » de l'app, puis
+  // « Réessayer » relit les conversations. Fil vide du côté de la personne qui vend (n° 98). À 1440 px et sur téléphone.
+  for (const [label, size] of [['1440', { width: 1440, height: 960 }], ['390', { phone: true }]]) {
+    const M = `messages hors ligne ${label}`;
+    const { context: offlineContext, chat } = await chatContext(size);
+    chat.fail = ({ table, body }) => (table === 'rpc/my_conversations' && !body?.p_conversation_id ? { status: 503 } : null);
+    // La lecture refusée exprès (503) est notée par Chrome dans la console.
+    const refusal = /status of 503/;
+    expectedConsole.add(refusal);
+    page = await open(offlineContext, '/messages/', `messages-hors-ligne-${label}`);
+    await page.waitForSelector('.dm-side .app-offline', { timeout: 8000 }).catch(() => problems.push(`${M} : l'écran hors ligne n'apparaît pas`));
+    expectSame(M, 'écran hors ligne', [await textOf(page, '.dm-side .app-offline h2'), await textOf(page, '.dm-side .app-offline p'), await textOf(page, '.dm-side .app-offline button')],
+      ['Pas de connexion Internet', 'Vérifiez votre connexion, puis réessayez.', 'Réessayer']);
+    await chatShot(page, `3-messages-hors-ligne-${label}.png`);
+    chat.fail = null;
+    await page.click('.dm-side .app-offline button');
+    await page.waitForSelector('.dm-list .dm-row', { timeout: 8000 }).catch(() => problems.push(`${M} : « Réessayer » ne relit pas les conversations`));
+    if (label === '1440') {
+      // Fil vide de la personne qui vend : « Écrivez votre premier message. », pas le texte pour l'acheteur.
+      chat.conversations.push({ id: chatId(10), kind: 'listing', listing: homeId(7), buyer: CAMILLE_ID, seller: USER_ID, other: CAMILLE_ID, name: null, unread: 0, created_at: '2026-11-06T09:00:00Z' });
+      chat.participants.push({ conversation_id: chatId(10), user_id: USER_ID, role: 'member', left_at: null, last_read_at: null },
+        { conversation_id: chatId(10), user_id: CAMILLE_ID, role: 'member', left_at: null, last_read_at: null });
+      await page.goto(`${base}/messages/?c=${chatId(10)}`, { waitUntil: 'networkidle' });
+      await page.waitForSelector('.dm-thread-empty', { timeout: 8000 }).catch(() => problems.push(`${M} : fil vide du vendeur absent`));
+      expectSame(M, 'fil vide du vendeur', await textOf(page, '.dm-thread-empty'), 'Écrivez votre premier message.');
+    }
+    await page.close();
+    await offlineContext.close();
+    expectedConsole.delete(refusal);
+  }
+
   // Sous 1024 px (iPhone 13, 390 px) : une seule colonne, comme dans l'app, avec la police du téléphone. La liste
   // au-dessus de la barre du bas, puis la conversation en plein écran (barre cachée, saisie tout en bas) ; « Retour
   // aux conversations » revient à la liste. Captures : 3-messages-telephone-*.png.
@@ -4319,12 +4749,16 @@ try {
       await context.clock.setFixedTime(CHAT_NOW);
       const server = await mock(context, { signedIn: true, listingRows: SPACE_LISTING_ROWS });
       await mockSpace(context, space);
-      // Biens consultés de l'onglet, posés une seule fois : « Retirer » et « Vider » tiennent après un rechargement.
-      await context.addInitScript((ids) => {
+      // Biens consultés du compte (gardés dans ce navigateur, n° 114), posés une seule fois par onglet : « Retirer » et
+      // « Vider » tiennent après un rechargement, chaque nouvel onglet repart de la même liste.
+      await context.addInitScript(([ids, owner]) => {
         try {
-          if (sessionStorage.getItem('nidalo.consultes') === null) sessionStorage.setItem('nidalo.consultes', JSON.stringify(ids));
+          if (sessionStorage.getItem('verification.consultes') === null) {
+            sessionStorage.setItem('verification.consultes', '1');
+            localStorage.setItem(`nidalo.consultes.${owner}`, JSON.stringify(ids));
+          }
         } catch { /* stockage indisponible */ }
-      }, viewed);
+      }, [viewed, USER_ID]);
       return { context, server };
     };
     /** Cartes « À venir » de Mon agenda sur ordinateur : le téléphone doit montrer les mêmes. */
@@ -4424,7 +4858,7 @@ try {
       // Dans l'ordre de l'app ; « Notifications » est la ligne du site, gardée.
       expectSame(E, 'paramètres et assistance', await spaceRows(page, '#parametres-et-assistance'),
         [['Notifications', null, '/compte/?vue=notifications'], ['Alertes sur cet iPhone', null, null], ['Préférences', null, null],
-          ['Aide et assistance', null, '/aide/'], ['Informations légales', null, '/compte/?vue=legal'], ['Donner mon avis', null, null]]);
+          ['Aide et assistance', null, '/aide/'], ['Informations légales', null, '/compte/?vue=legal']]);
       expectSame(E, 'bas de la colonne', [await textOf(page, '.dsp-logout'), await textOf(page, '.dsp-delete'), await page.getAttribute('.dsp-delete', 'href')],
         ['Se déconnecter', 'Supprimer mon compte', '/compte/?vue=supprimer']);
       // Ce que l'app garde sur l'iPhone : « Dans l'app iPhone pour l'instant », sans rien envoyer.
@@ -4554,6 +4988,58 @@ try {
       await page.reload({ waitUntil: 'networkidle' });
       await page.waitForSelector('.app-visit');
 
+      // Créneaux ouverts (VisitSessionStore.upcoming, n° 13) : les séances ouvertes et pas finies du compte, la plus proche
+      // d'abord, en tête des visites à venir (my_visit_sessions sans paramètre, comme l'app) ; leur page reste dans l'app
+      // iPhone. Demande reçue (n° 11) : « Message » ouvre la conversation déjà ouverte sur l'annonce avec le demandeur,
+      // la plus récente, sans en créer ; aucune : l'avis de l'app.
+      {
+        const saved = { requests: space.requests, conversations: space.conversations };
+        space.sessions = structuredClone(SPACE_SESSIONS);
+        space.requests = [...structuredClone(SPACE_REQUESTS), structuredClone(SPACE_RECEIVED_REQUEST)];
+        space.conversations = [...SPACE_CONVERSATIONS, ...SPACE_HOUSE_CONVERSATIONS];
+        const before = space.calls.length;
+        await page.reload({ waitUntil: 'networkidle' });
+        await page.waitForSelector('.app-session', { timeout: 8000 }).catch(() => problems.push(`${A} : « Créneaux ouverts » ne s'affiche pas`));
+        expectSame(A, 'lecture des créneaux ouverts', spaceCalls(space, 'rpc/my_visit_sessions', 'POST', before).map((call) => call.body), [{}]);
+        expectSame(A, 'créneaux ouverts', [
+          await page.$$eval('.app-agenda-list > section', (sections) => sections.map((section) => section.getAttribute('aria-label')).slice(0, 1)),
+          await page.$$eval('.app-session-group .app-section-label', (labels) => labels.map((label) => label.textContent)),
+          await page.$$eval('.app-session', (cards) => cards.map((card) => [card.querySelector('.app-session-title')?.textContent ?? null,
+            card.querySelector('.app-session-line')?.textContent ?? null, card.querySelector('.app-visit-pill')?.textContent ?? null,
+            [...(card.querySelector('.app-visit-pill')?.classList ?? [])].find((name) => name.startsWith('app-tone-')) ?? null])),
+          (await agendaTabs()).map((tab) => tab.slice(0, 2)),
+        ], [['Créneaux ouverts'], ['Créneaux ouverts'], [
+          ['Samedi 7 novembre · 14 h 00 – 15 h 00', 'Maison familiale 5 pièces · Écully', '0 inscrit sur 4', 'app-tone-blue'],
+          ['Jeudi 12 novembre · 10 h 00 – 12 h 00', 'Maison familiale 5 pièces · Écully', '3 inscrits sur 8', 'app-tone-green'],
+        ], [['À venir', '4'], ['Passées', '1'], ['Annulées', '1']]]);
+        await favShot(page, '5-mon-espace-agenda-creneaux-1440.png');
+        await page.locator('.app-session').nth(0).click();
+        await iphoneOnly(page, A, 'Séance de visites');
+        // Demande reçue de Julie : sa conversation la plus récente sur la maison.
+        const received = page.locator('.app-visit', { hasText: 'Maison familiale 5 pièces' });
+        expectSame(A, 'demande reçue', [await received.count(), await received.getByRole('button', { name: 'Message' }).isEnabled()], [1, true]);
+        const started = space.calls.length;
+        await received.getByRole('button', { name: 'Message' }).click();
+        await page.waitForURL(`${base}/messages/?c=c2000000-0000-4000-8000-000000000008`, { timeout: 8000 })
+          .catch(() => problems.push(`${A} : « Message » de la demande reçue ouvre ${page.url()}`));
+        expectSame(A, 'demande reçue : aucune conversation créée', [...writes, ...space.calls.slice(started)].filter((call) => /start_listing_conversation/.test(call.table)).length, 0);
+        await page.goBack({ waitUntil: 'networkidle' });
+        await page.waitForSelector('.app-session');
+        space.conversations = [...SPACE_CONVERSATIONS, SPACE_HOUSE_CONVERSATIONS[2]];
+        await page.locator('.app-visit', { hasText: 'Maison familiale 5 pièces' }).getByRole('button', { name: 'Message' }).click();
+        expectSame(A, 'demande reçue sans conversation', await noticeText(page, A), 'Aucune conversation avec cette personne n\'a été trouvée pour cette annonce.');
+        // Les autres onglets n'ont pas de créneaux ; sans séance à venir, plus de section.
+        await page.click('.app-agenda-tab >> nth=1');
+        expectSame(A, 'Passées sans créneaux', await page.locator('.app-session-group').count(), 0);
+        await page.click('.app-agenda-tab >> nth=0');
+        space.sessions = [];
+        space.requests = saved.requests;
+        space.conversations = saved.conversations;
+        await page.reload({ waitUntil: 'networkidle' });
+        await page.waitForSelector('.app-visit');
+        expectSame(A, 'sans séance à venir', await page.locator('.app-session-group').count(), 0);
+      }
+
       // Ajouter une visite (depuis l'agenda) : le bien d'une conversation, la date, la durée, le contact, deux participants,
       // les rappels et « Confirmée » ; « Enregistrer » insère dans agenda_visits la ligne que l'app insère.
       const V = 'Ajouter une visite';
@@ -4579,7 +5065,7 @@ try {
       expectSame(V, 'feuille Bien concerné', [await textOf(page, 'dialog.dsc-picker[open] h2'), await page.getAttribute('dialog.dsc-picker[open] input[type="search"]', 'placeholder'),
         await textOf(page, 'dialog.dsc-picker[open] .dsc-picker-manual'), await page.$$eval('dialog.dsc-picker[open] .dsc-picker-section h3', (titles) => titles.map((title) => title.textContent)),
         await textsOf(page, 'dialog.dsc-picker[open] .dsc-picker-section[aria-label="Biens de mes conversations"] .dsc-picker-row')],
-      ['Bien concerné', 'Rechercher un bien, une ville…', 'Ajouter une adresse manuellement Pour un bien qui n\'est pas dans NIDALO', ['Mes annonces', 'Mes favoris', 'Biens de mes conversations'],
+      ['Bien concerné', 'Rechercher un bien, une ville…', 'Ajouter une adresse manuellement Pour un bien qui n\'est pas dans Nidalo', ['Mes annonces', 'Mes favoris', 'Biens de mes conversations'],
         ['Appartement lumineux avec balconLyon 3e · avec Agence du Parc']]);
       await page.click('dialog.dsc-picker[open] .dsc-picker-section[aria-label="Biens de mes conversations"] .dsc-picker-row');
       await page.waitForFunction(() => document.querySelector('.dsc-place input')?.value === 'Lyon 3e (69003)', null, { timeout: 8000 })
@@ -4601,8 +5087,8 @@ try {
       await page.getByLabel('Nom', { exact: true }).fill('Camille Roux');
       await page.getByLabel('Téléphone (facultatif)', { exact: true }).fill('0639981122');
       await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
-      await page.getByRole('button', { name: 'Contact NIDALO' }).click();
-      expectSame(V, 'contacts NIDALO', await textsOf(page, '.dsc-menu-list [role="menuitem"]'), ['Agence du Parc']);
+      await page.getByRole('button', { name: 'Contact Nidalo' }).click();
+      expectSame(V, 'contacts Nidalo', await textsOf(page, '.dsc-menu-list [role="menuitem"]'), ['Agence du Parc']);
       await page.locator('.dsc-menu-list').getByRole('menuitem', { name: 'Agence du Parc' }).click();
       expectSame(V, 'participants', await page.$$eval('.dsc-participant', (rows) => rows.map((row) => row.querySelector('.dsc-participant-text')?.textContent ?? null)),
         ['Camille Roux06 39 98 11 22', 'Agence du Parc']);
@@ -4704,8 +5190,23 @@ try {
 
       // Biens consultés : du plus récent au plus ancien, « Retirer » puis « Vider l'historique » (rien n'est envoyé au serveur).
       const C = 'Biens consultés';
+      // Lecture ratée (réseau) : « Pas de connexion Internet » et « Réessayer », la liste gardée ; relue, un bien que le
+      // serveur ne rend plus est retiré de l'historique (n° 225).
+      await page.evaluate(([owner, ids]) => localStorage.setItem(`nidalo.consultes.${owner}`, JSON.stringify(ids)), [USER_ID, [...SPACE_VIEWED, GONE_ID]]);
+      const viewedRead = /^https:\/\/izzsoitqtzzswkpvdozd\.supabase\.co\/rest\/v1\/listings\?/;
+      const failViewed = (route) => (new URL(route.request().url()).searchParams.get('id')?.startsWith('in.(') ? route.abort('internetdisconnected') : route.fallback());
+      const disconnected = /net::ERR_INTERNET_DISCONNECTED/;
+      expectedConsole.add(disconnected);
+      await page.route(viewedRead, failViewed);
       await page.click('.dsp-space-rows a.app-row[href="/compte/?vue=consultes"]');
+      await page.waitForSelector('.dsc-viewed-screen .app-offline', { timeout: 8000 }).catch(() => problems.push(`${C} : lecture ratée sans « Pas de connexion Internet »`));
+      expectSame(C, 'lecture ratée', [await textOf(page, '.app-offline h2'), await textOf(page, '.app-offline-retry'), await page.locator('.dsc-viewed').count(),
+        JSON.parse(await viewedStorage(page) ?? 'null')], ['Pas de connexion Internet', 'Réessayer', 0, [...SPACE_VIEWED, GONE_ID]]);
+      await page.unroute(viewedRead, failViewed);
+      await page.click('.app-offline-retry');
       await page.waitForSelector('.dsc-viewed', { timeout: 8000 });
+      expectedConsole.delete(disconnected);
+      expectSame(C, 'bien introuvable retiré', JSON.parse(await viewedStorage(page) ?? 'null'), SPACE_VIEWED);
       expectSame(C, 'liste', [await textOf(page, '.dsc-head h1'), await textOf(page, '.dsc-head-action button'), await viewedRows(page),
         await page.$$eval('.dsc-viewed-remove', (buttons) => buttons.map((button) => [button.textContent.trim(), button.getAttribute('aria-label')]))],
       ['Biens consultés', 'Vider', [
@@ -4748,6 +5249,22 @@ try {
       await page.waitForSelector('.delete-card');
       expectSame('Supprimer mon compte', 'écran', [await textOf(page, '.delete-card h2'), await textOf(page, '.delete-card .danger-button')],
         ['Supprimer mon compte ?', 'Supprimer définitivement']);
+      // Les textes de l'app (n° 31, 125, 32), les fichiers de l'iPhone devenus ce que ce navigateur garde.
+      expectSame('Supprimer mon compte', 'textes', [await textOf(page, '.delete-card p:not(.delete-note)'), await textsOf(page, '.delete-card .delete-note')], [
+        'Votre compte, vos annonces et leurs photos, vos demandes de visite, vos données de professionnel et vos documents privés en ligne seront effacés. '
+          + 'Les biens consultés et les derniers lieux cherchés gardés dans ce navigateur le seront aussi. Les messages déjà envoyés restent visibles par vos '
+          + 'interlocuteurs, sans votre nom.',
+        ['Cette action est irréversible.'],
+      ]);
+      // Connexion et sécurité, Confidentialité et données : les textes de l'app (n° 33, 123, et la carte de l'app).
+      await page.goto(`${base}/compte/?vue=securite`, { waitUntil: 'networkidle' });
+      await page.waitForSelector('.soon-card');
+      expectSame('Connexion et sécurité', 'texte', await textOf(page, '.soon-card p'), 'Compte créé avec une adresse e-mail : pour changer de mot de passe, '
+        + 'déconnectez-vous, puis touchez « Mot de passe oublié » sur l\'écran de connexion. Compte Apple ou Google : votre mot de passe se gère chez Apple ou Google.');
+      await page.goto(`${base}/compte/?vue=confidentialite`, { waitUntil: 'networkidle' });
+      await page.waitForSelector('.privacy-card');
+      expectSame('Confidentialité et données', 'carte', [await textOf(page, '.privacy-card h2'), await textOf(page, '.privacy-card p')], ['Aucun suivi publicitaire',
+        'Nidalo n\'affiche aucune publicité et n\'utilise aucun outil de mesure d\'audience ni aucun traceur. Nidalo ne vend ni ne loue vos données.']);
 
       // Se déconnecter : la confirmation de l'app ; « Annuler » ne fait rien, « Se déconnecter » ferme la session.
       const D = 'Se déconnecter';
@@ -4756,11 +5273,14 @@ try {
       await page.click('.dsp-logout');
       expectSame(D, 'confirmation', [await dialogTitle(page), await textOf(page, 'dialog.alert-dialog[open] .alert-body p'),
         await page.$$eval('dialog.alert-dialog[open] .alert-actions button', (buttons) => buttons.map((button) => [button.textContent, button.className]))],
-      ['Se déconnecter ?', 'Vous pourrez vous reconnecter avec votre adresse e-mail et votre mot de passe.', [['Se déconnecter', 'btn dsc-btn-danger'], ['Annuler', 'btn dsc-btn-quiet']]]);
+      ['Se déconnecter ?', 'Vous pourrez vous reconnecter à tout moment.', [['Se déconnecter', 'btn dsc-btn-danger'], ['Annuler', 'btn dsc-btn-quiet']]]);
       await alertButton(page, 'Annuler');
       await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${D} : la confirmation reste ouverte`));
       await page.waitForTimeout(300);
       if (space.logouts.length) problems.push(`${D} : session fermée après « Annuler »`);
+      // Comparaison de l'onglet : vidée quand le compte s'en va (n° 1 B) ; ses biens consultés restent à lui dans ce
+      // navigateur.
+      await page.evaluate((ids) => sessionStorage.setItem('nidalo.comparer', JSON.stringify({ ids, referenceId: ids[0] })), [listings[0].id, listings[1].id]);
       await page.click('.dsp-logout');
       await dialogTitle(page);
       await alertButton(page, 'Se déconnecter');
@@ -4771,6 +5291,9 @@ try {
       expectSame(D, 'page après la déconnexion', [await page.locator('.dsp').count(), await page.evaluate(() => {
         try { return Object.keys(localStorage).filter((key) => key.startsWith('sb-')).length; } catch { return null; }
       })], [0, 0]);
+      expectSame(D, 'comparaison et biens consultés après la déconnexion', await page.evaluate((owner) => [
+        JSON.parse(sessionStorage.getItem('nidalo.comparer') ?? 'null')?.ids ?? [], localStorage.getItem(`nidalo.consultes.${owner}`) !== null,
+      ], USER_ID), [[], true]);
       await page.close();
       await context.close();
     }
@@ -5108,16 +5631,31 @@ try {
   if (!rentChips.some((c) => /^Dispo\. avant le /.test(c))) problems.push(`location : pastilles « ${rentChips.join(' | ')} »`);
   // Liste de la recherche : « Baisse de prix · avant 195 000 € » sous le rendement (ListingBadgePill), « Déjà vue » sur
   // une fiche déjà ouverte dans l'onglet (AlreadySeenTag).
-  page = await open(phone, '/recherche/?mode=invest', 'recherche-badges-telephone');
+  // Les fiches ouvertes sont celles du compte connecté (une liste par compte, n° 114) : sans compte, aucune n'est
+  // « Déjà vue », même avec la liste du compte dans ce navigateur.
+  page = await open(phone, '/recherche/?mode=invest', 'recherche-badges-telephone-sans-compte');
   await page.waitForSelector('.listing-card');
-  await page.evaluate((id) => sessionStorage.setItem('nidalo.consultes', JSON.stringify([id])), listings[1].id);
+  await page.evaluate(([id, owner]) => localStorage.setItem(`nidalo.consultes.${owner}`, JSON.stringify([id])), [listings[1].id, USER_ID]);
   await page.reload();
-  await page.waitForSelector('.listing-card .already-seen-tag', { timeout: 8000 }).catch(() => undefined);
-  expectSame('recherche téléphone', 'pastilles des cartes', await page.$$eval('.listing-card', (cards) => cards.map((card) => [
-    [...card.querySelectorAll('.listing-card-badges > *')].map((el) => el.textContent.replace(/\s+/g, ' ').trim()),
-    card.querySelector('.already-seen-tag')?.textContent.trim() ?? null])),
-  [[['5,5 % de rendement brut', 'Baisse de prix · avant 195 000 €'], 'Déjà vue']]);
-  await page.screenshot({ path: join(out, 'recherche-badges-telephone.png') });
+  await page.waitForSelector('.listing-card');
+  await page.waitForTimeout(400);
+  expectSame('recherche téléphone sans compte', '« Déjà vue »', await page.locator('.already-seen-tag').count(), 0);
+  await page.evaluate((owner) => localStorage.removeItem(`nidalo.consultes.${owner}`), USER_ID);
+  {
+    const seenPhone = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
+    await mock(seenPhone, { signedIn: true });
+    await seenPhone.addInitScript(([id, owner]) => {
+      try { localStorage.setItem(`nidalo.consultes.${owner}`, JSON.stringify([id])); } catch { /* indisponible */ }
+    }, [listings[1].id, USER_ID]);
+    const seenPage = await open(seenPhone, '/recherche/?mode=invest', 'recherche-badges-telephone');
+    await seenPage.waitForSelector('.listing-card .already-seen-tag', { timeout: 8000 }).catch(() => undefined);
+    expectSame('recherche téléphone', 'pastilles des cartes', await seenPage.$$eval('.listing-card', (cards) => cards.map((card) => [
+      [...card.querySelectorAll('.listing-card-badges > *')].map((el) => el.textContent.replace(/\s+/g, ' ').trim()),
+      card.querySelector('.already-seen-tag')?.textContent.trim() ?? null])),
+    [[['5,5 % de rendement brut', 'Baisse de prix · avant 195 000 €'], 'Déjà vue']]);
+    await seenPage.screenshot({ path: join(out, 'recherche-badges-telephone.png') });
+    await seenPhone.close();
+  }
   // Aucune annonce (SearchNoResults) : les pistes comptées par de vraies recherches, l'alerte, « Effacer tous les
   // critères » ; ni en-tête des résultats ni « Carte ». Une piste applique la recherche qu'elle a comptée.
   page = await open(phone, '/recherche/?mode=buy&lieu=Lyon&prixMax=50000&piecesMin=2', 'recherche-vide-telephone');
@@ -5179,7 +5717,7 @@ try {
       ['Compte et sécurité', [['Connexion et sécurité', null, '/compte/?vue=securite', 'gray'], ['Confidentialité et données', null, '/compte/?vue=confidentialite', 'gray'],
         ['Type de compte', 'Particulier', null, 'gray']]],
       ['Paramètres et assistance', [['Notifications', null, '/compte/?vue=notifications', 'gray'], ['Préférences', null, soon('preferences'), 'gray'],
-        ['Aide et assistance', null, '/aide/', 'gray'], ['Informations légales', null, '/compte/?vue=legal', 'gray'], ['Donner mon avis', null, null, 'gray']]],
+        ['Aide et assistance', null, '/aide/', 'gray'], ['Informations légales', null, '/compte/?vue=legal', 'gray']]],
     ]);
     // Mesures de l'app : lignes de 64 px au moins, carré d'icône de 40, carte du profil de 105 (nom, e-mail et pastille,
     // plus hauts que la photo de 64, marges de 16 et bord), « Se déconnecter » de 52, rien ne dépasse de l'écran.
@@ -5213,6 +5751,7 @@ try {
     const context = await browser.newContext(device ? { ...devices[device], locale: 'fr-FR' } : { viewport: { width: size[0], height: size[1] }, locale: 'fr-FR' });
     await context.addInitScript(() => { try { localStorage.setItem('nidalo.newAccount', '1'); } catch { /* stockage indisponible */ } });
     await mock(context, { signedIn: true });
+    const profileAsked = badgeRequests.length;
     page = await open(context, '/compte/', P);
     await page.getByRole('heading', { name: 'Quel est votre profil ?' }).waitFor({ timeout: 8000 }).catch(() => problems.push(`${P} : écran absent`));
     const screen = async () => page.evaluate(() => {
@@ -5283,6 +5822,8 @@ try {
     }
     await page.waitForTimeout(400);
     await page.screenshot({ path: join(out, `profil-professionnel${suffix}.png`) });
+    // Compte tout neuf : pas de pastille Messages tant que le profil n'est pas choisi (showsUnreadBadge, n° 44).
+    if (badgeRequests.slice(profileAsked).some((request) => request.table === 'rpc/my_conversations')) problems.push(`${P} : non-lus lus pour un compte tout neuf`);
     // « Continuer en tant que professionnel » : le type enregistré, comme avant, puis Mon compte.
     const before = writes.length;
     await page.getByRole('button', { name: /Continuer/ }).click();
@@ -5420,9 +5961,12 @@ try {
     const suffix = device === 'iPhone SE' ? '-320' : '';
     const member = await browser.newContext({ ...devices[device], locale: 'fr-FR' });
     const live = await mock(member, { signedIn: true });
+    // Sur l'iPhone SE, plus de 99 messages non lus : « 99+ » sur la barre d'onglets (n° 44).
+    if (device === 'iPhone SE') live.state.conversations[0].unread_count = 120;
     const asked = badgeRequests.length;
     page = await open(member, '/compte/', N);
     await page.waitForSelector('.app-space .app-row');
+    await checkTabBarBadge(page, live.state, N);
     await page.click('a.app-row[href="/compte/?vue=notifications"]');
     await page.waitForURL(`${base}/compte/?vue=notifications`, { timeout: 8000 }).catch(() => problems.push(`${N} : la ligne Notifications ouvre ${page.url()}`));
     await page.waitForSelector('.notification-row');
@@ -5447,7 +5991,10 @@ try {
     }), [40, '13px', 7, 46, '12px', '76px']);
     await waitFor(() => live.followed().includes('notifications'), `${N} : temps réel`);
     expectSame(N, 'tables suivies en direct', [...new Set(live.followed())].sort(), ['notifications']);
-    expectSame(N, 'lectures', [...new Set(badgeRequests.slice(asked).map((request) => request.table))], ['notifications']);
+    // Les notifications, et les non-lus de la pastille Messages de la barre d'onglets (n° 44), lus sans temps réel.
+    expectSame(N, 'lectures', [...new Set(badgeRequests.slice(asked).map((request) => request.table))].sort(), ['notifications', 'rpc/my_conversations']);
+    expectSame(N, 'lectures de la pastille Messages', badgeRequests.slice(asked).filter((request) => request.table === 'rpc/my_conversations')
+      .map((request) => [request.method, JSON.stringify(request.body ?? {}), request.width]).slice(0, 1), [['POST', '{}', devices[device].viewport.width]]);
     await phoneFits(page, N);
     await tallShot(page, `notifications-telephone${suffix}.png`);
     // Un clic : cette notification est marquée lue (p_ids : son id), puis son écran s'ouvre (ici l'annonce, simulée).

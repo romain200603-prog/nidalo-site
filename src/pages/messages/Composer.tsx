@@ -144,7 +144,10 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer, rep
     await sendDraft();
   };
 
-  /** Comme l'app : le champ et la réponse se vident tout de suite ; refusé, le texte et la réponse reviennent. */
+  /**
+   * Comme l'app : le champ et la réponse se vident tout de suite ; refusé, la réponse revient, et le texte aussi : seul
+   * si rien n'a été tapé depuis, sinon devant le nouveau texte, séparé par une espace (n° 208).
+   */
   const sendDraft = async () => {
     const text = draft;
     const reply = replyingTo;
@@ -152,7 +155,7 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer, rep
     onReplyChange(null);
     const outcome = await sendText(conversation.id, text, reply?.id ?? null);
     if (!outcome.sent) {
-      setDraft(text);
+      setDraft((current) => (current === '' ? text : `${text} ${current}`));
       onReplyChange(reply);
       showNotice(outcome.refusal ?? SEND_FAILED);
     }
@@ -389,11 +392,14 @@ function WideRow({ icon, title, subtitle, tone = 'blue', onClick }: { icon: Icon
   );
 }
 
-/** « Votre prénom » (domiaAlert) : champ « Prénom », « Affiché à votre interlocuteur : Claire M. », Envoyer, Annuler. */
+/**
+ * « Votre prénom » (domiaAlert) : champ « Prénom », « Affiché à votre interlocuteur : Claire M. », Envoyer, Annuler.
+ * Une alerte : seuls ses boutons la ferment, ni Échap ni un clic à l'extérieur (n° 45).
+ */
 function FirstNameDialog({ open, lastName, onClose, onSend }: { open: boolean; lastName: string; onClose: () => void; onSend: (first: string) => void }) {
   const id = useId();
   return (
-    <Dialog open={open} onClose={onClose} className="alert-dialog dm-dialog" labelledBy={`${id}-titre`} describedBy={`${id}-texte`}>
+    <Dialog open={open} onClose={onClose} className="alert-dialog dm-dialog" labelledBy={`${id}-titre`} describedBy={`${id}-texte`} dismissible={false}>
       <FirstNameForm id={id} lastName={lastName} onClose={onClose} onSend={onSend} />
     </Dialog>
   );
@@ -449,6 +455,9 @@ function PreviewSheet({ items, conversationId, replyToId, onReplySent, onRemove,
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const cancelled = useRef(false);
+  // Fichiers déjà envoyés dans le dossier, par élément : « Réessayer » ne les renvoie pas, et le message refait est le
+  // même, reconnu par le serveur s'il était arrivé malgré l'échec (n° 99).
+  const uploaded = useRef(new Map<string, Attachment>());
   const open = items.length > 0;
   const sendable = items.filter((item) => item.error === null);
 
@@ -457,6 +466,7 @@ function PreviewSheet({ items, conversationId, replyToId, onReplySent, onRemove,
     setCaption('');
     setProgress(null);
     setError(null);
+    uploaded.current.clear();
   }, [open]);
 
   const close = () => {
@@ -473,7 +483,9 @@ function PreviewSheet({ items, conversationId, replyToId, onReplySent, onRemove,
     const stored: Attachment[] = [];
     try {
       for (const [index, item] of sendable.entries()) {
-        stored.push(await uploadPending(item, conversationId));
+        const done = uploaded.current.get(item.id) ?? await uploadPending(item, conversationId);
+        uploaded.current.set(item.id, done);
+        stored.push(done);
         if (cancelled.current) return;
         setProgress((index + 1) / sendable.length);
       }
@@ -536,7 +548,7 @@ function PreviewSheet({ items, conversationId, replyToId, onReplySent, onRemove,
 
 /** Messages de l'app (AttachmentError, AttachmentPolicy) montrés tels quels ; les autres deviennent « n'a pas pu être envoyée ». */
 const isKnownError = (message: string) => message === UNREADABLE || message === UPLOAD_FAILURE
-  || /^(Format non accepté|Ce fichier est vide|Fichier trop volumineux|Le contenu de ce fichier)/.test(message);
+  || /^(Format non accepté|Ce fichier est vide|Fichier trop volumineux|Vidéo trop volumineuse|Le contenu de ce fichier)/.test(message);
 
 /** Vignette d'un élément en attente : photo, vidéo (durée), document (icône, nom, « DPE · PDF · 1,2 Mo »), ou son erreur. */
 function PendingTile({ item, onRemove, disabled }: { item: PendingFile; onRemove: () => void; disabled: boolean }) {

@@ -1294,8 +1294,10 @@ try {
   expect('vente-ordinateur', 'titre', await page.textContent('h1.dl-title'), 'Appartement lumineux avec balcon');
   expect('vente-ordinateur', 'lieu', await page.textContent('.dl-place'), 'Lyon 3e (69003)');
   expect('vente-ordinateur', 'outils', await page.$$eval('.dl-tools .dl-tool', (els) => els.map((el) => el.textContent.trim()).join(' | ')), 'Partager | Enregistrer | Comparer');
-  expect('vente-ordinateur', 'interlocuteur', await page.textContent('.publisher-head'), /Claire E\..*Particulier.*Sur Nidalo depuis mars 2025.*1 annonce en ligne/);
-  expect('vente-ordinateur', 'vendeur de la colonne', await page.textContent('.dl-aside .dl-seller-text'), /^Claire E\.\s*Particulier\s*Sur Nidalo depuis mars 2025$/);
+  // Le nom public tel que le serveur l'envoie (public_name, déjà réglé selon « Afficher mon nom complet »), sans être
+  // raccourci une deuxième fois (n° 24).
+  expect('vente-ordinateur', 'interlocuteur', await page.textContent('.publisher-head'), /Claire Essai.*Particulier.*Sur Nidalo depuis mars 2025.*1 annonce en ligne/);
+  expect('vente-ordinateur', 'vendeur de la colonne', await page.textContent('.dl-aside .dl-seller-text'), /^Claire Essai\s*Particulier\s*Sur Nidalo depuis mars 2025$/);
   // Colonne de droite : les capsules « Appeler » et « Envoyer un message » de la barre Duo, côte à côte ; la visite se
   // demande avec « Demander » sur la carte « Aucune visite prévue », comme dans l'app.
   expect('vente-ordinateur', 'boutons de la colonne', await page.$$eval('.dl-aside .dl-button, .dl-aside .duo-capsule', (els) => els.map((el) => el.getAttribute('aria-label') ?? el.textContent.trim()).join(' | ')), 'Appeler | Envoyer un message');

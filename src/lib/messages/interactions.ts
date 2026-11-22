@@ -51,13 +51,17 @@ export function reactionSummary(reactions: Reaction[]): { emojis: string[]; coun
 
 export const DELETED_QUOTE = 'Message supprimé';
 
-/** « Vous avez répondu à Sophie », « Sophie vous a répondu », « Marc a répondu à Sophie », « Vous vous êtes répondu ». */
-export function replyHeader({ replierIsMe, replierName, quotedIsMine, quotedName }: {
-  replierIsMe: boolean; replierName: string; quotedIsMine: boolean; quotedName: string;
+/**
+ * « Vous avez répondu à Sophie », « Sophie vous a répondu », « Marc a répondu à Sophie », « Vous vous êtes répondu ».
+ * « s'est répondu » seulement pour la même personne (`isSamePerson` : mêmes identifiants) ; deux personnes du même
+ * prénom : « Marie a répondu à Marie » (n° 241).
+ */
+export function replyHeader({ replierIsMe, replierName, quotedIsMine, quotedName, isSamePerson = false }: {
+  replierIsMe: boolean; replierName: string; quotedIsMine: boolean; quotedName: string; isSamePerson?: boolean;
 }): string {
   if (replierIsMe) return quotedIsMine ? 'Vous vous êtes répondu' : `Vous avez répondu à ${quotedName}`;
   if (quotedIsMine) return `${replierName} vous a répondu`;
-  return replierName === quotedName ? `${replierName} s'est répondu` : `${replierName} a répondu à ${quotedName}`;
+  return isSamePerson ? `${replierName} s'est répondu` : `${replierName} a répondu à ${quotedName}`;
 }
 
 /** Au-dessus du champ : « Réponse à Sophie Martin », « Réponse à vous-même ». */

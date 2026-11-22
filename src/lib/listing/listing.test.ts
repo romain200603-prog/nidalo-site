@@ -131,6 +131,16 @@ describe('Identité publique (PublicIdentityTests)', () => {
     }, '2026-11-01T09:00:00Z');
     expect(agency).toMatchObject({ isProfessional: true, name: 'Agence du Parc', lines: ['Votre contact : Paul Durand', 'Lyon (69006)'] });
   });
+
+  it('particulier : son nom tel que le serveur l’envoie, sans le raccourcir une deuxième fois (n° 24)', () => {
+    const individual = (publicName: string) => publisherFrom({
+      user_id: 'u', public_name: publicName, avatar_path: null, account_type: 'individual', member_since: '2026-01-01',
+      agency_id: null, agency_name: null, agency_logo_path: null, agency_postal_code: null, agency_city: null, agency_phone: null,
+    }, '2026-11-01T09:00:00Z').name;
+    expect(individual('Marie Claire D.')).toBe('Marie Claire D.');
+    expect(individual('Claire Martin')).toBe('Claire Martin');
+    expect(individual(' Claire M. ')).toBe('Claire M.');
+  });
 });
 
 describe('Textes de la fiche', () => {

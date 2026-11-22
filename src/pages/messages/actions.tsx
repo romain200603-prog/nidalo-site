@@ -2,26 +2,44 @@ import { useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { REPORT_DETAILS_LIMIT, REPORT_REASONS, reportConversation, type ReportReason } from '../../lib/messages/api';
 import { DISTANT_FUTURE, telHref } from '../../lib/messages/format';
-import { isMuted, type Conversation } from '../../lib/messages/inbox';
-import { block, setArchived, setMuted, unblock, updateSettings } from '../../lib/messages/store';
+import { isDeletedAccount, isMuted, type Conversation } from '../../lib/messages/inbox';
+import { block, setArchived, unblock, updateSettings } from '../../lib/messages/store';
 import { ConfirmDialog, Sheet, showIphoneOnly, showNotice, type MenuItem } from './parts';
 
 // Actions d'une conversation partagées par son en-tête et par « Détails », comme l'app : le menu ⋮
 // (DirectConversationMenuItems, ConversationView.swift:1080-1116, et celui du groupe, :280-306), l'appel
 // (« Appeler X ? »), le blocage (« Bloquer ce compte ? ») et le signalement (ReportSheet, GroupInfoView.swift:1206).
 
-export const DELETED_ACCOUNT = 'Compte supprimé';
+/** Échec d'un réglage (favori, archive, sourdine), comme l'app (n° 210, n° 233). */
+export const SETTING_FAILED = 'La modification n\'a pas pu être enregistrée.';
 
-/** Favori ajouté ou retiré (updateSettings, `try?`), puis l'avis de l'app, même si l'enregistrement a échoué. */
-async function toggleFavorite(conversation: Conversation, added: string, removed: string) {
+/** Favori ajouté ou retiré (updateSettings) ; l'avis de réussite seulement après l'enregistrement (n° 210). */
+export async function toggleFavorite(conversation: Conversation, added: string, removed: string) {
   const adding = !conversation.isFavorite;
-  await updateSettings(conversation.id, (current) => ({ ...current, isFavorite: adding })).catch(() => undefined);
+  try {
+    await updateSettings(conversation.id, (current) => ({ ...current, isFavorite: adding }));
+  } catch {
+    showNotice(SETTING_FAILED);
+    return;
+  }
   showNotice(adding ? added : removed);
 }
 
-/** Débloquer : tout de suite, puis l'avis de l'app. */
+/** Archiver ou désarchiver : tout de suite ; refusé, l'archive revient et l'avis le dit (n° 210). */
+export async function toggleArchived(conversation: Conversation) {
+  if (!(await setArchived(conversation.id, !conversation.isArchived))) showNotice(SETTING_FAILED);
+}
+
+/** Sourdine « toujours » ou aucune (mutedUntil, comme la ligne « Notifications ») ; échec : l'avis de l'app (n° 210). */
+export async function toggleMuted(conversation: Conversation) {
+  const muted = isMuted(conversation);
+  await updateSettings(conversation.id, (current) => ({ ...current, mutedUntil: muted ? null : DISTANT_FUTURE.toISOString() }))
+    .catch(() => showNotice(SETTING_FAILED));
+}
+
+/** Débloquer : seulement après la réponse du serveur, puis l'avis de l'app (n° 28). */
 export async function unblockWithNotice(userId: string) {
-  showNotice(await unblock(userId) ? 'Compte débloqué.' : 'Le déblocage n\'a pas abouti.');
+  showNotice(await unblock(userId) ? 'Compte débloqué.' : 'Le déblocage n\'a pas pu être enregistré. Vérifiez votre connexion.');
 }
 
 /** Menu ⋮ d'une conversation à deux : archiver, sourdine, favori, bloquer ou débloquer, signaler. */
@@ -35,11 +53,11 @@ export function directMenuItems({ conversation, isBlocked, onBlock, onReport }: 
   const items: MenuItem[] = [
     {
       label: conversation.isArchived ? 'Désarchiver' : 'Archiver', icon: 'archive',
-      onSelect: () => void setArchived(conversation.id, !conversation.isArchived),
+      onSelect: () => void toggleArchived(conversation),
     },
     {
       label: muted ? 'Réactiver les notifications' : 'Mettre en sourdine', icon: muted ? 'bell' : 'bellOff',
-      onSelect: () => void setMuted(conversation.id, !muted),
+      onSelect: () => void toggleMuted(conversation),
     },
     {
       label: conversation.isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris', icon: 'heart',
@@ -47,7 +65,7 @@ export function directMenuItems({ conversation, isBlocked, onBlock, onReport }: 
     },
   ];
   const other = conversation.otherUserId;
-  if (conversation.counterpart.name !== DELETED_ACCOUNT && other) {
+  if (!isDeletedAccount(conversation) && other) {
     items.push(isBlocked
       ? { label: 'Débloquer', icon: 'ban', onSelect: () => void unblockWithNotice(other) }
       : { label: 'Bloquer', icon: 'ban', destructive: true, onSelect: onBlock });
@@ -66,12 +84,12 @@ export function headerMenuItems({ conversation, isBlocked, onBlock, onReport }: 
   const items: MenuItem[] = [
     {
       label: conversation.isArchived ? 'Désarchiver' : 'Archiver', icon: 'archive',
-      onSelect: () => void setArchived(conversation.id, !conversation.isArchived),
+      onSelect: () => void toggleArchived(conversation),
     },
     { label: 'Signaler', icon: 'flag', destructive: true, onSelect: onReport },
   ];
   const other = conversation.otherUserId;
-  if (conversation.counterpart.name !== DELETED_ACCOUNT && other) {
+  if (!isDeletedAccount(conversation) && other) {
     items.push(isBlocked
       ? { label: 'Débloquer', icon: 'ban', onSelect: () => void unblockWithNotice(other) }
       : { label: 'Bloquer', icon: 'ban', destructive: true, onSelect: onBlock });
@@ -79,27 +97,31 @@ export function headerMenuItems({ conversation, isBlocked, onBlock, onReport }: 
   return items;
 }
 
-/** Menu ⋮ d'un groupe : infos (dans l'app iPhone), favori, sourdine « toujours », archiver, signaler le groupe. */
+/**
+ * Menu ⋮ d'un groupe : infos (dans l'app iPhone), favori, sourdine « toujours », archiver, signaler le groupe ; pour
+ * une communauté, « Communauté ajoutée aux favoris. » et « Signaler la communauté » (n° 212).
+ */
 export function groupMenuItems({ conversation, onReport }: { conversation: Conversation; onReport: () => void }): MenuItem[] {
   const muted = isMuted(conversation);
-  const info = conversation.communityId ? 'Communauté' : 'Infos du groupe';
+  const community = conversation.communityId !== null;
+  const info = community ? 'Communauté' : 'Infos du groupe';
   return [
     { label: info, icon: 'info', onSelect: () => showIphoneOnly(info) },
     {
       label: conversation.isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris', icon: 'heart',
-      onSelect: () => void toggleFavorite(conversation, 'Groupe ajouté aux favoris.', 'Groupe retiré des favoris.'),
+      onSelect: () => void (community
+        ? toggleFavorite(conversation, 'Communauté ajoutée aux favoris.', 'Communauté retirée des favoris.')
+        : toggleFavorite(conversation, 'Groupe ajouté aux favoris.', 'Groupe retiré des favoris.')),
     },
     {
       label: muted ? 'Réactiver les notifications' : 'Mettre en sourdine', icon: muted ? 'bell' : 'bellOff',
-      onSelect: () => void updateSettings(conversation.id, (current) => ({
-        ...current, mutedUntil: muted ? null : DISTANT_FUTURE.toISOString(),
-      })).catch(() => undefined),
+      onSelect: () => void toggleMuted(conversation),
     },
     {
       label: conversation.isArchived ? 'Désarchiver' : 'Archiver', icon: 'archive',
-      onSelect: () => void setArchived(conversation.id, !conversation.isArchived),
+      onSelect: () => void toggleArchived(conversation),
     },
-    { label: 'Signaler le groupe', icon: 'flag', destructive: true, onSelect: onReport },
+    { label: community ? 'Signaler la communauté' : 'Signaler le groupe', icon: 'flag', destructive: true, onSelect: onReport },
   ];
 }
 
@@ -116,7 +138,7 @@ export function CallDialog({ open, name, phone, onClose }: { open: boolean; name
   );
 }
 
-/** « Bloquer ce compte ? » ; l'avis dit si le blocage a abouti. */
+/** « Bloquer ce compte ? » ; l'avis dit si le blocage a été enregistré par le serveur (n° 28). */
 export function BlockDialog({ open, userId, onClose }: { open: boolean; userId: string | null; onClose: () => void }) {
   return (
     <ConfirmDialog
@@ -127,7 +149,7 @@ export function BlockDialog({ open, userId, onClose }: { open: boolean; userId: 
       destructive
       onConfirm={() => {
         if (!userId) return;
-        void block(userId).then((done) => showNotice(done ? 'Compte bloqué.' : 'Le blocage n\'a pas abouti.'));
+        void block(userId).then((done) => showNotice(done ? 'Compte bloqué.' : 'Le blocage n\'a pas pu être enregistré. Vérifiez votre connexion.'));
       }}
       onClose={onClose}
     />
@@ -136,7 +158,8 @@ export function BlockDialog({ open, userId, onClose }: { open: boolean; userId: 
 
 /**
  * Signalement (ReportSheet) : motif, description facultative de 500 caractères, puis « Enregistrer le signalement ».
- * Il part dans la table reports, comme la file de l'app quand elle est transmise.
+ * Il part tout de suite dans la table reports, comme l'app avec un compte connecté (n° 2) ; le site n'a pas la file
+ * de l'iPhone qui le garde sans réseau : un échec le dit, et le bouton reste là pour réessayer.
  */
 export function ReportSheet({ open, title, conversationId, onClose }: { open: boolean; title: string; conversationId: string; onClose: () => void }) {
   return (
@@ -166,7 +189,7 @@ function ReportForm({ conversationId, onClose }: { conversationId: string; onClo
       return;
     }
     onClose();
-    showNotice('Signalement transmis à l’équipe NIDALO.');
+    showNotice('Signalement envoyé à l\'équipe Nidalo.');
   };
 
   return (
@@ -194,7 +217,7 @@ function ReportForm({ conversationId, onClose }: { conversationId: string; onClo
           rows={4}
         />
       </div>
-      <p className="dm-sheet-note">Il est transmis à l’équipe NIDALO. Les autres membres ne le voient pas.</p>
+      <p className="dm-sheet-note">Il est transmis à l'équipe Nidalo. Les autres membres ne le voient pas.</p>
       {error && <p className="dm-error" role="alert"><Icon name="triangleAlert" />{error}</p>}
       <button type="submit" className="btn btn-primary dm-wide-button" disabled={!reason} aria-busy={saving}>Enregistrer le signalement</button>
     </form>

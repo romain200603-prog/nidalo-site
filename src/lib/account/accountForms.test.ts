@@ -90,6 +90,11 @@ describe('Mes informations (ProfileValidation de l’app)', () => {
     expect(profileErrors({ ...valid, postalCode: '6900', city: 'Lyon' }, now).postalCode).toBe('Le code postal compte 5 chiffres.');
   });
 
+  it('l’e-mail du compte, en lecture seule, ne bloque jamais l’enregistrement (n° 222)', () => {
+    const now = new Date(2026, 10, 6);
+    for (const email of ['', '   ', 'claire@exemple', 'pas une adresse']) expect(profileErrors({ ...valid, email }, now)).toEqual({});
+  });
+
   it('montre « Prénom N. » sauf si le nom complet est choisi', () => {
     expect(publicName('Claire', 'martin', false)).toBe('Claire M.');
     expect(publicName('Claire', 'Martin', true)).toBe('Claire Martin');

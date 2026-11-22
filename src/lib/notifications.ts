@@ -216,8 +216,12 @@ async function readOnce(): Promise<void> {
     readAgain = true;
     return;
   }
-  // Comme l'app (`try? … ?? []`) : une lecture refusée laisse la liste vide.
-  notificationsStore.set({ status: 'ready', items: error ? [] : notificationsFromRows((data ?? []) as NotificationRow[]) });
+  if (error) {
+    // Lecture en échec : la liste et la pastille restent telles quelles (n° 133) ; à la première lecture, liste vide.
+    if (notificationsStore.get().status !== 'ready') notificationsStore.set({ status: 'ready', items: [] });
+    return;
+  }
+  notificationsStore.set({ status: 'ready', items: notificationsFromRows((data ?? []) as NotificationRow[]) });
 }
 
 /** Relit les notifications du serveur (ouverture, temps réel, retour sur l'onglet). Une seule lecture à la fois. */

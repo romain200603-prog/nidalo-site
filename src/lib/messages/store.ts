@@ -8,23 +8,24 @@ import { supabase } from '../supabase';
 import { fetchOffers, type OfferRow } from '../listing/offers';
 import {
   blockUser, fetchBlockedIds, fetchCommunities, fetchConversationVisits, fetchMessage, fetchMessages, fetchParticipants,
-  fetchProfessionalContacts, fetchProfiles, insertMessage, markConversationRead, messageInsert, savePreferences, setReaction, unblockUser,
-  type ConversationVisit, type Message, type Preferences,
+  fetchProfessionalContacts, fetchProfiles, insertMessage, markConversationRead, MESSAGE_PAGE, messageInsert, savePreferences, setReaction,
+  unblockUser, type ConversationVisit, type Message, type Preferences,
 } from './api';
 import { attachmentsContent, attachmentsPreview, contentPreview, decodeContent, textContent, type Attachment } from './content';
 import { copyAttachments } from './files';
 import { canForward, HEART, interactionRefusal, MAX_FORWARD_TARGETS, myReaction, toggledReactions } from './interactions';
-import { DISTANT_FUTURE } from './format';
 import {
   conversationFrom, sameId, upper, type CommunityRow, type Conversation, type ParticipantRow, type ProfessionalContactRow,
   type ProfileRow, type ServerInboxRow,
 } from './inbox';
+import { RetryClientIds } from './retry';
 import { fetchConversationVisitRequests, type ConversationVisitRequest } from './visitRequests';
 
 // État de la page Messages, comme MessagingStore de l'app (Data/MessagingStore.swift) : la boîte de réception vient
 // des lignes de my_conversations déjà lues pour la pastille (lib/badges.ts), complétées par les membres des groupes,
-// les profils publics et les communautés ; la conversation ouverte garde ses 200 derniers messages. Le temps réel
-// relit tout (refreshFromServer), puis les offres ; la conversation ouverte est marquée lue dès qu'elle a des non-lus.
+// les profils publics et les communautés ; la conversation ouverte lit ses 200 derniers messages, puis 200 de plus à
+// chaque fois que l'on remonte en haut (n° 19). Le temps réel relit tout (refreshFromServer), puis les offres ; la
+// conversation ouverte est marquée lue dès qu'elle a des non-lus.
 
 export type InboxState =
   | { status: 'loading' }
@@ -97,24 +98,72 @@ export type ThreadState = {
   conversationId: string | null;
   status: 'idle' | 'loading' | 'ready' | 'error';
   messages: Message[];
+  /** Tout l'historique est lu (la dernière page lue était incomplète) : rien de plus ancien à chercher (n° 19). */
+  complete: boolean;
 };
 
-export const threadStore = createStore<ThreadState>({ conversationId: null, status: 'idle', messages: [] });
+export const threadStore = createStore<ThreadState>({ conversationId: null, status: 'idle', messages: [], complete: false });
 
 let threadToken = 0;
+let loadingOlder = false;
 
+/**
+ * Les 200 derniers messages (loadMessages). Une relecture garde sous eux les pages plus anciennes déjà lues, sans
+ * doublon (n° 19) ; une page incomplète veut dire que tout l'historique est là.
+ */
 async function loadThread(conversationId: string, quiet: boolean) {
   const token = ++threadToken;
-  if (!quiet) threadStore.set({ conversationId, status: 'loading', messages: [] });
+  if (!quiet) threadStore.set({ conversationId, status: 'loading', messages: [], complete: false });
   try {
-    const messages = await fetchMessages(conversationId, currentUserId());
+    const latest = await fetchMessages(conversationId, currentUserId());
     if (token !== threadToken) return;
-    threadStore.set({ conversationId, status: 'ready', messages });
+    const current = threadStore.get();
+    let messages = latest;
+    let complete = latest.length < MESSAGE_PAGE;
+    if (!complete && sameId(current.conversationId, conversationId) && current.status === 'ready') {
+      const ids = new Set(latest.map((message) => message.id.toLowerCase()));
+      const start = latest[0]?.createdAt.getTime() ?? -Infinity;
+      const older = current.messages.filter((message) => message.createdAt.getTime() < start && !ids.has(message.id.toLowerCase()));
+      messages = [...older, ...latest];
+      complete = older.length > 0 && current.complete;
+    }
+    threadStore.set({ conversationId, status: 'ready', messages, complete });
   } catch {
     if (token !== threadToken) return;
     const current = threadStore.get();
     // Une relecture qui échoue garde les messages déjà affichés (refreshFromServer, `try?`).
-    if (!quiet || current.status !== 'ready') threadStore.set({ conversationId, status: 'error', messages: [] });
+    if (!quiet || current.status !== 'ready') threadStore.set({ conversationId, status: 'error', messages: [], complete: false });
+  }
+}
+
+/**
+ * Haut de la conversation atteint (loadOlderMessages, n° 19) : les 200 messages d'avant le plus ancien affiché,
+ * ajoutés au-dessus sans doublon. Rien quand tout est lu ou qu'une page est déjà demandée ; un échec est ignoré (on
+ * réessaiera en remontant). Rend `true` si des messages ont été ajoutés.
+ */
+export async function loadOlderMessages(conversationId: string): Promise<boolean> {
+  const current = threadStore.get();
+  const oldest = current.messages[0];
+  if (!oldest || loadingOlder || current.complete || current.status !== 'ready' || !sameId(current.conversationId, conversationId)) return false;
+  loadingOlder = true;
+  try {
+    const page = await fetchMessages(conversationId, currentUserId(), oldest.createdAt);
+    const latest = threadStore.get();
+    // Conversation fermée, rouverte ou changée entre-temps : la page ne va plus avec ce qui est affiché.
+    if (latest.status !== 'ready' || !sameId(latest.conversationId, conversationId) || !sameId(latest.messages[0]?.id, oldest.id)) return false;
+    const known = new Set(latest.messages.map((message) => message.id.toLowerCase()));
+    const added = page.filter((message) => !known.has(message.id.toLowerCase()));
+    const complete = latest.complete || page.length < MESSAGE_PAGE;
+    if (!added.length) {
+      if (complete !== latest.complete) threadStore.set({ ...latest, complete });
+      return false;
+    }
+    threadStore.set({ ...latest, messages: [...added, ...latest.messages], complete });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    loadingOlder = false;
   }
 }
 
@@ -124,7 +173,7 @@ export function openConversation(conversationId: string | null) {
   if (sameId(current.conversationId, conversationId) && current.status !== 'error') return;
   if (!conversationId) {
     threadToken += 1;
-    threadStore.set({ conversationId: null, status: 'idle', messages: [] });
+    threadStore.set({ conversationId: null, status: 'idle', messages: [], complete: false });
     return;
   }
   void loadThread(conversationId, false);
@@ -167,18 +216,30 @@ function markOpenConversationRead() {
 
 // MARK: - Envoi (MessagingStore.send)
 
+/** Identifiants des envois ratés, repris au renvoi du même contenu dans la même conversation (n° 99). */
+const retryClientIds = new RetryClientIds();
+
 /**
  * Envoie un contenu, comme l'app : insert dans messages (avec le message cité d'une réponse, ou la marque d'un
  * transfert), puis le message rejoint la conversation ouverte, qui remonte en tête de liste et sort des archives (sur
- * place ; le serveur garde son réglage). Lève l'erreur du serveur.
+ * place ; le serveur garde son réglage). Un renvoi après un échec garde l'identifiant de l'envoi raté : si le message
+ * était arrivé malgré tout, le serveur le reconnaît et il n'est pas enregistré deux fois (n° 99). Lève l'erreur du
+ * serveur.
  */
 async function sendContent(conversationId: string, content: Record<string, unknown>,
   options: { replyToId?: string | null; forwarded?: boolean } = {}): Promise<Message> {
   const me = currentUserId();
   if (!me) throw new Error('Votre session a expiré. Reconnectez-vous.');
-  const clientId = crypto.randomUUID();
+  const clientId = retryClientIds.id(conversationId, content);
   const preview = contentPreview(decodeContent(content));
-  const message = await insertMessage(messageInsert(conversationId, clientId, content, preview, options), me);
+  let message: Message;
+  try {
+    message = await insertMessage(messageInsert(conversationId, clientId, content, preview, options), me);
+  } catch (error) {
+    retryClientIds.failed(clientId, conversationId, content);
+    throw error;
+  }
+  retryClientIds.succeeded(conversationId, content);
   appendMessage(message);
   patchConversationRow(conversationId, {
     last_message_id: message.id,
@@ -225,27 +286,35 @@ export async function sendAttachments(conversationId: string, items: Attachment[
   }
 }
 
+/** Résultat d'un transfert : conversations où il est parti, celles où il n'est pas parti, refus du serveur à montrer. */
+export type ForwardOutcome = { sent: number; failed: string[]; refusal: string | null };
+
 /**
- * Transfère un message vers 5 conversations au plus (MessagingStore.forward) : le même contenu, marqué « transféré »,
- * avec ses fichiers recopiés dans chaque conversation. Rend le nombre de conversations où il est parti et le premier
- * refus du serveur.
+ * Transfère un message vers 5 conversations au plus (MessagingStore.forward, une conversation après l'autre comme
+ * l'écran de l'app, n° 211) : le même contenu, marqué « transféré », avec ses fichiers recopiés dans chaque
+ * conversation. Rend le nombre de conversations où il est parti, celles où il n'est pas parti, et le refus du serveur
+ * de la dernière qui a échoué (sendRefusal).
  */
-export async function forwardMessage(message: Message, targets: string[]): Promise<{ sent: number; refusal: string | null }> {
-  if (!canForward(message.content)) return { sent: 0, refusal: null };
+export async function forwardMessage(message: Message, targets: string[]): Promise<ForwardOutcome> {
+  const chosen = targets.slice(0, MAX_FORWARD_TARGETS);
+  if (!canForward(message.content)) return { sent: 0, failed: chosen, refusal: null };
   let sent = 0;
+  const failed: string[] = [];
   let refusal: string | null = null;
-  for (const target of targets.slice(0, MAX_FORWARD_TARGETS)) {
+  for (const target of chosen) {
     try {
       const content = message.content.kind === 'attachments'
         ? attachmentsContent(await copyAttachments(message.content.items, target), message.content.caption)
         : message.raw as Record<string, unknown>;
       await sendContent(target, content, { forwarded: true });
       sent += 1;
+      refusal = null;
     } catch (error) {
-      refusal ??= refusalOf(error);
+      failed.push(target);
+      refusal = refusalOf(error);
     }
   }
-  return { sent, refusal };
+  return { sent, failed, refusal };
 }
 
 /** Aperçu écrit avec un message de pièces jointes (colonne preview), pour les tests. */
@@ -325,24 +394,26 @@ export async function loadQuotedOriginal(id: string, messages: Message[]) {
 
 // MARK: - Réglages (conversation_preferences), blocage
 
-const iso = (date: Date | null) => (date ? date.toISOString() : null);
-
-/** Archive ou désarchive : sur place, puis enregistré (setArchived, `try?`). */
-export async function setArchived(conversationId: string, isArchived: boolean) {
+/**
+ * Archive ou désarchive (setArchived, n° 210) : sur place, puis enregistré ; refusé ou sans réponse, l'ancienne valeur
+ * revient et `false` est rendu (l'écran dit « La modification n'a pas pu être enregistrée. »).
+ */
+export async function setArchived(conversationId: string, isArchived: boolean): Promise<boolean> {
+  const before = conversationRowsStore.get().rows?.find((row) => sameId(String(row.conversation_id), conversationId));
+  const previous = before ? (before.is_archived ?? false) : !isArchived;
   patchConversationRow(conversationId, { is_archived: isArchived });
-  await savePreferences(conversationId, (current) => ({ ...current, isArchived })).catch(() => undefined);
-}
-
-/** Sourdine « toujours » ou rien (setMuted, `try?`). */
-export async function setMuted(conversationId: string, muted: boolean) {
-  const mutedUntil = muted ? iso(DISTANT_FUTURE) : null;
-  patchConversationRow(conversationId, { muted_until: mutedUntil });
-  await savePreferences(conversationId, (current) => ({ ...current, mutedUntil })).catch(() => undefined);
+  try {
+    await savePreferences(conversationId, (current) => ({ ...current, isArchived }));
+    return true;
+  } catch {
+    patchConversationRow(conversationId, { is_archived: previous });
+    return false;
+  }
 }
 
 /**
- * Change un réglage puis relit la conversation (updateSettings) : favori ou durée de sourdine. Lève l'erreur, que
- * l'écran montre ou non selon l'app.
+ * Change un réglage puis relit la conversation (updateSettings) : favori ou sourdine (mutedUntil, aussi pour la
+ * sourdine rapide). Rien ne change avant la réponse du serveur ; lève l'erreur, que l'écran montre (n° 210).
  */
 export async function updateSettings(conversationId: string, change: (current: Preferences) => Preferences) {
   let saved: Preferences | null = null;

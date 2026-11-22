@@ -84,7 +84,7 @@ function useCurrentSection(): [SectionId, (id: SectionId) => void] {
   return [current, choose];
 }
 
-type Dialog = 'logout' | 'type' | 'review' | null;
+type Dialog = 'logout' | 'type' | null;
 
 export function DesktopSpace({ account }: { account: Account }) {
   const listings = useStore(myListingsStore);
@@ -212,7 +212,6 @@ export function DesktopSpace({ account }: { account: Account }) {
             { icon: 'gear', title: 'Préférences', onClick: iphone('Préférences') },
             { icon: 'circleHelp', title: 'Aide et assistance', href: PATHS.help },
             { icon: 'info', title: 'Informations légales', href: accountPath('legal') },
-            { icon: 'star', title: 'Donner mon avis', onClick: () => setDialog('review') },
           ]} />
         </section>
       </div>
@@ -221,7 +220,7 @@ export function DesktopSpace({ account }: { account: Account }) {
         open={dialog === 'logout'}
         onClose={() => setDialog(null)}
         title="Se déconnecter ?"
-        message="Vous pourrez vous reconnecter avec votre adresse e-mail et votre mot de passe."
+        message="Vous pourrez vous reconnecter à tout moment."
         actions={[
           { label: 'Se déconnecter', onClick: () => { setDialog(null); void signOut(); }, tone: 'danger' },
           { label: 'Annuler', onClick: () => setDialog(null) },
@@ -237,13 +236,6 @@ export function DesktopSpace({ account }: { account: Account }) {
           { label: 'Passer en professionnel', onClick: () => (account.profile.professional_profile_id ? void switchType() : window.location.assign(AGENCY_FORM_PATH)), tone: 'primary' },
           { label: 'Annuler', onClick: () => setDialog(null) },
         ]}
-      />
-      <ChoiceDialog
-        open={dialog === 'review'}
-        onClose={() => setDialog(null)}
-        title="Donner mon avis"
-        message="Vous pourrez noter NIDALO sur l'App Store dès sa sortie. Merci de votre soutien !"
-        actions={[{ label: 'OK', onClick: () => setDialog(null), tone: 'primary' }]}
       />
       <IphoneOnlyDialog title={iphoneOnly} onClose={() => setIphoneOnly(null)} />
     </div>

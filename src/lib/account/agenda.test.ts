@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-  agendaErrorMessage, agendaSummary, countIn, DEFAULT_REMINDERS, defaultVisitStart, directionsUrl, groupKind, groupsIn, groupTitle,
-  isDuplicate, itemsIn, newVisitRow, PERIOD_TITLES, periodGroupsIn, periodOf, reminderLabel, remindersSummary, requestEntries,
-  upcomingVisitForListing, visitAddressFor, visitCardTitle, visitContactFor, visitDateBlock, visitFromRow, visitPersonLine, visitSlotCount,
-  visitTimeRange, type AgendaItem, type AgendaRequestRow, type NewVisit,
+  agendaErrorMessage, agendaSummary, CONVERSATION_NOT_FOUND, countIn, DEFAULT_REMINDERS, defaultVisitStart, directionsUrl,
+  existingConversationId, groupKind, groupsIn, groupTitle, isDuplicate, isVideoVisit, itemsIn, newVisitRow, noAddressNotice, noSellerNotice,
+  PERIOD_TITLES, periodGroupsIn, periodOf, receivedRequest, reminderLabel, remindersSummary, requestEntries, sessionBookedLabel,
+  sessionFromRow, sessionTitle, upcomingSessions, upcomingSessionsOf, upcomingVisitForListing, visitAddressFor, visitCardTitle,
+  visitContactFor, visitDateBlock, visitFromRow, visitPersonLine, visitSlotCount, visitTimeRange, type AgendaInboxRow, type AgendaItem,
+  type AgendaRequestRow, type NewVisit, type VisitListing, type VisitSessionRow,
 } from './agenda';
 
 const ME = 'a0000000-0000-4000-8000-0000000000c1';
@@ -203,6 +205,97 @@ describe('Mon agenda : demandes de visite (AgendaRequests)', () => {
   it('carte « Mon agenda » : prochaine visite d’une demande « en attente »', () => {
     const summary = agendaSummary(requestEntries([base], ME, [], NOW), NOW);
     expect(summary.nextIsPending).toBe(true);
+  });
+});
+
+describe('Mon agenda : itinéraire, message et propriétaire (n° 178, 11, 74)', () => {
+  const rental: VisitListing = { listingId: 'L2', title: 'T2 meublé', price: 850, transaction: 'rent', city: 'Annecy', coverImageURL: null };
+  const sale: VisitListing = { ...rental, listingId: 'L3', transaction: 'sale', price: 320000 };
+  const request: AgendaRequestRow = {
+    id: 'r9', listing_id: 'L2', listing_snapshot: { listingId: 'L2', title: 'T2 meublé', price: 850, transaction: 'rent', city: 'Annecy' },
+    requester: { userId: OTHER, name: 'Claire M.', kind: 'individual' }, recipient: { userId: ME, name: 'Moi', kind: 'individual' },
+    slots: [{ id: 's1', start: at(3, 11).toISOString(), durationMinutes: 30 }], mode: 'video', status: 'pending', accepted_slot: null,
+    proposed_slots: [], created_at: at(-1, 9).toISOString(), meeting_place: null,
+  };
+
+  it('visite en visio : pas d’itinéraire (« En visio », espaces compris)', () => {
+    expect(isVideoVisit({ address: 'En visio' })).toBe(true);
+    expect(isVideoVisit({ address: '  En visio ' })).toBe(true);
+    expect(isVideoVisit({ address: '3 rue Royale, Annecy' })).toBe(false);
+    expect(isVideoVisit({ address: null })).toBe(false);
+    expect(isVideoVisit(requestEntries([request], ME, [], NOW)[0])).toBe(true);
+  });
+
+  it('location : « le propriétaire » ; vente ou sans bien : « le vendeur »', () => {
+    expect(noAddressNotice({ listing: rental })).toBe('Adresse non renseignée : l\'itinéraire sera disponible quand le propriétaire l\'aura communiquée.');
+    expect(noAddressNotice({ listing: sale })).toBe('Adresse non renseignée : l\'itinéraire sera disponible quand le vendeur l\'aura communiquée.');
+    expect(noSellerNotice({ listing: rental })).toBe('Impossible de joindre le propriétaire de ce bien pour l\'instant.');
+    expect(noSellerNotice({ listing: null })).toBe('Impossible de joindre le vendeur de ce bien pour l\'instant.');
+    expect(CONVERSATION_NOT_FOUND).toBe('Aucune conversation avec cette personne n\'a été trouvée pour cette annonce.');
+  });
+
+  it('demande reçue : seulement pour son destinataire (ou l’agent), pas pour le demandeur', () => {
+    const [entry] = requestEntries([request], ME, [], NOW);
+    expect(receivedRequest(entry, [request], ME)?.id).toBe('r9');
+    expect(receivedRequest(entry, [request], OTHER)).toBeNull();
+    expect(receivedRequest({ requestId: 'R9' }, [request], ME)?.id).toBe('r9');
+    expect(receivedRequest({ requestId: null }, [request], ME)).toBeNull();
+    expect(receivedRequest(entry, [request], null)).toBeNull();
+    const agent = { ...request, recipient: { userId: 'c0000000-0000-4000-8000-000000000003', name: 'Agence', kind: 'agency' as const }, agent_user_id: ME };
+    expect(receivedRequest(entry, [agent], ME)?.id).toBe('r9');
+  });
+
+  it('conversation déjà ouverte sur cette annonce avec cette personne, la plus récente (Conversation.existing)', () => {
+    const row = (id: string, change: Partial<AgendaInboxRow>): AgendaInboxRow => ({
+      conversation_id: id, kind: 'listing', listing_id: 'L2', listing_snapshot: { listingId: 'L2' }, buyer_id: OTHER, seller_id: ME,
+      created_at: '2026-10-01T09:00:00Z', last_message_at: null, ...change,
+    });
+    const old = row('c-ancienne', {});
+    const recent = row('c-recente', { last_message_at: '2026-11-05T10:00:00Z' });
+    const otherPerson = row('c-autre', { buyer_id: 'c0000000-0000-4000-8000-000000000004', last_message_at: '2026-11-06T10:00:00Z' });
+    const otherListing = row('c-autre-bien', { listing_id: 'L3', listing_snapshot: { listingId: 'L3' }, last_message_at: '2026-11-06T10:00:00Z' });
+    const group = row('c-groupe', { kind: 'group', last_message_at: '2026-11-06T11:00:00Z' });
+    expect(existingConversationId([otherPerson, old, otherListing, recent, group], 'l2', OTHER.toUpperCase())).toBe('c-recente');
+    expect(existingConversationId([otherPerson, otherListing, group], 'L2', OTHER)).toBeNull();
+    // Le demandeur peut aussi être le vendeur de la conversation (agence qui demande).
+    expect(existingConversationId([row('c-vendeur', { buyer_id: ME, seller_id: OTHER })], 'L2', OTHER)).toBe('c-vendeur');
+  });
+});
+
+describe('Mon agenda : créneaux ouverts (VisitSession, n° 13)', () => {
+  const row = (change: Partial<VisitSessionRow> = {}): VisitSessionRow => ({
+    id: 'v1', listing_id: 'L1', listing_snapshot: { listingId: 'L1', title: 'Maison 5 pièces', price: 450000, transaction: 'sale', city: 'Gex' },
+    starts_at: '2026-11-12T09:00:00+00:00', ends_at: '2026-11-12T11:00:00+00:00', status: 'open', booked_count: 0, total_places: 8, ...change,
+  });
+
+  it('ligne de my_visit_sessions : bien de l’instantané, dates (aussi au format brut), séance illisible écartée', () => {
+    const session = sessionFromRow(row({ starts_at: '2026-11-12 09:00:00+00', ends_at: '2026-11-12 11:00:00.123456+00' }))!;
+    expect(session.start.toISOString()).toBe('2026-11-12T09:00:00.000Z');
+    expect(session.end.toISOString()).toBe('2026-11-12T11:00:00.123Z');
+    expect(session.listing).toEqual({ listingId: 'L1', title: 'Maison 5 pièces', price: 450000, transaction: 'sale', city: 'Gex', coverImageURL: null });
+    expect(sessionFromRow(row({ listing_snapshot: null }))!.listing.title).toBe('Annonce');
+    expect(sessionFromRow(row({ booked_count: null, total_places: undefined }))).toMatchObject({ bookedCount: 0, totalPlaces: 0 });
+    expect(sessionFromRow(row({ starts_at: 'pas une date' }))).toBeNull();
+  });
+
+  it('à venir : ouvertes et pas finies, la plus proche d’abord ; seulement celles du compte', () => {
+    const later = sessionFromRow(row({ id: 'v2', starts_at: '2026-11-20T09:00:00Z', ends_at: '2026-11-20T10:00:00Z' }))!;
+    const soon = sessionFromRow(row({ id: 'v3', starts_at: '2026-11-07T07:00:00Z', ends_at: '2026-11-07T23:00:00Z' }))!;
+    const finished = sessionFromRow(row({ id: 'v4', starts_at: '2026-11-01T09:00:00Z', ends_at: '2026-11-01T10:00:00Z' }))!;
+    const cancelled = sessionFromRow(row({ id: 'v5', status: 'cancelled' }))!;
+    const now = new Date('2026-11-07T08:00:00Z');
+    expect(upcomingSessions([later, finished, cancelled, soon], now).map((session) => session.id)).toEqual(['v3', 'v2']);
+    expect(upcomingSessionsOf({ owner: ME.toUpperCase(), sessions: [later] }, ME, now).map((session) => session.id)).toEqual(['v2']);
+    expect(upcomingSessionsOf({ owner: OTHER, sessions: [later] }, ME, now)).toEqual([]);
+    expect(upcomingSessionsOf({ owner: ME, sessions: [later] }, null, now)).toEqual([]);
+  });
+
+  it('textes de la carte : « Jeudi 12 novembre · 10 h 00 – 12 h 00 », « 0 inscrit sur 8 », « 1 inscrit », « 5 inscrits »', () => {
+    expect(sessionTitle({ start: new Date(2026, 10, 12, 10, 0), end: new Date(2026, 10, 12, 12, 0) })).toBe('Jeudi 12 novembre · 10 h 00 – 12 h 00');
+    expect(sessionTitle({ start: new Date(2026, 10, 9, 9, 30), end: new Date(2026, 10, 9, 10, 15) })).toBe('Lundi 9 novembre · 9 h 30 – 10 h 15');
+    expect(sessionBookedLabel({ bookedCount: 0, totalPlaces: 8 })).toBe('0 inscrit sur 8');
+    expect(sessionBookedLabel({ bookedCount: 1, totalPlaces: 4 })).toBe('1 inscrit sur 4');
+    expect(sessionBookedLabel({ bookedCount: 5, totalPlaces: 8 })).toBe('5 inscrits sur 8');
   });
 });
 

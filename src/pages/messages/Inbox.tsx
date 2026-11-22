@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { Icon } from '../../components/Icon';
+import { OfflineState } from '../../components/OfflineState';
 import { liveReload } from '../../lib/badges';
 import { formatPrice } from '../../lib/format';
 import type { OfferRow } from '../../lib/listing/offers';
@@ -144,14 +145,8 @@ function InboxList({ inbox, rows, filter, searching, offers, me, selectedId }: {
   selectedId: string | null;
 }) {
   if (inbox.status === 'loading') return <ListSkeleton />;
-  if (inbox.status === 'error') {
-    return (
-      <div className="dm-inbox-empty" role="alert">
-        <p>Impossible de charger vos messages. Réessayez dans un instant.</p>
-        <button type="button" className="dm-link-button" onClick={() => void liveReload()}>Réessayer</button>
-      </div>
-    );
-  }
+  // Conversations jamais lues : « Pas de connexion Internet » de l'app, et « Réessayer » les relit (n° 95).
+  if (inbox.status === 'error') return <OfflineState onRetry={() => void liveReload()} />;
   if (rows.length === 0) {
     const empty = searching
       ? { title: 'Aucune conversation trouvée', message: 'Essayez un autre nom ou un autre titre d\'annonce.' }
@@ -220,7 +215,10 @@ function ConversationRow({ row, offers, me, selected }: { row: Row; offers: Offe
         <span className="dm-row-bottom">
           <RowPreview conversation={conversation} request={request} offers={offers} me={me} unread={unread} />
           {unread ? (
-            <span className={`dm-unread${isMuted(conversation) ? ' is-muted' : ''}`} aria-label={`${conversation.unreadCount} non lus`}>
+            <span
+              className={`dm-unread${isMuted(conversation) ? ' is-muted' : ''}`}
+              aria-label={conversation.unreadCount > 1 ? `${conversation.unreadCount} messages non lus` : '1 message non lu'}
+            >
               {conversation.unreadCount}
             </span>
           ) : isMuted(conversation) && <span className="dm-row-muted" role="img" aria-label="En sourdine"><Icon name="bellOff" /></span>}

@@ -48,9 +48,11 @@ describe('messages vocaux et GIF', () => {
   });
 
   it('une sorte inconnue ne donne jamais « 0 photos »', () => {
+    // Gardée comme pièce « non prise en charge » (lecture tolérante de l'app, n° 30).
     const content = decodeContent({ attachments: { _0: [{ ...gif, kind: 'sticker' }] } });
-    expect(content).toEqual({ kind: 'attachments', items: [], caption: null });
+    expect(content).toMatchObject({ kind: 'attachments', items: [{ id: gif.id, kind: 'unsupported', fileName: 'Hello Hi' }], caption: null });
     expect(contentPreview(content)).toBe('📎 Pièce jointe');
+    expect(contentPreview(decodeContent({ attachments: { _0: [] } }))).toBe('📎 Pièce jointe');
   });
 
   it('n\'affiche que des GIF en https chez KLIPY', () => {

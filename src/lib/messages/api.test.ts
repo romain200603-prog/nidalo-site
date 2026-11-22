@@ -35,7 +35,7 @@ vi.mock('../supabase', () => {
     from: (bucket: string) => ({
       upload: (...args: unknown[]) => {
         server.calls.push({ bucket, method: 'upload', args });
-        return Promise.resolve({ data: { path: args[0] }, error: null });
+        return Promise.resolve(server.results[`storage/${bucket}`] ?? { data: { path: args[0] }, error: null });
       },
       createSignedUrl: (...args: unknown[]) => {
         server.calls.push({ bucket, method: 'createSignedUrl', args });
@@ -49,7 +49,8 @@ vi.mock('../supabase', () => {
 import { answerOffer, sendCounterOffer } from '../listing/offers';
 import {
   blockUser, fetchConversationVisits, fetchInboxRows, fetchMessages, findAccountByPhone, insertMessage, markConversationRead, MESSAGE_COLUMNS,
-  messageInsert, PARTICIPANT_COLUMNS, reportConversation, savePreferences, setReaction, startDirectConversation, startPhoneConversation, unblockUser,
+  messageInsert, olderThan, PARTICIPANT_COLUMNS, reportConversation, savePreferences, setReaction, startDirectConversation, startPhoneConversation,
+  unblockUser,
 } from './api';
 import { textContent } from './content';
 import { signedUrl, uploadPending } from './files';
@@ -80,6 +81,17 @@ describe('Lectures (inbox, messages, agenda)', () => {
     ]);
     // Les colonnes de l'app, avec la réponse et le transfert (reply_to_id, forwarded ; demande du 17/11).
     expect(MESSAGE_COLUMNS).toBe('id, conversation_id, sender_id, kind, client_id, content, created_at, expires_at, reply_to_id, forwarded, message_reactions(user_id, emoji, created_at)');
+  });
+
+  it('page plus ancienne : 200 messages d’avant le plus ancien affiché, borne « +1 s » sans fractions (n° 19)', async () => {
+    expect(olderThan(new Date('2026-11-06T09:45:00.250Z'))).toBe('2026-11-06T09:45:01Z');
+    expect(olderThan(new Date('2026-12-31T23:59:59.999Z'))).toBe('2027-01-01T00:00:00Z');
+    server.results.messages = { data: [], error: null };
+    await fetchMessages(CONVERSATION, ME, new Date('2026-11-06T09:45:00.250Z'));
+    expect(server.calls[0]).toEqual({
+      table: 'messages',
+      chain: [['select', MESSAGE_COLUMNS], ['eq', 'conversation_id', UPPER], ['lt', 'created_at', '2026-11-06T09:45:01Z'], ['order', 'created_at', { ascending: false }], ['limit', 200]],
+    });
   });
 
   it('agenda : les colonnes de l’app', async () => {
@@ -144,6 +156,11 @@ describe('Écritures', () => {
     ]);
   });
 
+  it('déblocage raté : l’erreur remonte, le compte reste bloqué (n° 28)', async () => {
+    server.results.user_blocks = { data: null, error: { message: 'hors ligne' } };
+    await expect(unblockUser(OTHER, ME)).rejects.toMatchObject({ message: 'hors ligne' });
+  });
+
   it('nouvelle discussion : par numéro, ou avec une agence', async () => {
     server.results['rpc/start_phone_conversation'] = { data: CONVERSATION, error: null };
     server.results['rpc/start_direct_conversation'] = { data: CONVERSATION, error: null };
@@ -198,6 +215,18 @@ describe('Fichiers (bucket message-attachments)', () => {
       id: 'A2', kind: 'document', fileName: 'Plan.pdf', file, byteCount: file.size, category: null, previewUrl: null, durationSeconds: null, error: null,
     }, UPPER)).rejects.toThrow('Le contenu de ce fichier ne correspond pas à son format : il n\'a pas été envoyé.');
     expect(server.calls).toEqual([]);
+  });
+
+  it('vidéo refusée pour sa taille par le serveur (413) : le texte de l’app, pas celui de la connexion (n° 94)', async () => {
+    server.results['storage/message-attachments'] = { data: null, error: { statusCode: '413', error: 'Payload too large', message: 'The object exceeded the maximum allowed size' } };
+    const file = new File(['%PDF-1.4 essai'], 'Compromis.pdf');
+    await expect(uploadPending({
+      id: 'A3', kind: 'document', fileName: 'Compromis.pdf', file, byteCount: file.size, category: null, previewUrl: null, durationSeconds: null, error: null,
+    }, UPPER)).rejects.toThrow('Fichier trop volumineux : 50 Mo au maximum.');
+    server.results['storage/message-attachments'] = { data: null, error: { statusCode: '500', message: 'hors ligne' } };
+    await expect(uploadPending({
+      id: 'A4', kind: 'document', fileName: 'Compromis.pdf', file, byteCount: file.size, category: null, previewUrl: null, durationSeconds: null, error: null,
+    }, UPPER)).rejects.toThrow('La pièce jointe n\'a pas pu être envoyée. Vérifiez votre connexion et réessayez.');
   });
 
   it('lecture par URL signée de 10 minutes, demandée une fois par fichier', async () => {

@@ -34,10 +34,13 @@ describe('pastilles : mêmes nombres que l’app', () => {
     expect(unreadMessagesTotal([])).toBe(0);
   });
 
-  it('la cloche passe à « 9+ » au-delà de 9 ; Messages affiche le nombre', () => {
-    expect(badgeText(9, true)).toBe('9');
-    expect(badgeText(10, true)).toBe('9+');
-    expect(badgeText(12, false)).toBe('12');
+  it('la cloche passe à « 9+ » au-delà de 9 ; Messages à « 99+ » au-delà de 99 (n° 44)', () => {
+    expect(badgeText(9, 9)).toBe('9');
+    expect(badgeText(10, 9)).toBe('9+');
+    expect(badgeText(12, 99)).toBe('12');
+    expect(badgeText(99, 99)).toBe('99');
+    expect(badgeText(100, 99)).toBe('99+');
+    expect(badgeText(1234, 99)).toBe('99+');
   });
 
   it('libellés de l’app pour les lecteurs d’écran', () => {

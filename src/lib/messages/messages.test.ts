@@ -4,7 +4,8 @@ import { allowedActions, counterOfferParams, offerStatusLabel, type OfferRow } f
 import { conversationVisit, messageFrom, messageInsert, otherReadAt, phoneAccount, preferencesOf, preferencesWrite, serverMessage, upcomingVisits, type Message } from './api';
 import {
   attachmentIssue, attachmentsContent, attachmentsPreview, contentMatches, contentPreview, decodeContent, documentIcon, documentLine,
-  fileExtension, photoExtension, storageContentType, textContent, type Attachment,
+  fileExtension, isReadableContent, messageContent, photoExtension, SERVER_MAX_BYTES, serverTooLargeText, storageContentType, textContent,
+  UNSUPPORTED_MESSAGE, type Attachment,
 } from './content';
 import { jpegFileName, reducedSize, storagePath, videoWithoutMetadata } from './files';
 import {
@@ -12,8 +13,8 @@ import {
   normalizedPhoneNumber, sizeLabel, telHref, typingPhoneNumber,
 } from './format';
 import {
-  contactMatches, contactsFrom, conversationFrom, counterpartInitials, filterIncludes, groupSummary, matchesListSearch, rowPreview,
-  sectionLetter, unreadConversationCount, type ProfileRow, type ServerInboxRow,
+  accountContactKey, contactMatches, contactsFrom, conversationContactKey, conversationFrom, counterpartInitials, filterIncludes, groupSummary,
+  isDeletedAccount, matchesListSearch, membersLabel, rowPreview, sectionLetter, unreadConversationCount, type ProfileRow, type ServerInboxRow,
 } from './inbox';
 import {
   bannerLocation, callState, canOpenDetails, linkTitle, mediaPreview, mutedUntil, muteNotice, needsFirstName, sharedItems,
@@ -59,6 +60,11 @@ describe('Heures, tailles et numéros (MessageTime, AttachmentPolicy, PhoneNumbe
     expect(listLabel(new Date(2026, 10, 5, 23, 0), NOW)).toBe('Hier');
     expect(listLabel(new Date(2026, 10, 3, 8, 0), NOW)).toBe('Mar.');
     expect(listLabel(new Date(2026, 9, 27, 8, 0), NOW)).toBe('27 octobre');
+    // Une autre année : écrite (n° 220) ; dans la semaine, le jour reste, même d'une année à l'autre.
+    expect(listLabel(new Date(2025, 5, 12, 8, 0), NOW)).toBe('12 juin 2025');
+    expect(listLabel(new Date(2025, 10, 6, 8, 0), NOW)).toBe('6 novembre 2025');
+    expect(listLabel(new Date(2026, 11, 30, 8, 0), new Date(2027, 0, 2, 12, 0))).toBe('Mer.');
+    expect(listLabel(new Date(2026, 11, 20, 8, 0), new Date(2027, 0, 2, 12, 0))).toBe('20 décembre 2026');
   });
 
   it('tailles en Ko, Mo, Go (1 000 octets par Ko) et durées', () => {
@@ -89,9 +95,17 @@ describe('Heures, tailles et numéros (MessageTime, AttachmentPolicy, PhoneNumbe
     expect(normalizedPhoneNumber('0033639981234')).toBe('0639981234');
     expect(normalizedPhoneNumber('06 39 98')).toBeNull();
     expect(normalizedPhoneNumber('00 39 98 12 34')).toBeNull();
+    // « +33 (0)6… » et « 0033 (0)6… » : le « 0 » entre parenthèses est retiré (n° 239).
+    expect(normalizedPhoneNumber('+33 (0)6 39 98 12 34')).toBe('0639981234');
+    expect(normalizedPhoneNumber('0033 (0)6 39 98 12 34')).toBe('0639981234');
+    expect(normalizedPhoneNumber('+33 (0)0 39 98 12 34')).toBeNull();
+    expect(normalizedPhoneNumber('00 06 39 98 12 34')).toBeNull();
     expect(formattedPhoneNumber('0639981234')).toBe('06 39 98 12 34');
     expect(typingPhoneNumber('063998')).toBe('06 39 98');
     expect(typingPhoneNumber('+33639')).toBe('+33 6 39');
+    expect(typingPhoneNumber('+33 0639')).toBe('+33 6 39');
+    expect(typingPhoneNumber('+33 (0)6 39 98 12 34')).toBe('+33 6 39 98 12 34');
+    expect(typingPhoneNumber('+330')).toBe('+330');
     expect(telHref('06 39 98 12 34')).toBe('tel:0639981234');
   });
 
@@ -112,12 +126,37 @@ describe('Contenu des messages (MessageContent, MessageAttachment)', () => {
     expect(decodeContent({ system: { _0: 'Claire M. a créé le groupe' } })).toEqual({ kind: 'system', text: 'Claire M. a créé le groupe' });
     expect(decodeContent({ offer: { offerId: 'F1' } })).toEqual({ kind: 'offer', offerId: 'F1' });
     expect(decodeContent({ offer: {} })).toEqual({ kind: 'unknown' });
+    // Pièce jointe d'une sorte inconnue (version plus récente) : gardée, « non prise en charge » (n° 30).
     expect(decodeContent({ attachments: { _0: [photo, { id: 'X', kind: 'inconnu', fileName: 'x' }], caption: 'Voici' } }))
-      .toEqual({ kind: 'attachments', items: [photo], caption: 'Voici' });
+      .toEqual({ kind: 'attachments', items: [photo, { id: 'X', kind: 'unsupported', fileName: 'x', byteCount: 0 }], caption: 'Voici' });
     expect(decodeContent({ visitConfirmed: { slot: '2026-11-12T17:00:00Z', address: '12 rue de l\'Exemple' } }))
       .toEqual({ kind: 'visitConfirmed', slot: '2026-11-12T17:00:00Z', address: '12 rue de l\'Exemple' });
     expect(decodeContent({ nouveau: {} })).toEqual({ kind: 'unknown' });
     expect(decodeContent(null)).toEqual({ kind: 'unknown' });
+  });
+
+  it('contenu illisible : « Message non pris en charge », les autres messages restent (TolerantMessageContent, n° 30)', () => {
+    const unsupported = { kind: 'system', text: UNSUPPORTED_MESSAGE };
+    expect(UNSUPPORTED_MESSAGE).toBe('Message non pris en charge');
+    expect(messageContent({ text: { _0: 'Bonjour' } })).toEqual({ kind: 'text', text: 'Bonjour' });
+    expect(messageContent({ text: { _0: 42 } })).toEqual(unsupported);
+    expect(messageContent({ text: 'Bonjour' })).toEqual(unsupported);
+    expect(messageContent({ nouveau: { _0: 'x' } })).toEqual(unsupported);
+    expect(messageContent({ text: { _0: 'a' }, system: { _0: 'b' } })).toEqual(unsupported);
+    expect(messageContent(null)).toEqual(unsupported);
+    expect(messageContent('Bonjour')).toEqual(unsupported);
+    expect(messageContent({ offer: { offerId: 'F1' } })).toEqual(unsupported);
+    expect(messageContent({ offer: { offerId: 'f1000000-0000-4000-8000-000000000001' } })).toEqual({ kind: 'offer', offerId: 'f1000000-0000-4000-8000-000000000001' });
+    expect(messageContent({ visitConfirmed: { slot: '2026-11-12T17:00:00Z' } })).toEqual(unsupported);
+    // Une clé que cette version ne connaît pas, à côté d'une sorte connue : lue.
+    expect(messageContent({ text: { _0: 'Salut' }, nouveau: true })).toEqual({ kind: 'text', text: 'Salut' });
+    // Pièce jointe sans identifiant, nom ni taille : lue quand même, vide.
+    const loose = messageContent({ attachments: { _0: [{ kind: 'photo', storagePath: 'c1/p.jpg' }] } });
+    expect(loose).toMatchObject({ kind: 'attachments', items: [{ kind: 'photo', fileName: '', byteCount: 0, storagePath: 'c1/p.jpg' }], caption: null });
+    expect(loose.kind === 'attachments' && loose.items[0].id.length > 0).toBe(true);
+    expect(isReadableContent({ attachments: { _0: ['texte'] } })).toBe(false);
+    expect(isReadableContent({ attachments: { _0: [], caption: 3 } })).toBe(false);
+    expect(attachmentsPreview([{ id: 'U', kind: 'unsupported', fileName: '', byteCount: 0 }], null)).toBe('📎 Pièce jointe');
   });
 
   it('écrit le texte et les pièces jointes comme l’encodage de Swift (légende omise sans texte)', () => {
@@ -149,16 +188,27 @@ describe('Contenu des messages (MessageContent, MessageAttachment)', () => {
   });
 
   it('règles d’envoi : formats, taille, contenu qui correspond à l’extension', () => {
-    expect(attachmentIssue('document', 'outil.exe', 100, sizeLabel)).toBe('Format non accepté (EXE). Envoyez une photo, une vidéo ou un document (PDF, Word, Excel…).');
-    expect(attachmentIssue('photo', 'Photo.jpg', 0, sizeLabel)).toBe('Ce fichier est vide.');
-    expect(attachmentIssue('photo', 'Photo.jpg', 30 * 1024 * 1024, sizeLabel)).toBe('Fichier trop volumineux : 26,2 Mo au maximum.');
-    expect(attachmentIssue('video', 'Vidéo.mp4', 1000, sizeLabel)).toBeNull();
+    expect(attachmentIssue('document', 'outil.exe', 100)).toBe('Format non accepté (EXE). Envoyez une photo, une vidéo ou un document (PDF, Word, Excel…).');
+    expect(attachmentIssue('photo', 'Photo.jpg', 0)).toBe('Ce fichier est vide.');
+    // Limite comptée comme elle est fixée, en Mo de 1 024 × 1 024 octets : « 25 Mo », pas « 26,2 Mo » (n° 244).
+    expect(attachmentIssue('photo', 'Photo.jpg', 30 * 1024 * 1024)).toBe('Fichier trop volumineux : 25 Mo au maximum.');
+    expect(attachmentIssue('document', 'Bail.pdf', 60 * 1024 * 1024)).toBe('Fichier trop volumineux : 50 Mo au maximum.');
+    expect(attachmentIssue('video', 'Vidéo.mp4', 1000)).toBeNull();
+    // Vidéo plus lourde que le dossier du serveur : le texte de l'app, pas celui de la connexion (n° 94).
+    expect(serverTooLargeText('video/mp4')).toBe('Vidéo trop volumineuse : 50 Mo au maximum après compression. Essayez une vidéo plus courte.');
+    expect(serverTooLargeText('application/pdf')).toBe('Fichier trop volumineux : 50 Mo au maximum.');
+    expect(SERVER_MAX_BYTES).toBe(52_428_800);
     const bytes = (text: string) => new TextEncoder().encode(text);
     expect(contentMatches('a.pdf', bytes('%PDF-1.4'))).toBe(true);
     expect(contentMatches('a.pdf', new Uint8Array([0x4d, 0x5a, 0, 0]))).toBe(false);
     expect(contentMatches('a.jpg', new Uint8Array([0xff, 0xd8, 0xff, 0xe0]))).toBe(true);
     expect(contentMatches('a.txt', bytes('Bonjour'))).toBe(true);
     expect(contentMatches('a.txt', new Uint8Array([0x42, 0x00]))).toBe(false);
+    // Texte : UTF-16 avec sa marque, UTF-8 coupé en fin d'extrait, Windows-1252 : acceptés (n° 141).
+    expect(contentMatches('a.txt', new Uint8Array([0xff, 0xfe, 0x42, 0x00]))).toBe(true);
+    expect(contentMatches('a.csv', new Uint8Array([0xfe, 0xff, 0x00, 0x42]))).toBe(true);
+    expect(contentMatches('a.txt', new Uint8Array([0x43, 0x61, 0x66, 0xc3]))).toBe(true);
+    expect(contentMatches('a.csv', new Uint8Array([0x43, 0x61, 0x66, 0xe9]))).toBe(true);
     expect(contentMatches('a.docx', new Uint8Array([0x50, 0x4b, 0x03, 0x04]))).toBe(true);
     expect(storageContentType('photo', 'png')).toBe('image/jpeg');
     expect(storageContentType('video', 'mov')).toBe('video/quicktime');
@@ -331,6 +381,16 @@ describe('Boîte de réception (conversation(from:), MessagesView)', () => {
     expect(item).toMatchObject({ isGroup: false, isSellerSide: false, otherUserId: AGENT, listing: { listingId: 'l1', price: 238000, transaction: 'sale' } });
     expect(conversation({ seller_id: ME.toUpperCase(), buyer_id: AGENT }).isSellerSide).toBe(true);
     expect(conversation({ other_user_id: null }).counterpart.name).toBe('Compte supprimé');
+    // Compte supprimé reconnu à son drapeau, pas à son nom : un compte nommé « Compte supprimé » reste un compte (n° 113).
+    expect(isDeletedAccount(conversation({ other_user_id: null }))).toBe(true);
+    expect(isDeletedAccount(conversation())).toBe(false);
+    const named = conversationFrom(row({ other_user_id: CAMILLE, seller_id: CAMILLE }), {
+      me: ME, participants: [], communities: [],
+      profiles: new Map([[CAMILLE, { ...PROFILES.get(CAMILLE)!, public_name: 'Compte supprimé' }]]),
+    });
+    expect(named.counterpart.name).toBe('Compte supprimé');
+    expect(isDeletedAccount(named)).toBe(false);
+    expect(canOpenDetails(named)).toBe(true);
     expect(conversation({ other_user_id: 'a0000000-0000-4000-8000-0000000000ff', listing_snapshot: null }).counterpart).toMatchObject({ name: 'Particulier', subtitle: 'Particulier' });
   });
 
@@ -339,6 +399,9 @@ describe('Boîte de réception (conversation(from:), MessagesView)', () => {
     const group = conversation({ conversation_id: 'g1', kind: 'group', group_name: 'Visite groupée', member_count: 3, other_user_id: null, listing_snapshot: null },
       [member(ME, 'owner'), member(CAMILLE, 'member'), member(AGENT, 'admin'), member('a0000000-0000-4000-8000-0000000000ff', 'member', '2026-11-02T00:00:00Z')]);
     expect(group.counterpart).toMatchObject({ name: 'Visite groupée', subtitle: '3 membres', kind: 'group' });
+    // Un seul membre : « 1 membre », au singulier (n° 112).
+    expect(conversation({ conversation_id: 'g2', kind: 'group', group_name: 'Seul', member_count: 1, other_user_id: null }).counterpart.subtitle).toBe('1 membre');
+    expect([0, 1, 2].map(membersLabel)).toEqual(['0 membre', '1 membre', '2 membres']);
     expect(group.members.map((item) => `${item.name}:${item.kind}:${item.role}`)).toEqual(['Vous:individual:owner', 'Camille R.:individual:member', 'Agence Démo Lyon:agency:admin']);
     expect(groupSummary(group.members)).toBe('Vous, Camille R., Agence Démo Lyon');
     expect(groupSummary([...group.members, ...group.members, ...group.members])).toBe('9 membres');
@@ -384,6 +447,25 @@ describe('Boîte de réception (conversation(from:), MessagesView)', () => {
     expect(contactMatches(contacts[1], 'lyon')).toBe(true);
     expect(contactMatches(contacts[1], 'ly')).toBe(false);
     expect(sectionLetter(contacts[0])).toBe('A');
+    // Particuliers : un contact par compte (n° 140). Deux homonymes restent deux contacts ; la même personne sur deux
+    // annonces, un seul ; « Déjà parmi vos contacts » compare le compte, pas le nom.
+    const OTHER = 'a0000000-0000-4000-8000-0000000000e4';
+    const twins = new Map(PROFILES);
+    twins.set(OTHER, { ...PROFILES.get(CAMILLE)!, user_id: OTHER });
+    const individual = (id: string, user: string) => conversationFrom(row({ conversation_id: id, other_user_id: user, seller_id: user }), { me: ME, profiles: twins, participants: [], communities: [] });
+    const camille = individual('c3', CAMILLE);
+    const again = individual('c4', CAMILLE.toUpperCase());
+    const namesake = individual('c5', OTHER);
+    expect(camille.counterpart.name).toBe(namesake.counterpart.name);
+    expect(contactsFrom([camille, again, namesake]).map((item) => `${item.counterpart.name}:${item.conversations.length}`)).toEqual(['Camille R.:2', 'Camille R.:1']);
+    expect(conversationContactKey(camille)).toBe(conversationContactKey(again));
+    expect(conversationContactKey(camille)).not.toBe(conversationContactKey(namesake));
+    expect(accountContactKey({ userId: CAMILLE.toUpperCase(), counterpart: camille.counterpart })).toBe(conversationContactKey(camille));
+    expect(accountContactKey({ userId: OTHER, counterpart: camille.counterpart })).not.toBe(conversationContactKey(camille));
+    // Agences : toujours par leur nom ; comptes supprimés aussi.
+    expect(conversationContactKey(lyon)).toBe(conversationContactKey(second));
+    expect(accountContactKey({ userId: 'a0000000-0000-4000-8000-0000000000e9', counterpart: lyon.counterpart })).toBe(conversationContactKey(lyon));
+    expect(conversationContactKey(conversation({ other_user_id: null }))).toBe('individual|compte supprime');
     expect(counterpartInitials('Agence Démo Lyon')).toBe('AD');
     expect(counterpartInitials('julien m.')).toBe('JM');
   });
