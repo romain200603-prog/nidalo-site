@@ -72,19 +72,22 @@ export class RentalCost {
 
   /**
    * Revenus proposés dans « Simuler mon dossier » : 2,4 × et 3,6 × le loyer CC arrondis à la centaine, et 3 ×
-   * arrondi à la centaine supérieure (choix par défaut).
+   * arrondi à la centaine supérieure (choix par défaut). Deux arrondis égaux (petit loyer) ne donnent qu'un choix :
+   * doublons retirés, ordre gardé (n° 181).
    */
   get incomeOptions(): Decimal[] {
     const cc = this.rentIncludingCharges;
-    return [
+    const options = [
       cc.times(D('2.4')).dividedBy(100).rounded(0).times(100),
       RentalCost.ceilHundred(cc.times(3)),
       cc.times(D('3.6')).dividedBy(100).rounded(0).times(100),
     ];
+    return options.filter((option, index) => options.findIndex((other) => other.eq(option)) === index);
   }
 
+  /** 3 × le loyer CC arrondi à la centaine supérieure, toujours parmi les choix. */
   get defaultIncome(): Decimal {
-    return this.incomeOptions[1];
+    return RentalCost.ceilHundred(this.rentIncludingCharges.times(3));
   }
 
   /** Part du loyer CC dans des revenus donnés (0,33 = 33 %). */

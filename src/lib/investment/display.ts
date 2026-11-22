@@ -13,7 +13,7 @@ import { Decimal, type DecimalLike } from './decimal';
 
 const LOCALE = 'fr-FR';
 const priceFormat = new Intl.NumberFormat(LOCALE, { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 0 });
-const amountFormat = new Intl.NumberFormat(LOCALE, { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const centsFormat = new Intl.NumberFormat(LOCALE, { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const percentFormats = new Map<number, Intl.NumberFormat>();
 
 function percentFormat(fractionDigits: number): Intl.NumberFormat {
@@ -37,9 +37,15 @@ export function formatPrice(value: DecimalLike): string {
   return priceFormat.format(icuRounded(value, 0));
 }
 
-/** `Formatters.amount` : au centime si nécessaire, « 1 043,93 € », « 629 € ». */
+/**
+ * `Formatters.amount` (n° 142) : arrondi au centime d'abord (NSDecimalRound .plain, la moitié s'éloigne de zéro), puis
+ * sans décimale pour un montant entier, sinon exactement 2 : « 1 043,93 € », « 450,50 € », « 629 € » ; 450,996 donne
+ * « 451 € ». Le montant déjà arrondi n'est plus arrondi par ICU.
+ */
 export function formatAmount(value: DecimalLike): string {
-  return amountFormat.format(icuRounded(value, 2));
+  const cents = Decimal.from(value).rounded(2);
+  const amount = cents.isZero ? 0 : cents.toNumber();
+  return cents.eq(cents.rounded(0)) ? priceFormat.format(amount) : centsFormat.format(amount);
 }
 
 /** `Formatters.signedAmount` : « +120 € », « −85 € » (signe moins U+2212), « 0 € ». */

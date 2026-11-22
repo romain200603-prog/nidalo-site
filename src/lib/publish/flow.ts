@@ -3,7 +3,7 @@ import { PROPERTY_TYPE_LABELS } from '../labels';
 import type { ListingRow, RentalInfo } from '../listings';
 import {
   cityOf, missingRequiredFields, newDraft, postalCodeOf, PUBLISH_STEPS, rentalBanMessage, REQUIRED_FIELD_LABELS, stepIsComplete, stepIssues,
-  syncBuildingRent, type PublishDraft, type PublishStep, type RequiredField, type StepIssue,
+  stepOf, syncBuildingRent, type PublishDraft, type PublishStep, type RequiredField, type StepIssue,
 } from './draft';
 import { CATEGORY_TITLES } from './labels';
 import { listingWrite } from './serialize';
@@ -128,7 +128,9 @@ export function stepOfIssue(field: GuideField): PublishStep {
   switch (field) {
     case 'propertyType': return 'category';
     case 'postalCode': case 'city': case 'price': case 'address': return 'main';
-    case 'livingArea': case 'landArea': case 'rooms': case 'hotelRooms': case 'mixedBuilding': case 'energyClass': case 'rentalEnergyClass': return 'features';
+    case 'livingArea': case 'landArea': case 'rooms': case 'hotelRooms': case 'mixedBuilding': case 'energyClass': case 'climateClass': case 'energyCost':
+    case 'rentalEnergyClass':
+      return 'features';
     case 'coOwnershipProcedure': case 'agencyFeesPayer': return 'finance';
     case 'photos': return 'media';
     case 'title': case 'description': return 'description';
@@ -145,6 +147,29 @@ export function firstIssue(draft: PublishDraft, through: PublishStep, now = new 
     if (field) return { step: stepOfIssue(field), field };
   }
   return null;
+}
+
+/**
+ * Champs que « Publier » refuse encore, sans doublon et rangés par étape (PublishValidation.publishErrors) : le prix
+ * vérifié à l'étape « Prix et finances » reste un champ de l'étape « Informations principales ».
+ */
+export function publishIssues(draft: PublishDraft, now = new Date()): Guide[] {
+  const fields = [...new Set(PUBLISH_STEPS.flatMap((step) => stepIssues(draft, step, now)))];
+  return PUBLISH_STEPS.flatMap((step) => fields.filter((field) => stepOfIssue(field) === step).map((field) => ({ step, field })));
+}
+
+/**
+ * Étapes de la carte « À compléter » de la vérification (n° 81, PublishReviewStep) : chaque étape que « Publier » refuse
+ * encore sans ligne de champ manquant à cette étape (chambres d'un hôtel, GES, dépenses d'énergie…), même si d'autres
+ * champs manquent ailleurs, avec son premier champ à compléter, où mène « Corriger ». Dans l'ordre des étapes.
+ */
+export function stepsToComplete(draft: PublishDraft, now = new Date()): Guide[] {
+  const listed = new Set(missingRequiredFields(draft, now).map(stepOf));
+  const steps: Guide[] = [];
+  for (const issue of publishIssues(draft, now)) {
+    if (!listed.has(issue.step) && !steps.some((other) => other.step === issue.step)) steps.push(issue);
+  }
+  return steps;
 }
 
 /** Champ de l'écran d'une information exigée pour publier (missingRequiredFields) : la catégorie se choisit avec le type. */

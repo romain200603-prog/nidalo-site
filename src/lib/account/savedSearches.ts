@@ -1,4 +1,4 @@
-import { formatArea, formatFraction, formatPrice } from '../format';
+import { formatArea, formatPrice } from '../format';
 import { PROPERTY_TYPE_LABELS, type PropertyType, type SearchMode } from '../labels';
 import { boundingBox, DRAWN_ZONE_LABEL, isUsable as isUsableZone } from '../drawnZone';
 import type { HotelScope } from '../listingJson';
@@ -6,7 +6,7 @@ import { isNearbyLabel, savedLabel } from '../nearby';
 import type { Coordinate } from '../places';
 import {
   BEDROOM_NOUNS, chosenPlace, countRangeLabel, DEFAULT_RADIUS_METERS, defaultDraft, drawnZoneOf, floorRange, knownCityCenter,
-  MODE_PROPERTY_TYPES, ROOM_NOUNS, searchCenter, type EnergyClass, type OutdoorSpace, type SearchDraft,
+  MODE_PROPERTY_TYPES, ROOM_NOUNS, searchCenter, yieldPercent, type EnergyClass, type OutdoorSpace, type SearchDraft,
 } from '../search';
 import { supabase } from '../supabase';
 import { databaseMessage } from './errors';
@@ -288,7 +288,12 @@ export function draftFromQuery(query: SearchQueryJson): SearchDraft {
   const draft = defaultDraft(mode);
   const location = query.location;
   if ('city' in location) {
-    draft.place = location.city.postalCode ?? location.city.name;
+    // Le nom reste (« Lyon 3e ») ; le code postal revient dans le lieu choisi (n° 62).
+    const { name, postalCode, inseeCode } = location.city;
+    draft.place = name;
+    if (postalCode !== undefined || inseeCode !== undefined) {
+      draft.chosen = { kind: /\d+(e|er)$/.test(name) ? 'district' : 'municipality', name, postalCode, inseeCode };
+    }
   } else if ('around' in location) {
     const { center, radiusMeters } = location.around;
     const known = knownCityAt(center);
@@ -313,8 +318,8 @@ export function draftFromQuery(query: SearchQueryJson): SearchDraft {
   draft.pricePerSquareMeterMin = query.pricePerSquareMeter?.min ?? null;
   draft.pricePerSquareMeterMax = query.pricePerSquareMeter?.max ?? null;
   draft.availableBy = localDay(query.availableBy);
-  // Tous les types d'une catégorie = aucun type choisi.
-  const isCategoryDefault = (Object.values(MODE_PROPERTY_TYPES) as PropertyType[][]).some((types) => sameSet(types, query.propertyTypes));
+  // Tous les types de la catégorie de la recherche = aucun type choisi (n° 161).
+  const isCategoryDefault = sameSet(MODE_PROPERTY_TYPES[mode], query.propertyTypes);
   const onlyHotel = sameSet(query.propertyTypes, ['hotel']);
   draft.types = isCategoryDefault && !onlyHotel ? [] : [...new Set(query.propertyTypes)];
   draft.isNewBuild = query.isNewBuild ?? null;
@@ -362,6 +367,9 @@ export function draftFromQuery(query: SearchQueryJson): SearchDraft {
     draft.minUnits = query.building?.minUnits ?? null;
     draft.maxVacantUnits = query.building?.maxVacantUnits ?? null;
     draft.mixedBuilding = query.building?.mixedOnly === true;
+    // « Immeuble mixte » : l'immeuble a été ajouté par la requête (queryFromDraft) ; le garder ferait perdre
+    // « mixte seulement » à la relance (n° 10).
+    if (draft.mixedBuilding) draft.types = draft.types.filter((type) => type !== 'building');
   }
   return draft;
 }
@@ -406,9 +414,8 @@ export function resumeSummaryOf(query: SearchQueryJson): string {
   const location = query.location;
   const place = ('around' in location ? knownCityAt(location.around.center) : null) ?? placeLabelOf(query);
   if (place) parts.push(place);
-  const types = [...new Set(query.propertyTypes)];
-  if (types.length && !(types.length === 1 && types[0] === 'hotel')) {
-    parts.push(types.map((type) => PROPERTY_TYPE_LABELS[type] ?? type).sort().join(', '));
+  if (writesPropertyTypes(query)) {
+    parts.push([...new Set(query.propertyTypes)].map((type) => PROPERTY_TYPE_LABELS[type] ?? type).sort().join(', '));
   }
   const suffix = query.transaction === 'rent' ? '/mois' : '';
   const { min, max } = query.price;
@@ -418,18 +425,29 @@ export function resumeSummaryOf(query: SearchQueryJson): string {
   return parts.length ? parts.join(' · ') : MODE_TITLES[modeOf(query)];
 }
 
+/**
+ * Types de bien à écrire (nom proposé, résumé de l'accueil, critères) : aucun quand ce sont exactement ceux de la
+ * catégorie de la recherche, ni pour un hôtel (SearchQuery.writesPropertyTypes, n° 59 et 161).
+ */
+export function writesPropertyTypes(query: SearchQueryJson): boolean {
+  const types = [...new Set(query.propertyTypes)];
+  return types.length > 0 && !sameSet(types, ['hotel']) && !sameSet(types, MODE_PROPERTY_TYPES[modeOf(query)]);
+}
+
 /** Critères principaux : types de bien, surface, pièces, rentabilité. */
 export function criteriaLabelsOf(query: SearchQueryJson): string[] {
   const labels: string[] = [];
   const types = [...new Set(query.propertyTypes)];
   const onlyHotel = types.length === 1 && types[0] === 'hotel';
-  if (types.length && !onlyHotel) {
+  if (writesPropertyTypes(query)) {
     labels.push(types.map((type) => PROPERTY_TYPE_LABELS[type] ?? type).sort().join(', '));
   }
   if (query.livingArea.min !== undefined) labels.push(`${formatArea(query.livingArea.min)} et +`);
   const rooms = countRangeLabel(query.rooms.min, query.rooms.max, onlyHotel ? BEDROOM_NOUNS : ROOM_NOUNS);
   if (rooms) labels.push(rooms);
-  if (query.investment?.minGrossYield !== undefined) labels.push(`Rentabilité ≥ ${formatFraction(query.investment.minGrossYield, 0)}`);
+  // Une décimale quand il y en a une (« 7,5 % »), sinon aucune (SearchDraft.percentLabel, n° 162).
+  const minGrossYield = percentOf(query.investment?.minGrossYield);
+  if (minGrossYield !== null) labels.push(`Rentabilité ≥ ${yieldPercent(minGrossYield)}`);
   return labels;
 }
 

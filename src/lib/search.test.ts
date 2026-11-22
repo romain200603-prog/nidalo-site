@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   boxAround, compactPrice, defaultDraft, distanceMeters, effectiveSort, filterChips, sortOptions, draftFromParams, locationFor, matches, paramsFromDraft, placeLabel,
-  noResultsHints, propertyTypesFor, sortResults, type Highlights, type SearchDraft,
+  filtersLivingAreaOnServer, noResultsHints, propertyTypesFor, readPages, searchedArea, sortResults, type Highlights, type SearchDraft,
 } from './search';
 import { testRow } from './testRows';
 
@@ -151,6 +151,94 @@ describe('pastilles des critères', () => {
       .toEqual(['Rendement : 7 %', 'Cash-flow : −50 €', 'Apport : 30 k€']);
     expect(labels({ ...defaultDraft('hotel'), roomsMin: 1 })).toEqual(['1 chambre min']);
     expect(plain(compactPrice(1250))).toBe('1 250 €');
+  });
+});
+
+describe('pastilles : rayon, lots, pourcentages, étages (n° 57, 58, 162, 163)', () => {
+  const plain = (s: string) => s.replace(/[\u00a0\u202f]/g, ' ');
+  const labels = (d: SearchDraft) => filterChips(d).map((c) => plain(c.label));
+
+  it('« Rayon » seulement autour d’un centre (grande ville, commune choisie, « Autour de moi »)', () => {
+    expect(labels({ ...defaultDraft('buy'), place: 'Lyon', radiusKm: 20 })).toEqual(['Rayon : 20 km']);
+    expect(labels({ ...defaultDraft('buy'), place: 'Lyon 3e', radiusKm: 20 })).toEqual([]);
+    expect(labels({ ...defaultDraft('buy'), radiusKm: 20 })).toEqual([]);
+    const chosen: SearchDraft = {
+      ...defaultDraft('rent'), place: 'Saint-Priest', radiusKm: 5,
+      chosen: { kind: 'municipality', name: 'Saint-Priest', postalCode: '69800', coordinate: { latitude: 45.7, longitude: 4.94 } },
+    };
+    expect(labels(chosen)).toEqual(['Rayon : 5 km']);
+  });
+
+  it('« Lots » et « Lots vacants : N max », retirés par leur croix', () => {
+    const draft: SearchDraft = { ...defaultDraft('invest'), minUnits: 4, maxVacantUnits: 1 };
+    expect(labels(draft)).toEqual(['Lots : 4 min', 'Lots vacants : 1 max']);
+    const [lots, vacant] = filterChips(draft);
+    expect(lots.remove(draft)).toMatchObject({ minUnits: null, maxVacantUnits: 1 });
+    expect(vacant.remove(draft)).toMatchObject({ minUnits: 4, maxVacantUnits: null });
+    // Hors Investir, pas de lots.
+    expect(labels({ ...defaultDraft('buy'), minUnits: 4, maxVacantUnits: 1 })).toEqual([]);
+  });
+
+  it('pourcentages : une décimale quand il y en a une, sinon aucune', () => {
+    expect(labels({ ...defaultDraft('invest'), minGrossYieldPercent: 7.5, minNetYieldPercent: 5 }))
+      .toEqual(['Rendement : 7,5 %', 'Net : 5 %']);
+    expect(labels({ ...defaultDraft('invest'), minNetYieldPercent: 4.5 })).toEqual(['Net : 4,5 %']);
+    expect(labels({ ...defaultDraft('hotel'), minOccupancyRatePercent: 72.5 })).toEqual(['Occupation : 72,5 % min']);
+    expect(labels({ ...defaultDraft('hotel'), minOccupancyRatePercent: 70 })).toEqual(['Occupation : 70 % min']);
+  });
+
+  it('étages : « rez-de-chaussée », « 1er », puis « 3e » ; cash-flow au centime', () => {
+    expect(labels({ ...defaultDraft('buy'), floorMin: 0, floorMax: 1 })).toEqual(['Étage : rez-de-chaussée – 1er']);
+    expect(labels({ ...defaultDraft('buy'), floorMin: 3 })).toEqual(['Étage : min 3e']);
+    expect(labels({ ...defaultDraft('buy'), floorMax: 1 })).toEqual(['Étage : 1er']);
+    expect(labels({ ...defaultDraft('invest'), minMonthlyCashFlow: -85.5 })).toEqual(['Cash-flow : −85,50 €']);
+  });
+});
+
+describe('pages de la recherche (n° 49)', () => {
+  const rows = (from: number, count: number) => Array.from({ length: count }, (_, i) => ({ id: `id-${from + i}` }));
+
+  it('lit des pages pleines jusqu’à une page incomplète', async () => {
+    const asked: [number, number][] = [];
+    const result = await readPages(async (from, to) => {
+      asked.push([from, to]);
+      return from < 1000 ? rows(from, 500) : rows(from, 120);
+    });
+    expect(asked).toEqual([[0, 499], [500, 999], [1000, 1499]]);
+    expect(result).toHaveLength(1120);
+    expect(result[1119].id).toBe('id-1119');
+  });
+
+  it('s’arrête à 5 000 lignes, et ne garde qu’une fois une annonce lue deux fois', async () => {
+    let calls = 0;
+    const capped = await readPages(async (from) => { calls += 1; return rows(from, 500); });
+    expect(calls).toBe(10);
+    expect(capped).toHaveLength(5000);
+    // Une annonce passée d'une page à l'autre entre deux lectures : une seule fois.
+    const twice = await readPages(async (from) => (from === 0 ? rows(0, 3) : [{ id: 'id-2' }, { id: 'id-3' }]), 3);
+    expect(twice.map((row) => row.id)).toEqual(['id-0', 'id-1', 'id-2', 'id-3']);
+    expect(await readPages(async () => [])).toEqual([]);
+  });
+});
+
+describe('surface d’un terrain (n° 9)', () => {
+  const land = testRow({ property_type: 'land', living_area: 0, land_area: 800, rooms: null, bedrooms: null, floor: null, energy_class: null });
+
+  it('compare la surface du terrain pour un terrain, la surface habitable sinon', () => {
+    expect(searchedArea(land)).toBe(800);
+    expect(searchedArea(testRow({ living_area: 62, land_area: 300 }))).toBe(62);
+    expect(searchedArea(testRow({ property_type: 'land', living_area: 0, land_area: null }))).toBe(0);
+    expect(matches(land, { ...defaultDraft('buy'), types: ['land'], livingAreaMin: 500 }, null)).toBe(true);
+    expect(matches(land, { ...defaultDraft('buy'), types: ['land'], livingAreaMax: 500 }, null)).toBe(false);
+    expect(matches(testRow({ living_area: 45 }), { ...defaultDraft('buy'), livingAreaMin: 50 }, null)).toBe(false);
+  });
+
+  it('n’envoie la surface au serveur que si aucun terrain ne peut être trouvé', () => {
+    expect(filtersLivingAreaOnServer(defaultDraft('buy'))).toBe(false);
+    expect(filtersLivingAreaOnServer({ ...defaultDraft('buy'), types: ['land'] })).toBe(false);
+    expect(filtersLivingAreaOnServer({ ...defaultDraft('buy'), types: ['apartment', 'house'] })).toBe(true);
+    expect(filtersLivingAreaOnServer(defaultDraft('rent'))).toBe(false);
+    expect(filtersLivingAreaOnServer(defaultDraft('invest'))).toBe(true);
   });
 });
 

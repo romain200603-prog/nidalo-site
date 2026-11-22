@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { conversationFrom, listingConversation, type InboxRow } from './conversation';
+import { REFUSED_MESSAGE } from '../account/errors';
+import { CONVERSATION_FALLBACK, conversationErrorMessage, conversationFrom, listingConversation, type InboxRow } from './conversation';
 
 const me = 'a0000000-0000-4000-8000-0000000000c1';
 
@@ -29,5 +30,33 @@ describe('Conversation d\'une annonce (SupabaseMessagingRepository)', () => {
     expect(listingConversation(rows, 'l1', me)?.id).toBe('c1');
     expect(listingConversation(rows, 'L2', me)?.id).toBe('c2');
     expect(listingConversation(rows, 'l3', me)).toBeNull();
+  });
+});
+
+describe('Conversation qui ne s\'ouvre pas (conversationErrorMessage, n° 68)', () => {
+  const postgrest = (code: string, message: string) => ({ code, message, details: null, hint: null });
+
+  it('le message du serveur quand il en donne un', () => {
+    expect(conversationErrorMessage(postgrest('P0001', 'Cette annonce n\'est plus en ligne.'))).toBe('Cette annonce n\'est plus en ligne.');
+    // Autre erreur du serveur : son message, comme RepositoryError.unknown dans l'app.
+    expect(conversationErrorMessage(postgrest('PGRST116', 'JSON object requested, multiple (or no) rows returned')))
+      .toBe('JSON object requested, multiple (or no) rows returned');
+    // Données refusées : le message de l'app.
+    for (const code of ['23514', '23502', '22001', '22P02']) expect(conversationErrorMessage(postgrest(code, 'violates check constraint'))).toBe(REFUSED_MESSAGE);
+  });
+
+  it('sinon le message de la connexion', () => {
+    expect(CONVERSATION_FALLBACK).toBe('La conversation n\'a pas pu s\'ouvrir. Vérifiez votre connexion.');
+    // Réseau coupé : postgrest-js rend un code vide.
+    expect(conversationErrorMessage({ code: '', message: 'TypeError: Failed to fetch', details: '', hint: '' })).toBe(CONVERSATION_FALLBACK);
+    // Droits : aucun texte du serveur.
+    expect(conversationErrorMessage(postgrest('42501', 'permission denied for function start_listing_conversation'))).toBe(CONVERSATION_FALLBACK);
+    expect(conversationErrorMessage(postgrest('PGRST301', 'JWT expired'))).toBe(CONVERSATION_FALLBACK);
+    // Un mot seul n'est pas une phrase.
+    expect(conversationErrorMessage(postgrest('P0001', 'refus'))).toBe(CONVERSATION_FALLBACK);
+    // Conversation introuvable à la relecture, réponse inattendue, rien.
+    expect(conversationErrorMessage(new Error('conversation introuvable à la relecture'))).toBe(CONVERSATION_FALLBACK);
+    expect(conversationErrorMessage(null)).toBe(CONVERSATION_FALLBACK);
+    expect(conversationErrorMessage(undefined)).toBe(CONVERSATION_FALLBACK);
   });
 });

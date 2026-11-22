@@ -1,63 +1,49 @@
 import { Icon } from '../../components/Icon';
-import { ExtraIcon } from './icons';
+import { ContactBar } from './ContactBar';
+import { useFitTexts } from './fitText';
 
-// Barre d'actions des annonces des autres (FloatingActionBar, ListingDetailView.swift 1209–1262) : capsule bleue,
-// trois segments séparés de filets fins. Téléphone et tablette : flottante en bas de l'écran ; ordinateur : sous
-// le résumé, dans la colonne de droite. Sa propre annonce : « Voir les demandes » et « Gérer l'annonce », comme la
-// fiche sur ordinateur.
-export function ActionBar({ onMessage, onVisit, onCall, callHref = null, busy = false, owner = null }: {
+// Barre du bas de la fiche sur téléphone et tablette (actionBar de ListingDetailView.swift), posée une fois l'annonce
+// chargée. L'annonce d'un autre : la barre de contact « Duo » (ContactBar.tsx), « Appeler » et « Envoyer un message » ;
+// la visite se demande sur la carte « Aucune visite prévue ». Sa propre annonce : la barre blanche de l'app,
+// « Voir les demandes » (bleu clair) et « Gérer l'annonce » (bleu), qui ouvrent les mêmes fenêtres qu'avant.
+export function ActionBar({ onMessage, onCall, callHref = null, busy = false, isRental, playsArrival, onArrived, owner = null }: {
   onMessage: () => void;
-  onVisit: () => void;
-  /** « Téléphone » sans numéro (la fenêtre « Numéro non disponible »). */
+  /** « Appeler » sans numéro (la fenêtre « Numéro non disponible »). */
   onCall: () => void;
-  /** Le numéro du vendeur, quand il le communique (tel:…) : « Téléphone » l'appelle. */
+  /** Le numéro du vendeur, quand il le communique (tel:…) : « Appeler » l'appelle. */
   callHref?: string | null;
-  /** La conversation avec le vendeur s'ouvre : « Messages » attend. */
+  /** La conversation avec le vendeur s'ouvre : les points dans la bulle. */
   busy?: boolean;
+  /** Location : « propriétaire » au lieu de « vendeur » (n° 74). */
+  isRental: boolean;
+  /** L'arrivée de la barre se joue une fois par ouverture de la fiche. */
+  playsArrival: boolean;
+  onArrived: () => void;
   owner?: { onRequests: () => void; onManage: () => void } | null;
 }) {
-  if (owner) {
-    return (
-      <nav className="action-bar" aria-label="Mon annonce">
-        <div className="action-bar-capsule">
-          <button type="button" className="action-bar-item" onClick={owner.onRequests}>
-            <Icon name="calendarCheck" />
-            Voir les demandes
-          </button>
-          <span className="action-bar-divider" aria-hidden="true" />
-          <button type="button" className="action-bar-item" onClick={owner.onManage}>
-            <Icon name="pen" />
-            Gérer l'annonce
-          </button>
-        </div>
-      </nav>
-    );
-  }
+  if (owner) return <OwnerBar onRequests={owner.onRequests} onManage={owner.onManage} />;
   return (
-    <nav className="action-bar" aria-label="Contacter">
-      <div className="action-bar-capsule">
-        <button type="button" className="action-bar-item" onClick={onMessage} disabled={busy}>
-          <ExtraIcon name="messageCircle" />
-          Messages
-        </button>
-        <span className="action-bar-divider" aria-hidden="true" />
-        <button type="button" className="action-bar-item" onClick={onVisit}>
-          <ExtraIcon name="calendarPlus" />
-          Visiter
-        </button>
-        <span className="action-bar-divider" aria-hidden="true" />
-        {callHref ? (
-          <a className="action-bar-item" href={callHref}>
-            <Icon name="phone" />
-            Téléphone
-          </a>
-        ) : (
-          <button type="button" className="action-bar-item" onClick={onCall}>
-            <Icon name="phone" />
-            Téléphone
-          </button>
-        )}
-      </div>
+    <ContactBar onCall={onCall} callHref={callHref} onMessage={onMessage} opening={busy} isRental={isRental}
+      playsArrival={playsArrival} onArrived={onArrived} />
+  );
+}
+
+/**
+ * Sa propre annonce : barre blanche sur toute la largeur (padding 8 / 16 / 6, ombre bleu marine à 6 %), deux boutons
+ * de 46 px à 10 px l'un de l'autre, textes d'une ligne qui rapetissent (75 % et 80 % au plus), comme l'app.
+ */
+function OwnerBar({ onRequests, onManage }: { onRequests: () => void; onManage: () => void }) {
+  const ref = useFitTexts<HTMLElement>();
+  return (
+    <nav ref={ref} className="action-bar owner-bar" aria-label="Mon annonce">
+      <button type="button" className="owner-bar-button owner-bar-requests" onClick={onRequests}>
+        <Icon name="calendarCheck" />
+        <span data-fit="0.75">Voir les demandes</span>
+      </button>
+      <button type="button" className="owner-bar-button owner-bar-manage" onClick={onManage}>
+        <Icon name="squarePen" />
+        <span data-fit="0.8">Gérer l'annonce</span>
+      </button>
     </nav>
   );
 }

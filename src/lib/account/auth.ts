@@ -2,6 +2,7 @@ import { AuthError, type Session } from '@supabase/supabase-js';
 import { SITE_URL } from '../config';
 import { PATHS } from '../paths';
 import { supabase } from '../supabase';
+import { passwordRuleSatisfied, signUpMetadata } from './authFlow';
 
 // Connexion, création de compte et mot de passe oublié, comme l'app (Data/Supabase/AuthStore.swift).
 // Les liens des e-mails envoyés depuis le site reviennent sur la page Mon compte du site (PKCE : le lien ne
@@ -50,7 +51,15 @@ export function pendingLink(): LinkPurpose | null {
 
 export function setPendingLink(purpose: LinkPurpose | null) {
   writeStorage(PENDING_LINK_KEY, purpose);
+  // Demande vidée : l'adresse de l'inscription en cours est oubliée (suite du n° 39).
+  if (purpose === null) signupEmail = null;
 }
+
+/**
+ * Adresse nettoyée de l'inscription en cours sur cette page, en mémoire seulement (jamais dans le navigateur), comme
+ * l'app (suite du n° 39) : la connexion avec cette même adresse garde les marques du compte tout neuf.
+ */
+let signupEmail: string | null = null;
 
 export function isNewAccount(): boolean {
   return readStorage(NEW_ACCOUNT_KEY) === '1';
@@ -136,9 +145,9 @@ export function emailError(email: string): string | null {
   return null;
 }
 
-/** Mot de passe saisi pour se connecter : la règle de longueur d'avant, pour ne bloquer aucun ancien compte. */
+/** Mot de passe saisi pour se connecter : seulement un champ vide, le reste est laissé au serveur (n° 40), comme l'app. */
 export function passwordError(password: string): string | null {
-  return [...password].length < 8 ? 'Le mot de passe doit contenir au moins 8 caractères.' : null;
+  return password === '' ? 'Saisissez votre mot de passe' : null;
 }
 
 /** Règle d'un nouveau mot de passe, réglée dans Supabase et affichée à l'inscription et au changement. */
@@ -149,25 +158,37 @@ export const PASSWORD_RULE = 'Au moins 8 caractères, avec des lettres et des ch
  * comme Supabase les compte (lettres a à z sans accent, majuscules ou minuscules, et chiffres 0 à 9).
  */
 export function newPasswordError(password: string): string | null {
-  if ([...password].length >= 8 && /[A-Za-z]/.test(password) && /[0-9]/.test(password)) return null;
+  if (passwordRuleSatisfied(password)) return null;
   return 'Le mot de passe doit contenir au moins 8 caractères, dont une lettre et un chiffre.';
 }
 
-// MARK: - Messages d'erreur (AuthStore.swift 233–275)
+/** « Créer mon compte » actif, comme l'app (SignUpForm.canSubmit) : prénom, nom, e-mail valide et règle du mot de passe. */
+export function canSubmitSignUp(form: { firstName: string; lastName: string; email: string; password: string }): boolean {
+  return form.firstName.trim() !== '' && form.lastName.trim() !== '' && emailError(form.email) === null
+    && passwordRuleSatisfied(form.password);
+}
+
+// MARK: - Messages d'erreur (AuthStore.message et AuthMessages de l'app)
+
+/** Identifiants refusés : l'e-mail et le mot de passe passent en rouge. */
+export const INVALID_CREDENTIALS_MESSAGE = 'E-mail ou mot de passe incorrect.';
+/** Adresse déjà inscrite : sous l'e-mail de l'inscription, avec « Se connecter ». */
+export const ACCOUNT_EXISTS_MESSAGE = 'Un compte existe déjà avec cette adresse.';
 
 const MESSAGES: Record<string, string> = {
-  invalid_credentials: 'Adresse e-mail ou mot de passe incorrect.',
+  invalid_credentials: INVALID_CREDENTIALS_MESSAGE,
   email_not_confirmed: 'Votre adresse e-mail n\'est pas encore confirmée.',
   over_email_send_rate_limit: 'Trop d\'e-mails envoyés pour le moment. Réessayez dans une heure.',
   over_request_rate_limit: 'Trop de tentatives, réessayez dans quelques minutes.',
   email_address_invalid: 'Cette adresse e-mail n\'est pas valide.',
-  email_address_not_authorized: 'Cette adresse ne peut pas encore recevoir d\'e-mail de NIDALO. Les comptes sont pour l\'instant réservés à l\'équipe.',
+  // Envoi refusé par le serveur d'e-mails (n° 3).
+  email_address_not_authorized: 'L\'e-mail n\'a pas pu être envoyé à cette adresse. Réessayez plus tard.',
   otp_expired: 'Ce lien a expiré ou a déjà servi. Demandez-en un nouveau.',
   flow_state_expired: 'Ce lien a expiré ou a déjà servi. Demandez-en un nouveau.',
   // Sur l'iPhone : « Ouvrez le lien sur l'iPhone où vous avez fait la demande, puis réessayez. »
   bad_code_verifier: 'Ouvrez le lien dans le navigateur où vous avez fait la demande, puis réessayez.',
   flow_state_not_found: 'Ouvrez le lien dans le navigateur où vous avez fait la demande, puis réessayez.',
-  user_already_exists: 'Un compte existe déjà avec cette adresse.',
+  user_already_exists: ACCOUNT_EXISTS_MESSAGE,
   weak_password: 'Ce mot de passe est trop faible : il faut au moins 8 caractères, avec des lettres et des chiffres.',
   same_password: 'Choisissez un mot de passe différent de l\'ancien.',
 };
@@ -207,18 +228,45 @@ export function linkErrorMessage(params: URLSearchParams): string | null {
 
 export type SignUpOutcome = 'signedIn' | 'checkEmail' | 'alreadyExists';
 
+/**
+ * Connexion avec le mot de passe. Une autre adresse que l'inscription en cours sur cette page (ou aucune connue) est
+ * un compte existant : il ne passe pas pour nouveau, ni maintenant ni plus tard (n° 39). La même adresse (lien de
+ * confirmation ouvert ailleurs) ne change rien : « Quel est votre profil ? » s'affiche. Posé avant la session, défait en
+ * cas d'échec, comme l'app.
+ */
 export async function signIn(email: string, password: string): Promise<Session> {
-  const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail(email), password });
-  if (error) throw error;
-  return data.session;
+  const address = cleanEmail(email);
+  const isPendingSignup = signupEmail !== null && signupEmail === address;
+  const previous = { link: pendingLink(), isNew: isNewAccount(), email: signupEmail };
+  if (!isPendingSignup) {
+    setPendingLink(null);
+    setNewAccount(false);
+  }
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({ email: address, password });
+    if (error) throw error;
+    return data.session;
+  } catch (error) {
+    if (!isPendingSignup) {
+      setPendingLink(previous.link);
+      setNewAccount(previous.isNew);
+      signupEmail = previous.email;
+    }
+    throw error;
+  }
 }
 
-/** Création du compte : sans nom ni type de compte, comme l'app (le serveur crée le profil). */
-export async function signUp(email: string, password: string): Promise<SignUpOutcome> {
+/**
+ * Création du compte avec le prénom et le nom, comme l'app : `first_name`, `last_name` et `display_name` dans les
+ * données du compte (le serveur crée le profil avec `display_name`). Pas de type de compte : « Quel est votre
+ * profil ? » le demande après la confirmation.
+ */
+export async function signUp(email: string, password: string, firstName = '', lastName = ''): Promise<SignUpOutcome> {
+  const address = cleanEmail(email);
   const { data, error } = await supabase.auth.signUp({
-    email: cleanEmail(email),
+    email: address,
     password,
-    options: { emailRedirectTo: AUTH_REDIRECT_URL },
+    options: { emailRedirectTo: AUTH_REDIRECT_URL, data: signUpMetadata(firstName, lastName) },
   });
   if (error) throw error;
   if (data.session) {
@@ -229,15 +277,18 @@ export async function signUp(email: string, password: string): Promise<SignUpOut
   if (data.user && (data.user.identities?.length ?? 0) === 0) return 'alreadyExists';
   setNewAccount(true);
   setPendingLink('signup');
+  signupEmail = address;
   return 'checkEmail';
 }
 
 /** Renvoie l'e-mail de confirmation (connexion d'une adresse pas encore confirmée, ou bouton « Renvoyer »). */
 export async function resendConfirmation(email: string): Promise<void> {
-  const { error } = await supabase.auth.resend({ type: 'signup', email: cleanEmail(email), options: { emailRedirectTo: AUTH_REDIRECT_URL } });
+  const address = cleanEmail(email);
+  const { error } = await supabase.auth.resend({ type: 'signup', email: address, options: { emailRedirectTo: AUTH_REDIRECT_URL } });
   if (error) throw error;
   setNewAccount(true);
   setPendingLink('signup');
+  signupEmail = address;
 }
 
 export async function sendPasswordReset(email: string): Promise<void> {
@@ -277,10 +328,22 @@ export async function updatePassword(password: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Déconnexion de tous les appareils, comme l'app ; en cas d'échec, au moins dans ce navigateur. */
+/**
+ * Déconnexion de ce navigateur seulement, comme l'app (n° 122) : la session est fermée aussi sur le serveur, les
+ * autres appareils restent connectés. Hors ligne, la session de ce navigateur est tout de même effacée.
+ */
 export async function signOut(): Promise<void> {
   setPendingLink(null);
   setNewAccount(false);
-  const { error } = await supabase.auth.signOut();
-  if (error) await supabase.auth.signOut({ scope: 'local' });
+  try {
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
+    if (!error) return;
+  } catch {
+    // Second essai ci-dessous.
+  }
+  try {
+    await supabase.auth.signOut({ scope: 'local' });
+  } catch {
+    // Rien de plus à faire : la session de ce navigateur est déjà effacée.
+  }
 }

@@ -2,10 +2,12 @@ import type { IconName } from '../../components/iconPaths';
 import { cardContent, type CardContent, type CardKind } from '../cardContent';
 import { formatArea } from '../format';
 import { highlightsFor } from '../highlights';
-import { propertyTypeLabel, type SearchMode } from '../labels';
+import { propertyTypeLabel, type PropertyType, type SearchMode } from '../labels';
 import { readAsset } from '../listing/fields';
+import { rentalInfo } from '../listingJson';
 import type { ListingRow } from '../listings';
 import { normalized } from '../places';
+import { MODE_PROPERTY_TYPES, transactionFor } from '../search';
 
 // « Vos favoris » (Features/Favorites/FavoritesView.swift et ImmoDomain/Listing/FavoriteCardText.swift) :
 // catégories, recherche dans les favoris, suggestions, tri et textes des cartes.
@@ -49,17 +51,35 @@ export type FavoriteCard = {
 
 const YIELD_KINDS: CardKind[] = ['investment', 'commercial', 'office', 'building', 'hotel'];
 
-/** Fiche d'un favori : une vente dont le loyer est connu est présentée en investissement. */
+/**
+ * Catégorie de l'annonce comme l'app (ListingSummary.categoryIntent, PublishCategory.of) : celle gardée à la
+ * publication si elle propose ce type de bien pour cette transaction, sinon celle déduite de la transaction et du type
+ * (location ; hôtel ; immeuble, local, bureaux ; logement loué ; le reste en Résidentiel) ; `null` si aucune ne
+ * convient (un parking à vendre).
+ */
+export function listingCategoryMode(row: Pick<ListingRow, 'transaction' | 'property_type' | 'publish_category' | 'rental_info'>): SearchMode | null {
+  const type = row.property_type as PropertyType;
+  const guessed: SearchMode = row.transaction === 'rent' ? 'rent'
+    : type === 'hotel' ? 'hotel'
+      : type === 'building' || type === 'commercial' || type === 'office' ? 'invest'
+        : (type === 'apartment' || type === 'house') && rentalInfo(row)?.isLeased === true ? 'invest' : 'buy';
+  const stored = FAVORITE_CATEGORIES.find((entry) => entry.category === row.publish_category)?.mode ?? null;
+  return [stored, guessed].find((mode): mode is SearchMode => mode !== null
+    && transactionFor(mode) === row.transaction && MODE_PROPERTY_TYPES[mode].includes(type)) ?? null;
+}
+
+/** Fiche d'un favori : la catégorie de l'annonce, comme les autres écrans (FavoritesView.makeContent, n° 174). */
 export function favoriteCard(row: ListingRow): FavoriteCard {
   const highlights = highlightsFor(row, null);
-  const content = cardContent(row, row.transaction === 'sale' && highlights ? 'invest' : null, highlights);
+  const content = cardContent(row, listingCategoryMode(row), highlights);
   const gross = highlights?.grossYield ?? null;
   return { row, content, grossYield: YIELD_KINDS.includes(content.kind) && gross !== null && gross > 0 ? gross : null };
 }
 
-/** « Rez-de-chaussée », « 1er étage », « 3e étage ». */
+/** « Sous-sol » (étage négatif, n° 238), « Rez-de-chaussée », « 1er étage », « 3e étage » (FavoriteCardText.floorLabel). */
 export function floorLabel(floor: number): string {
-  if (floor < 1) return 'Rez-de-chaussée';
+  if (floor < 0) return 'Sous-sol';
+  if (floor === 0) return 'Rez-de-chaussée';
   if (floor === 1) return '1er étage';
   return `${floor}e étage`;
 }
@@ -73,7 +93,8 @@ const isDwelling = (type: string) => type === 'apartment' || type === 'house';
 export function favoriteDetails(row: ListingRow, kind: CardKind): string {
   const parts = [row.city];
   const living = Number(row.living_area);
-  if (kind === 'land') {
+  // Terrain à louer (gabarit « location ») : la même ligne qu'un terrain (n° 144).
+  if (kind === 'land' || row.property_type === 'land') {
     const land = row.land_area !== null && row.land_area !== undefined ? Number(row.land_area) : living > 0 ? living : null;
     if (land !== null && Number.isFinite(land)) parts.push(formatArea(land));
     const asset = readAsset(row);
@@ -166,8 +187,8 @@ export function sortFavorites<T extends { row: Pick<ListingRow, 'id' | 'price'> 
   }
 }
 
-/** « 3 biens sauvegardés », ou « 2 sur 3 biens » quand une recherche, une catégorie ou un filtre en écarte. */
+/** « 3 biens sauvegardés », ou « 2 sur 3 biens » (« 0 sur 1 bien ») quand une recherche, une catégorie ou un filtre en écarte. */
 export function savedCountText(shown: number, total: number): string {
   if (shown === total) return `${total} bien${total > 1 ? 's' : ''} sauvegardé${total > 1 ? 's' : ''}`;
-  return `${shown} sur ${total} biens`;
+  return `${shown} sur ${total} bien${total > 1 ? 's' : ''}`;
 }

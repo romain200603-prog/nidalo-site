@@ -25,6 +25,7 @@ import { placeLine, sortedPhotos, type ListingRow } from '../../lib/listings';
 import { accountPath, comparePath, conversationPath, visitRequestPath } from '../../lib/paths';
 import { recordView } from '../../lib/recentlyViewed';
 import { HotelSection, ProfitabilityCard, RentalCostCard } from './CategoryCards';
+import { ContactCapsules } from './ContactBar';
 import { backTarget, coordinateOf, hotelPerformanceOf, rentalCostOf } from './data';
 import { AlertDialog } from './Dialogs';
 import { Gallery } from './Gallery';
@@ -36,8 +37,9 @@ import { useListingScreens } from './useListingScreens';
 // Fiche d'une annonce sur ordinateur (maquette 2 de Romain), avec les actions de l'app (ListingDetailView.swift) :
 // en haut la catégorie, le titre, la ville et Partager · Enregistrer · Comparer ; la galerie ; à gauche le prix, les
 // chiffres clés et les sections de l'app dans son ordre ; à droite, une colonne fixe avec l'état de l'offre, le
-// vendeur, Envoyer un message · Demander une visite · Appeler et l'état de la visite. « Demander une visite » et
-// « Faire une offre » ont leur propre adresse (&vue=visite, &vue=offre), dans une colonne de 640 px.
+// vendeur, les capsules « Appeler » et « Envoyer un message » de la barre Duo de l'app, côte à côte, et l'état de la
+// visite. La visite se demande avec « Demander » sur la carte « Aucune visite prévue », comme dans l'app. « Demander
+// une visite » et « Faire une offre » ont leur propre adresse (&vue=visite, &vue=offre), dans une colonne de 640 px.
 
 /** Chiffres du numéro gardés pour l'appel (« tel: »), comme l'app : les chiffres et le « + ». */
 const telHref = (phone: string) => `tel:${phone.replace(/[^\d+]/g, '')}`;
@@ -51,7 +53,7 @@ const NOTICE_TITLES: Record<'requests' | 'manage', string> = { requests: 'Voir l
 
 export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMode | null }) {
   // Écrire, visiter, faire une offre : communs avec le téléphone (useListingScreens).
-  const { session, me, isOwn, account, opening, renderScreen, requestVisit, makeOffer, contactSeller } = useListingScreens(row, mode);
+  const { session, me, isOwn, account, opening, renderScreen, requestVisit, makeOffer, contactSeller, conversationAlert } = useListingScreens(row, mode);
   const [publisher, setPublisher] = useState<Publisher | null>(null);
   const [activeCount, setActiveCount] = useState<number | null>(null);
   const [choice, setChoice] = useState(STANDARD_CHOICE);
@@ -138,7 +140,9 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
   const offersPossible = !isOwn && row.transaction === 'sale';
   const upcoming = isOwn ? null : nextVisit(account.visits, row.id, now);
   const request = isOwn || upcoming ? null : openRequest(account.requests, row.id, me, now);
-  const recipientName = publisher?.name ?? 'Le vendeur';
+  const isRental = row.transaction === 'rent';
+  const recipientName = publisher?.name ?? (isRental ? 'Le propriétaire' : 'Le vendeur');
+  const phone = publisher?.phone?.trim();
 
   const opened = renderScreen({ photo: photos[0], recipientName, profitability });
   if (opened) return <div className="listing dl">{opened}</div>;
@@ -192,12 +196,12 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
             {rentalCost && <RentalCostCard cost={rentalCost} />}
             {hotel && <HotelSection figures={hotel} />}
             {profitabilityCard && <ProfitabilityCard view={profitabilityCard} choice={choice} options={FINANCING_OPTIONS} onChange={setChoice} />}
-            {!isOwn && <VisitCard upcoming={upcoming} request={request} now={now} />}
+            {!isOwn && <VisitCard upcoming={upcoming} request={request} now={now} isRental={isRental} onRequest={requestVisit} />}
             {kind === 'rental' && <PracticalInfo rows={rentalRows(row, true)} />}
             {activity && <HotelActivity rows={activity.rows} showsNote={activity.showsNote} />}
             {row.description?.trim() && <Description text={row.description.trim()} />}
             <Features rows={featureRows(row)} />
-            {publisher && <PublisherCard publisher={publisher} fees={feesLabel(row)} activeCount={activeCount} onContact={isOwn ? undefined : contactSeller} />}
+            {publisher && <PublisherCard publisher={publisher} fees={feesLabel(row)} activeCount={activeCount} onContact={isOwn ? undefined : contactSeller} isRental={isRental} />}
             <Energy energyClass={energyLetter(row.energy_class)} climateClass={energyLetter(row.climate_class)} lines={energyLines(row)} />
             <LocationSection
               coordinate={coordinateOf(row)}
@@ -209,6 +213,7 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
                 title: row.title,
                 subtitle: [row.city, livingArea > 0 ? formatArea(livingArea) : null].filter(Boolean).join(' · '),
               }}
+              isRental={isRental}
             />
             <RiskNote />
             <Footnote text={footnote(row)} />
@@ -228,42 +233,31 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
                 </button>
               ))}
               {publisher && <SellerRow publisher={publisher} />}
-              <div className="dl-actions">
-                {isOwn ? (
-                  <>
-                    <button type="button" className="dl-button dl-button-light" onClick={() => setNotice('requests')}>
-                      <Icon name="calendarCheck" />
-                      Voir les demandes
-                    </button>
-                    <button type="button" className="dl-button dl-button-filled" onClick={() => setNotice('manage')}>
-                      <Icon name="pen" />
-                      Gérer l'annonce
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button type="button" className="dl-button dl-button-filled dl-message" onClick={contactSeller} disabled={opening}>
-                      <Icon name="messageCircle" />
-                      Envoyer un message
-                    </button>
-                    <button type="button" className="dl-button dl-button-light dl-visit" onClick={requestVisit}>
-                      <Icon name="calendarPlus" />
-                      Demander une visite
-                    </button>
-                    {publisher?.phone?.trim() ? (
-                      <a className="dl-button dl-button-white dl-call" href={telHref(publisher.phone)} title={`Appeler le ${publisher.phone}`}>
-                        <Icon name="phone" />
-                        Appeler
-                      </a>
-                    ) : (
-                      <button type="button" className="dl-button dl-button-white dl-call" onClick={() => setNotice('noPhone')}>
-                        <Icon name="phone" />
-                        Appeler
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
+              {isOwn ? (
+                <div className="dl-actions">
+                  <button type="button" className="dl-button dl-button-light" onClick={() => setNotice('requests')}>
+                    <Icon name="calendarCheck" />
+                    Voir les demandes
+                  </button>
+                  <button type="button" className="dl-button dl-button-filled" onClick={() => setNotice('manage')}>
+                    <Icon name="pen" />
+                    Gérer l'annonce
+                  </button>
+                </div>
+              ) : (
+                // Les capsules de la barre Duo, sans l'arrivée ni le repli au défilement (la colonne ne flotte pas).
+                <div className="dl-actions dl-contact" aria-label="Contacter" role="group">
+                  <ContactCapsules
+                    floating={false}
+                    onCall={() => setNotice('noPhone')}
+                    callHref={phone ? telHref(phone) : null}
+                    callTitle={phone ? `Appeler le ${phone}` : undefined}
+                    onMessage={contactSeller}
+                    opening={opening}
+                    isRental={isRental}
+                  />
+                </div>
+              )}
               {upcoming && <VisitPill upcoming={upcoming} now={now} />}
               {request && (
                 // Comme la confirmation de l'app : « Demande envoyée » et son statut (la carte de gauche donne le détail).
@@ -280,16 +274,19 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
       <AlertDialog
         open={notice === 'noPhone'}
         onClose={() => setNotice(null)}
+        dismissible={false}
         title="Numéro non disponible"
-        message="Ce vendeur ne communique pas son numéro. Écrivez-lui sur Nidalo."
+        message={`Ce ${isRental ? 'propriétaire' : 'vendeur'} ne communique pas son numéro. Écrivez-lui sur Nidalo.`}
         actions={[
           { label: 'Envoyer un message', onClick: () => { setNotice(null); contactSeller(); }, tone: 'primary' },
           { label: 'Fermer', onClick: () => setNotice(null), tone: 'quiet' },
         ]}
       />
+      {conversationAlert}
       <AlertDialog
         open={notice === 'requests' || notice === 'manage'}
         onClose={() => setNotice(null)}
+        dismissible={false}
         title={notice === 'manage' ? NOTICE_TITLES.manage : NOTICE_TITLES.requests}
         message="Dans l’app iPhone pour l’instant."
         actions={[{ label: 'Fermer', onClick: () => setNotice(null), tone: 'primary' }]}
@@ -297,6 +294,7 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
       <AlertDialog
         open={copyLink !== null}
         onClose={() => setCopyLink(null)}
+        dismissible={false}
         title="Partager l’annonce"
         message="Copiez ce lien pour partager l’annonce."
         actions={[{ label: 'Fermer', onClick: () => setCopyLink(null), tone: 'primary' }]}
@@ -380,9 +378,16 @@ function VisitPill({ upcoming, now }: { upcoming: AgendaVisit; now: Date }) {
 
 /**
  * Carte « Visite » de l'app (agendaCard) : le prochain rendez-vous du bien, sinon la demande en cours, sinon « Aucune
- * visite prévue ». « Agenda » ouvre Mon agenda ; le détail d'une demande n'est pas encore sur le site (écran « bientôt »).
+ * visite prévue » avec la pastille « Demander » (la demande de visite, connexion d'abord si besoin). « Agenda » ouvre
+ * Mon agenda ; le détail d'une demande n'est pas encore sur le site (écran « bientôt »).
  */
-function VisitCard({ upcoming, request, now }: { upcoming: AgendaVisit | null; request: VisitRequestRow | null; now: Date }) {
+function VisitCard({ upcoming, request, now, isRental, onRequest }: {
+  upcoming: AgendaVisit | null;
+  request: VisitRequestRow | null;
+  now: Date;
+  isRental: boolean;
+  onRequest: () => void;
+}) {
   const icon = <span className="dl-visit-icon" aria-hidden="true"><ExtraIcon name="calendar" /></span>;
   if (upcoming) {
     return (
@@ -413,8 +418,9 @@ function VisitCard({ upcoming, request, now }: { upcoming: AgendaVisit | null; r
       {icon}
       <span className="dl-visit-text">
         <span className="dl-visit-title">Aucune visite prévue</span>
-        <span className="dl-visit-subtitle">Demandez une visite au vendeur ou à l'agence.</span>
+        <span className="dl-visit-subtitle">Demandez une visite au {isRental ? 'propriétaire' : 'vendeur'} ou à l'agence.</span>
       </span>
+      <button type="button" className="dl-visit-agenda dl-visit-request" onClick={onRequest} aria-label="Demander une visite">Demander</button>
     </section>
   );
 }

@@ -20,10 +20,13 @@
 }
 @media (min-width: 600px) { .listing { --k: 1; } }
 
-/* La barre du bas du site laisse la place à la barre d'actions (hidesTabBar dans l'app). */
+/* La barre du bas du site laisse la place à la barre d'actions (hidesTabBar dans l'app) : la dernière carte remonte
+   entièrement au-dessus des capsules Duo (56 px, 2 px au-dessus de la zone sûre, 10 px sans zone sûre) ou de la barre
+   blanche de sa propre annonce (8 + 46 + 6 px et la zone sûre). */
 body.page-listing-ready .tabbar { display: none; }
 @media (max-width: 1023px) {
-  body.page-listing-ready { padding-bottom: calc(46px + 6px + 16px + env(safe-area-inset-bottom)); }
+  body.page-listing-ready { padding-bottom: calc(56px + max(10px, env(safe-area-inset-bottom) + 2px)); }
+  body.page-listing-ready:has(.owner-bar) { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
   /* « Demander une visite » ou « Faire une offre » ouvert : pas de barre d'actions, donc pas de place pour elle. */
   body.page-listing-ready:has(.listing-screen) { padding-bottom: 0; }
 }
@@ -142,31 +145,121 @@ a.hc-offer { text-decoration: none; }
 .visit-text { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; line-height: 1.366; }
 .visit-title { color: var(--ink); font-size: 14px; font-weight: 800; letter-spacing: -0.039em; }
 .visit-subtitle { color: var(--text-secondary); font-size: 11.5px; font-weight: 500; letter-spacing: -0.032em; }
-/* « Agenda » (capsule de l'app, 32 px, zone de toucher de 44) et demande envoyée : toute la carte ouvre la demande. */
+/* « Agenda » et « Demander » (capsule de l'app, 32 px, zone de toucher de 44) ; demande envoyée : toute la carte ouvre
+   la demande. */
 .visit-agenda { position: relative; flex: none; display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--blue-soft); color: var(--blue); font-size: 13px; font-weight: 700; text-decoration: none; }
+button.visit-agenda { margin: 0; border: 0; font-family: inherit; line-height: normal; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .visit-agenda::after { content: ''; position: absolute; inset: -6px -4px; }
 a.visit-card { color: inherit; text-decoration: none; }
 .visit-chevron { flex: none; width: 16px; height: 16px; color: var(--text-muted); }
 :is(.visit-agenda, a.visit-card):focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
 
-/* ——— Barre d'actions : flottante sur téléphone et tablette, sous le résumé sur ordinateur ——— */
-.action-bar { position: fixed; z-index: 30; left: 0; right: 0; bottom: calc(6px + env(safe-area-inset-bottom)); display: flex; justify-content: center; padding: 0 13px; pointer-events: none; animation: action-bar-in 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.05) both; }
-.action-bar-capsule { pointer-events: auto; width: 100%; max-width: 520px; height: 46px; display: flex; align-items: center; overflow: hidden; border-radius: 999px; background: var(--blue); box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.25), 0 4px 20px rgba(10, 26, 68, 0.12); }
-.action-bar-item { flex: 1 1 0; min-width: 0; height: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 0; background: transparent; color: #FFFFFF; font-size: clamp(12.5px, 4.1vw, 16px); font-weight: 600; white-space: nowrap; text-decoration: none; cursor: pointer; transition: background 0.15s, transform 0.15s; }
-.action-bar-item:hover { background: rgba(255, 255, 255, 0.08); }
-.action-bar-item:active { background: rgba(255, 255, 255, 0.1); transform: scale(0.96); }
-.action-bar-item:focus-visible { outline-color: #FFFFFF; outline-offset: -4px; }
-.action-bar-item .icon { width: 20px; height: 20px; }
-/* La conversation avec le vendeur s'ouvre : « Messages » attend. */
-.action-bar-item:disabled { opacity: 0.6; cursor: default; transform: none; }
-.action-bar-divider { flex: none; width: 1px; height: 23px; background: rgba(255, 255, 255, 0.35); }
-@keyframes action-bar-in { from { opacity: 0; transform: translateY(16px); } }
-@media (prefers-reduced-motion: reduce) { .action-bar { animation: none; } }
-@media (min-width: 1024px) {
-  .action-bar { position: static; display: block; padding: 0; animation: none; }
-  .action-bar-capsule { max-width: none; box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.25); }
-  .action-bar-item { font-size: 16px; }
+/* ——— Barre du bas, sur téléphone et tablette ———
+   Annonce d'un autre : la barre de contact « Duo » (ContactBar.tsx, ListingContactBar.swift), deux capsules qui
+   flottent au-dessus de la fiche sur un dégradé de la couleur de la page (les 112 derniers pixels, sans toucher). Ses
+   capsules servent aussi sur ordinateur, dans la colonne de droite (ordinateur-fiche.css). Courbes de Romain : Morph,
+   Appui, Rebond (les autres sont dans contactBar.ts). Ses couleurs viennent de captures (Display P3) ; le bleu est
+   celui de l'app (#3C5CB0, qui s'affiche #435BAA en Display P3). L'app est en mode clair : la barre aussi. */
+.duo-bar { position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; padding: 0 20px max(10px, env(safe-area-inset-bottom) + 2px); pointer-events: none; }
+.duo-fade { position: absolute; left: 0; right: 0; bottom: 0; height: 112px; background: linear-gradient(rgba(250, 249, 246, 0), rgba(250, 249, 246, 0.7) 50%, rgba(250, 249, 246, 0.94)); pointer-events: none; }
+/* Tablette : les capsules gardent la largeur de l'ancienne barre (520 px), au centre. */
+.duo-bar .duo-row { max-width: 520px; margin: 0 auto; }
+
+.duo-row {
+  --duo-morph: cubic-bezier(0.32, 0.72, 0, 1);
+  --duo-press: cubic-bezier(0.2, 0, 0, 1);
+  --duo-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duo-border: rgba(31, 36, 48, 0.07);
+  --duo-call-shadow: 0 8px 22px rgba(31, 36, 48, 0.1), 0 1px 3px rgba(31, 36, 48, 0.08);
+  --duo-call-pressed: rgba(232, 236, 247, 0.96);
+  --duo-message-pressed: #384E96;
+  --duo-message-shadow: 0 10px 24px rgba(41, 57, 120, 0.28), 0 1px 3px rgba(41, 57, 120, 0.18);
+  position: relative; display: flex; align-items: center; justify-content: space-between; height: 56px; color-scheme: light;
 }
+@supports (color: color(display-p3 0 0 0)) {
+  .duo-row {
+    --duo-border: color(display-p3 0.1216 0.1412 0.1882 / 0.07);
+    --duo-call-shadow: 0 8px 22px color(display-p3 0.1216 0.1412 0.1882 / 0.1), 0 1px 3px color(display-p3 0.1216 0.1412 0.1882 / 0.08);
+    --duo-call-pressed: color(display-p3 0.9098 0.9255 0.9686 / 0.96);
+    --duo-message-pressed: color(display-p3 0.2196 0.3059 0.5882);
+    --duo-message-shadow: 0 10px 24px color(display-p3 0.1608 0.2235 0.4706 / 0.28), 0 1px 3px color(display-p3 0.1608 0.2235 0.4706 / 0.18);
+  }
+}
+/* Arrivée : chaque capsule monte de 90 px, de 90 % à 100 % et en fondu (Ressort 0,52 s ; easeOut 0,3 s si réduit). */
+.duo-slot { display: flex; transition: transform var(--duo-rise), opacity var(--duo-rise); }
+/* Capsule de 56 px : sa largeur se déplie et se replie en Morph ; l'appui l'enfonce (Appui 0,12 s), le relâchement la
+   fait revenir (Rebond 0,38 s). Repliée en rond, elle reste utilisable. */
+.duo-capsule {
+  position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; height: 56px; margin: 0; padding: 0;
+  border: 0; border-radius: 999px; background: none; color: var(--app-brand); font: 600 17px/24px var(--app-font); letter-spacing: -0.2px;
+  text-decoration: none; white-space: nowrap; cursor: pointer; pointer-events: var(--duo-hit, auto); touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none;
+  transition: width var(--duo-width-time, 0.4s) var(--duo-morph), transform 0.38s var(--duo-bounce);
+}
+.duo-capsule.is-pressed { transform: scale(0.96); transition: width var(--duo-width-time, 0.4s) var(--duo-morph), transform 0.12s var(--duo-press); }
+.duo-call.is-pressed { transform: scale(0.95); }
+.duo-capsule:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 3px; }
+/* Fond, bordure et ombres ; l'appui le fonce en 0,08 s, il revient en 0,30 s. */
+.duo-face { position: absolute; inset: 0; border-radius: inherit; transition: background-color 0.3s var(--duo-press); }
+.duo-capsule.is-pressed .duo-face { transition-duration: 0.08s; }
+/* « Appeler » : blanc à 92 % sur un flou d'arrière-plan, bordure #1F2430 à 7 %, ombre douce ; appuyé, #E8ECF7 à 96 %. */
+.duo-call .duo-face {
+  background-color: rgba(255, 255, 255, 0.92); -webkit-backdrop-filter: blur(20px) saturate(1.8); backdrop-filter: blur(20px) saturate(1.8);
+  box-shadow: inset 0 0 0 1px var(--duo-border), var(--duo-call-shadow);
+}
+.duo-call.is-pressed .duo-face { background-color: var(--duo-call-pressed); }
+/* « Envoyer un message » : bleu de l'app, ombre bleue, fin reflet blanc de 1 px en haut, à l'intérieur ; appuyé, #384E96. */
+.duo-message { color: #FFFFFF; }
+.duo-message .duo-face { background-color: var(--app-brand); box-shadow: var(--duo-message-shadow); }
+.duo-message .duo-face::after {
+  content: ''; position: absolute; inset: 0; padding: 1px; border-radius: inherit;
+  background: linear-gradient(rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 50%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+.duo-message.is-pressed .duo-face { background-color: var(--duo-message-pressed); }
+/* Pictogrammes de 21 px ; les ondes du téléphone (cercles de 26 px, contour de 1,5 px) partent de derrière lui. */
+.duo-icon { position: relative; flex: none; display: inline-flex; width: 21px; height: 21px; }
+.duo-icon .icon { position: relative; width: 21px; height: 21px; }
+.duo-waves { position: absolute; inset: 0; pointer-events: none; }
+.duo-wave { position: absolute; left: 50%; top: 50%; width: 27.5px; height: 27.5px; margin: -13.75px 0 0 -13.75px; border: 1.5px solid var(--app-brand); border-radius: 50%; opacity: 0; transform: scale(0.6); }
+.duo-bubble { display: inline-flex; }
+/* Trois points blancs de 2,6 px, espacés de 4 px, au centre de la bulle (0,5 px plus haut). */
+.duo-dots { position: absolute; left: 50%; top: 50%; display: flex; gap: 4px; transform: translate(-50%, calc(-50% - 0.5px)); }
+.duo-dots i { width: 2.6px; height: 2.6px; border-radius: 50%; background: #FFFFFF; }
+/* Texte : 8 px après le pictogramme ; il paraît en fondu en s'élargissant depuis son bord (gauche pour Appeler,
+   droit pour Message), et disparaît de même au repli. */
+.duo-text { position: relative; display: inline-flex; height: 24px; margin-left: 0; overflow: hidden; transition: width var(--duo-text-time, 0.4s) var(--duo-morph), margin-left var(--duo-text-time, 0.4s) var(--duo-morph); }
+.duo-text.is-shown { margin-left: 8px; }
+.duo-text-inner { display: block; opacity: 0; transform: scale(0.7); transform-origin: left center; transition: opacity var(--duo-text-time, 0.4s) var(--duo-morph), transform var(--duo-text-time, 0.4s) var(--duo-morph); }
+.duo-message .duo-text-inner { transform-origin: right center; }
+.duo-text.is-shown .duo-text-inner { opacity: 1; transform: none; }
+/* Reflet : bande de 70 px, blanche à 28 % au centre, inclinée de 18°, qui traverse la capsule une fois. */
+.duo-clip { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; pointer-events: none; }
+.duo-shine { position: absolute; top: -50%; left: -70px; width: 70px; height: 200%; background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0)); transform: rotate(18deg); visibility: hidden; }
+/* Libellés mesurés, invisibles (la largeur de « Envoyer un message » décide du titre court). */
+.duo-measure { position: absolute; left: 0; top: 0; visibility: hidden; pointer-events: none; font: 600 17px/24px var(--app-font); letter-spacing: -0.2px; white-space: nowrap; }
+.duo-measure > span { display: block; width: max-content; }
+/* « Réduire les animations » : l'appui ne change que la couleur. */
+@media (prefers-reduced-motion: reduce) {
+  .duo-capsule.is-pressed { transform: none; }
+}
+
+/* Sa propre annonce : barre blanche sur toute la largeur, « Voir les demandes » (bleu clair) et « Gérer l'annonce »
+   (bleu), 46 px de haut, rayon 12, pictogrammes de 18 px et texte de 14 px gras. Tablette : 520 px au centre. */
+.owner-bar {
+  position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; display: flex; gap: 10px;
+  padding: 8px max(16px, (100% - 520px) / 2) calc(6px + env(safe-area-inset-bottom)); background: #FFFFFF; box-shadow: 0 -2px 20px rgba(36, 45, 56, 0.06);
+}
+.owner-bar-button {
+  flex: 1 1 0; min-width: 0; min-height: 46px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0;
+  border: 0; border-radius: 12px; font: 700 14px/1.2 var(--app-font); white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.owner-bar-button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.owner-bar-button .icon { flex: none; width: 18px; height: 18px; }
+.owner-bar-requests { background: var(--app-brand-soft); color: var(--app-brand); }
+.owner-bar-manage { gap: 8px; background: var(--app-brand); color: #FFFFFF; }
+.owner-bar-button:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
 
 /* ——— Cartes de la catégorie (maquette × --k) ——— */
 .spec-stack { display: flex; flex-direction: column; gap: calc(14px * var(--k)); }
@@ -396,9 +489,10 @@ a.visit-card { color: inherit; text-decoration: none; }
 /* ——— Fenêtres ——— */
 .copy-link { width: 100%; height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--page); color: var(--ink); font: inherit; font-size: 14px; }
 
-.listing-toast { position: fixed; z-index: 40; left: 50%; bottom: calc(46px + 6px + 16px + env(safe-area-inset-bottom)); margin: 0; display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px; background: var(--ink); color: #FFFFFF; font-size: 14px; font-weight: 600; white-space: nowrap; opacity: 0; transform: translate(-50%, 8px); pointer-events: none; transition: opacity 0.2s, transform 0.2s; }
+.listing-toast { position: fixed; z-index: 40; left: 50%; bottom: calc(56px + max(10px, env(safe-area-inset-bottom) + 2px) + 16px); margin: 0; display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px; background: var(--ink); color: #FFFFFF; font-size: 14px; font-weight: 600; white-space: nowrap; opacity: 0; transform: translate(-50%, 8px); pointer-events: none; transition: opacity 0.2s, transform 0.2s; }
 .listing-toast.is-shown { opacity: 1; transform: translate(-50%, 0); }
 .listing-toast .icon { width: 16px; height: 16px; }
+body:has(.owner-bar) .listing-toast { bottom: calc(60px + env(safe-area-inset-bottom) + 16px); }
 @media (min-width: 1024px) { .listing-toast { bottom: 24px; } }
 
 /* ——— Chargement et erreurs ——— */

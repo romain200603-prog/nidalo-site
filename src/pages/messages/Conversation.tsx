@@ -6,7 +6,7 @@ import { highlightsFor } from '../../lib/highlights';
 import { answerOffer, canMakeOffer, offerErrorMessage, offersIn, type OfferAction, type OfferRow } from '../../lib/listing/offers';
 import { profitabilityFor } from '../../lib/listing/profitability';
 import {
-  areValidSlots, dayString, hourLabel, INVALID_SLOTS_MESSAGE, slotStart, SLOT_TIMES, suggestedSlot, visitErrorMessage, type SlotDraft,
+  areValidSlots, dayString, INVALID_SLOTS_MESSAGE, slotHourLabel, slotStart, SLOT_TIMES, suggestedSlot, visitErrorMessage, type SlotDraft,
 } from '../../lib/listing/visits';
 import { sortedPhotos } from '../../lib/listings';
 import type { Message } from '../../lib/messages/api';
@@ -469,7 +469,7 @@ function ProposeSlotsForm({ id, request, onClose }: { id: string; request: Conve
               aria-label={`Heure du créneau ${index + 1}`}
               onChange={(event) => change(index, { ...draft, minutes: Number(event.currentTarget.value) })}
             >
-              {SLOT_TIMES.map((minutes) => <option key={minutes} value={minutes}>{hourLabel(minutes)}</option>)}
+              {SLOT_TIMES.map((minutes) => <option key={minutes} value={minutes}>{slotHourLabel(minutes)}</option>)}
             </select>
           </div>
         ))}

@@ -224,6 +224,9 @@ export function listingWrite(source: PublishDraft, { insert }: { insert: boolean
   // charge pour « Fonds seul » (détails de l'hôtel) ; ni l'un ni l'autre pour « Murs et fonds ».
   const hotel = draft.assetDetails?.kind === 'hotel' ? draft.assetDetails.hotel : null;
   if (hotel && hotel.scope !== 'wallsOnly') rental = null;
+  // Résidentiel : la catégorie n'affiche aucun loyer, aucun n'est transmis (n° 79), même saisi avant un changement de
+  // catégorie (le brouillon à l'écran le garde).
+  if (draft.category === 'residential') rental = null;
   const assetDetails: AssetDraft | null = hotel && hotel.scope !== 'businessOnly'
     ? { kind: 'hotel', hotel: { ...hotel, wallsAnnualRent: null } }
     : draft.assetDetails;

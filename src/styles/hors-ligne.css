@@ -1,0 +1,13 @@
+/* « Pas de connexion Internet » (DomiaEmptyState.offline de l'app) : la vue système ContentUnavailableView avec la
+   typographie de l'app (titre de 16 gras bleu marine, texte de 13 gris) et « Réessayer » en bouton secondaire
+   (DomiaSecondaryButtonStyle : 52 de haut, rayon 12, fond bleu très clair, 15 demi-gras bleu, 200 au plus).
+   1 pt de l'app = 1 px ici. Le même état sur téléphone et sur ordinateur. */
+.app-offline h2 { font: 700 16px/21px var(--app-font); }
+.app-offline p { color: var(--app-text-secondary); font: 400 13px/18px var(--app-font); }
+.app-offline > .app-offline-retry {
+  display: flex; align-items: center; justify-content: center; width: 100%; max-width: 200px; min-height: 52px; margin-top: 16px;
+  padding: 0 16px; border: 0; border-radius: 12px; background: var(--app-brand-soft); color: var(--app-brand);
+  font: 600 15px/1.2 var(--app-font); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.app-offline > .app-offline-retry:active { opacity: 0.85; }
+.app-offline > .app-offline-retry:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }

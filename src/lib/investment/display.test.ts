@@ -46,9 +46,14 @@ describe('montants (Formatters.price, amount, signedAmount)', () => {
 
   it('affiche les centimes seulement s’il y en a', () => {
     expect(plain(formatAmount(1043.93))).toBe('1 043,93 €');
-    expect(plain(formatAmount(1043.9))).toBe('1 043,9 €');
+    expect(plain(formatAmount(1043.9))).toBe('1 043,90 €');
     expect(plain(formatAmount(629))).toBe('629 €');
-    expect(plain(formatAmount('1043.925'))).toBe('1 043,92 €');
+    // Arrondi au centime d'abord, la moitié loin de zéro (NSDecimalRound .plain, n° 142).
+    expect(plain(formatAmount('1043.925'))).toBe('1 043,93 €');
+    expect(plain(formatAmount('450.5'))).toBe('450,50 €');
+    expect(plain(formatAmount('837.5'))).toBe('837,50 €');
+    expect(plain(formatAmount('450.996'))).toBe('451 €');
+    expect(plain(formatAmount(-0.001))).toBe('0 €');
   });
 
   it('signe les montants avec + et le vrai signe moins', () => {

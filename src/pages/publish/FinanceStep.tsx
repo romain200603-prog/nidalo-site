@@ -1,10 +1,10 @@
-import { useId, useState } from 'react';
+import { useId, useLayoutEffect } from 'react';
 import { ChoiceChip, DateChoice, inOneMonth, InfoLine, isoDay, PERCENT_ISSUE } from '../../components/FilterControls';
 import { formatFraction, formatPrice } from '../../lib/format';
 import { scopeLabel } from '../../lib/listingJson';
 import {
-  buildingOfDraft, CHARGES_MODES, coOwnershipLotsIssue, coOwnershipNeedsProcedure, currentAnnualRent, depositWarning, emptyBuilding, emptyHotel, emptyRental, FEE_PAYERS, feesNeedPayer,
-  flatRateWarning, grossYield, hotelOfDraft, HOTEL_AMENITIES, HOTEL_STATUSES, inventoryFeeIssue, isDwelling, LEASE_TYPES, potentialGrossYield,
+  annualFromMonthly, buildingOfDraft, CHARGES_MODES, coOwnershipLotsIssue, coOwnershipNeedsProcedure, currentAnnualRent, depositWarning, emptyBuilding, emptyHotel, emptyRental, FEE_PAYERS, feesNeedPayer,
+  flatRateWarning, grossYield, hotelOfDraft, HOTEL_AMENITIES, HOTEL_STATUSES, inventoryFeeIssue, isDwelling, LEASE_TYPES, monthlyFromAnnual, potentialGrossYield,
   pricePerSquareMeter, rentalAvailability, rentalChargesLabel, rentIncludingCharges, saleChargesLabel, showsCoOwnership, showsInventoryFee, showsRentControl,
   syncBuildingRent, tenantShareWarning,
   type BuildingDraft, type Day, type FeePayer, type HotelDraft, type LeaseType, type PublishDraft, type RentalDraft,
@@ -16,7 +16,12 @@ import { Amount, BoolChoices, Card, Choices, ErrorLine, IndicatorsCard, type Ste
 // seulement quand les données le permettent (jamais de rendement net ni de cash-flow saisis par le vendeur).
 
 const perSquareMeter = (value: number | null) => (value === null ? null : `${formatPrice(value)}/m²`);
-const round2 = (value: number) => Math.round(value * 100) / 100;
+
+/**
+ * « À partir du… » choisi dans la disponibilité d'une location, gardé par l'assistant tant que la publication est
+ * ouverte (n° 206) : une date du jour choisie ainsi reste « À partir du… » d'une étape à l'autre.
+ */
+export type KeptChoice = { value: boolean; set: (value: boolean) => void };
 
 function setters(update: Update) {
   const set = <K extends keyof PublishDraft>(key: K, value: PublishDraft[K]) => update((current) => ({ ...current, [key]: value }));
@@ -55,19 +60,22 @@ function LeaseTypeChoice({ value, onChange }: { value: LeaseType | null; onChang
   );
 }
 
-/** `isPro` : compte professionnel, qui indique ses honoraires (mention obligatoire de ses annonces). */
-export function FinanceStep({ isPro, ...props }: StepProps & { isPro: boolean }) {
+/**
+ * `isPro` : compte professionnel, qui indique ses honoraires (mention obligatoire de ses annonces). `availabilityChoice` :
+ * le choix « À partir du… » d'une location, gardé par l'assistant.
+ */
+export function FinanceStep({ isPro, availabilityChoice, ...props }: StepProps & { isPro: boolean; availabilityChoice: KeptChoice }) {
   return (
     <>
-      {categoryCards(props)}
+      {categoryCards(props, availabilityChoice)}
       {isPro && <FeesCard {...props} />}
     </>
   );
 }
 
-function categoryCards(props: StepProps) {
+function categoryCards(props: StepProps, availabilityChoice: KeptChoice) {
   switch (props.draft.category) {
-    case 'rental': return <RentalCards {...props} />;
+    case 'rental': return <RentalCards {...props} availabilityChoice={availabilityChoice} />;
     case 'investment': return <InvestmentCards {...props} />;
     case 'hotel': return <HotelCards {...props} />;
     default: return <SaleCards {...props} />;
@@ -145,7 +153,7 @@ function SaleCards(props: StepProps) {
 
 // MARK: - Location
 
-function RentalCards({ draft, update }: StepProps) {
+function RentalCards({ draft, update, availabilityChoice }: StepProps & { availabilityChoice: KeptChoice }) {
   const { set, rental: setRental, lease: setLease } = setters(update);
   const rental = draft.rentalInfo ?? emptyRental();
   const total = rentIncludingCharges(draft);
@@ -191,7 +199,7 @@ function RentalCards({ draft, update }: StepProps) {
             onChange={(isFurnished) => setRental({ isFurnished })} />
         )}
         {business && <LeaseTypeChoice value={leaseOf(draft).leaseType} onChange={(leaseType) => setLease({ leaseType })} />}
-        <RentalAvailabilityChoice value={rental.availableFrom} onChange={(availableFrom) => setRental({ availableFrom })} />
+        <RentalAvailabilityChoice value={rental.availableFrom} onChange={(availableFrom) => setRental({ availableFrom })} kept={availabilityChoice} />
         <Amount label="Durée du bail" value={rental.leaseDurationMonths} unit="mois" integer
           onChange={(leaseDurationMonths) => setRental({ leaseDurationMonths })} />
         {dwelling && (
@@ -207,12 +215,18 @@ function RentalCards({ draft, update }: StepProps) {
  * enregistre la date du jour ; « À partir du… » montre la date juste dessous, dans un mois par défaut et jamais avant
  * aujourd'hui. Sans choix, la disponibilité n'est pas précisée et l'annonce se publie quand même. Retoucher le choix
  * l'enlève. Une annonce rouverte retrouve son choix : date du jour ou passée, « Tout de suite » ; date à venir,
- * « À partir du… » avec sa date.
+ * « À partir du… » avec sa date. Le choix « À partir du… » est gardé par l'assistant (`kept`, n° 206) : choisi avec la
+ * date du jour, il le reste en revenant à l'étape.
  */
-function RentalAvailabilityChoice({ value, onChange }: { value: Day | null; onChange: (value: Day | null) => void }) {
+function RentalAvailabilityChoice({ value, onChange, kept }: { value: Day | null; onChange: (value: Day | null) => void; kept: KeptChoice }) {
   const today = isoDay(new Date());
   const availability = rentalAvailability(value, today);
-  const [choosesDate, setChoosesDate] = useState(availability === 'from');
+  const { value: choosesDate, set: setChoosesDate } = kept;
+  // À l'apparition, comme l'app (onAppear) : une date à venir montre « À partir du… ».
+  useLayoutEffect(() => {
+    if (availability === 'from') setChoosesDate(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const dateId = useId();
   const immediately = availability === 'immediately' && !choosesDate;
   return (
@@ -311,9 +325,10 @@ function InvestmentCards(props: StepProps) {
           </div>
           {leased === true && (business ? (
             <>
-              {/* Loyer annuel saisi pour un local ou des bureaux, enregistré en mensuel (comme les autres annonces). */}
-              <Amount label="Loyer annuel actuel hors charges" value={rental.currentMonthlyRent === null ? null : rental.currentMonthlyRent * 12} unit="€/an"
-                onChange={(annual) => setRental({ currentMonthlyRent: annual === null ? null : round2(annual / 12) })} />
+              {/* Loyer annuel saisi pour un local ou des bureaux, enregistré en mensuel (comme les autres annonces), relu à
+                  l'euro près quand l'écart ne vient que de l'arrondi du mois (n° 82). */}
+              <Amount label="Loyer annuel actuel hors charges" value={annualFromMonthly(rental.currentMonthlyRent)} unit="€/an"
+                onChange={(annual) => setRental({ currentMonthlyRent: monthlyFromAnnual(annual) })} />
               {tenantShare('Part des charges payée par le locataire')}
               <LeaseTypeChoice value={leaseOf(draft).leaseType} onChange={(leaseType) => setLease({ leaseType })} />
               <DateChoice title="Échéance du bail" value={leaseOf(draft).leaseEndDate} onChange={(leaseEndDate) => setLease({ leaseEndDate })} />
@@ -346,7 +361,7 @@ function InvestmentCards(props: StepProps) {
             formula: 'Loyer envisagé × 12 ÷ prix de vente × 100', isHypothesis: true, hidesWhenMissing: true,
           },
         ]}
-        footnote="Rendement net et cash-flow s'affichent sur l'annonce, estimés avec les hypothèses de NIDALO (crédit sur 20 ans à 3,5 %), jamais saisis par le vendeur."
+        footnote="Rendement net et cash-flow s'affichent sur l'annonce, estimés avec les hypothèses de Nidalo (crédit sur 20 ans à 3,5 %), jamais saisis par le vendeur."
       />
     </>
   );
@@ -372,9 +387,10 @@ function HotelCards({ draft, update }: StepProps) {
         <Amount label="Taxe foncière" value={draft.annualPropertyTax} unit="€/an" onChange={(value) => set('annualPropertyTax', value)} />
         {hotel.scope === 'wallsOnly' && (
           <>
-            {/* Loyer saisi à l'année, enregistré en mensuel comme le bail d'un local loué : il sert au calcul de rentabilité. */}
-            <Amount label="Loyer annuel payé par l'exploitant" value={rental.currentMonthlyRent === null ? null : rental.currentMonthlyRent * 12} unit="€/an"
-              onChange={(annual) => setRental({ currentMonthlyRent: annual === null ? null : round2(annual / 12), isLeased: annual !== null })} />
+            {/* Loyer saisi à l'année, enregistré en mensuel comme le bail d'un local loué : il sert au calcul de rentabilité.
+                100 000 € restent 100 000 € (n° 82). */}
+            <Amount label="Loyer annuel payé par l'exploitant" value={annualFromMonthly(rental.currentMonthlyRent)} unit="€/an"
+              onChange={(annual) => setRental({ currentMonthlyRent: monthlyFromAnnual(annual), isLeased: annual !== null })} />
             <InfoLine>Loyer hors charges du bail en cours. Il sert au calcul de la rentabilité, comme pour un investissement.</InfoLine>
           </>
         )}

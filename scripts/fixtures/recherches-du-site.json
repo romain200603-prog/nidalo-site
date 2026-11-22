@@ -87,7 +87,7 @@
   {
     "label": "Résidentiel, un arrondissement (par son code postal)",
     "mode": "buy",
-    "name": "Résidentiel · Lyon 3e (69003) · Appartement, Maison, Terrain · 150 000 € – 400 0",
+    "name": "Résidentiel · Lyon 3e (69003) · 150 000 € – 400 000 €",
     "query": {
       "transaction": "sale",
       "propertyTypes": [
@@ -128,7 +128,7 @@
   {
     "label": "Location meublée à Paris",
     "mode": "rent",
-    "name": "Location · Paris et alentours · Appartement, Bureaux, Local commercial, Maison, ",
+    "name": "Location · Paris et alentours · Jusqu'à 1 200 €/mois",
     "query": {
       "transaction": "rent",
       "propertyTypes": [
@@ -271,7 +271,7 @@
   {
     "label": "Zone de la carte",
     "mode": "buy",
-    "name": "Résidentiel · Zone de la carte · Appartement, Maison, Terrain · Jusqu'à 400 000 ",
+    "name": "Résidentiel · Zone de la carte · Jusqu'à 400 000 €",
     "query": {
       "transaction": "sale",
       "propertyTypes": [

@@ -3,6 +3,7 @@ import {
   activeFilterCount, defaultDraft, draftFromParams, filterChips, hotelRoomCount, investmentKind, matches, paramsFromDraft,
   propertyTypesFor, withInvestmentKind, LIGHT_WORKS_LIMIT, type Highlights,
 } from './search';
+import { worksPreferenceLabel } from './homeCriteria';
 import { testRow } from './testRows';
 
 const highlights: Highlights = { grossYield: 0.08, netYield: 0.06, monthlyCashFlow: 50, isRentEstimated: false };
@@ -29,6 +30,13 @@ describe('critères de l’accueil (SearchMatching.swift)', () => {
     const none = { ...defaultDraft('invest'), maxWorksAmount: 0 };
     expect(matches(testRow({ works_amount: 1 }), none, highlights)).toBe(false);
     expect(matches(testRow({ works_amount: 0 }), none, highlights)).toBe(true);
+  });
+
+  it('Investir : « Sans travaux » dans l’accueil, comme la pastille (n° 163)', () => {
+    expect(worksPreferenceLabel(0)).toBe('Sans travaux');
+    expect(filterChips({ ...defaultDraft('invest'), maxWorksAmount: 0 }).map((c) => c.label)).toEqual(['Sans travaux']);
+    expect(worksPreferenceLabel(LIGHT_WORKS_LIMIT)).toBe('Travaux légers');
+    expect(worksPreferenceLabel(null)).toBe('Indifférent');
   });
 
   it('Investir : type d’investissement, vue des types et de l’immeuble mixte', () => {

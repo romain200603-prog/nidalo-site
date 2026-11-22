@@ -86,7 +86,13 @@ describe('Partage (ListingShareTests)', () => {
     const share = shareText(testRow({ transaction: 'rent', title: 'Studio', price: 650, living_area: 24, rooms: 1, monthly_charges: 40 }));
     const lines = share.text.split('\n');
     expect(lines[1].startsWith('690')).toBe(true);
-    expect(lines[1]).toContain('€/mois · 24 m² · 1 pièce');
+    // Le texte dit « charges comprises » quand le loyer les inclut (n° 69), dans le sujet et l'aperçu aussi.
+    expect(lines[1]).toContain('€/mois charges comprises · 24 m² · 1 pièce');
+    expect(share.subject.endsWith('€/mois charges comprises')).toBe(true);
+    expect(share.previewTitle.endsWith('€/mois charges comprises')).toBe(true);
+    // Sans charges connues : « /mois » seul, comme avant.
+    const bare = shareText(testRow({ transaction: 'rent', title: 'Studio', price: 650, living_area: 24, rooms: 1, monthly_charges: null }));
+    expect(bare.text.split('\n')[1]).toMatch(/^650\D+€\/mois · 24 m² · 1 pièce$/);
   });
 
   it('terrain et jardin de la maison', () => {

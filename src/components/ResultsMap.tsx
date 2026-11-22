@@ -10,7 +10,7 @@ import { formatPinPrice } from '../lib/format';
 import { sortedPhotos } from '../lib/listings';
 import type { Coordinate } from '../lib/places';
 import type { BoundingBox, Result } from '../lib/search';
-import { GOOD_YIELD, grossYieldText } from '../lib/cardContent';
+import { cardPrice, GOOD_YIELD, grossYieldText } from '../lib/cardContent';
 
 // Moteur de carte servi par le site lui-même (pas de code téléchargé ailleurs).
 setWorkerUrl(workerUrl);
@@ -459,7 +459,8 @@ export function ResultsMap({
           const isSelected = row.id === selectedId;
           const isHovered = row.id === hoveredId;
           const good = highlights ? highlights.grossYield >= GOOD_YIELD : false;
-          const price = formatPinPrice(Number(row.price), row.transaction);
+          // Location : le loyer charges comprises quand elles sont connues, comme les cartes (MapPricePin, n° 173).
+          const price = formatPinPrice(cardPrice(row).value, row.transaction);
           return (
             <button
               key={row.id}
@@ -478,7 +479,8 @@ export function ResultsMap({
                   <span className="map-marker-photo"><ListingPhoto photo={sortedPhotos(row)[0]} /></span>
                   <span className="map-marker-price">
                     {price}
-                    {isSelected && showsYield && highlights && <span className="map-marker-yield">{grossYieldText(highlights)}</span>}
+                    {/* Verte à partir de 7 %, orange en dessous, comme les cartes (n° 166). */}
+                    {isSelected && showsYield && highlights && <span className={`map-marker-yield${good ? '' : ' is-low'}`}>{grossYieldText(highlights)}</span>}
                   </span>
                 </span>
                 <span className={`map-marker-dot${good ? ' good' : ''}`} />

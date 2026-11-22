@@ -141,9 +141,14 @@ const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(
 const wideDay = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 const shortDay = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
 
-/** « 18h00 » (VisitDate.hour, SlotDraft.label). */
+/** « 18h00 » (VisitDate.hour) : l'heure des dates d'une visite (longue et dans une phrase). */
 export function hourLabel(minutes: number): string {
   return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, '0')}`;
+}
+
+/** « 10 h 00 » (SlotDraft.label, VisitSessionFormat.hour) : l'heure d'un créneau, comme les séances (n° 177). */
+export function slotHourLabel(minutes: number): string {
+  return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')}`;
 }
 
 const minutesOf = (date: Date) => date.getHours() * 60 + date.getMinutes();
@@ -158,9 +163,14 @@ export function visitDateInline(date: Date): string {
   return `${shortDay.format(date)}, ${hourLabel(minutesOf(date))}`;
 }
 
-/** « Jeu. 5 nov. · 10h00 » (VisitRequestFormatting.slot). */
+/** « Jeu. 5 nov. · 10h00 » (ProContacts.slotLabel) : le créneau d'une demande dans les contacts de l'espace pro. */
 export function slotLabel(date: Date): string {
   return `${capitalized(shortDay.format(date))} · ${hourLabel(minutesOf(date))}`;
+}
+
+/** « Jeu. 5 nov. · 10 h 00 » (VisitRequestFormatting.slot) : un créneau demandé (n° 177). */
+export function requestSlotLabel(date: Date): string {
+  return `${capitalized(shortDay.format(date))} · ${slotHourLabel(minutesOf(date))}`;
 }
 
 // MARK: - Formulaire (SlotDraft)
@@ -168,7 +178,7 @@ export function slotLabel(date: Date): string {
 /** Créneau en cours de saisie : un jour (« 2026-11-07 ») et une heure en minutes, par pas d'une demi-heure. */
 export type SlotDraft = { day: string; minutes: number };
 
-/** Heures proposées : de 8h00 à 20h00, toutes les demi-heures (SlotDraft.times). */
+/** Heures proposées : de 8 h 00 à 20 h 00, toutes les demi-heures (SlotDraft.times). */
 export const SLOT_TIMES: readonly number[] = Array.from({ length: 25 }, (_, index) => 8 * 60 + index * 30);
 
 /** Jour local « AAAA-MM-JJ » d'une date (champ de date du navigateur). */

@@ -100,12 +100,16 @@ function FullMap({ coordinate, isApproximate, card, onClose }: { coordinate: Coo
   );
 }
 
-/** Mini carte fixe (créée en arrivant près d'elle, comme la LazyVStack de l'app), « Voir sur la carte » et la légende. */
-export function LocationSection({ coordinate, isApproximate, place, card }: {
+/**
+ * Mini carte fixe (créée en arrivant près d'elle, comme la LazyVStack de l'app), « Voir sur la carte » et la légende
+ * (location : « le propriétaire », n° 74).
+ */
+export function LocationSection({ coordinate, isApproximate, place, card, isRental }: {
   coordinate: Coordinate | null;
   isApproximate: boolean;
   place: string;
   card: MapCardInfo;
+  isRental: boolean;
 }) {
   const [fullScreen, setFullScreen] = useState(false);
   const [near, setNear] = useState(false);
@@ -125,7 +129,7 @@ export function LocationSection({ coordinate, isApproximate, place, card }: {
     return () => observer.disconnect();
   }, [near, coordinate]);
 
-  const caption = isApproximate ? 'Localisation approximative : le vendeur n\'indique que le quartier.' : place;
+  const caption = isApproximate ? `Localisation approximative : le ${isRental ? 'propriétaire' : 'vendeur'} n'indique que le quartier.` : place;
   return (
     <SectionCard id="localisation" title="Localisation">
       <div className="location">

@@ -75,6 +75,17 @@ const RENTAL = { ...rentalRow, id: RENTAL_ID, owner_id: USER_ID };
 const RENTAL_PHOTOS = [{ ...ONLINE_PHOTOS[0], id: 'a1000000-0000-4000-8000-000000000004', listing_id: RENTAL_ID, storage_path: `${USER_ID}/${RENTAL_ID}/premiere.jpg` }];
 const RENTAL_LOCATION = { ...ONLINE_LOCATION, listing_id: RENTAL_ID };
 /**
+ * Hôtel en ligne du compte de test, murs seuls, une chambre : son loyer annuel de 100 000 € est enregistré au mois
+ * (8 333,33 €), comme l'app.
+ */
+const HOTEL_ID = '6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1b55';
+const HOTEL = {
+  ...listedRow, id: HOTEL_ID, owner_id: USER_ID, property_type: 'hotel', publish_category: 'hotel', title: 'Hôtel des Canuts', rooms: null, bedrooms: null,
+  monthly_charges: null, rental_info: { isLeased: true, currentMonthlyRent: 8333.33 }, asset_details: { hotel: { _0: { rooms: 1, scope: 'wallsOnly' } } },
+};
+const HOTEL_PHOTOS = [{ ...ONLINE_PHOTOS[0], id: 'a1000000-0000-4000-8000-000000000005', listing_id: HOTEL_ID, storage_path: `${USER_ID}/${HOTEL_ID}/premiere.jpg` }];
+const HOTEL_LOCATION = { ...ONLINE_LOCATION, listing_id: HOTEL_ID };
+/**
  * Partage dans l'agence : Claire est responsable de l'équipe de Rhône Immobilier, Inès y est agente. Claire modifie
  * l'annonce d'Inès : l'adresse et les photos restent au nom d'Inès, dans son dossier.
  */
@@ -110,6 +121,8 @@ const LISTING_TABLES = ['listings', 'listing_locations', 'listing_photos'];
 const problems = [];
 /** Réponses en erreur voulues (refus du serveur) : Chrome les écrit dans la console, ce ne sont pas des erreurs du site. */
 let expectedServerErrors = 0;
+/** Demandes coupées exprès (pas de réseau) : Chrome les écrit aussi dans la console. */
+let expectedNetworkFailures = 0;
 
 function fakeSession() {
   const b64 = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -157,6 +170,13 @@ function newState({ firstName = 'Claire', listings = [], locations = [], photos 
     geocoding: [],
     /** Message P0001 du serveur pour la mise en ligne (« Publication refusée »), ou null. */
     refuseOnline: null,
+    /** Mes informations refusées par le serveur (le prénom demandé avant la première publication n'est pas enregistré). */
+    refuseDetails: false,
+    /** Pas de réseau pour la recherche d'adresse, ou au moment d'écrire l'annonce (n° 80). */
+    offlineGeocoding: false,
+    offlineWrites: false,
+    /** Relecture de l'annonce après l'enregistrement en échec (n° 80). */
+    failRereads: false,
     /** Équipe de l'agence dont Claire est responsable (partage : elle modifie les annonces de l'équipe). */
     team,
   };
@@ -190,6 +210,11 @@ function rest(state, route, signedIn) {
   if (width !== null && width < 1024 && LISTING_TABLES.includes(table)) problems.push(`téléphone : ${method} ${table} demandé (rien ne doit changer sous 1024 px)`);
   const now = new Date().toISOString();
   const rows = Array.isArray(body) ? body : body && typeof body === 'object' ? [body] : [];
+  // Pas de réseau au moment d'écrire l'annonce : la demande ne part pas.
+  if (state.offlineWrites && LISTING_TABLES.includes(table) && method !== 'GET') {
+    expectedNetworkFailures += 1;
+    return route.abort('internetdisconnected');
+  }
   switch (table) {
     case 'profiles':
       if (method === 'GET') return single ? json(route, state.profile) : json(route, [state.profile]);
@@ -197,9 +222,21 @@ function rest(state, route, signedIn) {
       break;
     case 'profile_details':
       if (method === 'GET') return json(route, [state.details]);
-      if (method === 'PATCH') { Object.assign(state.details, body); return empty(route); }
+      if (method === 'PATCH') {
+        if (state.refuseDetails) {
+          expectedServerErrors += 1;
+          return json(route, { code: '23514', message: 'new row violates check constraint', details: null, hint: null }, 400);
+        }
+        Object.assign(state.details, body);
+        return empty(route);
+      }
       break;
     case 'listings': {
+      // Relecture d'une annonce après l'enregistrement (pas la vérification « id, status » du début) : en échec.
+      if (method === 'GET' && state.failRereads && params.has('id') && params.get('select') !== 'id,status') {
+        expectedServerErrors += 1;
+        return json(route, { message: 'indisponible' }, 500);
+      }
       if (method === 'GET') {
         // Comme les règles du serveur : le brouillon d'une autre personne n'est jamais lu (sauf dans son équipe).
         const found = filtered(state.listings, params).filter((row) => editableOwners(state).includes(row.owner_id) || row.status !== 'draft');
@@ -361,6 +398,10 @@ function geocoding(state, route) {
   const url = new URL(route.request().url());
   const params = Object.fromEntries(url.searchParams);
   state.geocoding.push(params);
+  if (state.offlineGeocoding) {
+    expectedNetworkFailures += 1;
+    return route.abort('internetdisconnected');
+  }
   const q = (params.q ?? '').toLowerCase();
   const features = [];
   for (const address of ADDRESSES) {
@@ -458,8 +499,12 @@ async function open(context, path, name) {
   const page = await context.newPage();
   page.on('console', (msg) => {
     const text = msg.text();
-    if (expectedServerErrors > 0 && /status of (400|409)/.test(text)) {
+    if (expectedServerErrors > 0 && /status of (400|409|500)/.test(text)) {
       expectedServerErrors -= 1;
+      return;
+    }
+    if (expectedNetworkFailures > 0 && /net::ERR_/.test(text)) {
+      expectedNetworkFailures -= 1;
       return;
     }
     if (msg.type() === 'error' || /Content Security Policy/i.test(text)) problems.push(`${name} : ${msg.type()} ${text}`);
@@ -507,6 +552,19 @@ const amount = (page, label) => page.locator('.dpub .dsc-amount').filter({ has: 
 const chip = (page, group, title) => page.locator('.dpub [role="group"]').filter({ has: page.locator('.field-label', { hasText: new RegExp(`^${group}$`) }) })
   .getByRole('button', { name: title, exact: true });
 /**
+ * Collage d'un texte dans un champ (événement « paste » avec ses données, comme ⌘V), le texte du champ sélectionné ;
+ * un collage que la page laisse passer insère le texte tel quel, comme le navigateur.
+ */
+const pasteInto = (locator, text) => locator.evaluate((input, value) => {
+  input.focus();
+  input.select();
+  const data = new DataTransfer();
+  data.setData('text/plain', value);
+  const event = new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true });
+  input.dispatchEvent(event);
+  if (!event.defaultPrevented) document.execCommand('insertText', false, value);
+}, text);
+/**
  * Capture de toute la page : la fenêtre prend la hauteur de la page (sinon la barre d'actions collante est dessinée au
  * milieu), comme tallShot dans check-pages.
  */
@@ -544,7 +602,7 @@ try {
     await mock(context, state, { signedIn: false });
     const page = await open(context, '/publier/', N);
     await page.waitForSelector('.signin-card');
-    expectSame(N, 'page', [await textOf(page, '.signin-card h1'), await page.locator('.dpub').count()], ['Bienvenue sur NIDALO', 0]);
+    expectSame(N, 'page', [await textOf(page, '.signin-card h1'), await page.locator('.dpub').count()], ['Votre prochain bien commence ici.', 0]);
     await shot(page, 'publier-sans-compte.png');
     await context.close();
   }
@@ -608,9 +666,20 @@ try {
     expectSame(N, 'champs signalés', await errorsOf(page), ['Obligatoire', 'Obligatoire', 'Indiquez le prix.']);
     await page.getByRole('combobox', { name: 'Code postal' }).fill('99999');
     await page.getByRole('combobox', { name: 'Ville' }).fill('Nulleville');
+    // Un montant en euros collé avec des points de milliers : « 250.000 » donne 250 000 (n° 242).
+    await pasteInto(amount(page, 'Prix de vente'), '250.000');
+    expectSame(N, 'prix collé', await amount(page, 'Prix de vente').inputValue(), '250 000');
     await amount(page, 'Prix de vente').fill('320000');
     await page.waitForTimeout(400);
     expectSame(N, 'prix saisi', await amount(page, 'Prix de vente').inputValue(), '320 000');
+    // Sans réseau, l'adresse n'est pas « introuvable » : elle n'a pas pu être vérifiée (n° 80).
+    state.offlineGeocoding = true;
+    await page.click(CONTINUE);
+    await page.waitForFunction(() => [...document.querySelectorAll('.dpub .field-error')].some((el) => el.textContent.startsWith('L\'adresse n\'a pas pu')), null, { timeout: 12000 })
+      .catch(async () => problems.push(`${N} : adresse sans réseau non signalée (${JSON.stringify(await errorsOf(page))})`));
+    expectSame(N, 'adresse sans réseau', [await errorsOf(page), await textOf(page, '.dsc-head .dsc-titles p')],
+      [['L\'adresse n\'a pas pu être vérifiée. Vérifiez votre connexion, puis réessayez.'], 'Étape 2 sur 7 · Informations principales']);
+    state.offlineGeocoding = false;
     await page.click(CONTINUE);
     await page.waitForFunction(() => [...document.querySelectorAll('.dpub .field-error')].some((el) => el.textContent.startsWith('Adresse introuvable')), null, { timeout: 8000 })
       .catch(async () => problems.push(`${N} : adresse introuvable non signalée (${JSON.stringify(await errorsOf(page))})`));
@@ -643,6 +712,9 @@ try {
     await chip(page, 'Extérieur', 'Balcon').click();
     await page.getByRole('button', { name: 'DPE (classe énergie) C', exact: true }).click();
     await page.getByRole('button', { name: 'GES (classe climat) B', exact: true }).click();
+    // Logement avec un DPE : les deux dépenses d'énergie sont obligatoires (n° 84).
+    await amount(page, 'Dépenses d\'énergie minimum').fill('820');
+    await amount(page, 'Dépenses d\'énergie maximum').fill('1150');
     await shot(page, 'publier-3-caracteristiques.png');
     await page.click(CONTINUE);
 
@@ -698,9 +770,23 @@ try {
     expectSame(N, 'récapitulatif', await page.$$eval('.dpub-recap-row', (rows) => rows.map((row) => `${row.querySelector('dt').textContent}: ${row.querySelector('dd span').textContent}`)),
       ['Catégorie: Résidentiel · Appartement', 'Adresse: 12 Rue Mercière, 69002 Lyon', 'Prix: 320 000 €', 'Surface: 62 m²', 'DPE: C', 'Photos: 2']);
     await shot(page, 'publier-7-verification.png');
+    // Le prénom refusé par le serveur : la fenêtre s'intitule « Prénom non enregistré » (n° 190) ; rien n'est publié.
+    state.refuseDetails = true;
+    let mark = state.calls.length;
+    await page.getByRole('button', { name: 'Publier mon annonce' }).click();
+    await page.waitForSelector('dialog.alert-dialog[open] input[aria-label="Prénom"]');
+    await page.fill('dialog[open] input[aria-label="Prénom"]', 'Claire');
+    await page.click('dialog[open] button[type="submit"]');
+    await page.waitForSelector('dialog.alert-dialog[open] h2:text("Prénom non enregistré")', { timeout: 15000 })
+      .catch(() => problems.push(`${N} : « Prénom non enregistré » absent`));
+    expectSame(N, 'prénom refusé', [await textOf(page, 'dialog[open] h2'), writeNames(writesSince(state, mark))],
+      ['Prénom non enregistré', ['PATCH profiles', 'PATCH profile_details']]);
+    await page.click('dialog[open] button:text("Compris")');
+    await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached' }).catch(() => undefined);
+    state.refuseDetails = false;
     // Premier essai : le serveur refuse la mise en ligne (message P0001 montré tel quel) ; l'annonce reste en brouillon.
     state.refuseOnline = 'Le DPE est obligatoire pour publier cette annonce.';
-    let mark = state.calls.length;
+    mark = state.calls.length;
     await page.getByRole('button', { name: 'Publier mon annonce' }).click();
     await page.waitForSelector('dialog.alert-dialog[open] input[aria-label="Prénom"]');
     expectSame(N, 'prénom demandé', [await textOf(page, 'dialog[open] h2'), await textOf(page, 'dialog[open] p')], ['Votre prénom', 'Affiché sur l\'annonce : Prénom M.']);
@@ -719,10 +805,12 @@ try {
     expectSame(N, 'prénom enregistré', [state.details.first_name, state.details.last_name, state.profile.display_name], ['Claire', 'Martin', 'Claire Martin']);
     const inserted = first.find((call) => call.table === 'listings' && call.method === 'POST')?.body ?? {};
     expectSame(N, 'annonce envoyée', Object.fromEntries(['status', 'transaction', 'property_type', 'publish_category', 'title', 'price', 'living_area', 'rooms', 'bedrooms', 'floor',
-      'has_elevator', 'outdoor_spaces', 'postal_code', 'city', 'insee_code', 'location_precision', 'energy_class', 'climate_class', 'country_code'].map((key) => [key, inserted[key]])), {
+      'has_elevator', 'outdoor_spaces', 'postal_code', 'city', 'insee_code', 'location_precision', 'energy_class', 'climate_class', 'annual_energy_cost_min',
+      'annual_energy_cost_max', 'rental_info', 'country_code'].map((key) => [key, inserted[key]])), {
       status: 'draft', transaction: 'sale', property_type: 'apartment', publish_category: 'residential', title: 'Appartement 3 pièces – Lyon', price: 320000, living_area: 62,
       rooms: 3, bedrooms: 2, floor: 2, has_elevator: true, outdoor_spaces: ['balcony'], postal_code: '69002', city: 'Lyon', insee_code: '69382',
-      location_precision: 'approximate', energy_class: 'C', climate_class: 'B', country_code: 'FR',
+      location_precision: 'approximate', energy_class: 'C', climate_class: 'B', annual_energy_cost_min: 820, annual_energy_cost_max: 1150, rental_info: null,
+      country_code: 'FR',
     });
     expectSame(N, 'adresse exacte envoyée', first.find((call) => call.table === 'listing_locations')?.body,
       { listing_id: listingId, street: '12 Rue Mercière', latitude: 45.7616, longitude: 4.8321 });
@@ -1017,6 +1105,14 @@ try {
     expectSame(N, 'surface remplie', await errorsOf(page), ['Indiquez le nombre de pièces.', 'Le DPE est obligatoire pour ce type de bien.']);
     await chip(page, 'Pièces', '3').click();
     await page.getByRole('button', { name: 'DPE (classe énergie) C', exact: true }).click();
+    // Logement avec une classe DPE : le GES et les deux dépenses d'énergie deviennent obligatoires, signalés sous leurs
+    // champs (n° 84).
+    const ENERGY_COSTS = 'Les dépenses d\'énergie minimum et maximum sont obligatoires pour ce logement.';
+    expectSame(N, 'DPE choisi', await errorsOf(page), ['Le GES est obligatoire pour ce logement.', ENERGY_COSTS]);
+    await page.getByRole('button', { name: 'GES (classe climat) B', exact: true }).click();
+    await amount(page, 'Dépenses d\'énergie minimum').fill('820');
+    expectSame(N, 'GES et une dépense', await errorsOf(page), [ENERGY_COSTS]);
+    await amount(page, 'Dépenses d\'énergie maximum').fill('1150');
     expectSame(N, 'étape 3 complète', await errorsOf(page), []);
 
     // Un champ vidé dans une étape précédente : « Continuer » y ramène.
@@ -1076,6 +1172,27 @@ try {
     await bar(7).click();
     await waitStep(page, 7, 'Vérification', N);
     expectSame(N, 'Publier à nouveau prêt', await dimmed(), [false, false]);
+    // Le GES retiré : aucun champ de la liste ne manque, mais « Publier » refuse encore l'étape 3. La carte le dit
+    // (« Caractéristiques : à compléter », jamais « Prête à publier ») et « Corriger » mène au GES (n° 81).
+    const firstCard = () => textOf(page, '.dpub .dpub-step .dsc-card-title');
+    await bar(3).click();
+    await waitStep(page, 3, 'Caractéristiques', N);
+    await page.getByRole('button', { name: 'GES (classe climat) B', exact: true }).click();
+    await bar(7).click();
+    await waitStep(page, 7, 'Vérification', N);
+    expectSame(N, 'étape à compléter', [await firstCard(), await page.$$eval('.dpub-missing li', (els) => els.map((el) => [...el.children].map((child) => child.textContent))),
+      await dimmed()], ['À compléter', [['Caractéristiques : à compléter', 'Corriger']], [true, false]]);
+    mark = state.calls.length;
+    const fix = page.locator('.dpub-missing li button');
+    // Sans « Corriger » (déjà signalé ci-dessus), la suite passe par la barre d'étapes.
+    await ((await fix.count()) > 0 ? fix.first() : bar(3)).click();
+    await waitStep(page, 3, 'Caractéristiques', N);
+    expectSame(N, 'Corriger mène au GES', [await errorsOf(page), writeNames(writesSince(state, mark))], [['Le GES est obligatoire pour ce logement.'], []]);
+    await guidedTo('climateClass', 'guidé vers le GES');
+    await page.getByRole('button', { name: 'GES (classe climat) B', exact: true }).click();
+    await bar(7).click();
+    await waitStep(page, 7, 'Vérification', N);
+    expectSame(N, 'à nouveau prête', [await firstCard(), await dimmed()], ['Prête à publier', [false, false]]);
     // Annonce complète : maintenant seulement, le prénom est demandé (compte sans prénom) ; « Annuler » n'envoie rien.
     mark = state.calls.length;
     await publishButton.click();
@@ -1323,12 +1440,71 @@ try {
 
     page = await reopen('date choisie');
     expectSame(N, 'date retrouvée', await choice(page), ['false', 'true', chosenDay]);
+    // « À partir du… » choisi avec la date du jour le reste d'une étape à l'autre, tant que la publication est ouverte
+    // (n° 206).
+    await page.getByLabel('Disponible à partir du', { exact: true }).fill(parisDay());
+    expectSame(N, 'date du jour choisie', await choice(page), ['false', 'true', parisDay()]);
+    await page.locator('.dpub-progress button[aria-label^="Étape 3 sur 7,"]').click();
+    await waitStep(page, 3, 'Caractéristiques', N);
+    await page.locator('.dpub-progress button[aria-label^="Étape 4 sur 7,"]').click();
+    await waitStep(page, 4, 'Prix et finances', N);
+    expectSame(N, 'date du jour gardée', await choice(page), ['false', 'true', parisDay()]);
     await page.close();
     // Date passée : « Tout de suite ».
     state.listings[0].rental_info = { ...state.listings[0].rental_info, availableFrom: '2026-10-01T12:00:00.000Z' };
     page = await reopen('date passée');
     expectSame(N, 'date passée', await choice(page), ['true', 'false', null]);
     await page.close();
+    await context.close();
+  }
+
+  // 10. Hôtel en ligne, murs seuls : le loyer annuel de l'exploitant se relit tel quel (100 000 €, pas 99 999,96 €,
+  //     n° 82) ; le titre proposé est au singulier (« Hôtel 1 chambre », n° 188). Sans réseau, « Enregistrer » le dit
+  //     avec les mots de l'app ; une relecture qui échoue encore après un second essai laisse la réussite (n° 80).
+  {
+    const N = 'hôtel';
+    const state = newState({ listings: [HOTEL], photos: HOTEL_PHOTOS, locations: [HOTEL_LOCATION] });
+    const context = await desktop();
+    await mock(context, state);
+    const page = await open(context, `/publier/?annonce=${HOTEL_ID}`, N);
+    await waitStep(page, 2, 'Informations principales', N);
+    const go = async (number, title) => {
+      await page.locator(`.dpub-progress button[aria-label^="Étape ${number} sur 7,"]`).click();
+      await waitStep(page, number, title, N);
+    };
+    await go(4, 'Prix et finances');
+    const rent = () => amount(page, 'Loyer annuel payé par l\'exploitant');
+    expectSame(N, 'loyer annuel relu', await rent().inputValue(), '100 000');
+    await rent().fill('84000');
+    await go(3, 'Caractéristiques');
+    await go(4, 'Prix et finances');
+    expectSame(N, 'loyer annuel gardé', await rent().inputValue(), '84 000');
+    await go(6, 'Description et aperçu');
+    await page.getByLabel('Titre de l\'annonce').fill('');
+    expectSame(N, 'titre proposé', await textOf(page, '.dpub-propose'), 'Proposer : « Hôtel 1 chambre – Lyon 3e »');
+    await page.click('.dpub-propose');
+    const save = '.dsc-head-action button[aria-label="Enregistrer les modifications"]';
+    // Sans réseau : rien n'est écrit, la vérification le dit sous le récapitulatif.
+    state.offlineWrites = true;
+    let mark = state.calls.length;
+    await page.click(save);
+    await waitStep(page, 7, 'Vérification', N);
+    await page.waitForSelector('.dpub .dpub-step .dpub-error', { timeout: 15000 }).catch(() => problems.push(`${N} : message sans réseau absent`));
+    expectSame(N, 'sans réseau', [await textOf(page, '.dpub .dpub-step .dpub-error'), await page.locator('dialog.alert-dialog[open]').count(),
+      writeNames(writesSince(state, mark)), state.listings[0].title],
+    ['Les modifications n\'ont pas pu être enregistrées. Vérifiez votre connexion, puis réessayez.', 0, ['PATCH listings'], 'Hôtel des Canuts']);
+    state.offlineWrites = false;
+    // Enregistrée, mais relue deux fois sans succès (le second essai 1,5 s après) : « Modifications enregistrées » quand même.
+    state.failRereads = true;
+    mark = state.calls.length;
+    await page.click(save);
+    await page.waitForSelector('.dpub-success', { timeout: 15000 }).catch(() => problems.push(`${N} : confirmation absente sans relecture`));
+    const rereads = state.calls.slice(mark).filter((call) => call.table === 'listings' && call.method === 'GET' && /[?&]id=eq\./.test(call.search)
+      && !call.search.startsWith('?select=id,status&'));
+    expectSame(N, 'enregistrée sans relecture', [await textOf(page, '.dpub-success h1'), rereads.length, writeNames(writesSince(state, mark)),
+      state.listings[0].title, state.listings[0].rental_info],
+    ['Modifications enregistrées', 2, ['PATCH listings', 'POST listing_locations'], 'Hôtel 1 chambre – Lyon 3e', { currentMonthlyRent: 7000, isLeased: true }]);
+    state.failRereads = false;
     await context.close();
   }
 } finally {
