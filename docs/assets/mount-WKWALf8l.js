@@ -1,0 +1,1 @@
+import{En as e,t,wn as n}from"./client-5Dla2sWA.js";var r=n(),i=t(),a=e();function o(e){let t=document.getElementById(`root`);if(!t)throw Error(`Élément #root absent`);(0,i.createRoot)(t).render((0,a.jsx)(r.StrictMode,{children:e}))}export{o as t};
