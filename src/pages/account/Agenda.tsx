@@ -5,30 +5,32 @@ import { LargeHeader } from '../../components/LargeHeader';
 import { SectionLabel } from '../../components/MenuRows';
 import { RoundButton } from '../../components/RoundButton';
 import {
-  acceptsReport, agendaItems, agendaStore, AGENDA_LOAD_ERROR, canContact, contactConversationId, countIn, directionsUrl, displayStatus,
-  EMPTY_TABS, fetchAgencyNames, isRequestEntry, loadAgenda, PERIOD_TITLES, periodGroupsIn, routableAddress, shortStatusLabel, TAB_TITLES,
-  visitCardTitle, visitDateBlock, visitPersonLine, visitSlotCount, visitTimeRange, type AgendaItem, type VisitDisplayStatus, type VisitTab,
+  acceptsReport, agendaItems, agendaStore, AGENDA_LOAD_ERROR, canContact, contactConversationId, CONVERSATION_NOT_FOUND, countIn,
+  directionsUrl, displayStatus, EMPTY_TABS, fetchAgencyNames, findExistingConversation, isRequestEntry, isVideoVisit, loadAgenda,
+  loadVisitSessions, noAddressNotice, noSellerNotice, PERIOD_TITLES, periodGroupsIn, receivedRequest, routableAddress, sessionBookedLabel,
+  sessionTitle, shortStatusLabel, TAB_TITLES, upcomingSessionsOf, visitCardTitle, visitDateBlock, visitPersonLine, visitSessionsStore,
+  visitSlotCount, visitTimeRange, type AgendaItem, type VisitDisplayStatus, type VisitSession, type VisitTab,
 } from '../../lib/account/agenda';
 import { useSession, useStore } from '../../lib/account/session';
 import { useDesktop } from '../../lib/desktop';
 import { openListingConversation } from '../../lib/listing/conversation';
 import { visitDateLong } from '../../lib/listing/visits';
 import { accountPath, conversationPath, PATHS, visitRequestPath } from '../../lib/paths';
+import { useFitTexts } from '../listing/fitText';
 import { ActionMenu, ChoiceDialog, IphoneOnlyDialog, ScreenHead, type MenuItem } from './DesktopParts';
 import { Spinner } from './parts';
 import '../../styles/agenda-app.css';
 
 // « Mon agenda », comme l'app (Features/Visits/VisitsAgendaView.swift) : sur téléphone, son écran (retour rond, « + »,
 // grand titre, onglets sur la piste grise, visites groupées par période, cartes avec le bloc date) ; sur ordinateur, la
-// mise en page du site (en-tête, onglets et « + » sur une ligne) avec ces pièces. Itinéraire (Plans), Message (la
-// conversation liée, sinon une conversation avec le vendeur) et le menu « … ». Les visites viennent de agenda_visits,
-// les demandes de visite pas encore acceptées de my_visit_requests (lib/account/agenda). Le détail d'une visite, ses
-// modifications et le calendrier restent dans l'app iPhone ; une demande ouvre l'écran « Demande de visite ».
+// mise en page du site (en-tête, onglets et « + » sur une ligne) avec ces pièces. Itinéraire (Plans, sauf en visio),
+// Message (la conversation liée ; pour une demande reçue, celle déjà ouverte avec le demandeur ; sinon une conversation
+// avec le vendeur) et le menu « … ». Les visites viennent de agenda_visits, les demandes de visite pas encore acceptées
+// de my_visit_requests, les créneaux ouverts de my_visit_sessions (lib/account/agenda). Le détail d'une visite ou d'une
+// séance de créneaux, leurs modifications et le calendrier restent dans l'app iPhone ; une demande ouvre l'écran
+// « Demande de visite ».
 
 const TABS: VisitTab[] = ['upcoming', 'past', 'cancelled'];
-
-const NO_ADDRESS = 'Adresse non renseignée : l\'itinéraire sera disponible quand le vendeur l\'aura communiquée.';
-const NO_SELLER = 'Impossible de joindre le vendeur de ce bien pour l\'instant.';
 
 /** Teinte du bloc date : gris annulée, ambre à confirmer ou en attente, bleu sinon (dateBlock). */
 function dateTone(status: VisitDisplayStatus): string {
@@ -126,12 +128,13 @@ function VisitCard({ item, now, slotCount, agencyName, onNotice, onIphone, onCon
       <div className="app-visit-actions">
         {slotCount !== null ? (
           <a className="app-visit-button is-outline" href={visitRequestPath(item.id)}><Icon name="calendarBlank" />Voir les créneaux</a>
-        ) : address ? (
+        ) : isVideoVisit(item) ? null : address ? (
+          // Visite en visio : pas d'itinéraire (n° 178).
           <a className="app-visit-button is-soft app-visit-route" href={directionsUrl(address)} target="_blank" rel="noopener noreferrer">
             <Icon name="navigation" />Itinéraire
           </a>
         ) : (
-          <button type="button" className="app-visit-button is-soft" onClick={() => onNotice(NO_ADDRESS)}>
+          <button type="button" className="app-visit-button is-soft" onClick={() => onNotice(noAddressNotice(item))}>
             <Icon name="navigation" />Itinéraire
           </button>
         )}
@@ -144,8 +147,30 @@ function VisitCard({ item, now, slotCount, agencyName, onNotice, onIphone, onCon
   );
 }
 
+/**
+ * Séance de créneaux ouverte (VisitSessionCard) : calendrier sur fond bleu clair, jour et horaire, bien, inscrits sur
+ * places (vert dès un inscrit), chevron. Sa page (« Séance de visites ») reste dans l'app iPhone.
+ */
+function SessionCard({ session, onOpen }: { session: VisitSession; onOpen: () => void }) {
+  // Titre trop long : il rapetisse jusqu'à 80 % avant « … » (minimumScaleFactor(0.8) de l'app).
+  const ref = useFitTexts<HTMLButtonElement>();
+  const line = [session.listing.title, session.listing.city].filter(Boolean).join(' · ');
+  return (
+    <button ref={ref} type="button" className="app-session" onClick={onOpen}>
+      <span className="app-session-icon" aria-hidden="true"><Icon name="calendarDays" /></span>
+      <span className="app-session-text">
+        <span className="app-session-title" data-fit="0.8">{sessionTitle(session)}</span>
+        <span className="app-session-line">{line}</span>
+        <span className={`app-visit-pill app-tone-${session.bookedCount > 0 ? 'green' : 'blue'}`}>{sessionBookedLabel(session)}</span>
+      </span>
+      <Icon name="chevronRight" className="icon app-row-chevron" />
+    </button>
+  );
+}
+
 export function AgendaScreen() {
   const state = useStore(agendaStore);
+  const sessionsState = useStore(visitSessionsStore);
   const session = useSession();
   const desktop = useDesktop();
   const me = session.status === 'signedIn' ? session.userId : null;
@@ -157,10 +182,15 @@ export function AgendaScreen() {
 
   useEffect(() => {
     void loadAgenda();
+    void loadVisitSessions();
   }, []);
 
-  // Agence qui publie chaque annonce visitée, lue une fois par annonce (VisitsAgendaView.loadAgencyNames).
-  const listingIds = [...new Set(state.visits.flatMap((visit) => (visit.listing ? [visit.listing.listingId.toLowerCase()] : [])))].sort().join(',');
+  const now = new Date();
+  const items = agendaItems(state, me, now);
+
+  // Agence qui publie chaque annonce visitée, lue une fois par annonce (VisitsAgendaView.loadAgencyNames) : visites et
+  // demandes en attente (n° 184).
+  const listingIds = [...new Set(items.flatMap((visit) => (visit.listing ? [visit.listing.listingId.toLowerCase()] : [])))].sort().join(',');
   useEffect(() => {
     const wanted = listingIds.split(',').filter((id) => id && !asked.current.has(id));
     if (!wanted.length) return;
@@ -170,9 +200,9 @@ export function AgendaScreen() {
     });
   }, [listingIds]);
 
-  const now = new Date();
-  const items = agendaItems(state, me, now);
   const groups = periodGroupsIn(items, tab, now);
+  // Séances de créneaux ouvertes (vendeur ou bailleur), en tête des visites à venir.
+  const sessions = tab === 'upcoming' ? upcomingSessionsOf(sessionsState, me, now) : [];
   const counts = { upcoming: countIn(items, 'upcoming', now), past: countIn(items, 'past', now), cancelled: countIn(items, 'cancelled', now) };
   const addPath = accountPath('ajouter-visite', { depuis: 'agenda' });
   const addLink = (
@@ -187,9 +217,17 @@ export function AgendaScreen() {
       return;
     }
     if (!item.listing) return;
+    // Visite d'une demande reçue : la conversation déjà ouverte avec le demandeur, jamais une nouvelle (n° 11).
+    const request = receivedRequest(item, state.requests, me);
+    if (request) {
+      const found = await findExistingConversation(item.listing.listingId, request.requester.userId);
+      if (found) window.location.assign(conversationPath(found));
+      else setNotice(CONVERSATION_NOT_FOUND);
+      return;
+    }
     const conversation = await openListingConversation(item.listing.listingId, me);
     if (conversation) window.location.assign(conversationPath(conversation.id));
-    else setNotice(NO_SELLER);
+    else setNotice(noSellerNotice(item));
   }
 
   let content;
@@ -201,7 +239,8 @@ export function AgendaScreen() {
         <button type="button" className="app-agenda-retry" onClick={() => void loadAgenda()}>Réessayer</button>
       </ContentUnavailable>
     );
-  } else if (groups.length === 0) {
+  } else if (groups.length === 0 && sessions.length === 0) {
+    // État vide seulement sans visite ni créneau ouvert à venir.
     content = (
       <>
         <ContentUnavailable icon="calendarBlank" title={EMPTY_TABS[tab].title} text={EMPTY_TABS[tab].message} />
@@ -211,6 +250,12 @@ export function AgendaScreen() {
   } else {
     content = (
       <div className="app-agenda-list">
+        {sessions.length > 0 && (
+          <section className="app-session-group" aria-label="Créneaux ouverts">
+            <SectionLabel title="Créneaux ouverts" />
+            {sessions.map((item) => <SessionCard key={item.id} session={item} onOpen={() => setIphoneOnly('Séance de visites')} />)}
+          </section>
+        )}
         {groups.map((group) => (
           <section key={group.period} className="app-visit-group" aria-label={PERIOD_TITLES[group.period]}>
             <SectionLabel title={PERIOD_TITLES[group.period]} />

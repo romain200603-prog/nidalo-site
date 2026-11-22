@@ -627,6 +627,9 @@ try {
       await page.goto(`${base}/conditions/`, { waitUntil: 'networkidle' });
       const terms = tidy(await page.locator('main').textContent());
       if (!terms.includes('Dernière mise à jour : 15 novembre 2026')) problems.push(`${N} : date des conditions`);
+      // Version des conditions, celle de l'app (n° 146).
+      const version = tidy(await page.locator('dl dt', { hasText: /^Version$/ }).locator('xpath=following-sibling::dd[1]').textContent());
+      if (version !== '1.0') problems.push(`${N} : version des conditions « ${version} » au lieu de « 1.0 »`);
       if (!terms.includes('Chaque signalement est examiné sous 24 heures')) problems.push(`${N} : phrase de la modération absente`);
       await context.close();
     }

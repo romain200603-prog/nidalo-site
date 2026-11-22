@@ -121,6 +121,10 @@ export async function removeFiles(bucket: string, paths: string[]): Promise<void
   }
 }
 
+/** Ligne de l'annonce en échec alors que ses photos sont déjà effacées : un nouvel essai termine (n° 235). */
+export const PHOTOS_GONE_MESSAGE =
+  'La suppression n\'a pas abouti : les photos de l\'annonce sont déjà effacées. Vérifiez votre connexion, puis réessayez pour terminer.';
+
 /**
  * « Supprimer définitivement » : les photos d'abord (dans le dossier de l'auteur de l'annonce), puis l'annonce (son
  * adresse et ses photos partent avec).
@@ -131,12 +135,19 @@ export async function deleteListing(id: string, ownerId: string | null = null): 
   try {
     const files = await listFiles(PHOTO_BUCKET, `${ownerId ?? userId}/${id}`, 1);
     await removeFiles(PHOTO_BUCKET, files);
-    const { data, error } = await supabase.from('listings').delete().eq('id', id).select('id');
-    if (error) throw error;
-    if (!data?.length) return NOT_ALLOWED_MESSAGE;
-    await reloadListings();
-    return null;
   } catch (error) {
     return isNetworkError(error) ? NETWORK_MESSAGE : 'L\'annonce n\'a pas pu être supprimée.';
   }
+  // L'ordre ne change pas (photos, puis ligne) ; la ligne en échec après le dossier vidé, le message le dit (n° 235).
+  let deleted: unknown[] | null;
+  try {
+    const { data, error } = await supabase.from('listings').delete().eq('id', id).select('id');
+    if (error) throw error;
+    deleted = data;
+  } catch {
+    return PHOTOS_GONE_MESSAGE;
+  }
+  if (!deleted?.length) return NOT_ALLOWED_MESSAGE;
+  await reloadListings();
+  return null;
 }

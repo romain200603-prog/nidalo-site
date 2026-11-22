@@ -134,6 +134,30 @@
   .app-visit-button.is-outline:hover:not(:disabled), .dsc-menu-button.app-visit-more:hover { background: #F7F6F3; }
 }
 
+/* Créneaux ouverts (VisitSessionCard), en tête des visites à venir : carte blanche (coins 22, bordure fine, ombre très
+   légère), 14 de marge ; calendrier de 19 dans un carré bleu clair de 40 (coins 13) ; jour et horaire en 14,5 gras, le
+   bien en 12,5 gris, puis la pastille des inscrits (verte dès un inscrit) ; chevron de 16. 18 avant le premier groupe. */
+.app-session-group { display: flex; flex-direction: column; gap: 12px; }
+.app-session-group + .app-visit-group { margin-top: 18px; }
+.app-session {
+  display: flex; align-items: center; gap: 12px; width: 100%; margin: 0; padding: 14px; border: 1px solid var(--app-border);
+  border-radius: 22px; background: #FFFFFF; box-shadow: 0 2px 16px rgba(36, 45, 56, 0.04); color: inherit; font: inherit;
+  text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.app-session:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+.app-session-icon {
+  display: inline-flex; flex: none; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 13px;
+  background: #EEF2FA; color: #3C5CB0;
+}
+.app-session-icon .icon { width: 19px; height: 19px; }
+.app-session-text { display: flex; flex: 1; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+.app-session-title, .app-session-line { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-session-title { color: var(--app-navy); font-size: 14.5px; font-weight: 700; line-height: 19px; }
+.app-session-line { color: var(--app-text-secondary); font-size: 12.5px; line-height: 17px; }
+@media (hover: hover) {
+  .app-session:hover { background: #FBFAF8; }
+}
+
 /* Très petit téléphone (moins de 360 px) : onglets et boutons plus serrés, pour que leur ligne tienne. */
 @media (max-width: 359.98px) {
   .app-agenda-tab { gap: 5px; padding: 0 4px; font-size: 12.5px; }

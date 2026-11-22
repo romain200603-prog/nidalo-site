@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   amountText, changeKind, completionOf, decodeCriteria, emptyCriteria, encodeCriteria, isEmptyCriteria, newProject, projectFromRow, projectIssues,
   projectRow, projectSubtitle, projectToSave, resetCategory, sameProject, summaryRows, toggleStep, type Project,
-  groupedInput, inputAmount,
+  groupedInput, inputAmount, parisNoon, parisNoonOfDay, pastedAmount, stepsCountText,
 } from './projectEditor';
+import { parisDay } from '../listing/views';
 
 const USER = 'a0000000-0000-4000-8000-0000000000c1';
 
@@ -86,11 +87,17 @@ describe('Mon projet : règles (RealEstateProject)', () => {
     expect(p.criteria.rental.maxRent).toBe(900);
   });
 
-  it('enregistré : la ville suit le lieu de la catégorie', () => {
+  it('enregistré : la ville suit le lieu de la catégorie ; lieu effacé, ville effacée (n° 226)', () => {
     const criteria = emptyCriteria();
     criteria.residential.location.place = 'Villeurbanne';
     expect(projectToSave(project({ city: 'Lyon', criteria })).city).toBe('Villeurbanne');
-    expect(projectToSave(project({ city: 'Lyon' })).city).toBe('Lyon');
+    expect(projectToSave(project({ city: 'Lyon' })).city).toBe('');
+  });
+
+  it('avancement : « 0 étape », « 1 étape », puis « 2 étapes sur 6 » (n° 129)', () => {
+    expect(stepsCountText(0, 6)).toBe('0 étape sur 6');
+    expect(stepsCountText(1, 6)).toBe('1 étape sur 6');
+    expect(stepsCountText(2, 6)).toBe('2 étapes sur 6');
   });
 
   it('problèmes de saisie : apport au-dessus du budget, pourcentage hors de 0 à 100 %', () => {
@@ -157,6 +164,22 @@ describe('Mon projet : champs de montant (AmountField, GroupedNumberInput)', () 
     expect(inputAmount('')).toBeNull();
   });
 
+  it('montant collé avec des points de milliers (GroupedNumberInput.pastedAmount, n° 242)', () => {
+    expect(pastedAmount('250.000')).toBe('250000');
+    expect(pastedAmount('1.250.000')).toBe('1250000');
+    expect(pastedAmount('250.000,50')).toBe('250000,50');
+    expect(pastedAmount(' 250.000 € ')).toBe('250000');
+    expect(pastedAmount('250.000\u00A0€')).toBe('250000');
+    expect(pastedAmount('62.5')).toBe('62.5');
+    expect(pastedAmount('1.5')).toBe('1.5');
+    expect(pastedAmount('12.34.56')).toBe('12.34.56');
+    expect(pastedAmount('06.39.98.12.34')).toBe('06.39.98.12.34');
+    // Collé puis mis en forme comme une frappe : 250 000 ; la frappe et les taux ne changent pas (« 3.125 » reste 3,125).
+    expect(inputAmount(groupedInput(pastedAmount('250.000')))).toBe(250000);
+    expect(inputAmount(groupedInput('250.000'))).toBe(250);
+    expect(inputAmount('3.125')).toBe(3.125);
+  });
+
   it('texte d’une valeur enregistrée', () => {
     expect(amountText(0.071, true)).toBe('7,1');
     expect(amountText(0.07, true)).toBe('7');
@@ -164,5 +187,28 @@ describe('Mon projet : champs de montant (AmountField, GroupedNumberInput)', () 
     expect(amountText(-200)).toBe('-200');
     expect(amountText(1985, false, false)).toBe('1985');
     expect(amountText(null)).toBe('');
+  });
+});
+
+describe('Mon projet : date d’entrée à midi, heure de Paris (ListingLot.parisNoon, n° 243)', () => {
+  // Le 31 août 2026 à 20 h, heure locale (UTC-4, UTC+4, UTC-10, UTC+2 en été).
+  const chosen: [string, string][] = [
+    ['America/Martinique', '2026-09-01T00:00:00Z'], ['Indian/Reunion', '2026-08-31T16:00:00Z'],
+    ['Pacific/Tahiti', '2026-09-01T06:00:00Z'], ['Europe/Paris', '2026-08-31T18:00:00Z'],
+  ];
+  const dayIn = (date: Date, timeZone: string) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+
+  it.each(chosen)('%s : le jour choisi reste le même pour le serveur et pour le calendrier', (zone, instant) => {
+    const stored = parisNoon(new Date(instant), zone);
+    expect(parisDay(stored)).toBe('2026-08-31');
+    expect(dayIn(stored, zone)).toBe('2026-08-31');
+    expect(new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', hour: 'numeric' }).format(stored)).toBe('12 h');
+  });
+
+  it('midi de Paris en hiver comme en été', () => {
+    expect(parisNoonOfDay(2026, 8, 31).toISOString()).toBe('2026-08-31T10:00:00.000Z');
+    expect(parisNoonOfDay(2026, 12, 24).toISOString()).toBe('2026-12-24T11:00:00.000Z');
+    expect(parisNoonOfDay(2027, 3, 28).toISOString()).toBe('2027-03-28T10:00:00.000Z');
   });
 });

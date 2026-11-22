@@ -4,6 +4,7 @@ import type { Session } from '@supabase/supabase-js';
 // Serveur simulé : on garde chaque demande pour vérifier qu'elle est celle de l'app.
 const server = vi.hoisted(() => ({
   rows: [] as unknown[],
+  error: null as { message: string } | null,
   queries: [] as { table: string; columns?: string; order?: [string, unknown]; limit?: number }[],
   rpcs: [] as { name: string; args: unknown }[],
 }));
@@ -16,7 +17,10 @@ vi.mock('./supabase', () => ({
       const builder = {
         select(columns: string) { query.columns = columns; return builder; },
         order(column: string, options: unknown) { query.order = [column, options]; return builder; },
-        limit(count: number) { query.limit = count; return Promise.resolve({ data: server.rows, error: null }); },
+        limit(count: number) {
+          query.limit = count;
+          return Promise.resolve(server.error ? { data: null, error: server.error } : { data: server.rows, error: null });
+        },
       };
       return builder;
     },
@@ -119,6 +123,7 @@ describe('notifications du compte : mêmes demandes au serveur que l’app', () 
   beforeEach(() => {
     server.queries.length = 0;
     server.rpcs.length = 0;
+    server.error = null;
     sessionStore.set({ status: 'signedIn', session: {} as Session, userId: 'a0000000-0000-4000-8000-0000000000c1', email: 'claire.martin@exemple.fr' });
   });
 
@@ -155,5 +160,23 @@ describe('notifications du compte : mêmes demandes au serveur que l’app', () 
     await loadNotifications();
     expect(server.queries).toEqual([]);
     expect(notificationsStore.get()).toEqual({ status: 'none', items: [] });
+  });
+
+  it('lecture ratée : la liste et la pastille restent telles quelles ; à la première lecture, liste vide (n° 133)', async () => {
+    server.rows = [row({}), row({ id: 'd0000000-0000-4000-8000-000000000007' })];
+    await loadNotifications();
+    const shown = notificationsStore.get().items;
+    expect(unreadNotificationCount(shown)).toBe(2);
+    server.error = { message: 'Erreur réseau' };
+    await loadNotifications();
+    expect(notificationsStore.get()).toEqual({ status: 'ready', items: shown });
+    expect(unreadNotificationCount(notificationsStore.get().items)).toBe(2);
+    // Autre compte, première lecture ratée : rien à garder, liste vide (pas d'attente sans fin).
+    sessionStore.set({ status: 'signedIn', session: {} as Session, userId: 'b0000000-0000-4000-8000-0000000000d2', email: 'autre@exemple.fr' });
+    await loadNotifications();
+    expect(notificationsStore.get()).toEqual({ status: 'ready', items: [] });
+    server.error = null;
+    await loadNotifications();
+    expect(notificationsStore.get().items).toHaveLength(2);
   });
 });

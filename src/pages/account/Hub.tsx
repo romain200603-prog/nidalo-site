@@ -34,7 +34,7 @@ import '../../styles/compte-app.css';
 // ses textes ; chaque ligne mène à l'écran que le site a déjà. Ce qui reste sur l'iPhone n'est pas ajouté : la carte
 // « Mon dossier immobilier » (documents), « Alertes sur cet iPhone ».
 
-type Dialog = 'logout' | 'type' | 'review' | null;
+type Dialog = 'logout' | 'type' | null;
 
 export function Hub({ account }: { account: Account }) {
   const desktop = useDesktop();
@@ -99,7 +99,6 @@ export function Hub({ account }: { account: Account }) {
     { icon: 'gear', title: 'Préférences', href: soonPath('preferences') },
     { icon: 'circleHelp', title: 'Aide et assistance', href: PATHS.help },
     { icon: 'info', title: 'Informations légales', href: accountPath('legal') },
-    { icon: 'star', title: 'Donner mon avis', onClick: () => setDialog('review') },
   ];
   const typeErrorText = typeError && <p className="field-error" role="alert">{typeError}</p>;
 
@@ -124,7 +123,7 @@ export function Hub({ account }: { account: Account }) {
         open={dialog === 'logout'}
         onClose={() => setDialog(null)}
         title="Se déconnecter ?"
-        message="Vous pourrez vous reconnecter avec votre adresse e-mail et votre mot de passe."
+        message="Vous pourrez vous reconnecter à tout moment."
         actions={[
           { label: 'Se déconnecter', onClick: () => { setDialog(null); void signOut(); }, tone: 'primary' },
           { label: 'Annuler', onClick: () => setDialog(null) },
@@ -142,13 +141,6 @@ export function Hub({ account }: { account: Account }) {
             : { label: isPro ? 'Passer en particulier' : 'Passer en professionnel', onClick: () => void switchType(), tone: 'primary' },
           { label: 'Annuler', onClick: () => setDialog(null) },
         ]}
-      />
-      <AlertDialog
-        open={dialog === 'review'}
-        onClose={() => setDialog(null)}
-        title="Donner mon avis"
-        message="Vous pourrez noter NIDALO sur l'App Store dès sa sortie. Merci de votre soutien !"
-        actions={[{ label: 'OK', onClick: () => setDialog(null), tone: 'primary' }]}
       />
     </div>
   );
@@ -251,12 +243,15 @@ function ProSpace({ securityRows, settingsRows, typeError }: SpaceProps) {
         { icon: 'userPlus', title: 'Gestion des équipes', tint: 'blue', subtitle: teamSubtitle(team), href: TEAM_PATH },
         { icon: 'megaphone', title: 'Outils de diffusion', tint: 'blue', href: accountPath('diffusion') },
         { icon: 'building2', title: 'Profil agence', tint: 'blue', subtitle: agency || member ? null : 'À compléter', href: AGENCY_PATH },
-        { icon: 'creditCard', title: 'Abonnement NIDALO Pro', tint: 'blue', href: soonPath('abonnement') },
+        { icon: 'creditCard', title: 'Abonnement Nidalo Pro', tint: 'blue', href: soonPath('abonnement') },
       ]} />
-      <MenuGroup title="Compte et sécurité" rows={member
-        ? securityRows
+      <MenuGroup title="Compte et sécurité" rows={[
         // Seul le gérant modifie la fiche de l'agence : un membre de l'équipe n'a pas cette ligne.
-        : [{ icon: 'badgeCheck', title: 'Informations de l\'agence', href: AGENCY_FORM_PATH }, ...securityRows]}>
+        ...(member ? [] : [{ icon: 'badgeCheck' as const, title: 'Informations de l\'agence', href: AGENCY_FORM_PATH }]),
+        // Seul chemin de l'espace professionnel vers « Mes informations », membres de l'équipe compris (n° 117).
+        { icon: 'user', title: 'Mes informations', href: accountPath('informations') },
+        ...securityRows,
+      ]}>
         {typeError}
       </MenuGroup>
       <MenuGroup title="Paramètres et assistance" rows={settingsRows} />

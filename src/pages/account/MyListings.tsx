@@ -40,7 +40,8 @@ const shortDate = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'lon
 function dateLine(row: ListingRow): string {
   const day = shortDate.format(new Date(row.updated_at));
   if (row.status === 'draft') return `Modifiée le ${day}`;
-  if (ONLINE_STATUSES.includes(row.status)) return `Publiée le ${day}`;
+  // En ligne : la date de publication si la ligne la connaît, sinon celle de la dernière modification (n° 223).
+  if (ONLINE_STATUSES.includes(row.status) && row.published_at) return `Publiée le ${shortDate.format(new Date(row.published_at))}`;
   return `Mise à jour le ${day}`;
 }
 
@@ -80,6 +81,12 @@ export function MyListings() {
 
   const items = state.status === 'ready' ? state.items : [];
   const shown = items.filter((row) => TABS.find((t) => t.tab === tab)!.matches(row.status));
+
+  // Onglet vidé (« Republier », suppression) : il disparaît, la page revient sur « Toutes » (n° 120).
+  const emptiedTab = state.status === 'ready' && tab !== 'all' && shown.length === 0;
+  useEffect(() => {
+    if (emptiedTab) setTab('all');
+  }, [emptiedTab]);
 
   async function changeStatus(row: ListingRow, status: 'active' | 'archived') {
     setMenu(null);
