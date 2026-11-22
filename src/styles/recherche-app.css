@@ -139,3 +139,6 @@
 @media (prefers-reduced-motion: reduce) {
   .map-open { transition: none; }
 }
+
+/* Fin de la liste des résultats : les 100 biens suivants s'affichent quand elle approche de l'écran (n° 48). */
+.results-end { height: 1px; }

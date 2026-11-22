@@ -4,6 +4,7 @@ import { FavoritesEmptyState } from '../components/FavoritesEmptyState';
 import { Icon } from '../components/Icon';
 import { ModeTabs } from '../components/ModeTabs';
 import { Page } from '../components/Layout';
+import { OfflineState } from '../components/OfflineState';
 import { PhotoPager } from '../components/PhotoPager';
 import { SignInCard } from '../components/account/SignInCard';
 import { HeartIcon } from '../components/account/HeartButton';
@@ -132,7 +133,8 @@ function MissingCards({ ids }: { ids: string[] }) {
   );
 }
 
-function FavoritesContent({ items }: { items: Favorite[] }) {
+/** `offline` : favoris du compte non lus (pas de connexion…) : « Pas de connexion Internet » à la place de l'état vide. */
+function FavoritesContent({ items, offline = false }: { items: Favorite[]; offline?: boolean }) {
   const [loaded, retry] = useFavoriteCards(items);
   const searches = useStore(savedSearchesStore);
   const searchItems = searches.status === 'ready' ? searches.items : [];
@@ -199,6 +201,11 @@ function FavoritesContent({ items }: { items: Favorite[] }) {
         <div key="searches" className="favorites-searches fav-tab-panel">
           <SavedSearchesList embedded counts={counts} />
         </div>
+      ) : items.length === 0 && offline ? (
+        // Favoris du compte non lus : la coupure, pas « Aucun favori » (n° 54) ; « Réessayer » relit les favoris.
+        <div key="offline" className="fav-tab-panel fav-empty-place-favorites">
+          <OfflineState onRetry={() => void loadFavorites(true, true)} />
+        </div>
       ) : items.length === 0 ? (
         // Aucun favori : ni recherche, ni filtres, ni catégories (ils reviennent avec le premier favori).
         <div key="empty" className="fav-tab-panel fav-empty-place-favorites">
@@ -263,7 +270,12 @@ function FavoritesContent({ items }: { items: Favorite[] }) {
             </ul>
           )}
 
-          <ModeTabs includesAll mode={modeOfCategory(category)} onChange={(mode) => setCategory(mode ? categoryOfMode(mode) : 'all')}
+          {/* Une pastille (sauf « Tous ») choisit aussi la catégorie des filtres (n° 53). */}
+          <ModeTabs includesAll mode={modeOfCategory(category)}
+            onChange={(mode) => {
+              setCategory(mode ? categoryOfMode(mode) : 'all');
+              if (mode) setFilterMode(mode);
+            }}
             className="mode-tabs-card favorites-categories" />
 
           {/* Filtres actifs (avec le lieu, que rien d'autre ne montre ici) : les retirer met à jour la liste. */}
@@ -292,14 +304,8 @@ function FavoritesContent({ items }: { items: Favorite[] }) {
 
           <div className="favorites-list">
             {loaded.status === 'loading' && <Spinner />}
-            {loaded.status === 'error' && (
-              <EmptyState
-                icon="triangleAlert"
-                title="Vos favoris n'ont pas pu être chargés"
-                text={loaded.message}
-                action={<button type="button" className="btn btn-light" onClick={retry}>Réessayer</button>}
-              />
-            )}
+            {/* Fiches non lues : « Pas de connexion Internet » (n° 54) ; « Réessayer » les relit, avec la roue. */}
+            {loaded.status === 'error' && <OfflineState onRetry={retry} />}
             {loaded.status === 'ready' && (
               cards.length === 0 && loaded.missing.length > 0 ? (
                 <MissingCards ids={loaded.missing} />
@@ -356,16 +362,8 @@ function FavoritesBody() {
       </div>
     );
   }
-  if (favorites.status === 'error') {
-    return (
-      <EmptyState
-        icon="triangleAlert"
-        title="Vos favoris n'ont pas pu être chargés"
-        text="Vérifiez votre connexion, puis réessayez."
-        action={<button type="button" className="btn btn-light" onClick={() => void loadFavorites(true)}>Réessayer</button>}
-      />
-    );
-  }
+  // Favoris du compte non lus : l'en-tête et les onglets restent, « Pas de connexion Internet » à la place de la liste.
+  if (favorites.status === 'error') return <FavoritesContent items={[]} offline />;
   if (favorites.status !== 'ready') return <Spinner />;
   return <FavoritesContent items={favorites.items} />;
 }

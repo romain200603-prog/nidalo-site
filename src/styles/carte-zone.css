@@ -12,6 +12,9 @@
   position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none;
   fill: none; stroke-linecap: round; stroke-linejoin: round;
 }
+/* Pendant le tracé ou l'ajustement d'une zone, les vignettes des biens ne captent pas le pointeur : il va au tracé ou
+   à la carte en dessous (MapMarkersLayer, allowsHitTesting, n° 52). */
+.map-column.is-editing-zone .map-markers > button { pointer-events: none; }
 /* Pendant le tracé, la carte ne bouge pas : ses boutons de zoom s'effacent. */
 .results-map.is-drawing .maplibregl-ctrl-top-right { visibility: hidden; }
 /* Étiquette « Rayon : 2,5 km » : capsule blanche de 28, 13,5 gras bleu marine, au-dessus des vignettes des biens. */

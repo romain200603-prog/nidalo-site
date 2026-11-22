@@ -297,7 +297,8 @@ export function moreCriteriaHint(mode: SearchMode): string {
 /** Travaux acceptés, avec les mots de l'app ; « Uniquement avec travaux » n'est pas repris (le site ne sait pas le chercher). */
 export function worksPreferenceLabel(value: number | null): string {
   if (value === null) return 'Indifférent';
-  if (value === 0) return 'Aucun travaux';
+  // « Sans travaux », comme la pastille (n° 163).
+  if (value === 0) return 'Sans travaux';
   if (value === LIGHT_WORKS_LIMIT) return 'Travaux légers';
   return `Jusqu'à ${formatPrice(value)}`;
 }

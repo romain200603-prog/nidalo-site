@@ -311,6 +311,7 @@ main:focus { outline: none; }
 .map-marker-price { display: inline-flex; align-items: center; gap: 5px; height: 26px; margin-top: -10px; padding: 0 10px; border-radius: 999px; background: #FFFFFF; color: var(--ink); font-size: 12.5px; font-weight: 800; white-space: nowrap; }
 .map-marker.is-selected .map-marker-price { background: var(--blue); color: #FFFFFF; }
 .map-marker-yield { display: inline-flex; align-items: center; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--green); color: #FFFFFF; font-size: 10.5px; font-weight: 800; }
+.map-marker-yield.is-low { background: var(--orange); }
 .map-marker-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--blue); border: 2px solid #FFFFFF; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); }
 .map-marker-dot.good { background: var(--green); }
 .map-marker.is-selected .map-marker-dot { width: 19px; height: 19px; }

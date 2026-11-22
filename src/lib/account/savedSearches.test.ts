@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   budgetLabelOf, criteriaLabelsOf, draftFromQuery, modeOf, placeLabelOf, proposedName, queryFromDraft, resumeSummaryOf, sameQuery,
-  type SearchQueryJson,
+  writesPropertyTypes, type SearchQueryJson,
 } from './savedSearches';
 import { defaultDraft, type SearchDraft } from '../search';
 
@@ -83,6 +83,62 @@ describe('recherches enregistrées : même format que l’app', () => {
     const b = { ...RESIDENTIAL, propertyTypes: ['house', 'apartment'] } as unknown as SearchQueryJson;
     expect(sameQuery(a, b)).toBe(true);
     expect(sameQuery(RESIDENTIAL, INVEST)).toBe(false);
+  });
+});
+
+describe('relance d’une recherche enregistrée (n° 10, 59, 62, 161, 162)', () => {
+  const plain = (text: string) => text.replace(/[\u00A0\u202F]/g, ' ');
+
+  it('un arrondissement garde son nom, et ses codes dans le lieu choisi', () => {
+    const query = { ...RESIDENTIAL, location: { city: { name: 'Lyon 3e', postalCode: '69003', inseeCode: '69383' } } } as SearchQueryJson;
+    const draft = draftFromQuery(query);
+    expect(draft.place).toBe('Lyon 3e');
+    expect(draft.chosen).toEqual({ kind: 'district', name: 'Lyon 3e', postalCode: '69003', inseeCode: '69383' });
+    expect(queryFromDraft(draft)).toEqual(query);
+    expect(draftFromQuery({ ...query, location: { city: { name: 'Paris 1er', postalCode: '75001' } } } as SearchQueryJson).chosen?.kind).toBe('district');
+    expect(draftFromQuery({ ...query, location: { city: { name: 'Villeurbanne', postalCode: '69100', inseeCode: '69266' } } } as SearchQueryJson).chosen?.kind)
+      .toBe('municipality');
+    // Une commune saisie sans code reste du texte.
+    const typed = draftFromQuery({ ...query, location: { city: { name: 'Lyon 3e' } } } as SearchQueryJson);
+    expect(typed.place).toBe('Lyon 3e');
+    expect(typed.chosen).toBeNull();
+  });
+
+  it('« Immeuble mixte » relancé garde « mixte seulement »', () => {
+    const query = queryFromDraft({ ...defaultDraft('invest'), mixedBuilding: true });
+    expect(query.propertyTypes).toEqual(['building']);
+    expect(query.building).toEqual({ mixedOnly: true });
+    const draft = draftFromQuery(query);
+    expect(draft.mixedBuilding).toBe(true);
+    expect(draft.types).toEqual([]);
+    expect(queryFromDraft(draft)).toEqual(query);
+  });
+
+  it('seuls les types de la catégorie de la recherche valent « aucun choix »', () => {
+    const rent = (propertyTypes: string[]) => ({ ...RESIDENTIAL, transaction: 'rent', propertyTypes } as unknown as SearchQueryJson);
+    // Location avec Appartement, Maison, Terrain (les types de Résidentiel) : un vrai choix.
+    expect(draftFromQuery(rent(['apartment', 'house', 'land'])).types).toEqual(['apartment', 'house', 'land']);
+    expect(draftFromQuery(rent(['apartment', 'house', 'parking', 'land', 'commercial', 'office'])).types).toEqual([]);
+    expect(draftFromQuery({ ...RESIDENTIAL, propertyTypes: ['land', 'house', 'apartment'] } as unknown as SearchQueryJson).types).toEqual([]);
+    expect(writesPropertyTypes(rent(['apartment', 'house', 'land']))).toBe(true);
+    expect(writesPropertyTypes({ ...RESIDENTIAL, propertyTypes: ['apartment', 'house', 'land'] } as unknown as SearchQueryJson)).toBe(false);
+    expect(writesPropertyTypes(HOTEL)).toBe(false);
+    expect(writesPropertyTypes(INVEST)).toBe(true);
+    expect(writesPropertyTypes({ ...RESIDENTIAL, propertyTypes: [] } as unknown as SearchQueryJson)).toBe(false);
+  });
+
+  it('les types de la catégorie ne s’écrivent ni dans le nom, ni dans le résumé, ni dans les critères', () => {
+    const all = { ...RESIDENTIAL, propertyTypes: ['apartment', 'house', 'land'] } as unknown as SearchQueryJson;
+    expect(plain(proposedName(all, 'buy'))).toBe('Résidentiel · 50 m² et + · Jusqu\'à 350 000 €');
+    expect(plain(resumeSummaryOf(all))).toBe('≤ 350 k€');
+    expect(criteriaLabelsOf(all)).toEqual(['50 m² et +', '3 pièces min']);
+  });
+
+  it('« Rentabilité ≥ 7,5 % » : une décimale quand il y en a une', () => {
+    const yieldOf = (minGrossYield: number) =>
+      criteriaLabelsOf({ ...INVEST, investment: { ...INVEST.investment, minGrossYield } } as SearchQueryJson).map(plain);
+    expect(yieldOf(0.075)).toContain('Rentabilité ≥ 7,5 %');
+    expect(yieldOf(0.07)).toContain('Rentabilité ≥ 7 %');
   });
 });
 
@@ -170,12 +226,8 @@ describe('recherches enregistrées depuis le site : fichier de contrôle pour l�
       // Les codes postaux et INSEE restent du texte (« 01630 »), comme dans l'app ; les montants, des nombres.
       const numbers = JSON.stringify(entry.query, (key, value) => (key === 'postalCode' || key === 'inseeCode' ? undefined : value));
       expect(numbers, entry.label).not.toMatch(/null|"\d+"/);
-      // Comme l'app (AppRouter, SearchDraft(query:)), un arrondissement se relit par son code postal : même résultat.
-      const location = entry.query.location;
-      const expected = 'city' in location && location.city.postalCode
-        ? { ...entry.query, location: { city: { name: location.city.postalCode } } }
-        : entry.query;
-      expect(queryFromDraft(draftFromQuery(entry.query)), entry.label).toEqual(expected);
+      // Comme l'app (AppRouter, SearchDraft(query:)), un arrondissement se relit sous son nom, avec ses codes (n° 62).
+      expect(queryFromDraft(draftFromQuery(entry.query)), entry.label).toEqual(entry.query);
       expect(modeOf(entry.query), entry.label).toBe(entry.mode);
     }
   });
@@ -213,7 +265,8 @@ describe('zone dessinée et « Autour de moi » : même JSON que l’app', () =>
     expect(draft.place).toBe('');
     expect(queryFromDraft(draft)).toEqual(APP_ZONE);
     expect(placeLabelOf(APP_ZONE)).toBe('Zone dessinée');
-    expect(proposedName(APP_ZONE, 'buy').replace(/[\u00A0\u202F]/g, ' ')).toBe('Résidentiel · Zone dessinée · Appartement, Maison, Terrain · Jusqu\'à 400 000 €');
+    // Les types de la catégorie de la recherche ne s'écrivent pas (SearchQuery.writesPropertyTypes, n° 59).
+    expect(proposedName(APP_ZONE, 'buy').replace(/[\u00A0\u202F]/g, ' ')).toBe('Résidentiel · Zone dessinée · Jusqu\'à 400 000 €');
   });
 
   it('écrit une zone tracée sur le site comme l’app', () => {
@@ -247,7 +300,7 @@ describe('zone dessinée et « Autour de moi » : même JSON que l’app', () =>
     expect(draft.place).toBe('Autour de Lyon');
     expect(queryFromDraft(draft)).toEqual(APP_NEARBY);
     expect(placeLabelOf(APP_NEARBY)).toBe('Autour de Lyon');
-    expect(resumeSummaryOf(APP_NEARBY).replace(/[\u00A0\u202F]/g, ' ')).toBe('Autour de Lyon · Appartement, Maison, Terrain · ≤ 400 k€');
+    expect(resumeSummaryOf(APP_NEARBY).replace(/[\u00A0\u202F]/g, ' ')).toBe('Autour de Lyon · ≤ 400 k€');
   });
 
   it('écrit « Autour de moi » comme l’app : le point, 10 km, « Autour de <commune> »', () => {

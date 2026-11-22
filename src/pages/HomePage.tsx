@@ -507,6 +507,9 @@ function PhoneHome({ mode, draft, drafts, feed, extras, changeMode, update, choo
   );
 }
 
+/** Attente avant de recharger « Biens similaires à vos recherches » après un changement de recherche (n° 61). */
+const FEED_RELOAD_DELAY = 600;
+
 /**
  * « Consultés récemment » et « Biens similaires à vos recherches » (HomeView.swift), au téléphone comme sur
  * ordinateur. Le projet du compte règle d'abord la recherche de sa catégorie (AppRouter.applyProject).
@@ -539,16 +542,27 @@ function useHomeExtras(mode: SearchMode, draft: SearchDraft, drafts: Record<Sear
   }, [session.status, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // « Biens similaires à vos recherches » : la recherche de la catégorie choisie, 10 biens (HomeView.loadFeed),
-  // relancée quand la catégorie change (.task(id: router.searchIntent)).
+  // relancée quand la catégorie ou la recherche change (HomeFeedKey, n° 61). Après le premier chargement, elle attend
+  // 0,6 s sans autre changement : un lieu tapé dans la carte de recherche ne la relance qu'une fois la saisie posée.
+  const feedKey = `${mode}?${paramsFromDraft(draft).toString()}`;
+  const didLoadFeed = useRef(false);
   useEffect(() => {
     if (!projectSettled) return;
     let cancelled = false;
     const current = currentDraft.current;
-    search(current, (row) => highlightsFor(row, current.mode === 'invest' ? current.downPayment : null))
-      .then((results) => { if (!cancelled) setSimilar(results.slice(0, SIMILAR_LIMIT)); })
-      .catch(() => { if (!cancelled) setSimilar([]); });
-    return () => { cancelled = true; };
-  }, [projectSettled, mode]);
+    const load = () => {
+      didLoadFeed.current = true;
+      search(current, (row) => highlightsFor(row, current.mode === 'invest' ? current.downPayment : null))
+        .then((results) => { if (!cancelled) setSimilar(results.slice(0, SIMILAR_LIMIT)); })
+        .catch(() => { if (!cancelled) setSimilar([]); });
+    };
+    const timer = didLoadFeed.current ? window.setTimeout(load, FEED_RELOAD_DELAY) : undefined;
+    if (timer === undefined) load();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [projectSettled, feedKey]);
 
   // « Consultés récemment » : fiches ouvertes dans cet onglet, relues au retour par « Précédent ».
   useEffect(() => {

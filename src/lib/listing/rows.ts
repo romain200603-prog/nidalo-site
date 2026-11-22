@@ -49,8 +49,12 @@ const ordered = (values: string[] | null, labels: [string, string][]): string =>
 
 const yesNo = (value: boolean): string => (value ? 'Oui' : 'Non');
 
-/** « Rez-de-chaussée », « 1er étage », « 3e étage », avec « sur 5 » si le nombre d'étages est connu. */
+/**
+ * « Rez-de-chaussée », « 1er étage », « 3e étage », avec « sur 5 » si le nombre d'étages est connu ; un étage négatif
+ * est « Sous-sol », sans « sur N » (n° 238).
+ */
 export function floorLabel(floor: number, total: number | null): string {
+  if (floor < 0) return 'Sous-sol';
   const label = floor === 0 ? 'Rez-de-chaussée' : floor === 1 ? '1er étage' : `${floor}e étage`;
   return total === null ? label : `${label} sur ${total}`;
 }
@@ -116,7 +120,8 @@ export type HeaderFact = { value: string; caption: string };
 /** Chiffres clés de l'en-tête, seulement ceux qui sont connus (keyFacts de l'app). */
 export function headerFacts(row: ListingRow, kind: CardKind): HeaderFact[] {
   const facts: HeaderFact[] = [];
-  if (kind === 'land') {
+  // Terrain à louer aussi : la surface du terrain, plus de « Surface 0 m² » (n° 144).
+  if (kind === 'land' || row.property_type === 'land') {
     const land = n(row.land_area);
     if (land !== null) facts.push({ value: formatArea(land), caption: 'Terrain' });
     return facts;
@@ -130,7 +135,8 @@ export function headerFacts(row: ListingRow, kind: CardKind): HeaderFact[] {
   }
   if (row.rooms !== null) facts.push({ value: `${row.rooms}`, caption: row.rooms > 1 ? 'Pièces' : 'Pièce' });
   if (row.bedrooms !== null) facts.push({ value: `${row.bedrooms}`, caption: row.bedrooms > 1 ? 'Chambres' : 'Chambre' });
-  if (row.floor !== null) facts.push({ value: row.floor === 0 ? 'RDC' : row.floor === 1 ? '1er' : `${row.floor}e`, caption: 'Étage' });
+  // FloorLabel.short : « Sous-sol » pour un étage négatif (n° 238).
+  if (row.floor !== null) facts.push({ value: row.floor < 0 ? 'Sous-sol' : row.floor === 0 ? 'RDC' : row.floor === 1 ? '1er' : `${row.floor}e`, caption: 'Étage' });
   return facts;
 }
 

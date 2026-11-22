@@ -15,7 +15,11 @@ export const favoritesStore = createStore<FavoritesState>({ status: 'none', item
 
 let loadedFor: string | null = null;
 
-export async function loadFavorites(force = false): Promise<void> {
+/**
+ * Lit les favoris du compte. `quietly` : nouvel essai après un échec (« Réessayer », retour sur la page) ; l'écran garde
+ * « Pas de connexion Internet » jusqu'à la réponse, comme FavoritesStore.reloadIfFailed de l'app (n° 54).
+ */
+export async function loadFavorites(force = false, quietly = false): Promise<void> {
   const session = sessionStore.get();
   if (session.status !== 'signedIn') {
     loadedFor = null;
@@ -24,17 +28,34 @@ export async function loadFavorites(force = false): Promise<void> {
   }
   if (!force && loadedFor === session.userId && favoritesStore.get().status !== 'error') return;
   loadedFor = session.userId;
-  if (favoritesStore.get().status !== 'ready') favoritesStore.set({ status: 'loading', items: [] });
+  if (favoritesStore.get().status !== 'ready' && !quietly) favoritesStore.set({ status: 'loading', items: [] });
   const { data, error } = await supabase.from('favorites').select('listing_id, created_at').order('created_at', { ascending: true });
   if (currentUserId() !== session.userId) return;
   if (error) {
     loadedFor = null;
     favoritesStore.set({ status: 'error', items: [] });
+    listenForReturn();
     return;
   }
   // Un retrait encore annulable n'est pas encore parti : le favori reste retiré de la liste.
   const pendingId = removals.pending?.id;
   favoritesStore.set({ status: 'ready', items: ((data ?? []) as Favorite[]).filter((item) => item.listing_id !== pendingId) });
+}
+
+let listensForReturn = false;
+
+/**
+ * Favoris non lus : relus quand on revient sur la page (onglet de nouveau visible, retour par « Précédent »), seulement
+ * si la dernière lecture a échoué (retour au premier plan dans RootTabView de l'app, n° 54).
+ */
+function listenForReturn() {
+  if (listensForReturn) return;
+  listensForReturn = true;
+  const reloadIfFailed = () => {
+    if (favoritesStore.get().status === 'error') void loadFavorites(true, true);
+  };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reloadIfFailed(); });
+  window.addEventListener('pageshow', (event) => { if (event.persisted) reloadIfFailed(); });
 }
 
 export function isFavorite(listingId: string): boolean {

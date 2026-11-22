@@ -266,7 +266,8 @@ export function cardContent(row: ListingRow, mode: SearchMode | null, highlights
   return {
     kind,
     price: cardPrice(row),
-    area: kind === 'land' ? num(row.land_area) : living > 0 ? living : null,
+    // La surface suit le type de bien, pas le gabarit : un terrain à louer garde la surface du terrain (n° 144).
+    area: kind === 'land' || row.property_type === 'land' ? num(row.land_area) : living > 0 ? living : null,
     facts,
     panelFacts: kind === 'investment' ? investmentPanelFacts(row, highlights).slice(0, 4)
       : kind === 'hotel' ? hotelPanelFacts(row).slice(0, 4) : facts,
@@ -332,7 +333,7 @@ export function formatFact(fact: KeyFact, now = new Date()): FormattedFact {
       return f('wallet', `Cash-flow estimé : ${amount}/mois`, fact.value > 0 ? 'positive' : fact.value < 0 ? 'negative' : 'neutral', true);
     }
     case 'yieldToCompute': return f('percent', 'Rendement : à calculer (loyer non renseigné)', 'muted');
-    case 'hotelRooms': return f('bedDouble', `${fact.value} chambres`);
+    case 'hotelRooms': return f('bedDouble', `${fact.value} ${fact.value > 1 ? 'chambres' : 'chambre'}`);
     case 'hotelStars': return f('star', `${fact.value} étoile${s(fact.value)}`);
     case 'annualRevenue':
       return f('trend', `Chiffre d’affaires : ${formatPrice(fact.value.value)}/an`, 'neutral', fact.value.origin === 'estimated');
@@ -341,7 +342,7 @@ export function formatFact(fact: KeyFact, now = new Date()): FormattedFact {
     case 'hotelScope': return f('building2', scopeLabel(fact.value));
     case 'leased': return f('key', fact.annualRent !== null ? `Loué : ${formatPrice(fact.annualRent)}/an HC` : 'Loué');
     case 'vacant': return f('door', 'Libre de toute occupation');
-    case 'workstations': return f('users', `${fact.value} postes`);
+    case 'workstations': return f('users', `${fact.value} ${fact.value > 1 ? 'postes' : 'poste'}`);
     case 'parkingSpaces': return f('car', `${fact.value} place${s(fact.value)} de parking`);
     case 'frontage': return f('store', `Vitrine ${formatNumber(fact.value)} m`);
     case 'zoning': return f('map', `Zone PLU ${fact.value}`);
@@ -427,8 +428,10 @@ export function shortDay(date: Date): string {
 /** « 680 k€ », « 1,2 M€ » (Formatters.compactPrice de l'app). */
 export function compactAmount(value: number): string {
   const number = (n: number, digits: number) => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: digits }).format(n);
-  if (value >= 1_000_000) return `${number(Math.round(value / 100_000) / 10, 1)} M€`;
-  return `${number(Math.round(value / 1_000), 0)} k€`;
+  // Arrondi aux milliers d'abord : 999 600 € donne « 1 M€ », pas « 1 000 k€ » (n° 153).
+  const thousands = Math.round(value / 1_000);
+  if (thousands >= 1_000) return `${number(Math.round(value / 100_000) / 10, 1)} M€`;
+  return `${number(thousands, 0)} k€`;
 }
 
 export function formatShortFact(fact: ShortFact, now = new Date()): ShortFactText {

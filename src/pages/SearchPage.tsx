@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import { useToastShown } from '../components/AppToast';
+import { showToast, useToastShown } from '../components/AppToast';
 import { Icon } from '../components/Icon';
 import { Page } from '../components/Layout';
 import { cardTag, ListingCard } from '../components/ListingCard';
@@ -19,10 +19,9 @@ import type { DrawTool, MapFrame } from '../components/ResultsMap';
 const ResultsMap = lazy(() => import('../components/ResultsMap').then((m) => ({ default: m.ResultsMap })));
 import { FiltersDialog } from './FiltersDialog';
 import { requireAccount } from '../lib/account/gate';
-import { saveSearch } from '../lib/account/savedSearches';
-import { cardContent, formatCardPrice } from '../lib/cardContent';
+import { saveSearch, type SavedSearch } from '../lib/account/savedSearches';
+import { cardContent, cardLocation, formatCardPrice } from '../lib/cardContent';
 import { useDesktop } from '../lib/desktop';
-import { formatArea } from '../lib/format';
 import { highlightsFor } from '../lib/highlights';
 import type { SearchMode } from '../lib/labels';
 import { sortedPhotos } from '../lib/listings';
@@ -90,8 +89,36 @@ function countLabel(count: number, mode: SearchMode): string {
   return count === 1 ? `1 ${noun}` : `${count} ${noun}s`;
 }
 
-/** La liste montre les 100 premiers biens, comme l'app ; la carte les montre tous. */
-const LIST_LIMIT = 100;
+/**
+ * La liste montre 100 biens, puis les 100 suivants quand sa fin approche (SearchView, dernière carte, n° 48) ; elle
+ * repart des 100 premiers quand les critères ou le tri changent. La carte les montre tous, l'en-tête garde le total.
+ */
+const LIST_PAGE = 100;
+
+/**
+ * Fin de la liste : les biens suivants dès qu'elle approche de l'écran. Ils sont déjà lus (tous les résultats sont
+ * en mémoire, pour la carte) : ils s'affichent aussitôt, sans la petite roue de l'app. Remonté à chaque page affichée,
+ * l'observateur repart et relance la suite si la fin est encore visible.
+ */
+function ListEnd({ onReach }: { onReach: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const reach = useRef(onReach);
+  reach.current = onReach;
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      reach.current();
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) reach.current();
+    }, { rootMargin: '0px 0px 600px 0px' });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return <div ref={ref} className="results-end" aria-hidden="true" />;
+}
 
 /** Aperçu du bien choisi sur la carte (MapPropertyPreviewCard de l'app). */
 function MapPreview({ result, mode, onClose }: { result: Result; mode: SearchMode; onClose: () => void }) {
@@ -112,7 +139,7 @@ function MapPreview({ result, mode, onClose }: { result: Result; mode: SearchMod
             <span className="map-preview-chip">{cardTag(content.kind, isLeased)}</span>
           )}
           <span className="map-preview-title">{row.title}</span>
-          <span className="map-preview-place">{row.city} · {formatArea(Number(row.living_area))}</span>
+          <span className="map-preview-place">{cardLocation(row.city, content)}</span>
           <span className="map-preview-price">{price.amount}{price.suffix && <small>{price.suffix}</small>}</span>
         </span>
       </a>
@@ -151,6 +178,8 @@ export function SearchPage() {
   /** Zone visible de la carte (« Zone autour du centre de la carte »). */
   const visibleArea = useRef<BoundingBox | null>(null);
   const [attempt, setAttempt] = useState(0);
+  /** Biens montrés dans la liste (n° 48). */
+  const [listCount, setListCount] = useState(LIST_PAGE);
   const toastShown = useToastShown();
   const savedSearch = useSavedSearchFor(draft);
   /** Derniers critères de chaque mode, repris quand on y revient (comme l'app). */
@@ -188,6 +217,7 @@ export function SearchPage() {
     let cancelled = false;
     setStatus({ kind: 'loading' });
     setSelectedId(null);
+    setListCount(LIST_PAGE);
     search(draft, (row) => highlightsFor(row, draft.mode === 'invest' ? draft.downPayment : null))
       .then((results) => {
         if (cancelled) return;
@@ -353,12 +383,19 @@ export function SearchPage() {
     apply({ ...draft, drawnZone: null });
   }
 
+  /** « Activer l'alerte » : un échec (pas de réseau…) donne son message en bas de l'écran (n° 167). */
+  function enableAlert(item: SavedSearch) {
+    void saveSearch({ ...item, alerts_enabled: true }).then((failure) => {
+      if (failure) showToast({ icon: 'info', text: failure });
+    });
+  }
+
   const zoneMenu = postedZone ? zoneMenuItems({
     saved: savedSearch,
     onRedraw: startDrawing,
     onAdjust: () => proposeZone(postedZone, 'Ajustez votre zone'),
     onCreateAlert: openSave,
-    onEnableAlert: (item) => void requireAccount(() => { void saveSearch({ ...item, alerts_enabled: true }); }),
+    onEnableAlert: (item) => void requireAccount(() => enableAlert(item)),
     onClear: clearZone,
   }) : null;
   const proposalLoading = proposalZone !== null && proposalFound?.zone !== proposalZone;
@@ -477,17 +514,20 @@ export function SearchPage() {
               savedSearch={savedSearch}
               onApply={apply}
               onAlert={openSave}
-              onEnableAlert={(item) => { void saveSearch({ ...item, alerts_enabled: true }); }}
+              onEnableAlert={enableAlert}
               onClear={() => apply(defaultDraft(draft.mode))}
             />
           )}
           {status.kind === 'ready' && results.length > 0 && (
-            <div className="results-list">
-              {results.slice(0, LIST_LIMIT).map(({ row, highlights }) => (
-                <ListingCard key={row.id} row={row} content={cardContent(row, draft.mode, highlights)}
-                  selected={row.id === selectedId} onHover={setHoveredId} headingLevel="h3" showsBadge alreadySeen={seen.has(row.id)} />
-              ))}
-            </div>
+            <>
+              <div className="results-list">
+                {results.slice(0, listCount).map(({ row, highlights }) => (
+                  <ListingCard key={row.id} row={row} content={cardContent(row, draft.mode, highlights)}
+                    selected={row.id === selectedId} onHover={setHoveredId} headingLevel="h3" showsBadge alreadySeen={seen.has(row.id)} />
+                ))}
+              </div>
+              {results.length > listCount && <ListEnd key={listCount} onReach={() => setListCount((count) => count + LIST_PAGE)} />}
+            </>
           )}
         </div>
 

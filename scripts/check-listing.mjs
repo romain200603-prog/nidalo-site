@@ -1755,10 +1755,11 @@ try {
     init: `sessionStorage.setItem('nidalo.comparer', ${JSON.stringify(JSON.stringify({ ids: [BROKEN], referenceId: BROKEN }))});`,
   });
   await page.waitForSelector('.cmp-error');
-  expect('comparer-erreur', 'message', await page.textContent('.cmp-error h2'), 'Comparaison indisponible');
+  // L'état commun « Pas de connexion Internet » de l'app (n° 64).
+  expect('comparer-erreur', 'message', await page.textContent('.cmp-error h2'), 'Pas de connexion Internet');
   if (await page.$('.cmp-table')) problems.push('comparer-erreur: tableau affiché sans aucun bien');
   const brokenBefore = brokenRequests;
-  await page.click('.cmp-error .cmp-discover');
+  await page.click('.cmp-error .app-offline-retry');
   for (let i = 0; i < 30 && brokenRequests <= brokenBefore; i += 1) await page.waitForTimeout(100);
   if (brokenRequests <= brokenBefore) problems.push('comparer-erreur: « Réessayer » ne redemande pas le bien');
   await page.waitForSelector('.cmp-error');

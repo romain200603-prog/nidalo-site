@@ -8,7 +8,7 @@ import '../styles/pieces-app.css';
 // dernier remplace le précédent. Au-dessus de la barre d'onglets du téléphone, en bas au centre sur ordinateur.
 
 export type ToastMessage = {
-  icon: 'heart' | 'check' | 'columns';
+  icon: 'heart' | 'check' | 'columns' | 'info';
   text: string;
   action?: { label: string; accessibilityLabel: string; run: () => void };
 };

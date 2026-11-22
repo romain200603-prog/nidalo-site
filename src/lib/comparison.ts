@@ -1,10 +1,11 @@
 import type { IconName } from '../components/iconPaths';
 import { cardKind } from './cardContent';
 import { formatArea, formatFraction, formatPrice, formatSignedAmount } from './format';
+import type { Project } from './account/projectEditor';
 import { D, Decimal } from './investment/decimal';
-import { rentalBanYear, STANDARD_ASSUMPTIONS } from './investment/domain';
-import { LoanMath } from './investment/loanMath';
-import { investmentForRow } from './investment/row';
+import { rentalBanYear } from './investment/domain';
+import { FinancingSimulation, MonthlyBreakdown } from './investment/financingSimulation';
+import { inputsFromRow, investmentForRow } from './investment/row';
 import type { SearchMode } from './labels';
 import { readAsset, rentalDetails, type RentalDetails } from './listing/fields';
 import type { ListingRow, PhotoRow } from './listings';
@@ -130,16 +131,41 @@ const num = (value: unknown): number | null => {
 /** Arrondi à l'unité comme l'app (`rounded(scale: 0)`, mode .plain : la moitié s'éloigne de zéro). */
 const roundPlain = (value: number) => Math.sign(value) * Math.round(Math.abs(value));
 
-/** Mensualité estimée : 10 % d'apport, 25 ans, taux et assurance des hypothèses standard (CompareView). */
-export function estimatedMonthlyPayment(price: number): number {
-  const principal = D(price).times(D('0.9'));
-  const payment = LoanMath.monthlyPayment(principal, STANDARD_ASSUMPTIONS.loanAnnualRate, 300)
-    .plus(LoanMath.monthlyInsurance(principal, STANDARD_ASSUMPTIONS.borrowerInsuranceAnnualRate));
-  return payment.rounded(0).toNumber();
+/**
+ * Apport du projet immobilier du compte (ProjectDownPayment(project:) de l'app) : celui de la catégorie du projet,
+ * `cashPurchase` pour un achat au comptant ; `null` sans apport, pour un projet de location ou sans projet.
+ */
+export function projectDownPayment(project: Pick<Project, 'kind' | 'criteria'> | null): Decimal | null {
+  if (!project) return null;
+  const criteria = project.kind === 'buy' ? project.criteria.residential
+    : project.kind === 'invest' ? project.criteria.investment
+      : project.kind === 'hotel' ? project.criteria.hotel : null;
+  if (!criteria) return null;
+  if (criteria.financing === 'cash') return FinancingSimulation.cashPurchase;
+  return criteria.downPayment !== null && criteria.downPayment > 0 ? D(criteria.downPayment) : null;
 }
 
-/** Bien comparé, lu comme l'app le lit (ListingSummary(details:calculator:) puis CompareView.load). */
-export function comparisonItem(row: ListingRow, mode: SearchMode | null): ComparisonItem {
+/**
+ * Mensualité estimée : exactement la « Mensualité estimée » de la fiche (CompareView.estimatedMonthlyPayment, n° 65) :
+ * `FinancingSimulation.standard` avec l'apport du projet s'il y en a un, puis le mois type du moteur, arrondi à l'euro.
+ * `null` quand le moteur ne calcule pas (vente sans loyer, annonce illisible), comme `try?` dans l'app.
+ */
+export function estimatedMonthlyPayment(row: ListingRow, downPayment: Decimal | null = null): number | null {
+  const inputs = inputsFromRow(row);
+  if (!inputs) return null;
+  try {
+    const result = FinancingSimulation.standard.with({ fixedDownPayment: downPayment }).result(inputs);
+    return new MonthlyBreakdown(result).monthlyPayment.rounded(0).toNumber();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Bien comparé, lu comme l'app le lit (ListingSummary(details:calculator:) puis CompareView.load) ; `downPayment` :
+ * l'apport du projet du compte (projectDownPayment).
+ */
+export function comparisonItem(row: ListingRow, mode: SearchMode | null, downPayment: Decimal | null = null): ComparisonItem {
   const card = cardKind(row, mode);
   const kind: ComparisonKind = card === 'rental' || card === 'purchase' || card === 'investment' ? card : 'professional';
   const asset = readAsset(row);
@@ -170,7 +196,7 @@ export function comparisonItem(row: ListingRow, mode: SearchMode | null): Compar
       ? (building.residentialUnits ?? 0) + (building.commercialUnits ?? 0) : null,
     annualPropertyTax: num(row.annual_property_tax),
     worksAmount: num(row.works_amount),
-    estimatedMonthlyPayment: row.transaction === 'sale' && row.property_type !== 'hotel' ? estimatedMonthlyPayment(price) : null,
+    estimatedMonthlyPayment: row.transaction === 'sale' && row.property_type !== 'hotel' ? estimatedMonthlyPayment(row, downPayment) : null,
   };
 }
 
@@ -292,8 +318,10 @@ function analysisFor(index: number, items: ComparisonItem[], kind: ComparisonKin
   if (item.monthlyCharges !== null && item.livingArea > 0 && item.monthlyCharges / item.livingArea > HIGH_CHARGES_PER_SQUARE_METER) {
     warnings.push({ kind: 'highCharges', value: item.monthlyCharges });
   }
-  // Règles de location du DPE : utiles pour un investissement ou une location.
-  if ((kind === 'investment' || kind === 'rental') && item.energyClass) {
+  // Règles de location du DPE : utiles pour un investissement ou une location, d'un logement ou d'un immeuble (qui
+  // contient des logements) ; ni local, ni bureaux, ni parking, ni terrain, ni hôtel (n° 145).
+  const housing = item.propertyType === 'apartment' || item.propertyType === 'house' || item.propertyType === 'building';
+  if ((kind === 'investment' || kind === 'rental') && housing && item.energyClass) {
     const year = rentalBanYear(item.energyClass);
     if (year !== null) warnings.push({ kind: 'rentalBan', letter: item.energyClass, year });
     if (item.energyClass === 'F' || item.energyClass === 'G') warnings.push({ kind: 'rentFreeze', letter: item.energyClass });
@@ -369,13 +397,17 @@ export function valueText(value: ComparisonValue, criterion: Criterion, now: Dat
   }
 }
 
-/** Écart affiché sous la valeur : « + 12 000 € », « − 0,7 % pt », « + 2 classes » (CompareFormatting.deltaText). */
+/** Écart en points de pourcentage, une décimale : 0,012 → « 1,2 » (ICU, égalité au pair). */
+const pointsFormat = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+/** Écart affiché sous la valeur : « + 12 000 € », « − 0,7 pt », « + 2 classes » (CompareFormatting.deltaText). */
 export function deltaText(difference: number, criterion: Criterion): string {
   const sign = difference > 0 ? '+' : difference < 0 ? '−' : '';
   const magnitude = Math.abs(difference);
   let body: string;
   switch (criterion) {
-    case 'grossYield': case 'estimatedNetYield': body = `${formatFraction(magnitude)} pt`; break;
+    // En points, sans « % » : « + 1,2 pt » (n° 163).
+    case 'grossYield': case 'estimatedNetYield': body = `${pointsFormat.format(D(magnitude).times(100).rounded(1, 'bankers').toNumber())} pt`; break;
     case 'livingArea': case 'landArea': body = formatArea(magnitude); break;
     case 'rooms': case 'bedrooms': case 'hotelRooms': case 'units': body = `${Math.trunc(magnitude)}`; break;
     case 'energyClass': body = `${Math.trunc(magnitude)} classe${magnitude > 1 ? 's' : ''}`; break;

@@ -93,6 +93,10 @@
 .fav-empty-place-favorites { padding-top: 62px; }
 .fav-empty-place-searches { padding-top: 83px; }
 .fav-empty-place-account { display: flex; align-items: center; min-height: calc(100vh - 260px); padding: 24px 0; }
+/* « Pas de connexion Internet » (n° 54) : 62 sous les onglets quand les favoris du compte n'ont pas été lus, 24 sous
+   la recherche et les catégories quand leurs fiches ne l'ont pas été (padding .top 62 et Spacing.xl de l'app). */
+.fav-empty-place-favorites > .app-offline { padding: 0 24px; }
+.favorites-list > .app-offline, .dfav-list > .app-offline { grid-column: 1 / -1; padding: 24px 24px 0; }
 
 @media (prefers-reduced-motion: reduce) {
   .fav-tabs-pill { display: none; }
