@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type ReactNode } from 'react';
 import { ChoiceChip, EnergyPicker, FeatureToggle, InfoLine, RadiusChoices, RoomsPicker } from '../../components/FilterControls';
 import { Icon } from '../../components/Icon';
 import { PlaceField } from '../../components/PlaceField';
@@ -6,8 +6,9 @@ import { PROJECT_KIND_LABELS, PROJECT_STEPS, STEP_LABELS, type ProjectKind } fro
 import {
   AMOUNT_INVALID, amountText, changeKind, completionOf, editableProjectStore, encodeCriteria, groupedInput, inputAmount, investmentLabel,
   INVESTMENT_ASSET_TYPES, isEmptyCriteria, isStepCompleted, KIND_DISPLAY_ORDER, KIND_SUBTITLES, loadEditableProject,
-  NOTARY_FEE_RATE_EXISTING, NOTARY_FEE_RATE_NEW_BUILD, PERCENTAGE_ISSUE, projectIssues, projectToSave, RENTAL_TYPES, resetCategory,
-  RESIDENTIAL_TYPES, sameProject, saveProject, STEP_HINTS, summaryRows, toggleStep, type Financing, type HotelCriteria,
+  NOTARY_FEE_RATE_EXISTING, NOTARY_FEE_RATE_NEW_BUILD, parisNoon, parisNoonOfDay, pastedAmount, PERCENTAGE_ISSUE, projectIssues,
+  projectToSave, RENTAL_TYPES, resetCategory,
+  RESIDENTIAL_TYPES, sameProject, saveProject, STEP_HINTS, stepsCountText, summaryRows, toggleStep, type Financing, type HotelCriteria,
   type InvestmentCriteria, type Project, type ProjectLocation, type RentalCriteria, type ResidentialCriteria,
 } from '../../lib/account/projectEditor';
 import { useStore } from '../../lib/account/session';
@@ -103,14 +104,32 @@ function Amount({ label, value, onChange, unit, percent = false, allowsNegative 
     caret.current = null;
   }, [text]);
 
-  function handle(event: ChangeEvent<HTMLInputElement>) {
-    const raw = event.target.value;
-    const count = significantCount(raw, event.target.selectionStart ?? raw.length);
+  function update(raw: string, cursor: number) {
+    const count = significantCount(raw, cursor);
     const formatted = groupedInput(raw, allowsNegative, groups);
     caret.current = offsetAfterSignificant(formatted, count);
     setText(formatted);
     const parsed = inputAmount(formatted, allowsNegative, percent);
     onChange(parsed === null ? null : integer ? Math.trunc(parsed) : parsed);
+  }
+
+  function handle(event: ChangeEvent<HTMLInputElement>) {
+    const raw = event.target.value;
+    update(raw, event.target.selectionStart ?? raw.length);
+  }
+
+  // Montant en euros : « 250.000 » collé donne 250 000 (n° 242) ; les autres collages ne changent pas.
+  function paste(event: ClipboardEvent<HTMLInputElement>) {
+    if (!unit.includes('€')) return;
+    const pasted = event.clipboardData.getData('text');
+    if (pasted.length <= 1) return;
+    const inserted = pastedAmount(pasted);
+    if (inserted === pasted) return;
+    event.preventDefault();
+    const field = event.currentTarget;
+    const start = field.selectionStart ?? field.value.length;
+    const end = field.selectionEnd ?? start;
+    update(field.value.slice(0, start) + inserted + field.value.slice(end), start + inserted.length);
   }
 
   const invalid = text.trim() !== '' && inputAmount(text, allowsNegative) === null;
@@ -120,7 +139,7 @@ function Amount({ label, value, onChange, unit, percent = false, allowsNegative 
       <label htmlFor={id}>{label}</label>
       <div className="number-input">
         <input ref={input} id={id} type="text" inputMode={allowsNegative ? 'text' : 'decimal'} autoComplete="off" placeholder="Non renseigné"
-          value={text} onChange={handle} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+          value={text} onChange={handle} onPaste={paste} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
           aria-invalid={message ? true : undefined} aria-describedby={message ? `${id}-erreur` : undefined} />
         {unit && <span className="unit" aria-hidden="true">{unit}</span>}
       </div>
@@ -206,24 +225,24 @@ function oneMonthLater(from: Date): Date {
   return next;
 }
 
-/** Date facultative (DateChoice) : interrupteur, puis le calendrier ; dans un mois par défaut. */
+/**
+ * Date facultative (DateChoice) : interrupteur, puis le calendrier ; dans un mois par défaut. La date est écrite à
+ * midi, heure de Paris, du jour choisi : le même jour partout, outre-mer compris (n° 243).
+ */
 function DateChoice({ title, value, onChange }: { title: string; value: Date | null; onChange: (value: Date | null) => void }) {
   return (
     <div className="dsc-date-choice">
       <label className="feature-toggle">
         <span className="feature-title field-label">{title}</span>
         <input type="checkbox" role="switch" className="switch" checked={value !== null}
-          onChange={(event) => onChange(event.target.checked ? oneMonthLater(new Date()) : null)} />
+          onChange={(event) => onChange(event.target.checked ? parisNoon(oneMonthLater(new Date())) : null)} />
       </label>
       {value !== null && (
         <input type="date" className="date-input" aria-label={`${title} : date`} min={dayString(new Date())} value={dayString(value)}
           onChange={(event) => {
             const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(event.target.value);
             if (!match) return;
-            // Le calendrier change le jour et garde l'heure de la date choisie.
-            const next = new Date(value);
-            next.setFullYear(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-            onChange(next);
+            onChange(parisNoonOfDay(Number(match[1]), Number(match[2]), Number(match[3])));
           }} />
       )}
     </div>
@@ -598,7 +617,7 @@ function Editor({ saved }: { saved: Project }) {
           onClick={() => setStepsExpanded(!stepsExpanded)}>
           <span id={`${stepsId}-titre`} className="dsc-card-title">Avancement du projet</span>
           {/* En étapes, pour ne pas confondre avec le pourcentage de complétude du résumé. */}
-          <span className="dsc-steps-count">{`${doneCount} étapes sur ${steps.length}`}</span>
+          <span className="dsc-steps-count">{stepsCountText(doneCount, steps.length)}</span>
           <Icon name={stepsExpanded ? 'chevronUp' : 'chevronDown'} />
         </button>
         {stepsExpanded && (
@@ -644,7 +663,7 @@ function Editor({ saved }: { saved: Project }) {
 
       <ChoiceDialog
         open={resetting}
-        title={`Réinitialiser les critères ${PROJECT_KIND_LABELS[draft.kind].toLowerCase()} ?`}
+        title="Réinitialiser les critères de ce parcours ?"
         message="Les critères des autres parcours sont conservés."
         onClose={() => setResetting(false)}
         actions={[
@@ -680,7 +699,7 @@ export function ProjectEditor() {
         <div className="dsc-empty">
           <Icon name="triangleAlert" />
           <h2>Projet indisponible</h2>
-          <p>Impossible de charger votre projet. Réessayez dans un instant.</p>
+          <p>Votre projet n&apos;a pas pu être chargé. Vérifiez votre connexion.</p>
           <button type="button" className="dsc-button dsc-button-primary" onClick={() => void loadEditableProject()}>Réessayer</button>
         </div>
       ) : <Spinner />}

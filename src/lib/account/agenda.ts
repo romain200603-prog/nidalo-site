@@ -1,4 +1,5 @@
 import { appDate, appDateString } from '../appDates';
+import { conversationFrom, fetchConversations, type InboxRow } from '../listing/conversation';
 import { requestDisplayStatus, type AgendaRow, type VisitRequestRow, type VisitSlot } from '../listing/visits';
 import { photoUrl } from '../listings';
 import { fetchProfiles } from '../messages/api';
@@ -147,6 +148,22 @@ export const contactConversationId = (item: AgendaItem): string | null => item.c
 /** « Contacter » possible : une conversation, ou un bien dont on peut joindre le vendeur (canContact). */
 export const canContact = (item: AgendaItem): boolean => contactConversationId(item) !== null || item.listing !== null;
 
+/** Visite en visio : pas d'itinéraire (Visit.isVideo, n° 178). */
+export const isVideoVisit = (item: Pick<AgendaItem, 'address'>): boolean => item.address?.trim() === 'En visio';
+
+/** « vendeur », ou « propriétaire » pour une location (n° 74). */
+const sellerWord = (item: Pick<AgendaItem, 'listing'>): string => (item.listing?.transaction === 'rent' ? 'propriétaire' : 'vendeur');
+
+/** Itinéraire sans adresse (openDirections). */
+export const noAddressNotice = (item: Pick<AgendaItem, 'listing'>): string =>
+  `Adresse non renseignée : l'itinéraire sera disponible quand le ${sellerWord(item)} l'aura communiquée.`;
+
+/** « Message » sans conversation possible avec le vendeur (contact). */
+export const noSellerNotice = (item: Pick<AgendaItem, 'listing'>): string => `Impossible de joindre le ${sellerWord(item)} de ce bien pour l'instant.`;
+
+/** « Message » d'une demande reçue sans conversation avec le demandeur (VisitRequestLinks.conversationNotFound, n° 11). */
+export const CONVERSATION_NOT_FOUND = 'Aucune conversation avec cette personne n\'a été trouvée pour cette annonce.';
+
 // MARK: - Demandes de visite dans l'agenda (AgendaRequests)
 
 type Role = 'requester' | 'recipient';
@@ -174,6 +191,41 @@ function canAccept(request: AgendaRequestRow, me: string, now: Date): boolean {
 
 /** Créneaux encore proposés par la demande (openSlotCount). */
 export const openSlotCount = (request: AgendaRequestRow): number => openSlots(request).length;
+
+/** Demande de visite reçue par ce compte (vendeur ou agent) dont vient la visite ; `null` sinon. */
+export function receivedRequest(item: Pick<AgendaItem, 'requestId'>, requests: AgendaRequestRow[], me: string | null): AgendaRequestRow | null {
+  if (!item.requestId || !me) return null;
+  const request = requests.find((other) => sameId(other.id, item.requestId));
+  return request && requestRole(request, me) === 'recipient' ? request : null;
+}
+
+/** Ce que l'on lit d'une ligne de my_conversations pour retrouver une conversation (InboxRow, avec ses dates). */
+export type AgendaInboxRow = InboxRow & { created_at?: string | null; last_message_at?: string | null };
+
+/**
+ * Conversation à deux déjà ouverte sur cette annonce avec cette personne, la plus récente, sans en créer
+ * (Conversation.existing(in:listingId:with:), n° 11) ; `null` s'il n'y en a pas.
+ */
+export function existingConversationId(rows: AgendaInboxRow[], listingId: string, person: string): string | null {
+  let best: { id: string; at: number } | null = null;
+  for (const row of rows) {
+    const conversation = conversationFrom(row, null);
+    if (conversation.isGroup || !sameId(conversation.listingId, listingId)) continue;
+    if (!sameId(row.buyer_id, person) && !sameId(row.seller_id, person)) continue;
+    const at = (appDate(row.last_message_at) ?? appDate(row.created_at))?.getTime() ?? 0;
+    if (!best || at > best.at) best = { id: row.conversation_id, at };
+  }
+  return best?.id ?? null;
+}
+
+/** La même, lue sur le serveur (my_conversations sans paramètre) ; `null` si elle est introuvable ou illisible. */
+export async function findExistingConversation(listingId: string, person: string): Promise<string | null> {
+  try {
+    return existingConversationId(await fetchConversations() as AgendaInboxRow[], listingId, person);
+  } catch {
+    return null;
+  }
+}
 
 /** Demandes pas encore acceptées, en visites calculées (AgendaRequests.visits(for:me:existing:now:)). */
 export function requestEntries(requests: AgendaRequestRow[], me: string, existing: AgendaItem[], now: Date): AgendaItem[] {
@@ -449,6 +501,105 @@ export async function loadAgenda(): Promise<void> {
 export function agendaItems(state: AgendaState, me: string | null, now: Date): AgendaItem[] {
   if (!me) return state.visits;
   return [...state.visits, ...requestEntries(state.requests, me, state.visits, now)];
+}
+
+// MARK: - Créneaux ouverts (VisitSession, VisitSessionStore)
+
+/** Séance de créneaux ouverte par le vendeur ou le bailleur sur son annonce, telle que l'agenda la montre (VisitSession). */
+export type VisitSession = {
+  id: string;
+  listing: VisitListing;
+  start: Date;
+  end: Date;
+  status: 'open' | 'cancelled';
+  bookedCount: number;
+  totalPlaces: number;
+};
+
+/** Ligne de my_visit_sessions (SessionRow) : ce que l'agenda en lit. */
+export type VisitSessionRow = {
+  id: string;
+  listing_id: string;
+  listing_snapshot: { listingId?: string | null; title?: string | null; price?: number | string | null; transaction?: string | null;
+    city?: string | null; coverPath?: string | null } | null;
+  starts_at: string;
+  ends_at: string;
+  status: string;
+  booked_count?: number | null;
+  total_places?: number | null;
+};
+
+/** Date du serveur, aussi au format brut « 2026-11-20 13:00:00+00 » (lu comme l'app, et par Safari). */
+function serverDate(value: unknown): Date | null {
+  if (typeof value !== 'string') return null;
+  const iso = value.trim().replace(' ', 'T').replace(/(\.\d{3})\d+/, '$1').replace(/([+-]\d{2})$/, '$1:00');
+  return appDate(iso);
+}
+
+/** Séance d'une ligne ; `null` si elle est illisible. */
+export function sessionFromRow(row: VisitSessionRow): VisitSession | null {
+  const start = serverDate(row.starts_at);
+  const end = serverDate(row.ends_at);
+  if (!row.id || !start || !end) return null;
+  const snapshot = row.listing_snapshot ?? {};
+  const count = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : 0);
+  return {
+    id: row.id,
+    listing: {
+      listingId: snapshot.listingId ?? row.listing_id,
+      title: snapshot.title ?? 'Annonce',
+      price: amount(snapshot.price),
+      transaction: snapshot.transaction === 'rent' ? 'rent' : 'sale',
+      city: snapshot.city ?? '',
+      coverImageURL: snapshot.coverPath ? photoUrl(snapshot.coverPath) : null,
+    },
+    start,
+    end,
+    status: row.status === 'cancelled' ? 'cancelled' : 'open',
+    bookedCount: count(row.booked_count),
+    totalPlaces: count(row.total_places),
+  };
+}
+
+/** Séances ouvertes et pas finies, la plus proche d'abord (VisitSessionStore.upcoming, isActive). */
+export function upcomingSessions(sessions: VisitSession[], now: Date): VisitSession[] {
+  return sessions.filter((session) => session.status === 'open' && session.end.getTime() > now.getTime())
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+}
+
+/** « 5 inscrits sur 8 », « 1 inscrit sur 4 » (bookedLabel). */
+export const sessionBookedLabel = (session: Pick<VisitSession, 'bookedCount' | 'totalPlaces'>): string =>
+  `${session.bookedCount} inscrit${session.bookedCount > 1 ? 's' : ''} sur ${session.totalPlaces}`;
+
+/** « Jeudi 5 novembre · 10 h 00 – 12 h 00 » (VisitSessionFormat.session). */
+export function sessionTitle(session: Pick<VisitSession, 'start' | 'end'>): string {
+  const day = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }).format(session.start);
+  return `${day.charAt(0).toLocaleUpperCase('fr-FR')}${day.slice(1)} · ${cardHour(session.start)} – ${cardHour(session.end)}`;
+}
+
+/** Mes séances de créneaux (vendeur ou bailleur) ; la liste reste pendant une relecture et après un échec. */
+export const visitSessionsStore = createStore<{ owner: string | null; sessions: VisitSession[] }>({ owner: null, sessions: [] });
+
+/** Relit mes séances (my_visit_sessions, sans paramètre, comme l'app pour toutes ses séances). */
+export async function loadVisitSessions(): Promise<void> {
+  const session = sessionStore.get();
+  if (session.status !== 'signedIn') {
+    visitSessionsStore.set({ owner: null, sessions: [] });
+    return;
+  }
+  try {
+    const { data, error } = await supabase.rpc('my_visit_sessions');
+    if (currentUserId() !== session.userId || error) return;
+    const sessions = ((data as VisitSessionRow[] | null) ?? []).map(sessionFromRow).filter((item): item is VisitSession => item !== null);
+    visitSessionsStore.set({ owner: session.userId, sessions });
+  } catch {
+    // Réseau coupé : la liste reste comme elle est.
+  }
+}
+
+/** Séances ouvertes à venir du compte `me` (agenda). */
+export function upcomingSessionsOf(state: { owner: string | null; sessions: VisitSession[] }, me: string | null, now: Date): VisitSession[] {
+  return me && sameId(state.owner, me) ? upcomingSessions(state.sessions, now) : [];
 }
 
 // MARK: - « Ajouter une visite » (VisitFormView)

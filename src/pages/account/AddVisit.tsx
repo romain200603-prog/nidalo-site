@@ -171,7 +171,7 @@ function ListingPicker({ open, conversations, onChoose, onManualAddress, onClose
           <Icon name="pin" />
           <span className="dsc-picker-text">
             <span className="dsc-picker-title">Ajouter une adresse manuellement</span>
-            <span className="dsc-picker-line">Pour un bien qui n'est pas dans NIDALO</span>
+            <span className="dsc-picker-line">Pour un bien qui n'est pas dans Nidalo</span>
           </span>
           <Icon name="chevronRight" className="icon dsc-chevron" />
         </button>
@@ -459,7 +459,10 @@ export function AddVisit({ fromAgenda }: { fromAgenda: boolean }) {
             fetcher={visitAddressFetcher}
             onChange={(text) => setAddress(text)}
             onChoose={(place) => { setAddress(fullLabel(place)); setIsAddressHidden(false); }} />
-          {isAddressHidden && <InfoLine>Adresse exacte à demander au vendeur : l'annonce n'indique que la commune.</InfoLine>}
+          {isAddressHidden && (
+            // Location : « le propriétaire » (n° 74).
+            <InfoLine>Adresse exacte à demander au {listing?.transaction === 'rent' ? 'propriétaire' : 'vendeur'} : l'annonce n'indique que la commune.</InfoLine>
+          )}
           {trimmedAddress && (
             <div className="dsc-small-row">
               <a className="dsc-small" href={directionsUrl(trimmedAddress)} target="_blank" rel="noopener noreferrer"><Icon name="map" />Plans</a>
@@ -498,7 +501,7 @@ export function AddVisit({ fromAgenda }: { fromAgenda: boolean }) {
             <div className="dsc-small-row">
               <button type="button" className="dsc-small" onClick={() => setAdding(true)}><Icon name="userPlus" />Ajouter un participant</button>
               {contactNames.length > 0 && (
-                <ActionMenu label="Contact NIDALO" triggerClassName="dsc-small" trigger={<><Icon name="users" />Contact NIDALO</>}
+                <ActionMenu label="Contact Nidalo" triggerClassName="dsc-small" trigger={<><Icon name="users" />Contact Nidalo</>}
                   items={contactNames.map((name) => ({
                     label: name,
                     onClick: () => setParticipants((current) => [...current, { id: newUUID(), name, phone: null }]),
@@ -506,7 +509,7 @@ export function AddVisit({ fromAgenda }: { fromAgenda: boolean }) {
               )}
             </div>
           )}
-          <InfoLine>Les participants ne sont pas prévenus automatiquement tant que la messagerie en ligne n'existe pas : partagez la visite depuis son détail.</InfoLine>
+          <InfoLine>Les participants ne sont pas prévenus automatiquement : partagez la visite depuis son détail.</InfoLine>
         </div>
       </section>
 

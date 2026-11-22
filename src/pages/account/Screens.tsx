@@ -31,7 +31,7 @@ const SOON_TITLES: Record<string, string> = {
   statistiques: 'Statistiques',
   equipes: 'Gestion des équipes',
   diffusion: 'Outils de diffusion',
-  abonnement: 'Abonnement NIDALO Pro',
+  abonnement: 'Abonnement Nidalo Pro',
   publier: 'Publier une annonce',
   comparer: 'Comparer vos favoris',
 };
@@ -76,8 +76,8 @@ export function SecurityScreen() {
         <Icon name="lock" />
         <h2>Connexion et sécurité</h2>
         <p>
-          Vous vous connectez avec votre adresse e-mail et votre mot de passe. Pour en changer, utilisez « Mot de passe
-          oublié ? » sur la page de connexion. La gestion de vos appareils connectés arrivera bientôt.
+          Compte créé avec une adresse e-mail : pour changer de mot de passe, déconnectez-vous, puis touchez « Mot de passe
+          oublié » sur l&apos;écran de connexion. Compte Apple ou Google : votre mot de passe se gère chez Apple ou Google.
         </p>
       </div>
     </div>
@@ -108,8 +108,8 @@ export function PrivacyScreen({ account }: { account: Account }) {
         <div>
           <h2>Aucun suivi publicitaire</h2>
           <p>
-            NIDALO n&apos;utilise aucun traceur publicitaire ni outil de mesure d&apos;audience. Sur le site, seule votre
-            session de connexion est gardée dans ce navigateur, pour que vous restiez connecté.
+            Nidalo n&apos;affiche aucune publicité et n&apos;utilise aucun outil de mesure d&apos;audience ni aucun traceur.
+            Nidalo ne vend ni ne loue vos données.
           </p>
         </div>
       </div>
@@ -128,7 +128,10 @@ export function PrivacyScreen({ account }: { account: Account }) {
   );
 }
 
-/** « Supprimer mon compte » (DeleteAccountSheet.swift), en écran sur le site. */
+/**
+ * « Supprimer mon compte » (DeleteAccountSheet.swift), en écran sur le site. Pendant la suppression, le retour et
+ * « Annuler » ne font rien (n° 158).
+ */
 export function DeleteAccountScreen() {
   const session = useSession();
   // Compte « Continuer avec Apple » : l'app coupe elle-même le lien avec Apple ; sur le site, la personne le fait.
@@ -145,15 +148,16 @@ export function DeleteAccountScreen() {
   }
   return (
     <div className="space">
-      <ScreenHeader title="Supprimer mon compte" />
+      <ScreenHeader title="Supprimer mon compte" onBack={busy ? () => undefined : undefined} />
       <div className="delete-card space-card">
         <span className="icon-tile icon-tile-52 is-danger"><Icon name="trash" /></span>
         <h2>Supprimer mon compte ?</h2>
         <p>
-          Votre compte NIDALO et tout ce qui y est enregistré en ligne seront effacés définitivement : profil, photo, Mes
-          informations, projet, recherches enregistrées et favoris. Cette action est irréversible.
+          Votre compte, vos annonces et leurs photos, vos demandes de visite, vos données de professionnel et vos documents
+          privés en ligne seront effacés. Les biens consultés et les derniers lieux cherchés gardés dans ce navigateur le
+          seront aussi. Les messages déjà envoyés restent visibles par vos interlocuteurs, sans votre nom.
         </p>
-        <p className="delete-note">Les documents gardés sur votre iPhone ne sont pas concernés.</p>
+        <p className="delete-note">Cette action est irréversible.</p>
         {apple && (
           <p className="delete-note">
             Votre compte est relié à votre identifiant Apple. Pour couper aussi ce lien, ouvrez les réglages de votre
@@ -165,7 +169,15 @@ export function DeleteAccountScreen() {
         <button type="button" className="danger-button" onClick={confirm} disabled={busy}>
           {busy ? <span className="spinner spinner-white" aria-label="Suppression en cours" /> : 'Supprimer définitivement'}
         </button>
-        <a className="btn btn-light" href={accountPath()} aria-disabled={busy}>Annuler</a>
+        <a
+          className="btn btn-light"
+          href={busy ? undefined : accountPath()}
+          aria-disabled={busy || undefined}
+          role={busy ? 'link' : undefined}
+          onClick={(event) => { if (busy) event.preventDefault(); }}
+        >
+          Annuler
+        </a>
       </div>
     </div>
   );

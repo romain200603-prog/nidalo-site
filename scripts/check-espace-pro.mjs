@@ -910,6 +910,15 @@ async function mock(context, state, { signedIn = true } = {}) {
 // MARK: - Outils
 
 const tidy = (text) => (text ?? '').replace(/[\s  ]+/g, ' ').trim();
+
+/** Lignes du groupe « Compte et sécurité » de Mon compte : [titre, lien]. */
+function securityGroup(page) {
+  return page.$$eval('.app-menu-group', (groups) => {
+    const group = groups.find((section) => section.querySelector('.app-section-label')?.textContent.trim() === 'Compte et sécurité');
+    return [...(group?.querySelectorAll('.app-row') ?? [])].map((row) => [row.querySelector('.app-row-title')?.textContent.trim() ?? null, row.getAttribute('href')]);
+  });
+}
+
 function expectSame(name, what, actual, wanted) {
   const got = JSON.stringify(actual);
   const want = JSON.stringify(wanted);
@@ -2497,6 +2506,9 @@ try {
       tidy(await row.locator('.app-row-subtitle').textContent()), await row.getAttribute('href'), await page.locator('.space-profile').getAttribute('href'),
       await page.locator('a.app-row', { hasText: 'Informations de l\'agence' }).count(),
     ], ['3 membres', '/compte/?vue=equipes', '/compte/?vue=agence', 1]);
+    // « Mes informations » dans « Compte et sécurité », seul chemin de l'espace professionnel vers cette page (n° 117).
+    expectSame(N, 'Compte et sécurité', await securityGroup(page), [['Informations de l\'agence', FORM_PATH], ['Mes informations', '/compte/?vue=informations'],
+      ['Connexion et sécurité', '/compte/?vue=securite'], ['Confidentialité et données', '/compte/?vue=confidentialite'], ['Type de compte', null]]);
 
     await row.click();
     await page.waitForURL('**/compte/?vue=equipes');
@@ -2646,6 +2658,9 @@ try {
       await page.locator('a.app-row', { hasText: 'Profil agence' }).locator('.app-row-subtitle').count(),
       await page.locator('a.app-row', { hasText: 'Informations de l\'agence' }).count(),
     ], ['Agent de l\'équipe', '/compte/?vue=equipes', '3 membres', 0, 0]);
+    // Membre d'une équipe : « Mes informations » aussi (n° 117), sans les informations de l'agence.
+    expectSame(N, 'Compte et sécurité', await securityGroup(page), [['Mes informations', '/compte/?vue=informations'],
+      ['Connexion et sécurité', '/compte/?vue=securite'], ['Confidentialité et données', '/compte/?vue=confidentialite'], ['Type de compte', null]]);
     await shot(page, 'equipes-telephone-agent-compte.png');
 
     await page.locator('.space-profile').click();

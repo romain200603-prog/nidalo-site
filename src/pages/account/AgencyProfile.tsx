@@ -268,7 +268,7 @@ function AgencyEditor({ account, agency, onSaved }: { account: Account; agency: 
             <h2>{agency ? 'Vérification en attente' : 'Votre activité professionnelle'}</h2>
             <p>
               {agency
-                ? 'Votre dossier est enregistré. La vérification de votre entreprise et de vos justificatifs par Nidalo arrivera bientôt : d’ici là, votre agence apparaît sans badge « Vérifiée ».'
+                ? 'Votre dossier est enregistré. Votre agence apparaît sans badge « Vérifiée » tant que Nidalo n’a pas vérifié votre dossier.'
                 : 'Renseignez votre entreprise et votre agence. Elles apparaîtront sur vos annonces et votre page agence, sans badge « Vérifiée » tant que Nidalo n’a pas vérifié votre dossier.'}
             </p>
           </div>
@@ -313,8 +313,8 @@ function AgencyEditor({ account, agency, onSaved }: { account: Account; agency: 
           {field('Téléphone (facultatif)', 'phone', { inputMode: 'tel', autoComplete: 'tel' })}
           {field('E-mail de l\'agence (facultatif)', 'email', { inputMode: 'email', autoComplete: 'email' })}
           {field('Site internet (facultatif)', 'website', { inputMode: 'url', autoComplete: 'url' })}
-          {field('Barème d\'honoraires, lien (facultatif)', 'feeSchedule', { inputMode: 'url' })}
-          <p className="agency-caption">Obligatoire pour une agence : il s&apos;affiche sur chacune de vos annonces.</p>
+          {field('Barème d\'honoraires, lien', 'feeSchedule', { inputMode: 'url' })}
+          <p className="agency-caption">La loi le demande pour une agence : il s&apos;affiche sur chacune de vos annonces.</p>
           <label className="form-field">
             <span className="field-label">Présentation (facultative)</span>
             <textarea

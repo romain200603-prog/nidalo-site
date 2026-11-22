@@ -107,26 +107,36 @@ export function buildContacts({ me, conversations, visits, offers, profiles, row
   rows: ContactRow[];
   now: Date;
 }): Contact[] {
-  type Draft = { userId: string; fallbackName: string | null; activities: ContactActivity[]; conversation: { id: string; at: Date } | null };
+  // startedAt : le premier échange, la création d'une conversation, la demande de visite ou l'offre la plus ancienne (n° 231).
+  type Draft = {
+    userId: string; fallbackName: string | null; activities: ContactActivity[]; conversation: { id: string; at: Date } | null;
+    startedAt: Date | null;
+  };
   const people = new Map<string, Draft>();
+  const earliest = (a: Date | null, b: Date) => (a && a < b ? a : b);
 
-  function add(userId: string, activity: ContactActivity, conversationId: string | null, fallbackName: string | null = null) {
+  function add(userId: string, activity: ContactActivity, conversationId: string | null, fallbackName: string | null = null): Draft {
     const key = userId.toLowerCase();
-    const draft = people.get(key) ?? { userId, fallbackName: null, activities: [], conversation: null };
+    const draft = people.get(key) ?? { userId, fallbackName: null, activities: [], conversation: null, startedAt: null };
     people.set(key, draft);
     draft.activities.push(activity);
+    draft.startedAt = earliest(draft.startedAt, activity.at);
     if (fallbackName && !draft.fallbackName) draft.fallbackName = fallbackName;
     if (conversationId && (!draft.conversation || draft.conversation.at < activity.at)) draft.conversation = { id: conversationId, at: activity.at };
+    return draft;
   }
 
   for (const row of conversations) {
     if (row.kind !== 'listing' || !sameId(row.seller_id, me) || !row.buyer_id || sameId(row.buyer_id, me)) continue;
     const at = appDate(row.last_message_at);
     if (!at) continue;
-    add(row.buyer_id, {
+    const draft = add(row.buyer_id, {
       kind: 'message', id: row.conversation_id, at, title: 'Message', detail: row.last_message_preview?.trim() || null,
       listingTitle: titleOf(row.listing_snapshot), href: conversationPath(row.conversation_id),
     }, row.conversation_id);
+    // Une conversation commence à sa création, pas à son dernier message (n° 231).
+    const created = appDate(row.created_at);
+    if (created) draft.startedAt = earliest(draft.startedAt, created);
   }
 
   for (const visit of visits) {
@@ -168,14 +178,14 @@ export function buildContacts({ me, conversations, visits, offers, profiles, row
   }
   // Une note sur une personne dont les échanges ont disparu reste visible.
   for (const [key, row] of notes) {
-    if (!people.has(key)) people.set(key, { userId: row.contact_user_id!, fallbackName: null, activities: [], conversation: null });
+    if (!people.has(key)) people.set(key, { userId: row.contact_user_id!, fallbackName: null, activities: [], conversation: null, startedAt: null });
   }
 
   const contacts: Contact[] = [];
   for (const [key, draft] of people) {
     const activities = [...draft.activities].sort((a, b) => b.at.getTime() - a.at.getTime());
     const note = notes.get(key) ?? null;
-    const first = activities.length ? activities[activities.length - 1].at : null;
+    const first = draft.startedAt;
     contacts.push({
       key: `u-${key}`,
       userId: draft.userId,

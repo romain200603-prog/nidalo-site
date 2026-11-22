@@ -529,10 +529,14 @@ export function projectIssues(criteria: ProjectCriteria, kind: ProjectKind): Rec
   return issues;
 }
 
-/** Projet enregistré : la ville du projet suit le lieu de la catégorie (save()). */
+/** Projet enregistré : la ville du projet suit le lieu de la catégorie (save()) ; lieu effacé, ville effacée (n° 226). */
 export function projectToSave(project: Project): Project {
-  const place = locationOf(project.criteria, project.kind).place;
-  return place ? { ...project, city: place } : project;
+  return { ...project, city: locationOf(project.criteria, project.kind).place };
+}
+
+/** « 1 étape sur 6 », « 3 étapes sur 6 » : l'avancement du projet, en étapes (ProjectEditorView, n° 129). */
+export function stepsCountText(done: number, total: number): string {
+  return `${done} ${done > 1 ? 'étapes' : 'étape'} sur ${total}`;
 }
 
 /** Sous-titre de la carte du projet : usage ou catégorie, puis la ville (ProjectCard). */
@@ -677,6 +681,18 @@ export function inputAmount(text: string, allowsNegative = false, percent = fals
   return Number.isFinite(value) ? value : null;
 }
 
+/**
+ * Montant collé avec des points de milliers (GroupedNumberInput.pastedAmount, n° 242) : « 250.000 » → « 250000 »,
+ * « 1.250.000 € » → « 1250000 », « 250.000,50 » → « 250000,50 ». Seulement 1 à 3 chiffres suivis de groupes « point
+ * + 3 chiffres », avec une virgule et des décimales éventuelles ; sinon le texte est rendu tel quel (« 62.5 »,
+ * « 12.34.56 »). Appliqué au seul collage dans les champs en € ; la frappe et `inputAmount` ne changent pas.
+ */
+export function pastedAmount(text: string): string {
+  const trimmed = text.replace(/^[\s€\u00A0\u202F]+|[\s€\u00A0\u202F]+$/g, '');
+  if (!/^[0-9]{1,3}(\.[0-9]{3})+(,[0-9]+)?$/.test(trimmed)) return text;
+  return trimmed.replaceAll('.', '');
+}
+
 /** Texte d'une valeur enregistrée (AmountField.format) : 0,065 en pourcentage → « 6,5 », 250000 → « 250 000 ». */
 export function amountText(value: number | null, percent = false, groups = true): string {
   if (value === null) return '';
@@ -686,6 +702,34 @@ export function amountText(value: number | null, percent = false, groups = true)
 
 /** Texte non vide sans nombre (« - » seul) : « Saisissez un nombre, par exemple 250000 ou 6,5. ». */
 export const AMOUNT_INVALID = 'Saisissez un nombre, par exemple 250000 ou 6,5.';
+
+// MARK: - Dates en jours (n° 243)
+
+/** Décalage de l'heure de Paris sur UTC, en minutes, à un instant donné. */
+function parisOffsetMinutes(at: Date): number {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Paris', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+  }).formatToParts(at).map((part) => [part.type, part.value]));
+  const asUTC = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute));
+  return Math.round((asUTC - at.getTime()) / 60000);
+}
+
+/** Midi, heure de Paris, d'un jour (mois de 1 à 12). Midi n'est jamais l'heure d'un changement d'heure. */
+export function parisNoonOfDay(year: number, month: number, day: number): Date {
+  const guess = Date.UTC(year, month - 1, day, 12);
+  return new Date(guess - parisOffsetMinutes(new Date(guess)) * 60000);
+}
+
+/**
+ * Midi, heure de Paris, du jour que montre `date` dans le fuseau du navigateur (ou `timeZone`)
+ * (ListingLot.parisNoon(ofDayShownBy:in:), n° 243) : le même jour pour le serveur et pour le calendrier, même outre-mer.
+ */
+export function parisNoon(date: Date, timeZone?: string): Date {
+  if (!timeZone) return parisNoonOfDay(date.getFullYear(), date.getMonth() + 1, date.getDate());
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' })
+    .formatToParts(date).map((part) => [part.type, part.value]));
+  return parisNoonOfDay(Number(parts.year), Number(parts.month), Number(parts.day));
+}
 
 // MARK: - Serveur
 

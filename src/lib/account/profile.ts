@@ -217,9 +217,7 @@ export function profileErrors(form: ProfileForm, now = new Date()): Partial<Reco
     else if (birth > now) errors.birthDate = 'La date de naissance ne peut pas être dans le futur.';
     else if (ageInYears(birth, now) > 120) errors.birthDate = 'Vérifiez la date de naissance.';
   }
-  const mail = trimmed(form.email);
-  if (!mail) errors.email = 'Indiquez votre adresse e-mail.';
-  else if (!isValidProfileEmail(mail)) errors.email = 'Adresse e-mail invalide (exemple : prenom.nom@domaine.fr).';
+  // L'e-mail du compte n'est pas modifiable dans Mes informations : il n'est pas contrôlé (n° 222).
   if (trimmed(form.phone) && normalizedPhone(form.phone) === null) {
     errors.phone = 'Numéro invalide : 10 chiffres commençant par 0, ou + suivi de l\'indicatif du pays.';
   }
