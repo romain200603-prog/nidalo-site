@@ -10,7 +10,7 @@ import { useSession, useStore } from '../../lib/account/session';
 import { DESKTOP_QUERY, useDesktop } from '../../lib/desktop';
 import { UUID_PATTERN } from '../../lib/listings';
 import { accountPath, PATHS, publishPath } from '../../lib/paths';
-import { locateAddress } from '../../lib/places';
+import { locateAddress, PlaceSearchError } from '../../lib/places';
 import {
   missingRequiredFields, newDraft, PUBLISH_STEPS, STEP_TITLES, syncBuildingRent,
   type Address, type Coordinate, type PublishDraft, type PublishStep,
@@ -26,7 +26,7 @@ import { Spinner } from '../account/parts';
 import { type Update } from './controls';
 import { DescriptionStep, ReviewStep, SuccessView } from './FinalSteps';
 import { FinanceStep } from './FinanceStep';
-import { ADDRESS_NOT_FOUND, CategoryStep, FeaturesStep, MainStep } from './MainSteps';
+import { ADDRESS_NOT_FOUND, ADDRESS_OFFLINE, CategoryStep, FeaturesStep, MainStep } from './MainSteps';
 import { MediaStep } from './MediaStep';
 import { StepSlide } from './StepSlide';
 
@@ -141,12 +141,22 @@ function backPath(fromMyListings: boolean): string {
 
 /**
  * Position du bien (PublishFlowView.coordinate(for:)) : Base Adresse Nationale (adresse, rue ou commune), sinon le
- * centre d'une grande ville connue.
+ * centre d'une grande ville connue. `offline` : la recherche n'a pas pu partir faute de réseau et aucun centre n'est
+ * connu ; ce n'est pas l'adresse qui est en cause (n° 80).
  */
-async function locate(address: Address): Promise<Coordinate | null> {
-  const found = await locateAddress(address).catch(() => null);
-  return found ?? knownCityCenter(address.city);
+async function locate(address: Address): Promise<{ coordinate: Coordinate | null; offline: boolean }> {
+  let offline = false;
+  const found = await locateAddress(address).catch((error: unknown) => {
+    offline = error instanceof PlaceSearchError && error.reason === 'offline';
+    return null;
+  });
+  if (found) return { coordinate: found, offline: false };
+  const center = knownCityCenter(address.city);
+  return { coordinate: center, offline: center === null && offline };
 }
+
+/** Adresse sans position à la dernière tentative, et pourquoi : introuvable, ou pas de réseau pour la vérifier. */
+type Unfound = { address: Address; offline: boolean };
 
 const MAIN = PUBLISH_STEPS.indexOf('main');
 const LAST = PUBLISH_STEPS.length - 1;
@@ -215,13 +225,18 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
   const guided = useRef<GuideField | null>(null);
   const [resolving, setResolving] = useState(false);
   /** Adresse introuvable à la dernière tentative : le message reste affiché tant qu'elle n'a pas été modifiée. */
-  const [unfoundAddress, setUnfoundAddress] = useState<Address | null>(null);
+  const [unfoundAddress, setUnfoundAddress] = useState<Unfound | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [progress, setProgress] = useState<{ sent: number; total: number } | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
-  /** Refus du serveur (champ manquant, DPE…) : son message, tel quel. */
-  const [refusal, setRefusal] = useState<string | null>(null);
+  /**
+   * Refus du serveur (champ manquant, DPE…) : son message, tel quel ; `firstName` : il vient de l'enregistrement du
+   * prénom, la fenêtre s'intitule alors « Prénom non enregistré » (n° 190).
+   */
+  const [refusal, setRefusal] = useState<{ message: string; firstName: boolean } | null>(null);
+  /** « À partir du… » choisi dans la disponibilité d'une location, gardé d'une étape à l'autre (n° 206). */
+  const [choosesAvailabilityDate, setChoosesAvailabilityDate] = useState(false);
   const [askName, setAskName] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -245,7 +260,9 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
   const index = PUBLISH_STEPS.indexOf(step);
   const showsErrors = index <= checkedThrough;
   const ready = firstIssue(draft, 'review') === null && missingRequiredFields(draft).length === 0;
-  const addressError = unfoundAddress !== null && unfoundAddress === draft.address ? ADDRESS_NOT_FOUND : null;
+  const addressError = unfoundAddress !== null && unfoundAddress.address === draft.address
+    ? (unfoundAddress.offline ? ADDRESS_OFFLINE : ADDRESS_NOT_FOUND)
+    : null;
   const title = editing ? 'Modifier l\'annonce' : start.listingStatus === 'draft' ? 'Reprendre le brouillon' : 'Publier une annonce';
   const busy = publishing || savingDraft;
   const dialogOpen = leaving || askName || refusal !== null;
@@ -339,12 +356,12 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
     if (index >= MAIN && draft.coordinate === null && draft.address) {
       const address = draft.address;
       setResolving(true);
-      const coordinate = await locate(address);
+      const { coordinate, offline } = await locate(address);
       setResolving(false);
       // Adresse ou étape changées pendant la recherche : le résultat ne leur correspond plus.
       if (latest.current.address !== address || currentStep.current !== step) return;
       if (!coordinate) {
-        setUnfoundAddress(address);
+        setUnfoundAddress({ address, offline });
         guide({ step: 'main', field: 'address' }, index);
         return;
       }
@@ -426,9 +443,9 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
       // Adresse modifiée : sa position est recalculée avant d'enregistrer.
       if (current.coordinate === null && current.address) {
         const address = current.address;
-        const coordinate = await locate(address);
+        const { coordinate, offline } = await locate(address);
         if (!coordinate) {
-          setUnfoundAddress(address);
+          setUnfoundAddress({ address, offline });
           guide({ step: 'main', field: 'address' }, LAST);
           return;
         }
@@ -451,11 +468,13 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
         onProgress: (sent, total) => setProgress(total > 0 ? { sent, total } : null),
       });
       if (!result.ok) {
-        if (result.refusal) setRefusal(result.message);
+        if (result.refusal) setRefusal({ message: result.message, firstName: false });
         setPublishError(result.message);
         open('review');
         return;
       }
+      // Enregistrée : c'est une réussite, même quand la relecture de l'annonce a encore échoué après un second essai
+      // (n° 80) ; la confirmation n'a pas besoin de la relecture.
       setDraft(result.draft);
       setSaved(result.draft);
       setPublishError(null);
@@ -475,7 +494,7 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
       { displayName: account.profile.display_name },
     );
     if (error) {
-      setRefusal(error);
+      setRefusal({ message: error, firstName: true });
       return;
     }
     await publish({ firstNameSaved: true });
@@ -495,7 +514,10 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
     case 'main': stepView = <MainStep draft={draft} update={update} showsErrors={showsErrors} addressError={addressError} />; break;
     case 'features': stepView = <FeaturesStep draft={draft} update={update} showsErrors={showsErrors} />; break;
     case 'finance':
-      stepView = <FinanceStep draft={draft} update={update} showsErrors={showsErrors} isPro={account.profile.account_type === 'professional'} />;
+      stepView = (
+        <FinanceStep draft={draft} update={update} showsErrors={showsErrors} isPro={account.profile.account_type === 'professional'}
+          availabilityChoice={{ value: choosesAvailabilityDate, set: setChoosesAvailabilityDate }} />
+      );
       break;
     case 'media': stepView = <MediaStep draft={draft} update={update} showsErrors={showsErrors} />; break;
     case 'description': stepView = <DescriptionStep draft={draft} update={update} showsErrors={showsErrors} ownerId={start.ownerId ?? account.profile.id} />; break;
@@ -509,6 +531,7 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
             open(target);
           }}
           onFix={(field) => guide(guideForRequired(field), LAST)}
+          onFixStep={(target) => guide(target, LAST)}
         />
       );
       break;
@@ -589,8 +612,8 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
 
       <ChoiceDialog
         open={refusal !== null}
-        title="Publication refusée"
-        message={refusal ?? ''}
+        title={refusal?.firstName ? 'Prénom non enregistré' : 'Publication refusée'}
+        message={refusal?.message ?? ''}
         onClose={() => setRefusal(null)}
         actions={[{ label: 'Compris', onClick: () => setRefusal(null), tone: 'primary' }]}
       />

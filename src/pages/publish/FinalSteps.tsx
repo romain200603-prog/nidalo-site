@@ -4,8 +4,8 @@ import { Icon } from '../../components/Icon';
 import { ListingCard } from '../../components/ListingCard';
 import { cardContent } from '../../lib/cardContent';
 import { accountPath, listingPath } from '../../lib/paths';
-import { missingRequiredFields, type PublishStep, type RequiredField } from '../../lib/publish/draft';
-import { missingLabel, previewRow, recapRows } from '../../lib/publish/flow';
+import { missingRequiredFields, STEP_TITLES, type PublishStep, type RequiredField } from '../../lib/publish/draft';
+import { missingLabel, previewRow, recapRows, stepsToComplete, type Guide } from '../../lib/publish/flow';
 import { proposedDescription, proposedTitle } from '../../lib/publish/writing';
 import { ChoiceDialog } from '../account/DesktopParts';
 import { Card, ErrorLine, TextInput, type StepProps } from './controls';
@@ -77,17 +77,21 @@ export function DescriptionStep({ draft, update, showsErrors, ownerId }: StepPro
 
 /**
  * Récapitulatif, champs manquants (« Corriger » mène au champ, dans son étape) et avertissement avant publication.
+ * La carte suit le contrôle du bouton « Publier » (n° 81) : une étape qu'il refuse encore sans ligne de champ à cette
+ * étape (chambres d'un hôtel, GES…) s'affiche « <Étape> : à compléter », et « Corriger » mène à son premier champ.
  */
-export function ReviewStep({ draft, onEdit, onFix, errorMessage }: {
+export function ReviewStep({ draft, onEdit, onFix, onFixStep, errorMessage }: {
   draft: StepProps['draft'];
   onEdit: (step: PublishStep) => void;
   onFix: (field: RequiredField) => void;
+  onFixStep: (target: Guide) => void;
   errorMessage: string | null;
 }) {
   const missing = missingRequiredFields(draft);
+  const steps = stepsToComplete(draft);
   return (
     <>
-      {missing.length === 0 ? (
+      {missing.length === 0 && steps.length === 0 ? (
         <Card title="Prête à publier">
           <InfoLine>Toutes les informations obligatoires sont renseignées. Les autres champs restent facultatifs.</InfoLine>
         </Card>
@@ -98,6 +102,12 @@ export function ReviewStep({ draft, onEdit, onFix, errorMessage }: {
               <li key={field}>
                 <span>{missingLabel(draft, field)}</span>
                 <button type="button" className="dpub-link" onClick={() => onFix(field)}>Corriger</button>
+              </li>
+            ))}
+            {steps.map((target) => (
+              <li key={`etape-${target.step}`}>
+                <span>{`${STEP_TITLES[target.step]} : à compléter`}</span>
+                <button type="button" className="dpub-link" onClick={() => onFixStep(target)}>Corriger</button>
               </li>
             ))}
           </ul>
