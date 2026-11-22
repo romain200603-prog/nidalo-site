@@ -30,6 +30,12 @@ describe('Outils de diffusion', () => {
     expect(posterPrice({ ...rent, monthly_charges: null })).toBe(`950${nb}€/mois`);
   });
 
+  it('location : « charges comprises » une seule fois, dans le texte comme sur l\'affiche (n° 69)', () => {
+    const rent = { ...flat, transaction: 'rent' as const, price: 950, monthly_charges: 80 };
+    expect(socialText(rent).split('\n')[1]).toBe(`1${s}030${nb}€/mois charges comprises · 62 m² · 3 pièces`);
+    expect(posterPrice(rent).match(/charges comprises/g)).toHaveLength(1);
+  });
+
   it('dessine un QR code carré avec ses trois repères dans les coins', () => {
     const matrix = qrMatrix(publicListingUrl(ID));
     // 66 caractères en correction M : version 5, 37 cases de côté.

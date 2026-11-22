@@ -3,8 +3,8 @@ import { Icon } from '../../components/Icon';
 import { ListingPhoto } from '../../components/PhotoPager';
 import { formatPrice } from '../../lib/format';
 import {
-  areValidSlots, createVisitRequestParams, dayString, hourLabel, INVALID_SLOTS_MESSAGE, isSlotPast, REQUEST_STATUS_LABELS,
-  sendVisitRequest, SLOT_TIMES, slotLabel, slotStart, suggestedSlot, visitErrorMessage, type SlotDraft, type VisitMode,
+  areValidSlots, createVisitRequestParams, dayString, INVALID_SLOTS_MESSAGE, isSlotPast, REQUEST_STATUS_LABELS, requestSlotLabel,
+  sendVisitRequest, slotHourLabel, SLOT_TIMES, slotStart, suggestedSlot, visitErrorMessage, type SlotDraft, type VisitMode,
   type VisitRequestRow,
 } from '../../lib/listing/visits';
 import type { ListingRow, PhotoRow } from '../../lib/listings';
@@ -32,7 +32,7 @@ function ListingHeader({ row, photo }: { row: ListingRow; photo: PhotoRow | unde
   );
 }
 
-/** Jour (calendrier du navigateur, à partir d'aujourd'hui) et heure (de 8h00 à 20h00) d'un créneau (SlotPickerRow). */
+/** Jour (calendrier du navigateur, à partir d'aujourd'hui) et heure (de 8 h 00 à 20 h 00) d'un créneau (SlotPickerRow). */
 function SlotPicker({ id, title, draft, onChange, today }: {
   id: string;
   title: string;
@@ -56,10 +56,10 @@ function SlotPicker({ id, title, draft, onChange, today }: {
           <Icon name="clock" />
           <select
             value={draft.minutes}
-            aria-label={`Heure : ${hourLabel(draft.minutes)}`}
+            aria-label={`Heure : ${slotHourLabel(draft.minutes)}`}
             onChange={(event) => onChange({ ...draft, minutes: Number(event.currentTarget.value) })}
           >
-            {SLOT_TIMES.map((minutes) => <option key={minutes} value={minutes}>{hourLabel(minutes)}</option>)}
+            {SLOT_TIMES.map((minutes) => <option key={minutes} value={minutes}>{slotHourLabel(minutes)}</option>)}
           </select>
           <Icon name="chevronDown" className="icon dl-time-chevron" />
         </span>
@@ -94,6 +94,8 @@ export function VisitRequestScreen({ row, photo, recipientName, initialMode = 'o
   const [second, setSecond] = useState<SlotDraft>(() => suggestedSlot(opened, new Date(opened.getFullYear(), opened.getMonth(), opened.getDate() + 1)));
   const [hasSecond, setHasSecond] = useState(false);
   const offersVideo = row.accepts_video_visits === true;
+  /** « le propriétaire » pour une location (n° 74). */
+  const seller = row.transaction === 'rent' ? 'propriétaire' : 'vendeur';
   const [mode, setMode] = useState<VisitMode>(() => (initialMode === 'video' && offersVideo ? 'video' : 'onSite'));
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -159,11 +161,11 @@ export function VisitRequestScreen({ row, photo, recipientName, initialMode = 'o
             </div>
             <p className="dl-sent-text">
               Ce n'est pas encore une visite confirmée : {recipientName} doit choisir un créneau, ou en proposer un autre.
-              {' Vous la retrouvez dans Mon compte › Mon agenda.'}
+              {' Vous la retrouvez dans votre agenda (Mon compte).'}
             </p>
             <ul className="dl-sent-slots">
               {sent.map((start) => (
-                <li key={start.toISOString()}><ExtraIcon name="calendar" />{slotLabel(start)}</li>
+                <li key={start.toISOString()}><ExtraIcon name="calendar" />{requestSlotLabel(start)}</li>
               ))}
             </ul>
           </div>
@@ -183,7 +185,7 @@ export function VisitRequestScreen({ row, photo, recipientName, initialMode = 'o
         >
           <p className="dl-notice">
             <Icon name="info" />
-            <span>Votre demande part chez le vendeur : il accepte un créneau ou en propose un autre, et vous êtes prévenu dans la cloche. Vous pouvez aussi lui écrire.</span>
+            <span>Votre demande part chez le {seller} : il accepte un créneau ou en propose un autre, et vous êtes prévenu dans la cloche. Vous pouvez aussi lui écrire.</span>
           </p>
 
           <Section icon={<ExtraIcon name="calendar" />} title="Créneau souhaité">
@@ -199,7 +201,7 @@ export function VisitRequestScreen({ row, photo, recipientName, initialMode = 'o
                 Ajouter un deuxième choix
               </button>
             )}
-            <p className="dl-help">Chaque créneau dure environ une heure. Le vendeur ou l'agence choisit l'un d'eux, ou en propose un autre.</p>
+            <p className="dl-help">Chaque créneau dure environ une heure. Le {seller} ou l'agence choisit l'un d'eux, ou en propose un autre.</p>
           </Section>
 
           {offersVideo && (

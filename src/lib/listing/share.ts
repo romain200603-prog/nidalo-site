@@ -16,12 +16,16 @@ export type ShareText = { text: string; subject: string; previewTitle: string };
 type ShareRow = Pick<ListingRow, 'title' | 'city' | 'postal_code' | 'transaction' | 'price' | 'monthly_charges' | 'property_type'
   | 'living_area' | 'land_area' | 'rooms' | 'asset_details'>;
 
-/** Prix de vente, ou loyer par mois (charges comprises s'il est connu). */
+/**
+ * Prix de vente, ou loyer par mois : « 900 €/mois charges comprises » quand les charges sont connues (le texte le dit,
+ * comme les outils de diffusion, n° 69), sinon « 900 €/mois ».
+ */
 export function sharePrice(row: ShareRow): string {
   const price = Number(row.price);
   if (row.transaction !== 'rent') return euros.format(price);
   const charges = row.monthly_charges === null ? null : Number(row.monthly_charges);
-  return `${euros.format(charges !== null && Number.isFinite(charges) ? price + charges : price)}/mois`;
+  if (charges !== null && Number.isFinite(charges)) return `${euros.format(price + charges)}/mois charges comprises`;
+  return `${euros.format(price)}/mois`;
 }
 
 export function shareFacts(row: ShareRow): string[] {

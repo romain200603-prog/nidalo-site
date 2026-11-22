@@ -1,3 +1,4 @@
+import { REFUSED_MESSAGE } from '../account/errors';
 import { supabase } from '../supabase';
 
 // Conversation d'une annonce avec son vendeur, comme l'app (Data/Supabase/SupabaseMessagingRepository.swift) :
@@ -68,14 +69,48 @@ export async function fetchConversations(): Promise<InboxRow[]> {
 }
 
 /**
- * Ouvre ou crée la conversation avec le vendeur (conversation(forListingId:)) : start_listing_conversation, puis
- * my_conversations pour cette seule conversation. `null` si l'une des deux échoue : l'app ne montre alors rien.
+ * Ouvre ou crée la conversation avec le vendeur (conversation(forListingId:), MessagingStore.openConversation) :
+ * start_listing_conversation, puis my_conversations pour cette seule conversation. Lève l'erreur du serveur si l'une
+ * des deux échoue (sans code : réponse inattendue ou conversation introuvable à la relecture).
  */
-export async function openListingConversation(listingId: string, me: string | null): Promise<ListingConversation | null> {
+export async function startListingConversation(listingId: string, me: string | null): Promise<ListingConversation> {
   const started = await supabase.rpc('start_listing_conversation', { p_listing_id: listingId });
-  if (started.error || typeof started.data !== 'string') return null;
+  if (started.error) throw started.error;
+  if (typeof started.data !== 'string') throw new Error('start_listing_conversation sans identifiant');
   const read = await supabase.rpc('my_conversations', { p_conversation_id: started.data });
+  if (read.error) throw read.error;
   const row = (read.data as InboxRow[] | null)?.[0];
-  if (read.error || !row) return null;
+  if (!row) throw new Error('conversation introuvable à la relecture');
   return conversationFrom(row, me);
+}
+
+/** La même, `null` si elle ne s'ouvre pas : pour les écrans qui ne montrent rien dans ce cas (l'agenda). */
+export async function openListingConversation(listingId: string, me: string | null): Promise<ListingConversation | null> {
+  try {
+    return await startListingConversation(listingId, me);
+  } catch {
+    return null;
+  }
+}
+
+/** Fenêtre de la fiche quand la conversation ne s'ouvre pas (« Envoyer un message », « Faire une offre », n° 68). */
+export const CONVERSATION_ERROR_TITLE = 'Impossible d\'ouvrir la conversation';
+export const CONVERSATION_FALLBACK = 'La conversation n\'a pas pu s\'ouvrir. Vérifiez votre connexion.';
+
+/**
+ * Texte de la fenêtre, comme conversationErrorMessage de la fiche : le message du serveur quand il y en a un (texte
+ * français, donc avec une espace), sinon celui de la connexion. Erreurs traduites comme SupabaseMessagingRepository :
+ * déclencheur (P0001) son message ; droits (42501, PGRST301) aucun ; données refusées (23514, 23502, 22001, 22P02) le
+ * message de l'app ; autre erreur du serveur son message. Sans code (réseau coupé, réponse inattendue, conversation
+ * introuvable) : le message de la connexion.
+ */
+export function conversationErrorMessage(error: unknown): string {
+  const { code, message } = (error ?? {}) as { code?: unknown; message?: unknown };
+  if (typeof code !== 'string' || !code) return CONVERSATION_FALLBACK;
+  const server = typeof message === 'string' ? message : null;
+  let text: string | null;
+  if (code === '42501' || code === 'PGRST301') text = null;
+  else if (['23514', '23502', '22001', '22P02'].includes(code)) text = REFUSED_MESSAGE;
+  else text = server;
+  return text && text.includes(' ') ? text : CONVERSATION_FALLBACK;
 }

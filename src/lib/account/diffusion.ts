@@ -20,10 +20,12 @@ export function socialText(row: TextRow): string {
   return `${shareText(row).text}\n${publicListingUrl(row.id)}`;
 }
 
-/** Prix de l'affiche : le prix de vente, ou le loyer par mois, « charges comprises » quand elles sont connues. */
+/**
+ * Prix de l'affiche : le prix de vente, ou le loyer par mois, « charges comprises » quand elles sont connues ; le partage
+ * l'écrit déjà (n° 69), il n'est pas ajouté une seconde fois.
+ */
 export function posterPrice(row: Parameters<typeof sharePrice>[0]): string {
-  const price = sharePrice(row);
-  return row.transaction === 'rent' && row.monthly_charges !== null ? `${price} charges comprises` : price;
+  return sharePrice(row);
 }
 
 /** Bandeau de l'affiche. */
