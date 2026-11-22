@@ -544,7 +544,7 @@ try {
     await mock(context, state, { signedIn: false });
     const page = await open(context, '/publier/', N);
     await page.waitForSelector('.signin-card');
-    expectSame(N, 'page', [await textOf(page, '.signin-card h1'), await page.locator('.dpub').count()], ['Bienvenue sur NIDALO', 0]);
+    expectSame(N, 'page', [await textOf(page, '.signin-card h1'), await page.locator('.dpub').count()], ['Votre prochain bien commence ici.', 0]);
     await shot(page, 'publier-sans-compte.png');
     await context.close();
   }

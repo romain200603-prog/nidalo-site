@@ -4765,7 +4765,8 @@ try {
       await dialogTitle(page);
       await alertButton(page, 'Se déconnecter');
       await waitFor(() => space.logouts.length > 0, `${D} : appel au serveur`);
-      expectSame(D, 'appel', space.logouts, [{ method: 'POST', search: '?scope=global' }]);
+      // Comme l'app (n° 122) : seulement ce navigateur ; les autres appareils restent connectés.
+      expectSame(D, 'appel', space.logouts, [{ method: 'POST', search: '?scope=local' }]);
       await page.waitForSelector('.signin-card', { timeout: 8000 }).catch(() => problems.push(`${D} : la carte de connexion ne s'affiche pas`));
       expectSame(D, 'page après la déconnexion', [await page.locator('.dsp').count(), await page.evaluate(() => {
         try { return Object.keys(localStorage).filter((key) => key.startsWith('sb-')).length; } catch { return null; }
@@ -4829,7 +4830,7 @@ try {
         const path = view ? `/compte/?vue=${view}` : '/compte/';
         page = await open(context, path, `${path} sans compte`);
         await page.waitForSelector('.signin-card');
-        expectSame(`${path} sans compte`, 'page', [await page.locator('.dsp, .dsc').count(), await textOf(page, '.signin-card h1')], [0, 'Bienvenue sur NIDALO']);
+        expectSame(`${path} sans compte`, 'page', [await page.locator('.dsp, .dsc').count(), await textOf(page, '.signin-card h1')], [0, 'Votre prochain bien commence ici.']);
         await page.close();
       }
       const asked = guestServer.requests.filter((request) => ['real_estate_projects', 'agenda_visits', 'rpc/my_visit_requests', 'profiles'].includes(request.table));
@@ -4946,7 +4947,7 @@ try {
       for (const view of ['agenda', 'ajouter-visite']) {
         page = await open(context, `/compte/?vue=${view}`, `${view} téléphone sans compte`);
         await page.waitForSelector('.signin-card');
-        expectSame(`${view} téléphone sans compte`, 'page', [await page.locator('.dsc').count(), await textOf(page, '.signin-card h1')], [0, 'Bienvenue sur NIDALO']);
+        expectSame(`${view} téléphone sans compte`, 'page', [await page.locator('.dsc').count(), await textOf(page, '.signin-card h1')], [0, 'Votre prochain bien commence ici.']);
         await page.close();
       }
       const asked = guestServer.requests.filter((request) => ['agenda_visits', 'rpc/my_visit_requests', 'rpc/my_conversations'].includes(request.table));

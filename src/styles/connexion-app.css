@@ -1,0 +1,258 @@
+/* Écran de connexion de l'app (Features/Account/AuthView.swift et AuthLaunchLoop.swift), mesures de l'app (1 pt = 1 px).
+   Accueil : le lancement en boucle, « Votre prochain bien commence ici. », Apple, Google et l'e-mail ; étapes par
+   e-mail : le titre sur le fond clair et la feuille blanche en bas. Téléphone (moins de 1024 px) : plein écran, sans
+   barre du haut, barre du bas ni pied de page ; ordinateur : un panneau clair dans la colonne de la page ; fenêtre
+   d'une action : le même écran. */
+
+.auth {
+  --auth-blue: #3A5BAE;
+  --auth-blue-pressed: #2C468A;
+  --auth-blue-soft: #EEF2FB;
+  --auth-ink: #1F2430;
+  --auth-grey: #6B7280;
+  --auth-subtle: #646B76;
+  --auth-link: #3F4652;
+  --auth-red: #D64545;
+  --auth-field: #F8F7F4;
+  --auth-field-border: #E6E4DF;
+  --auth-muted: #8A8F99;
+  --auth-page: #FAF9F6;
+  --auth-border: #ECEAE6;
+  --auth-tertiary: #9AA2AA;
+  --auth-positive: #577965;
+  /* Ressort de l'app (réponse 0,55 s, amorti 0,85) : la courbe du site, ajustée sur ce ressort (écart de 1 %). */
+  --auth-spring: cubic-bezier(0.24, 0.15, 0.2, 1.13);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--auth-page);
+  color: var(--auth-ink);
+  font-family: var(--app-font);
+  font-size: 15px;
+  line-height: 1.21;
+  text-align: left;
+  -webkit-font-smoothing: antialiased;
+}
+.auth *, .auth *::before, .auth *::after { box-sizing: border-box; }
+/* Remises à zéro du poids d'une seule classe : les règles plus bas l'emportent. */
+.auth :where(h1, p) { margin: 0; }
+.auth :where(button) { margin: 0; font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+.auth :focus-visible { outline: 3px solid var(--auth-blue); outline-offset: 2px; border-radius: 16px; }
+
+/* ——— Présentations ——— */
+
+/* Téléphone : plein écran, comme la présentation plein écran de l'app ; la page sous l'écran ne défile plus. */
+@media (max-width: 1023px) {
+  .auth.is-page { position: fixed; inset: 0; z-index: 40; overflow-x: hidden; overflow-y: auto; overscroll-behavior: none; }
+  html:has(.auth.is-page:not([hidden] *)) { overflow: hidden; }
+  body:has(.auth.is-page:not([hidden] *)) { padding-bottom: 0; }
+  body:has(.auth.is-page:not([hidden] *)) :is(.topbar, .tabbar, .footer, .phone-page-head) { display: none; }
+}
+/* Ordinateur : la barre du haut et le pied de page restent ; l'écran dans un panneau clair de la colonne. */
+@media (min-width: 1024px) {
+  .auth.is-page { width: 100%; max-width: 480px; min-height: 760px; margin: 32px auto 0; border: 1px solid var(--auth-border); border-radius: 28px; overflow: hidden; }
+  .account-wrap:has(> .auth.is-page), .favorites-wrap:has(> .favorites-signin > .auth.is-page) { padding-top: 0; }
+}
+/* Fenêtre d'une action (favori, recherche enregistrée…) : plein écran sur téléphone, 480 px sur ordinateur. */
+.signin-sheet { width: 100vw; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: #FAF9F6; color: #1F2430; overflow: hidden; overscroll-behavior: contain; }
+.signin-sheet::backdrop { background: rgba(10, 26, 68, 0.45); }
+@media (min-width: 1024px) {
+  .signin-sheet { width: 480px; height: min(760px, calc(100dvh - 48px)); margin: auto; border-radius: 28px; box-shadow: 0 24px 64px rgba(10, 26, 68, 0.28); }
+}
+.auth.is-dialog { height: 100%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: none; }
+
+/* ——— Colonne, barre du haut, scène ——— */
+
+.auth-column { position: relative; display: flex; flex: 1 0 auto; flex-direction: column; width: 100%; max-width: 480px; min-height: 100%; margin: 0 auto; }
+/* Barre du haut : 1, puis 46 de haut (bouton de 38 centré) ; le contenu commence 54 sous le haut. */
+.auth-bar { position: sticky; top: 0; z-index: 3; display: flex; flex: none; align-items: flex-start; height: calc(54px + env(safe-area-inset-top)); padding: calc(5px + env(safe-area-inset-top)) 20px 0; background: var(--auth-page); }
+.auth-round { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; padding: 0; border: 1px solid var(--auth-field-border); border-radius: 50%; background: #FFFFFF; color: var(--auth-ink); cursor: pointer; position: relative; }
+.auth-round::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; }
+.auth-round .icon { width: 19px; height: 19px; }
+.auth-round.is-close .icon { width: 17px; height: 17px; }
+.auth-round.is-end { margin-left: auto; }
+.auth .auth-round:focus-visible { border-radius: 50%; }
+@media (hover: hover) { .auth-round:hover { background: #F7F6F3; } }
+@media (min-width: 1024px) { .auth.is-page .auth-round.is-welcome-close { display: none; } }
+
+.auth-stage { position: relative; display: flex; flex: 1 0 auto; flex-direction: column; overflow: hidden; }
+@supports (overflow: clip) { .auth-stage { overflow: clip; } }
+/* Copies figées de ce qui s'en va pendant un changement d'étape (components/account/authMotion.ts). */
+.auth-ghosts { position: absolute; inset: 0; pointer-events: none; }
+.auth .auth-ghost { position: absolute; left: 0; right: 0; margin: 0; pointer-events: none; }
+.auth .auth-ghost.is-under { z-index: 0; }
+.auth .auth-ghost.is-over { z-index: 2; }
+.auth-layer { position: relative; z-index: 1; display: flex; flex: 1 0 auto; flex-direction: column; }
+
+/* ——— Accueil ——— */
+
+.auth-welcome { padding: 0 20px max(14px, env(safe-area-inset-bottom)); }
+/* Le lancement en boucle : entre le bas de la croix (43 sous le haut) et le haut du titre, sur toute la largeur. */
+.auth-loop-zone { position: relative; flex: 1 1 0; min-height: 0; margin: -11px -20px 0; }
+.auth-welcome-head { padding: 0 4px; }
+.auth-hero-title { color: var(--auth-ink); font-size: 33px; font-weight: 800; line-height: 37px; letter-spacing: -1px; }
+.auth-hero-subtitle { margin-top: 13px; color: var(--auth-subtle); font-size: 15px; font-weight: 500; line-height: calc(1.21em + 2px); }
+.auth-welcome-head .team-intro { margin-top: 14px; }
+.auth-hero-space { height: 6px; margin-top: 18px; }
+@media (max-height: 699px) {
+  .auth-hero-title { font-size: 28px; line-height: 31px; }
+}
+.auth-welcome-actions { display: flex; flex-direction: column; }
+.auth-providers { display: flex; flex-direction: column; gap: 10px; }
+
+/* Apple : fond noir ; Google et e-mail : fond blanc bordé. 54 sur l'accueil, 52 dans la feuille. */
+.auth-provider { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 54px; padding: 0 16px; border: 1px solid var(--auth-field-border); border-radius: 16px; background: #FFFFFF; color: var(--auth-ink); font-size: 17px; font-weight: 600; line-height: 1.2; white-space: nowrap; cursor: pointer; }
+.auth-sheet .auth-provider { min-height: 52px; }
+.auth-provider.auth-apple { gap: 8px; border-color: #000000; background: #000000; color: #FFFFFF; }
+.auth-provider-logo { flex: none; width: 19px; height: 19px; }
+.auth-apple .auth-provider-logo { width: 18px; height: 18px; margin-top: -2px; }
+.auth-provider .icon { width: 19px; height: 19px; stroke-width: 1.75; }
+.auth-provider[disabled] { cursor: default; }
+.auth-provider .spinner { width: 19px; height: 19px; border-width: 2.5px; }
+@media (hover: hover) {
+  .auth-provider:not([disabled]):hover { background: #F7F6F3; }
+  .auth-provider.auth-apple:not([disabled]):hover { background: #1A1A1A; }
+}
+
+/* Espacements de l'app entre les éléments (--gap) ; les liens ont une zone d'appui de 44 de haut (--zone au-dessus et
+   au-dessous) sans que leur texte bouge. */
+.auth-welcome-actions > *, .auth-sheet-content > * { margin-top: var(--gap, 0px); }
+.auth-welcome-actions > :is(.auth-switch, .auth-forgot, .auth-back-link),
+.auth-sheet-content > :is(.auth-switch, .auth-forgot, .auth-back-link) {
+  margin-top: calc(var(--gap, 0px) - var(--zone)); margin-bottom: calc(0px - var(--zone)); padding-top: var(--zone); padding-bottom: var(--zone);
+}
+.auth-g6 { --gap: 6px; }
+.auth-g10 { --gap: 10px; }
+.auth-g12 { --gap: 12px; }
+.auth-g15 { --gap: 15px; }
+.auth-g16 { --gap: 16px; }
+.auth-g18 { --gap: 18px; }
+.auth-g19 { --gap: 19px; }
+.auth-g20 { --gap: 20px; }
+.auth-g21 { --gap: 21px; }
+.auth-g22 { --gap: 22px; }
+.auth-g25 { --gap: 25px; }
+
+/* « Nouveau sur Nidalo ? Créer un compte » : question grise, action foncée en gras (bleue dans la feuille). */
+.auth-switch { --zone: 12px; display: block; width: 100%; padding-left: 0; padding-right: 0; border: 0; background: none; color: var(--auth-grey); font-size: 15px; font-weight: 500; line-height: 1.21; text-align: center; cursor: pointer; }
+.auth-switch strong { color: var(--auth-blue); font-weight: 700; }
+.auth-welcome .auth-switch { color: var(--auth-subtle); }
+.auth-welcome .auth-switch strong { color: var(--auth-ink); }
+
+.auth-mentions { color: var(--auth-grey); font-size: 12px; line-height: calc(1.21em + 2px); text-align: center; }
+.auth-mentions a { color: var(--auth-blue); font-weight: 600; text-decoration: none; }
+.auth-mentions a:hover { text-decoration: underline; }
+.auth-welcome .auth-mentions { color: var(--auth-subtle); }
+.auth-welcome .auth-mentions a { color: var(--auth-link); font-weight: 400; text-decoration: underline; }
+
+/* ——— Étapes par e-mail : titre sur le fond clair, feuille blanche ——— */
+
+.auth-steps { justify-content: flex-end; }
+.auth-head-box { position: relative; }
+.auth-step-head { position: relative; padding: 16px 24px 24px; }
+.auth-step-title { color: var(--auth-ink); font-size: 30px; font-weight: 800; line-height: 1.21; }
+.auth-step-subtitle { margin-top: 8px; color: var(--auth-subtle); font-size: 15px; font-weight: 500; line-height: calc(1.21em + 2px); }
+.auth-step-head .team-intro { margin-top: 14px; }
+.auth h1:focus { outline: none; }
+.auth-sheet { position: relative; padding: 26px 20px calc(10px + max(14px, env(safe-area-inset-bottom))); border-radius: 32px 32px 0 0; background: #FFFFFF; box-shadow: 0 -6px 48px rgba(0, 0, 0, 0.18); color-scheme: light; }
+/* Inscription : la ligne du bas descend près du bas de l'écran, comme dans l'app. */
+.auth-sheet.is-signup { padding-bottom: calc(-4px + max(14px, env(safe-area-inset-bottom))); }
+.auth-sheet.is-resizing { overflow: hidden; }
+.auth-sheet-content { display: flex; flex-direction: column; }
+.auth .auth-content-ghost { top: 26px; left: 20px; right: 20px; }
+
+/* Champ (point 4 de l'app) : 56, coins 16, fond #F8F7F4 bordé #E6E4DF ; actif : fond blanc, bordure bleue de 1,5 et
+   halo de 4 à 12 %, icône et libellé flottant bleus ; erreur : rouge. */
+.auth-fields { display: flex; flex-direction: column; gap: 12px; }
+.auth-names { display: flex; gap: 11px; }
+.auth-names > * { flex: 1; min-width: 0; }
+.auth-field { position: relative; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 16px; border-radius: 16px; background: var(--auth-field); cursor: text; transition: background-color 0.15s ease-out, box-shadow 0.15s ease-out; }
+.auth-field::after { content: ''; position: absolute; inset: 0; border: 1px solid var(--auth-field-border); border-radius: 16px; pointer-events: none; }
+.auth-field.has-trailing { padding-right: 4px; }
+.auth-field.is-focused { background: #FFFFFF; box-shadow: 0 0 0 4px rgba(58, 91, 174, 0.12); }
+.auth-field.is-focused::after { border: 1.5px solid var(--auth-blue); }
+.auth-field.is-error::after { border: 1.5px solid var(--auth-red); }
+.auth-field.is-error.is-focused { box-shadow: 0 0 0 4px rgba(214, 69, 69, 0.12); }
+.auth-field-icon { display: inline-flex; flex: none; justify-content: center; width: 22px; color: var(--auth-muted); }
+.auth-field-icon .icon { width: 18px; height: 18px; stroke-width: 1.75; }
+.auth-field.is-focused .auth-field-icon { color: var(--auth-blue); }
+.auth-field.is-error .auth-field-icon { color: var(--auth-red); }
+.auth-field-body { display: flex; flex: 1; flex-direction: column; gap: 1px; min-width: 0; }
+.auth-field-label { color: var(--auth-muted); font-size: 12px; font-weight: 600; line-height: 1.21; }
+.auth-field.is-focused .auth-field-label { color: var(--auth-blue); }
+.auth-field.is-error .auth-field-label { color: var(--auth-red); }
+.auth-field:not(.shows-label) .auth-field-label { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.auth-field.shows-label .auth-field-label { animation: auth-label-in 0.15s ease-out; }
+@keyframes auth-label-in { from { opacity: 0; transform: translateY(6px); } }
+.auth-field input { width: 100%; min-width: 0; height: 20px; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--auth-ink); caret-color: var(--auth-blue); font: inherit; font-size: 16px; line-height: 20px; outline: none; box-shadow: none; -webkit-appearance: none; appearance: none; }
+/* Le champ actif a déjà sa bordure bleue et son halo : pas de contour en plus autour du texte. */
+.auth .auth-field input:focus-visible { outline: none; }
+.auth-field input::placeholder { color: var(--auth-muted); opacity: 1; }
+.auth-field.is-focused input::placeholder { color: #A3A8B0; }
+.auth-field input::-ms-reveal { display: none; }
+/* Champ rempli par le navigateur : le fond du champ, pas la bande colorée du remplissage automatique. */
+.auth-field input:-webkit-autofill { -webkit-box-shadow: 0 0 0 40px var(--auth-field) inset; -webkit-text-fill-color: var(--auth-ink); }
+.auth-field.is-focused input:-webkit-autofill { -webkit-box-shadow: 0 0 0 40px #FFFFFF inset; }
+.auth-eye { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 12px; background: none; color: var(--auth-muted); cursor: pointer; }
+.auth-eye .icon { width: 20px; height: 20px; stroke-width: 1.75; }
+.auth-field.is-focused .auth-eye { color: var(--auth-blue); }
+.auth .auth-eye:focus-visible { outline-offset: -2px; border-radius: 12px; }
+.auth-email-error { padding: 0 4px; color: var(--auth-red); font-size: 13px; font-weight: 600; line-height: 1.21; }
+.auth-email-error button { padding: 0; border: 0; background: none; color: var(--auth-blue); font-weight: 600; cursor: pointer; }
+.auth-email-block { display: flex; flex-direction: column; gap: 6px; }
+
+/* Message d'erreur : pastille pleine et texte rouges, 13 medium. */
+.auth-error { display: flex; align-items: flex-start; gap: 6px; padding: 0 4px; color: var(--auth-red); font-size: 13px; font-weight: 500; line-height: 1.21; }
+.auth-error svg { flex: none; width: 13px; height: 13px; margin-top: 1.5px; }
+.auth-info { color: var(--auth-positive); font-size: 13px; font-weight: 500; line-height: 1.21; text-align: center; }
+
+.auth-forgot { --zone: 13px; align-self: flex-end; padding-left: 0; padding-right: 0; border: 0; background: none; color: var(--auth-blue); font-size: 13.5px; font-weight: 600; line-height: 1.21; cursor: pointer; }
+
+/* Bouton plein bleu #3A5BAE (#2C468A appuyé), ombre bleue douce ; inactif (formulaire incomplet) plus pâle. */
+.auth-primary { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 54px; padding: 0 16px; border: 0; border-radius: 16px; background: var(--auth-blue); color: #FFFFFF; font-size: 17px; font-weight: 600; line-height: 1.2; box-shadow: 0 6px 24px rgba(58, 91, 174, 0.28); cursor: pointer; transition: transform 0.12s ease-out, background-color 0.12s ease-out; }
+.auth-primary:active:not([disabled]) { background: var(--auth-blue-pressed); transform: scale(0.985); }
+.auth-primary.is-inactive { opacity: 0.45; box-shadow: none; }
+.auth-primary[disabled] { cursor: default; }
+.auth-primary .spinner { width: 20px; height: 20px; }
+
+.auth-divider { display: flex; align-items: center; gap: 12px; color: var(--auth-tertiary); font-size: 13px; line-height: 1.21; }
+.auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--auth-border); }
+
+.auth-note { color: var(--auth-grey); font-size: 13.5px; line-height: calc(1.21em + 2px); text-align: center; }
+.auth-back-link { --zone: 13px; align-self: center; padding-left: 0; padding-right: 0; border: 0; background: none; color: var(--auth-blue); font-size: 14.5px; font-weight: 600; line-height: 1.21; cursor: pointer; }
+.auth-hint { color: var(--auth-grey); font-size: 12.5px; line-height: 1.21; }
+
+/* Jauge : quatre segments de 4, 7 entre eux, et le niveau à droite. */
+.auth-gauge { display: flex; align-items: center; gap: 7px; }
+.auth-gauge-segment { flex: 1; height: 4px; border-radius: 2px; background: #E6E3DD; transition: background-color 0.2s ease-out; }
+.auth-gauge-label { flex: none; min-width: 50px; font-size: 13px; font-weight: 600; line-height: 16px; text-align: right; transition: color 0.2s ease-out; }
+
+/* E-mail envoyé : enveloppe et coche dans un rond bleu clair. */
+.auth-sent-icon { position: relative; display: flex; align-items: center; justify-content: center; align-self: center; width: 56px; height: 56px; border-radius: 50%; background: var(--auth-blue-soft); color: var(--auth-blue); }
+.auth-sent-icon .icon { width: 28px; height: 28px; stroke-width: 1.6; }
+.auth-sent-check { position: absolute; left: 32px; top: 28px; display: inline-flex; align-items: center; justify-content: center; width: 12px; height: 12px; border-radius: 50%; background: var(--auth-blue-soft); }
+.auth-sent-check .icon { width: 9px; height: 9px; stroke-width: 4; }
+.auth-sent-text { color: var(--auth-grey); font-size: 15px; line-height: calc(1.21em + 3px); text-align: center; overflow-wrap: anywhere; }
+.auth-sent-text strong { color: var(--auth-ink); font-weight: 600; }
+.auth-keep { white-space: nowrap; }
+.auth-resend { display: flex; justify-content: center; min-height: 18px; }
+.auth-resend-wait { color: var(--auth-tertiary); font-size: 14px; line-height: 1.21; }
+.auth-resend button { margin: -13px 0; padding: 13px 0; border: 0; background: none; color: var(--auth-blue); font-size: 14px; font-weight: 600; line-height: 1.21; cursor: pointer; }
+.auth-resend button[disabled] { cursor: default; opacity: 0.6; }
+
+/* ——— Lancement en boucle (décoratif) ——— */
+
+.auth-loop { position: absolute; left: 0; top: 50%; width: 100%; height: 144px; margin-top: -72px; pointer-events: none; transform-origin: 50% 50%; }
+.auth-loop-logo { position: absolute; left: 0; top: 0; width: 84px; height: 70px; max-width: none; transform-origin: 42px 35px; opacity: 0; will-change: transform, opacity; }
+.auth-loop-letter { position: absolute; left: 0; top: 0; overflow: visible; opacity: 0; will-change: transform, opacity; }
+.auth-loop-letter path { fill: #1B2235; }
+.auth-loop .mode-tab { position: absolute; left: 0; top: 0; display: block; width: 0; height: 0; cursor: default; }
+.auth-loop-tile { position: absolute; left: 0; top: 0; width: 60px; height: 60px; transform-origin: 30px 30px; opacity: 0; will-change: transform, opacity; }
+.auth-loop-tile .mode-tile { position: absolute; inset: 0; transition: none; }
+.auth-loop .auth-loop-lit { width: 60px; height: 60px; opacity: 0; }
+.auth-loop-name { position: absolute; left: 0; top: 0; color: var(--tile-ink); font-family: var(--app-font-system); font-size: 13px; font-weight: 600; line-height: 16px; white-space: nowrap; opacity: 0; will-change: transform, opacity; }
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-field, .auth-gauge-segment, .auth-gauge-label, .auth-primary { transition: none; }
+  .auth-field.shows-label .auth-field-label { animation: none; }
+}
