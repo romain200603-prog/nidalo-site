@@ -74,9 +74,18 @@ export function HeaderCard({ category, price, priceSecondary, priceNote, conditi
 /**
  * Carte Visite (agendaCard de l'app) : le prochain rendez-vous du bien, avec « Agenda » qui ouvre Mon agenda ; sinon la
  * demande envoyée, dont toute la carte ouvre la demande (son écran est encore « bientôt » sur le site, comme sur
- * ordinateur) ; sinon « Aucune visite prévue », sans lien. La visite se demande avec « Visiter » dans la barre du bas.
+ * ordinateur) ; sinon « Aucune visite prévue » avec la pastille « Demander » (la visite se demande ici depuis que la
+ * barre du bas n'a plus « Visiter »), qui demande un compte comme avant.
  */
-export function VisitCard({ upcoming = null, request = null, now }: { upcoming?: AgendaVisit | null; request?: VisitRequestRow | null; now: Date }) {
+export function VisitCard({ upcoming = null, request = null, now, isRental, onRequest }: {
+  upcoming?: AgendaVisit | null;
+  request?: VisitRequestRow | null;
+  now: Date;
+  /** Location : « au propriétaire » (n° 74). */
+  isRental: boolean;
+  /** « Demander » : le formulaire de demande de visite (connexion d'abord si besoin). */
+  onRequest: () => void;
+}) {
   const icon = <span className="visit-icon" aria-hidden="true"><ExtraIcon name="calendar" /></span>;
   const text = (title: string, subtitle: string) => (
     <span className="visit-text">
@@ -106,7 +115,8 @@ export function VisitCard({ upcoming = null, request = null, now }: { upcoming?:
   return (
     <section className="top-card visit-card" aria-label="Visites">
       {icon}
-      {text('Aucune visite prévue', 'Demandez une visite au vendeur ou à l\'agence.')}
+      {text('Aucune visite prévue', `Demandez une visite au ${isRental ? 'propriétaire' : 'vendeur'} ou à l'agence.`)}
+      <button type="button" className="visit-agenda visit-request" onClick={onRequest} aria-label="Demander une visite">Demander</button>
     </section>
   );
 }

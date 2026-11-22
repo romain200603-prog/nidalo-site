@@ -32,6 +32,15 @@ describe('RentalCost', () => {
   });
 });
 
+/** N° 181 : petits loyers, revenus proposés sans doublon (ordre gardé), choix par défaut toujours présent. */
+describe('RentalIncomeOptions', () => {
+  it.each([[80, ['200', '300']], [150, ['400', '500']], [235, ['600', '800']]])('loyer de %i € : %j', (rent, expected) => {
+    const figures = new RentalCost({ rentExcludingCharges: rent, charges: null, area: null, isFurnished: null, declaredDeposit: null, agencyFees: null });
+    expect(figures.incomeOptions.map(String)).toEqual(expected);
+    expect(figures.incomeOptions.some((option) => option.eq(figures.defaultIncome))).toBe(true);
+  });
+});
+
 describe('HotelPerformance', () => {
   it('hotelFigures', () => {
     const hotel = new HotelPerformance({ annualRevenue: 1_180_000, ebitda: 236_000, rooms: 24, occupancyRate: D('0.78') });

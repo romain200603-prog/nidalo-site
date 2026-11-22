@@ -2,11 +2,14 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import { requireAccount } from '../../lib/account/gate';
 import { currentUserId, useSession } from '../../lib/account/session';
 import type { SearchMode } from '../../lib/labels';
-import { openListingConversation, type ListingConversation } from '../../lib/listing/conversation';
+import {
+  CONVERSATION_ERROR_TITLE, conversationErrorMessage, startListingConversation, type ListingConversation,
+} from '../../lib/listing/conversation';
 import { canMakeOffer } from '../../lib/listing/offers';
 import type { Profitability } from '../../lib/listing/profitability';
 import type { ListingRow, PhotoRow } from '../../lib/listings';
 import { conversationPath, listingPath, listingScreenFromParams, wantsVideoVisit, type ListingScreen } from '../../lib/paths';
+import { AlertDialog } from './Dialogs';
 import { OfferScreen } from './OfferScreen';
 import { useListingAccount } from './useListingAccount';
 import { VisitRequestScreen } from './VisitRequestScreen';
@@ -14,7 +17,8 @@ import { VisitRequestScreen } from './VisitRequestScreen';
 // Actions de la fiche qui demandent un compte (ListingDetailView.swift), communes à l'ordinateur (DesktopListing) et
 // au téléphone (ListingView) : « Envoyer un message » ouvre (ou crée) la conversation avec le vendeur dans Messages ;
 // « Demander une visite » et « Faire une offre » ont leur propre adresse (&vue=visite, &vue=offre). Sans compte, la
-// connexion d'abord ; sa propre annonce n'en a pas.
+// connexion d'abord ; sa propre annonce n'en a pas. Si la conversation ne s'ouvre pas (message, offre), la fenêtre
+// « Impossible d'ouvrir la conversation » (n° 68), commune aux deux tailles.
 
 const sameId = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
@@ -28,6 +32,9 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
   const isOwn = sameId(row.owner_id, me);
   const { account, refreshOffers, refreshConversations, addRequest } = useListingAccount(isOwn ? null : me);
   const [opening, setOpening] = useState(false);
+  /** Texte de la fenêtre « Impossible d'ouvrir la conversation », ou `null`. */
+  const [conversationError, setConversationError] = useState<string | null>(null);
+  const contacting = useRef(false);
 
   // ——— Écrans « Demander une visite » et « Faire une offre » (adresse de la fiche avec &vue=…) ———
   const [screen, setScreen] = useState<ListingScreen | null>(() => listingScreenFromParams(new URLSearchParams(window.location.search)));
@@ -93,9 +100,12 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
     resolving.current = true;
     setOpening(true);
     try {
-      const conversation = await openListingConversation(row.id, userId);
-      if (!conversation) {
+      let conversation: ListingConversation;
+      try {
+        conversation = await startListingConversation(row.id, userId);
+      } catch (error) {
         if (how === 'replace') go(null, 'replace');
+        setConversationError(conversationErrorMessage(error));
         return;
       }
       // Les offres du compte, relues pour ne pas proposer une offre déjà en attente.
@@ -121,15 +131,23 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
   const requestVisit = () => void requireAccount(showVisitForm);
   const makeOffer = () => void requireAccount(() => void resolveOffer('push'));
 
-  /** « Envoyer un message » : ouvre (ou crée) la conversation avec le vendeur, dans Messages. */
+  /**
+   * « Envoyer un message » : ouvre (ou crée) la conversation avec le vendeur, dans Messages. Une seule ouverture à la
+   * fois (le bouton reste actif pour son animation, comme dans l'app).
+   */
   const contactSeller = () => void requireAccount(() => {
     const userId = currentUserId();
-    if (!userId || sameId(row.owner_id, userId)) return;
+    if (!userId || sameId(row.owner_id, userId) || contacting.current) return;
+    contacting.current = true;
     setOpening(true);
-    void openListingConversation(row.id, userId).then((conversation) => {
-      if (conversation) window.location.assign(conversationPath(conversation.id));
-      else setOpening(false);
-    });
+    startListingConversation(row.id, userId).then(
+      (conversation) => window.location.assign(conversationPath(conversation.id)),
+      (error) => {
+        contacting.current = false;
+        setOpening(false);
+        setConversationError(conversationErrorMessage(error));
+      },
+    );
   });
 
   // Adresse d'un écran ouverte directement : sans compte, la connexion d'abord ; sa propre annonce (ou une location
@@ -151,6 +169,18 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
 
   // Un autre compte : la feuille d'offre est relue pour lui.
   useEffect(() => { setOfferConversation(null); }, [me]);
+
+  // Retour depuis Messages sur la fiche gardée par le navigateur : la conversation est ouverte, plus rien n'attend
+  // (comme la fiche de l'app quand on revient de la conversation).
+  useEffect(() => {
+    const onShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      contacting.current = false;
+      setOpening(false);
+    };
+    window.addEventListener('pageshow', onShow);
+    return () => window.removeEventListener('pageshow', onShow);
+  }, []);
 
   const shown: ListingScreen | null = me && !isOwn
     ? (screen === 'visite' ? 'visite' : screen === 'offre' && offerConversation ? 'offre' : null)
@@ -208,5 +238,17 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
     return null;
   };
 
-  return { session, me, isOwn, account, opening, shown, renderScreen, requestVisit, makeOffer, contactSeller };
+  /** « Impossible d'ouvrir la conversation » : le message du serveur, ou celui de la connexion ; seul « OK » la ferme. */
+  const conversationAlert = (
+    <AlertDialog
+      open={conversationError !== null}
+      onClose={() => setConversationError(null)}
+      dismissible={false}
+      title={CONVERSATION_ERROR_TITLE}
+      message={conversationError}
+      actions={[{ label: 'OK', onClick: () => setConversationError(null), tone: 'light' }]}
+    />
+  );
+
+  return { session, me, isOwn, account, opening, shown, renderScreen, requestVisit, makeOffer, contactSeller, conversationAlert };
 }

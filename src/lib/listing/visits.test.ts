@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   agendaVisit, areValidSlots, createVisitRequestParams, hourLabel, isSlotPast, nextVisit, openRequest, requestDisplayStatus,
-  slotStart, SLOT_TIMES, suggestedSlot, visitErrorMessage, VISIT_FAILURE_MESSAGE, type VisitRequestRow,
+  requestSlotLabel, slotHourLabel, slotLabel, slotStart, SLOT_TIMES, suggestedSlot, visitDateInline, visitDateLong, visitErrorMessage,
+  VISIT_FAILURE_MESSAGE, type VisitRequestRow,
 } from './visits';
 
 const now = new Date('2026-11-06T10:00:00Z');
@@ -72,10 +73,14 @@ describe('Agenda (VisitAgenda.nextVisit)', () => {
 });
 
 describe('Formulaire de demande (VisitRequestFormView)', () => {
-  it('heures de 8h00 à 20h00 par demi-heure, demain à 10h00 par défaut', () => {
+  it('heures de 8 h 00 à 20 h 00 par demi-heure, demain à 10 h 00 par défaut', () => {
     expect(SLOT_TIMES).toHaveLength(25);
     expect(hourLabel(SLOT_TIMES[0])).toBe('8h00');
     expect(hourLabel(SLOT_TIMES.at(-1)!)).toBe('20h00');
+    // Le choix d'un créneau s'écrit comme les séances (n° 177).
+    expect(slotHourLabel(SLOT_TIMES[0])).toBe('8 h 00');
+    expect(slotHourLabel(SLOT_TIMES[5])).toBe('10 h 30');
+    expect(slotHourLabel(SLOT_TIMES.at(-1)!)).toBe('20 h 00');
     const local = new Date(2026, 10, 6, 15, 30);
     expect(suggestedSlot(local)).toEqual({ day: '2026-11-07', minutes: 600 });
     expect(suggestedSlot(local, new Date(2026, 10, 30, 10))).toEqual({ day: '2026-12-01', minutes: 600 });
@@ -83,6 +88,15 @@ describe('Formulaire de demande (VisitRequestFormView)', () => {
     expect(isSlotPast({ day: '', minutes: 600 }, local)).toBe(true);
     expect(isSlotPast({ day: '2026-11-06', minutes: 900 }, local)).toBe(true);
     expect(isSlotPast({ day: '2026-11-06', minutes: 960 }, local)).toBe(false);
+  });
+
+  it('créneaux en « 10 h 00 », dates d’une visite en « 18h00 » (n° 177)', () => {
+    const slot = new Date(2026, 10, 5, 10, 0);
+    expect(requestSlotLabel(slot)).toBe('Jeu. 5 nov. · 10 h 00');
+    // Les contacts de l'espace pro (ProContacts.slotLabel) et les dates d'une visite (VisitDate) ne changent pas.
+    expect(slotLabel(slot)).toBe('Jeu. 5 nov. · 10h00');
+    expect(visitDateLong(new Date(2026, 9, 8, 18, 0))).toBe('Jeudi 8 octobre · 18h00');
+    expect(visitDateInline(new Date(2026, 9, 8, 18, 0))).toBe('jeu. 8 oct., 18h00');
   });
 
   it('1 à 3 créneaux à venir, qui ne se chevauchent pas', () => {

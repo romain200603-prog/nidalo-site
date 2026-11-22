@@ -155,13 +155,14 @@ export function Avatar({ publisher }: { publisher: Publisher }) {
 
 /**
  * « Votre interlocuteur » : sans page de profil en phase 1 (pas de « Voir le profil »). Sans `onContact` (sa propre
- * annonce, comme l'app), pas de bouton de contact.
+ * annonce, comme l'app), pas de bouton de contact. Location d'un particulier : « Contacter le propriétaire » (n° 74).
  */
-export function PublisherCard({ publisher, fees, activeCount, onContact }: {
+export function PublisherCard({ publisher, fees, activeCount, onContact, isRental }: {
   publisher: Publisher;
   fees: string | null;
   activeCount: number | null;
   onContact?: () => void;
+  isRental: boolean;
 }) {
   const lines = activeCount !== null ? [...publisher.lines, activeCountLine(activeCount)] : publisher.lines;
   return (
@@ -187,7 +188,7 @@ export function PublisherCard({ publisher, fees, activeCount, onContact }: {
         )}
         {onContact && (
           <button type="button" className="btn btn-primary btn-block" onClick={onContact}>
-            {publisher.isProfessional ? 'Contacter l\'agence' : 'Contacter le vendeur'}
+            {publisher.isProfessional ? 'Contacter l\'agence' : isRental ? 'Contacter le propriétaire' : 'Contacter le vendeur'}
           </button>
         )}
       </div>

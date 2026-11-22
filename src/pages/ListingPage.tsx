@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { Icon } from '../components/Icon';
 import { Page } from '../components/Layout';
 import { cardKind } from '../lib/cardContent';
@@ -34,7 +34,8 @@ import { useListingScreens } from './listing/useListingScreens';
 
 // Fiche d'une annonce (ListingDetailView.swift). Téléphone : mêmes sections, dans le même ordre ; écrire au vendeur,
 // demander une visite et faire une offre comme sur ordinateur (useListingScreens), les deux écrans à leur propre
-// adresse (&vue=visite, &vue=offre). Ordinateur (≥ 1024 px) : DesktopListing.
+// adresse (&vue=visite, &vue=offre) ; en bas, la barre de contact « Duo » (ou la barre blanche de sa propre annonce),
+// et la visite se demande sur la carte « Aucune visite prévue ». Ordinateur (≥ 1024 px) : DesktopListing.
 
 type State = { status: 'loading' } | { status: 'notFound' } | { status: 'error' } | { status: 'ready'; row: ListingRow };
 
@@ -42,7 +43,7 @@ type Notice = 'noPhone' | 'requests' | 'manage' | null;
 
 function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }) {
   // Écrire, visiter, faire une offre : communs avec l'ordinateur (useListingScreens).
-  const { session, me, isOwn, account, opening, renderScreen, requestVisit, makeOffer, contactSeller } = useListingScreens(row, mode);
+  const { session, me, isOwn, account, opening, renderScreen, requestVisit, makeOffer, contactSeller, conversationAlert } = useListingScreens(row, mode);
   const [notice, setNotice] = useState<Notice>(null);
   const [publisher, setPublisher] = useState<Publisher | null>(null);
   const [activeCount, setActiveCount] = useState<number | null>(null);
@@ -50,6 +51,9 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
   const [toast, setToast] = useState<string | null>(null);
   const [copyLink, setCopyLink] = useState<string | null>(null);
   const back = useMemo(backTarget, []);
+  /** L'arrivée de la barre Duo est jouée : une fois par ouverture de la fiche, pas au retour d'un de ses écrans. */
+  const arrived = useRef(false);
+  const isRental = row.transaction === 'rent';
 
   const kind = cardKind(row, mode);
   const photos = useMemo(() => sortedPhotos(row), [row]);
@@ -109,7 +113,7 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
     }
   };
 
-  // « Téléphone » : le numéro du vendeur s'il le communique (connecté), sinon la fenêtre « Numéro non disponible ».
+  // « Appeler » : le numéro du vendeur s'il le communique (connecté), sinon la fenêtre « Numéro non disponible ».
   const phone = publisher?.phone?.trim();
 
   const fees = feesLabel(row);
@@ -122,7 +126,7 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
   const request = isOwn || upcoming ? null : openRequest(account.requests, row.id, me, now);
 
   // « Demander une visite » ou « Faire une offre » ouvert : l'écran seul, à la place de la fiche.
-  const opened = renderScreen({ photo: photos[0], recipientName: publisher?.name ?? 'Le vendeur', profitability });
+  const opened = renderScreen({ photo: photos[0], recipientName: publisher?.name ?? (isRental ? 'Le propriétaire' : 'Le vendeur'), profitability });
   if (opened) return <div className="listing listing-screen">{opened}</div>;
 
   return (
@@ -154,13 +158,15 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
             />
             <ActionBar
               onMessage={contactSeller}
-              onVisit={requestVisit}
               onCall={() => setNotice('noPhone')}
               callHref={phone ? telHref(phone) : null}
               busy={opening}
+              isRental={isRental}
+              playsArrival={!arrived.current}
+              onArrived={() => { arrived.current = true; }}
               owner={isOwn ? { onRequests: () => setNotice('requests'), onManage: () => setNotice('manage') } : null}
             />
-            {!isOwn && <VisitCard upcoming={upcoming} request={request} now={now} />}
+            {!isOwn && <VisitCard upcoming={upcoming} request={request} now={now} isRental={isRental} onRequest={requestVisit} />}
           </div>
         </div>
         <div className="listing-main">
@@ -175,7 +181,7 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
           {activity && <HotelActivity rows={activity.rows} showsNote={activity.showsNote} />}
           {row.description?.trim() && <Description text={row.description.trim()} />}
           <Features rows={featureRows(row)} />
-          {publisher && <PublisherCard publisher={publisher} fees={fees} activeCount={activeCount} onContact={isOwn ? undefined : contactSeller} />}
+          {publisher && <PublisherCard publisher={publisher} fees={fees} activeCount={activeCount} onContact={isOwn ? undefined : contactSeller} isRental={isRental} />}
           <Energy energyClass={energyLetter(row.energy_class)} climateClass={energyLetter(row.climate_class)} lines={energyLines(row)} />
           <LocationSection
             coordinate={coordinateOf(row)}
@@ -187,16 +193,19 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
               title: row.title,
               subtitle: [row.city, livingArea > 0 ? formatArea(livingArea) : null].filter(Boolean).join(' · '),
             }}
+            isRental={isRental}
           />
           <RiskNote />
           <Footnote text={footnote(row)} />
         </div>
       </div>
 
-      <NoPhoneDialog open={notice === 'noPhone'} onClose={() => setNotice(null)} onMessage={() => { setNotice(null); contactSeller(); }} />
+      <NoPhoneDialog open={notice === 'noPhone'} onClose={() => setNotice(null)} onMessage={() => { setNotice(null); contactSeller(); }} isRental={isRental} />
+      {conversationAlert}
       <AlertDialog
         open={notice === 'requests' || notice === 'manage'}
         onClose={() => setNotice(null)}
+        dismissible={false}
         title={notice === 'manage' ? 'Gérer l\'annonce' : 'Voir les demandes'}
         message="Dans l’app iPhone pour l’instant."
         actions={[{ label: 'Fermer', onClick: () => setNotice(null), tone: 'primary' }]}
@@ -204,6 +213,7 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
       <AlertDialog
         open={copyLink !== null}
         onClose={() => setCopyLink(null)}
+        dismissible={false}
         title="Partager l’annonce"
         message="Copiez ce lien pour partager l’annonce."
         actions={[{ label: 'Fermer', onClick: () => setCopyLink(null), tone: 'primary' }]}
