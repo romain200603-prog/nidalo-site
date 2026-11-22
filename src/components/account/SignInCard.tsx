@@ -331,12 +331,12 @@ export function SignInCard({ onClose, onSignedIn, linkError = null, recovery = f
             <h1 id={titleId} className="signin-title signin-title-gap">Vérifiez votre boîte mail</h1>
             <p className="signin-subtitle">
               {flow.purpose === 'signup'
-                ? <>Nous avons envoyé un lien à <strong>{flow.email}</strong>. Choisissez « Confirm email address » dans l&apos;e-mail pour confirmer votre compte : NIDALO s&apos;ouvrira.</>
-                : <>Nous avons envoyé un lien à <strong>{flow.email}</strong>. Choisissez « Reset password » dans l&apos;e-mail : NIDALO s&apos;ouvrira pour choisir un nouveau mot de passe.</>}
+                ? <>Nous avons envoyé un lien à <strong>{flow.email}</strong>. Dans l&apos;e-mail, cliquez sur « Confirmer mon adresse e-mail » pour confirmer votre compte : NIDALO s&apos;ouvrira.</>
+                : <>Nous avons envoyé un lien à <strong>{flow.email}</strong>. Dans l&apos;e-mail, cliquez sur « Choisir un nouveau mot de passe » : NIDALO s&apos;ouvrira pour le saisir.</>}
             </p>
             <ul className="signin-tips">
               <li><Icon name="lock" />Ouvrez l&apos;e-mail sur cet appareil : le lien ne fonctionne que dans le navigateur où vous avez fait la demande.</li>
-              <li><Icon name="mail" />L&apos;e-mail est en anglais et peut mettre une minute à arriver. Regardez aussi dans les courriers indésirables.</li>
+              <li><Icon name="mail" />L&apos;e-mail peut mettre une minute à arriver. Regardez aussi dans les courriers indésirables.</li>
             </ul>
             {error && <p className="signin-error" role="alert">{error}</p>}
             {info && <p className="signin-info" role="status">{info}</p>}
