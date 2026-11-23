@@ -12,22 +12,23 @@
 /* Couleurs et mesures de la page. Sous 1024 px, les jetons de l'ordinateur (--d-…) que la page et les écrans de la
    fiche utilisent sont définis ici, avec la police de l'app (Inter, comme sur ordinateur). */
 :root {
-  /* Couleurs de l'app (AppColors.swift : navy, textSecondary, textTertiary, border, brand, brandSoft, pageBackground ;
-     demande du 17/11). */
-  --m-text: #242D38;
-  --m-grey: #75808B;
-  --m-time: #9AA2AA;
-  --m-line: #ECEAE6;
-  --m-blue: #3C5CB0;
-  --m-blue-hover: #2F4A92;
-  --m-blue-soft: #EEF2FA;
-  --m-blue-outline: #C9D3EE;
+  /* Couleurs de l'app (AppColors.swift) : les jetons communs du site (app.css, pieces-app.css), sous les noms de la page. */
+  --m-text: var(--app-navy);
+  --m-grey: var(--app-text-secondary);
+  --m-time: var(--app-text-muted);
+  --m-line: var(--app-border);
+  --m-blue: var(--app-brand);
+  --m-blue-hover: var(--app-brand-pressed);
+  --m-blue-soft: var(--app-brand-soft);
+  --m-blue-outline: var(--blue-border);
+  /* NidaloPill .green et HomeCategoryColors(.invest) : vert foncé sur vert pâle. */
   --m-green: #2F7A4E;
-  --m-green-soft: #E6F0EA;
-  --m-online: #2BB673;
-  --m-thread: #FAF9F6;
-  --m-hover: #F6F5F1;
-  --m-red: #E5484D;
+  --m-green-soft: #E3F2E8;
+  /* Point « en ligne » : yieldGreen. */
+  --m-online: var(--app-yield-green);
+  --m-thread: var(--app-page);
+  --m-hover: var(--app-segment);
+  --m-red: var(--red);
 }
 @media (max-width: 1023.98px) {
   :root {

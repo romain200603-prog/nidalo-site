@@ -1,7 +1,6 @@
-/* Messagerie avec les morceaux de l'app iPhone (demande du 17/11) : réponses, transferts et réactions
-   (MessageInteractionViews.swift), liste des conversations (MessagesView.swift) et « Votre activité immobilière »
-   (MessagingSearchView.swift). Sur téléphone, la liste copie l'app ; sur ordinateur, les deux colonnes restent, avec
-   ces morceaux. La police reste celle de la page : celle du téléphone sur téléphone. */
+/* Messagerie avec les morceaux de l'app iPhone : réponses, transferts et réactions (MessageInteractionViews.swift),
+   liste des conversations (MessagesView.swift), recherche (MessagingSearchView.swift). Sur téléphone, chaque écran
+   copie l'app ; sur ordinateur, les deux colonnes restent, avec ces morceaux. Police de l'app (Inter) partout. */
 
 /* ——— Liste ——— */
 .dm-side-title { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -204,4 +203,152 @@
   .dm-bubble { padding: 7px 12px; font-size: 16px; line-height: 21px; }
   .dm-media-caption, .dm-caption { font-size: 16px; }
   .dm-reply-bar { margin-bottom: 6px; }
+}
+
+/* ——— Étape 4 : liste des conversations comme l'app (MessagesView.swift) ———
+   Toute la colonne défile (titre, recherche, filtres, prochaine visite, liste), comme le ScrollView de l'app. */
+.dm-side > .dm-list-scroll { padding-top: 0; }
+.dm-list-scroll > .dm-side-top { padding: 20px 10px 12px; }
+.dm-search-open { width: 100%; font: inherit; text-align: left; }
+.dm-search-open > span { flex: 1; min-width: 0; overflow: hidden; color: var(--app-text-muted); font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.dm-search-open:hover { border-color: #DAD7D1; }
+.dm-search-open:focus-visible { outline: 2px solid var(--app-brand); outline-offset: 2px; }
+/* Filtres : une seule ligne qui défile à l'horizontale, jusqu'aux bords (scrollClipDisabled). */
+.dm-tabs { flex-wrap: nowrap; gap: 8px; margin: 0 -10px; padding: 0 10px; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+.dm-tabs::-webkit-scrollbar { display: none; }
+.dm-tab { padding: 0 15px; }
+.dm-tab:hover { background: #FFFFFF; border-color: #DAD7D1; }
+.dm-tab[aria-pressed="true"]:hover { background: var(--app-brand); border-color: var(--app-brand); }
+
+/* « Prochaine visite » : titre de 18, « Voir l'agenda › » en bleu, puis la carte blanche (photo de 64, pastille, date). */
+.dm-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.dm-section-head h2 { margin: 0; color: var(--app-navy); font-size: 18px; font-weight: 700; line-height: 24px; }
+.dm-section-link { flex: none; display: inline-flex; align-items: center; gap: 3px; color: var(--app-brand); font-size: 14px; font-weight: 700; text-decoration: none; }
+.dm-section-link .icon { width: 14px; height: 14px; }
+.dm-section-link:hover { text-decoration: underline; }
+.dm-next-visit { margin-top: 22px; }
+.dm-next-card { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding: 12px; border: 1px solid var(--app-border); border-radius: 22px; background: #FFFFFF; box-shadow: var(--shadow); color: inherit; text-decoration: none; }
+.dm-next-card:hover { border-color: #DAD7D1; }
+.dm-next-card:focus-visible { outline: 2px solid var(--app-brand); outline-offset: 2px; }
+.dm-next-photo { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; overflow: hidden; border-radius: 14px; background: var(--app-segment); color: var(--app-text-muted); }
+.dm-next-photo img { width: 100%; height: 100%; object-fit: cover; }
+.dm-next-photo .icon { width: 26px; height: 26px; }
+.dm-next-text { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.dm-next-date { max-width: 100%; overflow: hidden; color: var(--app-navy); font-size: 16px; font-weight: 700; line-height: 21px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.dm-next-meta { max-width: 100%; overflow: hidden; color: var(--app-text-secondary); font-size: 12.5px; line-height: 17px; text-overflow: ellipsis; white-space: nowrap; }
+.dm-next-card > .dm-chevron { color: #A7AEB5; }
+/* Pastille de l'app (NidaloPill) : 22 de haut, 11,5 gras. */
+.dm-pill { flex: none; display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; line-height: 1; white-space: nowrap; }
+.dm-pill.is-green { background: #E3F2E8; color: #2F7A4E; }
+.dm-pill.is-amber { background: #FBF0D9; color: #946B1E; }
+.dm-pill.is-blue { background: #EFF2F9; color: #435BAA; }
+.dm-pill.is-gray { background: #F1F0EC; color: #5D6470; }
+
+/* Avatar et point vert « en ligne » (yieldGreen, 17 % de l'avatar, anneau blanc de 1,5). */
+.dm-avatar { font-weight: 600; letter-spacing: 0; }
+.dm-avatar-wrap { position: relative; flex: none; display: inline-flex; }
+.dm-presence { position: absolute; box-sizing: content-box; border: 1.5px solid #FFFFFF; border-radius: 50%; background: var(--app-yield-green); transform: translate(1.5px, 1.5px); }
+
+/* Aperçus de la ligne : visite confirmée en vert, fichier avec son icône. */
+.dm-row-preview.is-visit { gap: 5px; color: #2F7A4E; font-weight: 600; }
+.dm-row-preview.is-visit .icon { flex: none; width: 13px; height: 13px; }
+.dm-row-preview.is-file { gap: 5px; color: var(--app-navy); font-size: 14px; }
+.dm-row-preview.is-file .icon { flex: none; width: 15px; height: 15px; }
+.dm-row-preview.is-empty { color: var(--app-text-secondary); font-size: 14px; }
+/* État vide de la liste (ContentUnavailableView) : titre de 15 gras, texte de 12. */
+.dm-list-empty { padding: 24px 16px; }
+.dm-list-empty :is(h1, h2) { font-size: 15px; line-height: 20px; }
+.dm-list-empty p { font-size: 12px; line-height: 16px; }
+.dm-side .account-spinner { padding: 24px 0; }
+.dm-side .app-offline { padding: 24px 16px; }
+
+/* ——— Recherche ouverte (MessagingSearchView.swift) : barre de 46 qui monte de 64 en 0,3 s, contenu en fondu ——— */
+.dm-side.is-searching { background: var(--app-page); }
+.dm-msearch, .dm-msearch-page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.dm-msearch-bar { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 16px 10px; background: var(--app-page); transform: translateY(64px); transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.dm-msearch.is-shown .dm-msearch-bar { transform: none; }
+.dm-msearch > .dm-msearch-scroll { opacity: 0; transition: opacity 0.3s ease; }
+.dm-msearch.is-shown > .dm-msearch-scroll { opacity: 1; }
+.dm-msearch-field { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 4px 0 14px; border: 1px solid var(--app-border); border-radius: 999px; background: #FFFFFF; color: var(--app-text-secondary); }
+.dm-msearch-field:focus-within { border-color: var(--app-brand); }
+.dm-msearch-field > .icon { flex: none; width: 17px; height: 17px; }
+.dm-msearch-field input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; color: var(--app-navy); font: inherit; font-size: 15px; outline: none; }
+.dm-msearch-field input::placeholder { color: var(--app-text-muted); opacity: 1; }
+.dm-msearch-field input::-webkit-search-cancel-button { display: none; }
+.dm .dm-msearch-field input:focus-visible { outline: none; }
+.dm-msearch-clear { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: none; color: #FFFFFF; cursor: pointer; }
+.dm-msearch-clear::before { content: ''; position: absolute; width: 17px; height: 17px; border-radius: 50%; background: var(--app-text-muted); }
+.dm-msearch-clear { position: relative; }
+.dm-msearch-clear .icon { position: relative; width: 11px; height: 11px; stroke-width: 3; }
+.dm-msearch-cancel { flex: none; padding: 6px 0; border: 0; background: none; color: var(--app-brand); font-size: 15px; font-weight: 600; cursor: pointer; }
+.dm-msearch-scroll { padding: 0 16px 24px; }
+.dm-msearch-section.is-first { margin-top: 14px; }
+.dm-msearch-section.is-contacts { margin-top: 26px; }
+.dm-msearch-scroll .dm-activity { margin: 28px 0 0; }
+.dm-msearch-scroll .dm-activity h2 { padding: 0; }
+.dm-clear-all { flex: none; height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--app-brand-soft); color: var(--app-brand); font-size: 13px; font-weight: 600; cursor: pointer; }
+.dm-see-all { flex: none; padding: 0; border: 0; background: none; color: var(--app-brand); font-size: 13px; font-weight: 600; cursor: pointer; }
+.dm-msearch-note { margin: 6px 0 0; color: var(--app-text-secondary); font-size: 13px; line-height: 18px; }
+.dm-msearch-ideas { margin: 14px 0 0; color: var(--app-text-secondary); font-size: 13px; font-weight: 600; line-height: 18px; }
+.dm-chip-row { display: flex; gap: 8px; margin: 8px -16px 0; padding: 0 16px; overflow-x: auto; scrollbar-width: none; }
+.dm-chip-row.is-recent { margin-top: 10px; }
+.dm-chip-row::-webkit-scrollbar { display: none; }
+.dm-search-chip { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 14px; border: 1px solid var(--app-border); border-radius: 999px; background: #FFFFFF; color: var(--app-navy); font-size: 13.5px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.dm-search-chip .icon { flex: none; width: 15px; height: 15px; color: var(--app-brand); }
+.dm-search-chip:hover { border-color: #DAD7D1; }
+.dm-recent-contacts { display: flex; align-items: flex-start; gap: 14px; margin: 12px -16px 0; padding: 0 16px; overflow-x: auto; scrollbar-width: none; }
+.dm-recent-contacts::-webkit-scrollbar { display: none; }
+.dm-recent-contact { flex: none; display: flex; flex-direction: column; align-items: center; gap: 7px; width: 76px; padding: 0; border: 0; background: none; color: var(--app-navy); cursor: pointer; }
+.dm-recent-contact > span:last-child { display: -webkit-box; overflow: hidden; font-size: 12.5px; font-weight: 600; line-height: 16px; text-align: center; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.dm-contact-preview { color: rgba(36, 45, 56, 0.75); font-size: 12.5px; line-height: 17px; }
+.dm-msearch-page .dm-msearch-scroll { padding-top: 0; }
+.dm-page-header { flex: none; background: var(--app-page); }
+@media (prefers-reduced-motion: reduce) {
+  .dm-msearch-bar { transform: none; transition: none; }
+  .dm-msearch > .dm-msearch-scroll { transition-duration: 0.2s; transition-timing-function: ease-in-out; }
+}
+
+/* Titres et cartes des résultats (ContactSectionTitle, ContactsCard, ActionRow) : 15 gras gris, cartes blanches de 18,
+   lignes de 64 (contacts) et 58 (actions), traits décalés sous le texte. */
+.dm-results-title { margin: 22px 0 8px; padding-left: 6px; color: var(--app-text-secondary); font-size: 15px; font-weight: 700; line-height: 20px; }
+.dm-results-empty { padding: 40px 12px 0; }
+.dm-results-empty h3 { margin: 0 0 6px; color: var(--app-navy); font-size: 15px; font-weight: 700; }
+.dm-results-empty p { margin: 0; color: var(--app-text-secondary); font-size: 13px; line-height: 18px; }
+.dm-card-list { padding: 0; overflow: hidden; border: 0; border-radius: 18px; }
+.dm-card-list > li { position: relative; }
+.dm-card-list > li + li::before { content: ''; position: absolute; z-index: 1; top: 0; left: 70px; right: 0; height: 1px; background: rgba(236, 234, 230, 0.8); }
+.dm-card-list.dm-quick-actions > li + li::before { left: 62px; }
+.dm-contact { min-height: 64px; padding: 8px 14px; border-radius: 0; }
+.dm-contact:hover, .dm-action-row:hover { background: rgba(238, 242, 250, 0.6); }
+.dm-contact-name { color: var(--app-navy); font-size: 15px; font-weight: 600; }
+.dm-contact-detail { color: var(--app-text-secondary); font-size: 12.5px; line-height: 17px; }
+.dm-action-row { gap: 14px; min-height: 58px; padding: 8px 16px; border-radius: 0; }
+.dm-action-row > .icon:first-child { width: 21px; height: 21px; margin: 0 5.5px; color: var(--app-brand); }
+.dm-action-text > span { color: var(--app-navy); font-size: 15.5px; font-weight: 600; }
+.dm-action-text small { color: var(--app-text-secondary); font-size: 12.5px; line-height: 17px; }
+.dm-action-row .dm-chevron { color: var(--app-text-muted); }
+/* « Votre activité immobilière » : lignes d'action de l'app (icône bleue de 21 sans fond). */
+.dm-activity-card { border: 0; }
+.dm-activity-row { gap: 14px; min-height: 58px; padding: 8px 16px; }
+.dm-activity-row:hover { background: rgba(238, 242, 250, 0.6); }
+.dm-activity-icon { width: 32px; height: auto; border-radius: 0; background: none; }
+.dm-activity-icon .icon { width: 21px; height: 21px; }
+.dm-activity-title { font-size: 15.5px; font-weight: 600; }
+.dm-activity-card > li + li { border-top-color: rgba(236, 234, 230, 0.8); }
+.dm-activity-row .dm-chevron { color: var(--app-text-muted); }
+
+/* « Discussions liées aux annonces » : cartes blanches de 18, photo de 72 × 64, pastille ronde de 20. */
+.dm-linked-list { display: flex; flex-direction: column; gap: 10px; }
+.dm-linked-row { padding: 10px; border: 0; border-radius: 18px; }
+.dm-linked-photo { width: 72px; height: 64px; border-radius: 9px; }
+.dm-linked-title { font-size: 14.5px; font-weight: 700; }
+.dm-linked-line { font-size: 12.5px; }
+.dm-linked-unread { min-width: 20px; height: 20px; padding: 0; border-radius: 50%; font-size: 11px; line-height: 20px; }
+
+@media (max-width: 1023.98px) {
+  .dm-side > .dm-list-scroll { padding: 0 16px 20px; }
+  .dm-list-scroll > .dm-side-top { padding: 8px 0 10px; }
+  .dm-search-open { margin-top: 15px; height: 52px; padding-left: 13px; }
+  .dm-tabs { margin: 13px -16px 0; padding: 0 16px; }
+  .dm-list { box-shadow: var(--shadow); }
 }

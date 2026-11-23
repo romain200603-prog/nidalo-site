@@ -351,16 +351,16 @@ const findOffer = (offers: OfferRow[], id: string) => offers.find((offer) => sam
 function SenderAvatar({ conversation, senderId, shown }: { conversation: Conversation; senderId: string | null; shown: boolean }) {
   if (!shown) return <span className="dm-msg-avatar is-empty" aria-hidden="true" />;
   const member = groupSender(conversation, senderId);
-  if (!member) return <ConversationAvatar conversation={conversation} size={28} className="dm-msg-avatar" />;
+  if (!member) return <ConversationAvatar conversation={conversation} size={23} fontSize={8.5} className="dm-msg-avatar" />;
   const profile = profileOf(member.userId);
   const photo = profile ? avatarUrl(member.kind === 'agency' ? profile.agency_logo_path ?? null : profile.avatar_path) : null;
   return (
     <CounterpartAvatar
       counterpart={{ name: member.name, kind: member.kind, imagePath: null }}
-      size={28}
+      size={23}
+      fontSize={8.5}
       className="dm-msg-avatar"
       photo={photo}
-      colorKey={member.userId}
     />
   );
 }

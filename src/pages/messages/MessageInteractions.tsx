@@ -301,7 +301,6 @@ function PersonAvatar({ conversation, userId, me, size }: { conversation: Conver
       counterpart={{ name: member?.name ?? senderName(userId, conversation, me), kind: member?.kind ?? 'individual', imagePath: null }}
       size={size}
       photo={photo}
-      colorKey={userId}
     />
   );
 }

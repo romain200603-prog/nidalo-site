@@ -1,202 +1,196 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
+import { ContentUnavailable } from '../../components/ContentUnavailable';
 import { Icon } from '../../components/Icon';
-import { OfflineState } from '../../components/OfflineState';
+import { LoadErrorState, OfflineState } from '../../components/OfflineState';
+import { appDate } from '../../lib/appDates';
 import { liveReload } from '../../lib/badges';
-import { formatPrice } from '../../lib/format';
-import type { OfferRow } from '../../lib/listing/offers';
-import { keepNumbersTogether, rowTimeLabel } from '../../lib/messages/format';
+import { upcomingVisits, type ConversationVisit } from '../../lib/messages/api';
+import { keepNumbersTogether, rowTimeLabel, visitCardDate, visitRowDate } from '../../lib/messages/format';
 import {
-  EMPTY_STATES, filterIncludes, isMuted, lastActivity, matchesListSearch, rowPreview, sameId, SITE_INBOX_FILTERS, unreadConversationCount,
-  type Conversation, type InboxFilter,
+  EMPTY_STATES, filterIncludes, INBOX_FILTERS, isMuted, lastActivity, rowPreview, sameId, type Conversation, type InboxFilter,
 } from '../../lib/messages/inbox';
+import { isOnline } from '../../lib/messages/presence';
 import type { InboxState } from '../../lib/messages/store';
-import {
-  latestRequestAfter, requestActivity, requestPreview, requestsIn, type ConversationVisitRequest,
-} from '../../lib/messages/visitRequests';
+import { accountPath } from '../../lib/paths';
+import { Spinner } from '../account/parts';
 import { AccountPill } from './MessageInteractions';
+import { MessagingSearch } from './MessagingSearch';
 import { ConversationAvatar } from './parts';
 import { openOnClick, routePath } from './route';
-import { ListingConversations, SearchActivity } from './SearchActivity';
 
-// Colonne de gauche (360 px sur ordinateur, tout l'écran sur téléphone) : « Messages » et « Nouveau message »,
-// recherche par nom ou par titre d'annonce, filtres Toutes / Non lues / Archivées, puis les conversations, la plus
-// récente en haut. La conversation ouverte est surlignée. Les morceaux sont ceux de l'app (MessagesView.swift ;
-// demande du 17/11) : sous-titre, crayon, champ blanc, filtres en capsules avec leur nombre, lignes avec « Pro » ou
-// « Particulier » et la petite maison ; la recherche ouverte montre « Votre activité immobilière ».
+// Liste des conversations, comme l'app (MessagesView.swift) : grand titre « Messages » et crayon « Nouveau message »,
+// champ « Rechercher un contact ou un bien » qui ouvre la recherche, les cinq filtres en capsules qui défilent sur une
+// ligne, la carte « Prochaine visite », puis « Toutes les conversations » dans une carte blanche. Sur ordinateur, la
+// même colonne à gauche (360 px), la conversation ouverte surlignée ; la recherche s'ouvre dans cette colonne.
 
-type Row = { conversation: Conversation; request: ConversationVisitRequest | null; activity: Date };
+/** Texte de l'échec de lecture des conversations (MessagingStore.load, DomiaEmptyState.failed). */
+export const INBOX_FAILED = { title: 'Conversations indisponibles', message: 'Vos conversations n\'ont pas pu être chargées. Vérifiez votre connexion, puis réessayez.' };
 
-export function Inbox({ inbox, offers, visitRequests, me, selectedId, onCompose }: {
+type Presence = ReadonlyMap<string, ReadonlySet<string>>;
+
+export function Inbox({ inbox, visits, presence, me, selectedId, onCompose }: {
   inbox: InboxState;
-  offers: OfferRow[];
-  visitRequests: ConversationVisitRequest[];
+  visits: ConversationVisit[];
+  presence: Presence;
   me: string | null;
   selectedId: string | null;
   onCompose: () => void;
 }) {
   const [filter, setFilter] = useState<InboxFilter>('all');
-  const [query, setQuery] = useState('');
-  // Recherche ouverte (« Annuler » la referme) et « Discussions liées aux annonces ».
   const [searching, setSearching] = useState(false);
-  const [linked, setLinked] = useState(false);
-  const field = useRef<HTMLInputElement>(null);
   const conversations = inbox.status === 'ready' ? inbox.conversations : [];
-  const unread = unreadConversationCount(conversations);
-  /** Nombre de conversations de chaque filtre (« Toutes 5 », « Non lues 2 »), comme les capsules de l'app. */
-  const countOf = (value: InboxFilter) => (value === 'unread' ? unread : conversations.filter((conversation) => filterIncludes(value, conversation, false)).length);
-  const cancelSearch = () => {
-    setQuery('');
-    setSearching(false);
-    field.current?.blur();
-  };
-  // Une demande de visite plus récente que le dernier message tient lieu de dernier message (aperçu, heure, rang).
-  const rows: Row[] = conversations
-    .filter((conversation) => filterIncludes(filter, conversation, false) && matchesListSearch(conversation, query))
-    .map((conversation) => {
-      const request = latestRequestAfter(requestsIn(visitRequests, conversation), conversation.lastMessageAt);
-      return { conversation, request, activity: request ? requestActivity(request) : lastActivity(conversation) };
-    })
-    .sort((a, b) => b.activity.getTime() - a.activity.getTime());
+  // Visites à venir liées à une conversation : filtre « Visites » et carte « Prochaine visite ».
+  const upcoming = upcomingVisits(visits, new Date());
+  const withVisit = new Set(upcoming.map((visit) => visit.conversationId?.toLowerCase()).filter((id): id is string => !!id));
+  const hasVisit = (conversation: Conversation) => withVisit.has(conversation.id.toLowerCase());
+  const nextVisit = upcoming.find((visit) => conversations.some((conversation) => sameId(conversation.id, visit.conversationId))) ?? null;
+  const nextConversation = nextVisit ? conversations.find((conversation) => sameId(conversation.id, nextVisit.conversationId)) ?? null : null;
+  /** Nombre de conversations de chaque filtre (« Tous 5 », « Non lus 2 », « Visites 1 »), comme les capsules de l'app. */
+  const countOf = (value: InboxFilter) => conversations.filter((conversation) => filterIncludes(value, conversation, hasVisit(conversation))).length;
+  const shown = conversations
+    .filter((conversation) => filterIncludes(filter, conversation, hasVisit(conversation)))
+    .sort((a, b) => lastActivity(b).getTime() - lastActivity(a).getTime());
 
-  if (linked) {
+  if (searching) {
     return (
-      <aside className="dm-side" aria-label="Conversations">
-        <ListingConversations conversations={conversations} onBack={() => setLinked(false)} />
+      <aside className="dm-side is-searching" aria-label="Recherche">
+        <MessagingSearch conversations={conversations} me={me} onCancel={() => setSearching(false)} />
       </aside>
     );
   }
 
   return (
     <aside className="dm-side" aria-label="Conversations">
-      <div className="dm-side-top">
-        <header className="dm-side-head">
-          <div className="dm-side-title">
-            <h1>Messages</h1>
-            <p className="dm-side-sub">Vos échanges, votre futur chez-vous.</p>
-          </div>
-          <button type="button" className="dm-compose" onClick={onCompose} aria-label="Nouveau message" title="Nouveau message">
-            <Icon name="pencil" />
-          </button>
-        </header>
-
-        <div className={`dm-search-line${searching ? ' is-searching' : ''}`}>
-          <label className="dm-search">
-            <Icon name="search" />
-            <input
-              ref={field}
-              type="search"
-              value={query}
-              placeholder="Rechercher une conversation"
-              aria-label="Rechercher une conversation (nom ou annonce)"
-              autoComplete="off"
-              onFocus={() => setSearching(true)}
-              onChange={(event) => setQuery(event.currentTarget.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Escape') cancelSearch();
-              }}
-            />
-            {query && (
-              <button type="button" className="dm-search-clear" onClick={() => setQuery('')} aria-label="Effacer la recherche" title="Effacer la recherche">
-                <Icon name="x" />
-              </button>
-            )}
-          </label>
-          {searching && <button type="button" className="dm-search-cancel" onClick={cancelSearch}>Annuler</button>}
-        </div>
-
-        <div className="dm-tabs" role="group" aria-label="Filtres">
-          {SITE_INBOX_FILTERS.map((option) => {
-            const count = countOf(option.value);
-            return (
-              <button
-                key={option.value}
-                type="button"
-                className="dm-tab"
-                aria-pressed={filter === option.value}
-                aria-label={count > 0 ? `${option.title}, ${count}` : option.title}
-                onClick={() => setFilter(option.value)}
-              >
-                {option.title}
-                {count > 0 && <span className="dm-tab-count" aria-hidden="true">{count}</span>}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       <div className="dm-list-scroll">
-        {searching && query.trim() === '' && (
-          <SearchActivity linkedCount={conversations.filter((conversation) => conversation.listing !== null).length} onLinked={() => setLinked(true)} />
-        )}
+        <div className="dm-side-top">
+          <header className="dm-side-head">
+            <div className="dm-side-title">
+              <h1>Messages</h1>
+              <p className="dm-side-sub">Vos échanges, votre futur chez-vous.</p>
+            </div>
+            <button type="button" className="dm-compose" onClick={onCompose} aria-label="Nouveau message" title="Nouveau message">
+              <Icon name="pencil" />
+            </button>
+          </header>
+
+          <button type="button" className="dm-search dm-search-open" onClick={() => setSearching(true)} aria-label="Rechercher un contact ou une annonce">
+            <Icon name="search" />
+            <span>Rechercher un contact ou un bien</span>
+          </button>
+
+          <div className="dm-tabs" role="group" aria-label="Filtres">
+            {INBOX_FILTERS.map((option) => {
+              const count = countOf(option.value);
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  className="dm-tab"
+                  aria-pressed={filter === option.value}
+                  aria-label={count > 0 ? `${option.title}, ${count}` : option.title}
+                  onClick={() => setFilter(option.value)}
+                >
+                  {option.title}
+                  {count > 0 && <span className="dm-tab-count" aria-hidden="true">{count}</span>}
+                </button>
+              );
+            })}
+          </div>
+
+          {nextVisit && nextConversation && filter !== 'archived' && (
+            <section className="dm-next-visit" aria-labelledby="dm-prochaine-visite">
+              <div className="dm-section-head">
+                <h2 id="dm-prochaine-visite">Prochaine visite</h2>
+                <a className="dm-section-link" href={accountPath('agenda')}>Voir l'agenda<Icon name="chevronRight" /></a>
+              </div>
+              <NextVisitCard visit={nextVisit} conversation={nextConversation} />
+            </section>
+          )}
+        </div>
+
         <h2 className="dm-list-title">Toutes les conversations</h2>
-        <InboxList inbox={inbox} rows={rows} filter={filter} searching={query.trim() !== ''} offers={offers} me={me} selectedId={selectedId} />
+        <InboxList inbox={inbox} shown={shown} filter={filter} presence={presence} me={me} selectedId={selectedId} />
       </div>
     </aside>
   );
 }
 
-function InboxList({ inbox, rows, filter, searching, offers, me, selectedId }: {
+/**
+ * Carte de la prochaine visite (NextVisitCard) : photo de 64, pastille d'état, date et heure en gras, « bien · ville ·
+ * avec X », chevron ; elle ouvre la conversation.
+ */
+function NextVisitCard({ visit, conversation }: { visit: ConversationVisit; conversation: Conversation }) {
+  const photo = visit.listing?.coverUrl ?? conversation.listing?.coverUrl ?? null;
+  const [failed, setFailed] = useState(false);
+  const pill = visit.status === 'confirmed' ? { text: 'Visite confirmée', tone: 'green' }
+    : { text: visit.status === 'toConfirm' ? 'Visite à confirmer' : 'Visite en attente', tone: 'amber' };
+  const meta = [conversation.listing?.title, conversation.listing?.city, `avec ${conversation.counterpart.name}`].filter((part) => !!part).join(' · ');
+  return (
+    <a className="dm-next-card" href={routePath({ conversationId: conversation.id })} onClick={openOnClick(conversation.id)}
+      aria-description="Ouvre la conversation">
+      <span className="dm-next-photo" aria-hidden="true">
+        {photo && !failed ? <img src={photo} alt="" onError={() => setFailed(true)} /> : <Icon name="building" />}
+      </span>
+      <span className="dm-next-text">
+        <span className={`dm-pill is-${pill.tone}`}>{pill.text}</span>
+        <span className="dm-next-date">{visitCardDate(visit.start)}</span>
+        <span className="dm-next-meta">{meta}</span>
+      </span>
+      <Icon name="chevronRight" className="icon dm-chevron" />
+    </a>
+  );
+}
+
+function InboxList({ inbox, shown, filter, presence, me, selectedId }: {
   inbox: InboxState;
-  rows: Row[];
+  shown: Conversation[];
   filter: InboxFilter;
-  searching: boolean;
-  offers: OfferRow[];
+  presence: Presence;
   me: string | null;
   selectedId: string | null;
 }) {
+  // Premier chargement : la roue de l'app, pas « Aucune conversation » (n° 209).
   if (inbox.status === 'loading') return <ListSkeleton />;
-  // Conversations jamais lues : « Pas de connexion Internet » de l'app, et « Réessayer » les relit (n° 95).
-  if (inbox.status === 'error') return <OfflineState onRetry={() => void liveReload()} />;
-  if (rows.length === 0) {
-    const empty = searching
-      ? { title: 'Aucune conversation trouvée', message: 'Essayez un autre nom ou un autre titre d\'annonce.' }
-      : EMPTY_STATES[filter];
-    return (
-      <div className="dm-inbox-empty">
-        <Icon name={searching ? 'search' : filter === 'archived' ? 'archive' : 'messages'} />
-        <h3>{empty.title}</h3>
-        <p>{empty.message}</p>
-      </div>
-    );
+  // Conversations jamais lues : « Pas de connexion Internet » faute de connexion, sinon « Conversations indisponibles »
+  // (n° 95) ; « Réessayer » les relit.
+  if (inbox.status === 'error') {
+    return inbox.offline ? <OfflineState onRetry={() => void liveReload()} />
+      : <LoadErrorState title={INBOX_FAILED.title} message={INBOX_FAILED.message} onRetry={() => void liveReload()} />;
+  }
+  if (shown.length === 0) {
+    const empty = EMPTY_STATES[filter];
+    return <ContentUnavailable className="dm-list-empty" icon={filter === 'archived' ? 'archive' : 'messages'} title={empty.title} text={empty.message} />;
   }
   return (
     <ul className="dm-list" aria-label="Conversations">
-      {rows.map((row) => (
-        <li key={row.conversation.id}>
-          <ConversationRow row={row} offers={offers} me={me} selected={sameId(row.conversation.id, selectedId)} />
+      {shown.map((conversation) => (
+        <li key={conversation.id}>
+          <ConversationRow
+            conversation={conversation}
+            online={!conversation.isGroup && isOnline(presence, conversation.id, conversation.otherUserId)}
+            me={me}
+            selected={sameId(conversation.id, selectedId)}
+          />
         </li>
       ))}
     </ul>
   );
 }
 
-/** Liste en cours de lecture : six lignes grises (avatar, nom, aperçu). */
+/** Liste en cours de lecture : la roue de l'app (ProgressView). */
 export function ListSkeleton() {
-  const widths = [[62, 80], [48, 66], [70, 58], [55, 74], [40, 62], [66, 50]];
-  return (
-    <div className="dm-skel-list" role="status" aria-label="Chargement des conversations">
-      {widths.map(([name, preview], index) => (
-        <div key={index} className="dm-skel-row" aria-hidden="true">
-          <span className="dm-skel dm-skel-avatar" />
-          <span className="dm-skel-lines">
-            <span className="dm-skel dm-skel-line" style={{ width: `${name}%` }} />
-            <span className="dm-skel dm-skel-line is-thin" style={{ width: `${preview}%` }} />
-          </span>
-        </div>
-      ))}
-    </div>
-  );
+  return <Spinner label="Chargement des conversations" />;
 }
 
 /**
- * Ligne (ConversationRow de l'app) : avatar de 46 px, nom en gras et « Pro » ou « Particulier », heure (bleue s'il y a
- * des non-lus), la petite maison et le bien (ou le rôle), puis le dernier message et la pastille des non-lus (grise en
- * sourdine), ou la cloche barrée d'une conversation en sourdine.
+ * Ligne (ConversationRow de l'app) : avatar de 46 px avec le point vert « en ligne », nom en gras et « Pro » ou
+ * « Particulier », heure (bleue s'il y a des non-lus), la petite maison et le bien (ou le rôle), puis le dernier message
+ * et la pastille des non-lus (grise en sourdine), ou la cloche barrée d'une conversation en sourdine.
  */
-function ConversationRow({ row, offers, me, selected }: { row: Row; offers: OfferRow[]; me: string | null; selected: boolean }) {
-  const { conversation, request, activity } = row;
+function ConversationRow({ conversation, online, me, selected }: { conversation: Conversation; online: boolean; me: string | null; selected: boolean }) {
   const unread = conversation.unreadCount > 0;
   const subtitle = conversation.counterpart.subtitle;
+  const activity = lastActivity(conversation);
   return (
     <a
       className="dm-row"
@@ -204,7 +198,7 @@ function ConversationRow({ row, offers, me, selected }: { row: Row; offers: Offe
       aria-current={selected ? 'true' : undefined}
       onClick={openOnClick(conversation.id)}
     >
-      <ConversationAvatar conversation={conversation} size={46} />
+      <ConversationAvatar conversation={conversation} size={46} fontSize={15} online={online} />
       <span className="dm-row-main">
         <span className="dm-row-top">
           <span className="dm-row-name">{conversation.counterpart.name}</span>
@@ -213,7 +207,7 @@ function ConversationRow({ row, offers, me, selected }: { row: Row; offers: Offe
         </span>
         {subtitle && <span className="dm-row-listing"><Icon name="house" /><span>{subtitle}</span></span>}
         <span className="dm-row-bottom">
-          <RowPreview conversation={conversation} request={request} offers={offers} me={me} unread={unread} />
+          <RowPreview conversation={conversation} me={me} unread={unread} />
           {unread ? (
             <span
               className={`dm-unread${isMuted(conversation) ? ' is-muted' : ''}`}
@@ -229,41 +223,31 @@ function ConversationRow({ row, offers, me, selected }: { row: Row; offers: Offe
 }
 
 /**
- * Dernier message : « Vous : » devant les miens ; une offre en tag vert « Offre » puis le montant ; une demande de
- * visite plus récente que le dernier message en « Demande de visite · sam. 15 nov. à 10:00 ».
+ * Dernier message (ConversationRow.preview) : une visite confirmée en vert avec le calendrier, un fichier avec son
+ * icône, sinon « Vous : » et les coches devant mes messages (grise pour envoyé, deux coches bleues pour vu).
  */
-function RowPreview({ conversation, request, offers, me, unread }: {
-  conversation: Conversation;
-  request: ConversationVisitRequest | null;
-  offers: OfferRow[];
-  me: string | null;
-  unread: boolean;
-}) {
+function RowPreview({ conversation, me, unread }: { conversation: Conversation; me: string | null; unread: boolean }) {
   const weight = unread ? ' is-unread' : '';
-  if (request) {
-    const mine = sameId(request.requester.userId, me);
-    return <span className={`dm-row-preview${weight}`}><span>{`${mine ? 'Vous : ' : ''}${requestPreview(request)}`}</span></span>;
-  }
   const last = conversation.lastMessage;
   if (!last) return <span className="dm-row-preview is-empty"><span>{rowPreview(conversation, me).text}</span></span>;
-  const mine = sameId(last.senderId, me) && last.content.kind !== 'system';
-  // Coches devant « Vous : » (conversation à deux) : grise pour envoyé, deux coches bleues pour vu.
-  const seen = !conversation.isGroup && conversation.otherLastReadAt !== null && conversation.lastMessageAt !== null
-    && conversation.otherLastReadAt.getTime() >= conversation.lastMessageAt.getTime();
-  const check = mine && !conversation.isGroup && (
-    <span className={`dm-row-check${seen ? ' is-read' : ''}`} role="img" aria-label={seen ? 'Vu' : 'Envoyé'}><Icon name={seen ? 'checkCheck' : 'check'} /></span>
-  );
-  if (last.content.kind === 'offer') {
-    const offerId = last.content.offerId;
-    const offer = offers.find((item) => sameId(item.id, offerId)) ?? null;
+  const { content } = last;
+  if (content.kind === 'visitConfirmed') {
+    const slot = appDate(content.slot);
     return (
-      <span className={`dm-row-preview${weight}`}>
-        {check}
-        {mine && <>{<span>Vous :</span>}{' '}</>}
-        <span className="dm-tag">Offre</span>{' '}
-        <span>{offer ? keepNumbersTogether(`${formatPrice(Number(offer.amount))} proposés`) : ''}</span>
+      <span className="dm-row-preview is-visit">
+        <Icon name="calendar" />
+        <span>{slot ? `Visite confirmée · ${visitRowDate(slot)}` : 'Visite confirmée'}</span>
       </span>
     );
   }
-  return <span className={`dm-row-preview${weight}`}>{check}<span>{keepNumbersTogether(rowPreview(conversation, me).text)}</span></span>;
+  if (content.kind === 'file') {
+    return <span className={`dm-row-preview is-file${weight}`}><Icon name="fileText" /><span>{content.name}</span></span>;
+  }
+  const { text, mine } = rowPreview(conversation, me);
+  const check = mine && (
+    <span className={`dm-row-check${last.isRead ? ' is-read' : ''}`} role="img" aria-label={last.isRead ? 'Vu' : 'Envoyé'}>
+      <Icon name={last.isRead ? 'checkCheck' : 'check'} />
+    </span>
+  );
+  return <span className={`dm-row-preview${weight}`}>{check}<span>{keepNumbersTogether(text)}</span></span>;
 }

@@ -46,25 +46,60 @@ export function listLabel(date: Date, now: Date = new Date()): string {
 
 // MARK: - Page Messages du site (demande de Romain du 14 novembre 2026)
 
-const weekdayDayMonth = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
-
-/** Heure d'une conversation de la liste : « 14:10 » aujourd'hui, « Hier », « Mer. » dans la semaine, sinon « 10 nov. ». */
+/**
+ * Heure d'une conversation de la liste, comme l'app (MessageTime.listLabel) : « 14:10 » aujourd'hui, « Hier », « Mer. »
+ * dans la semaine, sinon le mois en toutes lettres, « 10 novembre » (« 24 décembre 2025 » une autre année).
+ */
 export function rowTimeLabel(date: Date, now: Date = new Date()): string {
-  const days = daysBetween(date, now);
-  if (days <= 0) return clock(date);
-  if (days === 1) return 'Hier';
-  if (days < 7) return capitalized(weekdayShort.format(date));
-  const text = dayMonthShort.format(date);
-  return date.getFullYear() === now.getFullYear() ? text : `${text} ${date.getFullYear()}`;
+  return daysBetween(date, now) <= 0 ? clock(date) : listLabel(date, now);
 }
 
-/** Séparateur de date du fil : « Aujourd'hui », « Hier », sinon « Mer. 12 nov. » (l'année si ce n'est pas celle-ci). */
+const weekdayDayMonthWide = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+const weekdayDayMonthYearWide = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+const weekdayWide = new Intl.DateTimeFormat('fr-FR', { weekday: 'long' });
+
+/**
+ * Jour d'un séparateur du fil (MessageTime.dayLabel) : « Aujourd'hui », « Hier », sinon « Mercredi 11 novembre » ;
+ * l'heure du premier message suit (« Hier · 18:03 »).
+ */
 export function daySeparatorLabel(date: Date, now: Date = new Date()): string {
   const days = daysBetween(date, now);
   if (days <= 0) return 'Aujourd\'hui';
   if (days === 1) return 'Hier';
-  const text = capitalized(weekdayDayMonth.format(date));
-  return date.getFullYear() === now.getFullYear() ? text : `${text} ${date.getFullYear()}`;
+  return capitalized(weekdayDayMonthWide.format(date));
+}
+
+/**
+ * Pastille de jour qui flotte en haut du fil pendant le défilement (MessageTime.floatingDayLabel) : « Aujourd'hui »,
+ * « Hier », le jour de la semaine jusqu'à une semaine, puis la date (avec l'année si ce n'est pas celle-ci).
+ */
+export function floatingDayLabel(date: Date, now: Date = new Date()): string {
+  const days = daysBetween(date, now);
+  if (days <= 0) return 'Aujourd\'hui';
+  if (days === 1) return 'Hier';
+  if (days <= 7) return capitalized(weekdayWide.format(date));
+  return capitalized((date.getFullYear() === now.getFullYear() ? weekdayDayMonthWide : weekdayDayMonthYearWide).format(date));
+}
+
+// MARK: - Dates de visite (VisitDate de l'app)
+
+const weekdayDayMonthShort = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+const hourMinute = (date: Date) => `${date.getHours()}\u00A0h\u00A0${pad(date.getMinutes())}`;
+
+/** « Sam. 21 nov. · 10 h 00 » : carte « Prochaine visite » de la liste (VisitDate.card). */
+export function visitCardDate(date: Date): string {
+  return `${capitalized(weekdayDayMonthShort.format(date))} · ${hourMinute(date)}`;
+}
+
+/** « sam. 21 nov. à 10 h », « à 10 h 30 » : aperçu « Visite confirmée » d'une ligne (VisitDate.row). */
+export function visitRowDate(date: Date): string {
+  const minutes = date.getMinutes();
+  return `${weekdayDayMonthShort.format(date)} à ${date.getHours()}\u00A0h${minutes > 0 ? `\u00A0${pad(minutes)}` : ''}`;
+}
+
+/** « Jeudi 19 novembre · 18 h 00 » : carte « Visite confirmée » du fil (VisitDate.longApp). */
+export function visitLongDate(date: Date): string {
+  return `${capitalized(weekdayDayMonthWide.format(date))} · ${hourMinute(date)}`;
 }
 
 /**

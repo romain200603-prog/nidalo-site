@@ -29,7 +29,7 @@ import { fetchConversationVisitRequests, type ConversationVisitRequest } from '.
 
 export type InboxState =
   | { status: 'loading' }
-  | { status: 'error' }
+  | { status: 'error'; offline: boolean }
   | { status: 'ready'; conversations: Conversation[] };
 
 export const inboxStore = createStore<InboxState>({ status: 'loading' });
@@ -60,7 +60,7 @@ async function loadExtras(rows: ServerInboxRow[]): Promise<Extras> {
 function onRows(value: ConversationRows) {
   if (!value.rows) {
     lastRows = null;
-    inboxStore.set(value.failed ? { status: 'error' } : { status: 'loading' });
+    inboxStore.set(value.failed ? { status: 'error', offline: value.offline === true } : { status: 'loading' });
     return;
   }
   const rows = value.rows as unknown as ServerInboxRow[];
