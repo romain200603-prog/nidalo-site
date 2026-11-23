@@ -284,11 +284,11 @@ function pageView(request) {
 
 /**
  * Pastille Messages de la barre d'onglets du téléphone (AppTabBar de l'app, n° 44) : avec un compte, my_conversations
- * sans paramètre, lu à l'ouverture d'une page qui montre la barre (sous 761 px) ; jamais sur la fiche d'une annonce,
+ * sans paramètre, lu à l'ouverture d'une page qui montre la barre (sous 1024 px) ; jamais sur la fiche d'une annonce,
  * qui la masque.
  */
 function tabBarBadgeRead(request, table, body, width, signedIn) {
-  return signedIn && table === 'rpc/my_conversations' && request.method() === 'POST' && width !== null && width < 761
+  return signedIn && table === 'rpc/my_conversations' && request.method() === 'POST' && width !== null && width < 1024
     && pagePath(request) !== '/annonce/' && (body === null || body === '' || (typeof body === 'object' && Object.keys(body).length === 0));
 }
 
@@ -606,7 +606,7 @@ async function checkTabBarBadge(page, state, name) {
   const label = await page.getAttribute('.tabbar a[href="/messages/"]', 'aria-label');
   if (label !== (messages ? `Messages, ${messages} non lus` : null)) problems.push(`${name} : libellé de l'onglet Messages « ${label} »`);
   if (!messages) return;
-  // Capsule rouge (#E5383B) à liseré blanc, en haut à droite de l'icône : dans la largeur de l'onglet, sous le haut de
+  // Capsule rouge (#E5383B) de 12 à liseré blanc, en haut à droite de l'icône : dans la largeur de l'onglet, sous le haut de
   // la barre (elle dépasse le lien, centré dans la barre, comme la pastille de l'app dépasse l'icône).
   const look = await page.evaluate(() => {
     const badge = document.querySelector('.tabbar a[href="/messages/"] .tabbar-badge');
@@ -620,7 +620,7 @@ async function checkTabBarBadge(page, state, name) {
       inside: box.left >= tab.left && box.right <= tab.right && box.top >= bar.top,
     };
   });
-  expectSame(name, 'pastille de la barre d\'onglets', look, { color: 'rgb(229, 56, 59)', height: 16, rightOfCenter: true, aboveCenter: true, inside: true });
+  expectSame(name, 'pastille de la barre d\'onglets', look, { color: 'rgb(229, 56, 59)', height: 12, rightOfCenter: true, aboveCenter: true, inside: true });
 }
 
 /** Pastilles de la barre du haut = données du serveur simulé (archivées exclues, sortes inconnues ignorées). */
@@ -682,7 +682,11 @@ async function open(context, path, name) {
   // Sur téléphone, seule la page Messages ouvre le temps réel (demande de Romain du 14 novembre 2026).
   const onMessages = () => { try { return new URL(page.url()).pathname === '/messages/'; } catch { return false; } };
   page.on('websocket', (socket) => { if (isPhone() && !onMessages()) problems.push(`${name}: temps réel ouvert sur téléphone (${socket.url()})`); });
-  page.on('request', (request) => { if (isPhone() && request.url().includes('/fonts/')) problems.push(`${name}: police chargée sur téléphone (${request.url()})`); });
+  // Polices : seulement Inter, la police de l'app (400, 500, 600 et 700, Nidalo Inter), sur toutes les largeurs.
+  page.on('request', (request) => {
+    const url = request.url();
+    if (url.includes('/fonts/') && !/\/fonts\/inter-latin(-ext)?-(400|500|600|700)-normal\.woff2$/.test(url)) problems.push(`${name}: police inattendue (${url})`);
+  });
   await page.addInitScript(() => {
     document.addEventListener('securitypolicyviolation', (e) => console.error(`CSP bloque ${e.violatedDirective} ${e.blockedURI}`));
   });
@@ -2613,7 +2617,7 @@ try {
   // Baisses de prix, la carte compacte de 296 × 112 (photo de 88 × 80 à gauche ; « Nouveau » et le cœur, ou la baisse
   // et l'ancien prix barré) ; Biens similaires, la carte de 170 px (photo de 100, rendement brut si l'annonce a ses
   // chiffres, cœur). Avec les lectures de l'ordinateur (projet du compte, fiches consultées, biens similaires) ; avec le
-  // compte, la cloche (point rouge des non lues) et « Reprendre ma recherche ». Pas d'en-tête bleu sous 761 px.
+  // compte, la cloche (point rouge des non lues) et « Reprendre ma recherche ». Pas d'en-tête bleu sous 1024 px.
   // Captures : accueil-telephone-app-*.png.
   for (const signedIn of [false, true]) {
     const H = `accueil téléphone ${signedIn ? 'connecté' : 'sans compte'}`;
@@ -4281,7 +4285,7 @@ try {
     expectedConsole.delete(refusal);
   }
 
-  // Sous 1024 px (iPhone 13, 390 px) : une seule colonne, comme dans l'app, avec la police du téléphone. La liste
+  // Sous 1024 px (iPhone 13, 390 px) : une seule colonne, comme dans l'app, avec sa police (Inter). La liste
   // au-dessus de la barre du bas, puis la conversation en plein écran (barre cachée, saisie tout en bas) ; « Retour
   // aux conversations » revient à la liste. Captures : 3-messages-telephone-*.png.
   {
@@ -4299,7 +4303,7 @@ try {
         composerGap: bottom ? Math.round(innerHeight - bottom.bottom) : null,
       };
     });
-    expectSame(M, 'liste', await phoneShape(), { list: true, pane: false, tabbar: true, overflowX: 0, pageScroll: 0, font: '-apple-system', composerGap: null });
+    expectSame(M, 'liste', await phoneShape(), { list: true, pane: false, tabbar: true, overflowX: 0, pageScroll: 0, font: 'Nidalo Inter', composerGap: null });
     expectSame(M, 'conversations', await inboxRows(page), INITIAL_ROWS);
     await chatShot(page, '3-messages-telephone-liste.png');
     const mark = chat.calls.length;
@@ -4308,7 +4312,7 @@ try {
     await page.waitForSelector('.dm-visit-actions');
     const readB = await oneCall(chat, 'rpc/mark_conversation_read', mark, `${M} : ouverture de B`);
     if (readB) expectSame(M, 'B marquée lue', readB.body, { p_conversation_id: chatId(2).toUpperCase() });
-    expectSame(M, 'conversation', await phoneShape(), { list: false, pane: true, tabbar: false, overflowX: 0, pageScroll: 0, font: '-apple-system', composerGap: 0 });
+    expectSame(M, 'conversation', await phoneShape(), { list: false, pane: true, tabbar: false, overflowX: 0, pageScroll: 0, font: 'Nidalo Inter', composerGap: 0 });
     expectSame(M, 'boutons de l\'en-tête', await page.$$eval('.dm-head button', (els) => els.map((el) => el.getAttribute('aria-label'))),
       ['Retour aux conversations', 'Proposer une visite', 'Plus d\'options']);
     expectSame(M, 'réponses rapides', await quickReplies(page), ['Oui, samedi 10 h', 'Proposer un autre créneau', 'Envoyer le dossier complet']);
@@ -4644,8 +4648,8 @@ try {
       expectSame(B, 'menu d\'une recherche', await openMenu(0), ['Modifier les critères', 'Renommer', 'Désactiver les alertes', 'Supprimer']);
       mark = writes.length;
       await choose(0, 'Renommer');
-      expectSame(B, 'renommer', [await dialogTitle(page), await page.inputValue('dialog[open] .text-input')], ['Renommer la recherche', lyon.name]);
-      await page.fill('dialog[open] .text-input', 'Lyon centre');
+      expectSame(B, 'renommer', [await dialogTitle(page), await page.inputValue('dialog[open] .dialog-field')], ['Renommer la recherche', lyon.name]);
+      await page.fill('dialog[open] .dialog-field', 'Lyon centre');
       await page.locator('dialog[open]').getByRole('button', { name: 'Renommer', exact: true }).click();
       await expectWrites(mark, saved({ name: 'Lyon centre', query: lyon.query, alerts_enabled: true }), `${B} : renommer`);
       await page.waitForFunction(() => document.querySelector('.dfav-searches .saved-search h3')?.textContent === 'Lyon centre', null, { timeout: 8000 })
@@ -5273,7 +5277,7 @@ try {
       await page.click('.dsp-logout');
       expectSame(D, 'confirmation', [await dialogTitle(page), await textOf(page, 'dialog.alert-dialog[open] .alert-body p'),
         await page.$$eval('dialog.alert-dialog[open] .alert-actions button', (buttons) => buttons.map((button) => [button.textContent, button.className]))],
-      ['Se déconnecter ?', 'Vous pourrez vous reconnecter à tout moment.', [['Se déconnecter', 'btn dsc-btn-danger'], ['Annuler', 'btn dsc-btn-quiet']]]);
+      ['Se déconnecter ?', 'Vous pourrez vous reconnecter à tout moment.', [['Se déconnecter', 'btn btn-danger'], ['Annuler', 'btn btn-light']]]);
       await alertButton(page, 'Annuler');
       await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${D} : la confirmation reste ouverte`));
       await page.waitForTimeout(300);
@@ -5336,10 +5340,11 @@ try {
       expectSame('Mon espace 1023', 'lien Mon agenda', await page.$$eval('a.app-row', (rows) => rows.filter((row) => row.querySelector('.app-row-title')?.textContent === 'Mon agenda')
         .map((row) => row.getAttribute('href'))), ['/compte/?vue=agenda']);
       await page.close();
-      for (const [view, title] of [['projet', 'Mon projet immobilier'], ['consultes', 'Biens consultés']]) {
+      // Mon projet masque la barre d'onglets, comme dans l'app (hidesTabBar) ; Biens consultés la garde.
+      for (const [view, title, tabBar] of [['projet', 'Mon projet immobilier', false], ['consultes', 'Biens consultés', true]]) {
         page = await open(context, `/compte/?vue=${view}`, `${view} 1023`);
-        await page.waitForSelector('.soon-card');
-        expectSame(`${view} 1023`, 'écran « bientôt »', [await textOf(page, '.soon-card h2'), await page.locator('.dsc').count()], [title, 0]);
+        await page.waitForSelector('.soon-state');
+        expectSame(`${view} 1023`, 'écran « bientôt »', [await textOf(page, '.soon-state h2'), await page.locator('.dsc').count(), await page.locator('.tabbar').isVisible()], [title, 0, tabBar]);
         await page.close();
       }
       await context.close();
@@ -5844,12 +5849,13 @@ try {
     await context.close();
   }
 
-  // Haut des pages du téléphone (étape 3) : plus d'en-tête bleu sous 761 px. Chaque page commence comme son écran de
+  // Haut des pages du téléphone (étape 3) : plus d'en-tête bleu sous 1024 px. Chaque page commence comme son écran de
   // l'app : grand titre d'un onglet (Favoris, Messages, Mon compte), retour et titre d'un écran poussé ; les pages que
   // l'app n'a pas (aide, pages légales, 404, « bientôt », annonce introuvable) ont le retour rond et le titre, leur h1
   // restant pour les lecteurs d'écran ; le retour ramène à la page précédente du site, sinon à sa page. Une conversation
   // ouverte garde sa barre et toute la hauteur. Fond de page et barre du navigateur aux couleurs de l'app. Entre 761 et
-  // 1023 px, l'en-tête bleu reste (seul menu de ces largeurs). Captures : haut-telephone-*.png.
+  // 1023 px (l'iPhone couché), c'est aussi la page du téléphone, avec la barre d'onglets en bas. Captures :
+  // haut-telephone-*.png.
   {
     const T = 'haut du téléphone';
     const context = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
@@ -5868,7 +5874,7 @@ try {
     });
     page = await open(context, '/aide/', `${T} aide`);
     expectSame(T, 'couleur de la barre du navigateur', await page.$$eval('meta[name="theme-color"]', (metas) => metas.map((meta) => [meta.getAttribute('content'), meta.getAttribute('media')])),
-      [['#FAF9F6', '(max-width: 760px)'], ['#1F5BC6', '(min-width: 761px)']]);
+      [['#FAF9F6', '(max-width: 1023px)'], ['#FFFFFF', '(min-width: 1024px)']]);
     await page.close();
     const unknownListing = '6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1aff';
     for (const [path, title, back, file] of [['/aide/', 'Aide', '/', 'aide'], ['/conditions/', 'Conditions d’utilisation', '/', 'conditions'],
@@ -5920,7 +5926,8 @@ try {
     await page.waitForURL(`${base}/`, { timeout: 8000 }).catch(() => problems.push(`${T} : le retour de l'aide ouverte seule mène à ${page.url()}`));
     await page.close();
     await context.close();
-    // Entre 761 et 1023 px : l'en-tête bleu reste, sans le retour ni le titre du téléphone ; le titre de la page est visible.
+    // Entre 761 et 1023 px : la page du téléphone (retour et titre en haut, h1 lu par les lecteurs d'écran), sans en-tête
+    // bleu ; la barre d'onglets de l'app en bas (42 de haut, au-dessus de la zone du bas de 4 au moins), ses cinq onglets.
     const tablet = await browser.newContext({ viewport: { width: 800, height: 1000 }, locale: 'fr-FR' });
     await mock(tablet);
     for (const path of ['/aide/', '/publier/', '/page-inexistante/']) {
@@ -5928,7 +5935,14 @@ try {
       page = await open(tablet, path, name);
       await page.waitForSelector('main h1');
       expectSame(name, '[en-tête bleu, retour du téléphone, h1 visible]', [await page.locator('.topbar').isVisible(), await page.locator('.phone-page-head').isVisible(),
-        await page.locator('main h1').first().isVisible()], [true, false, true]);
+        await page.locator('main h1').first().evaluate((heading) => heading.getBoundingClientRect().width > 1)], [false, true, false]);
+      if (path === '/aide/') {
+        expectSame(name, 'barre d\'onglets [haut, hauteur, onglets]', await page.evaluate(() => {
+          const bar = document.querySelector('.tabbar');
+          const box = bar.getBoundingClientRect();
+          return [Math.round(innerHeight - box.top), Math.round(box.height), [...bar.querySelectorAll('.tabbar-label')].map((label) => label.textContent)];
+        }), [46, 46, ['Accueil', 'Favoris', 'Publier', 'Messages', 'Mon compte']]);
+      }
       await page.close();
     }
     await tablet.close();

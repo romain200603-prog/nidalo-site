@@ -208,7 +208,7 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
         dismissible={false}
         title={notice === 'manage' ? 'Gérer l\'annonce' : 'Voir les demandes'}
         message="Dans l’app iPhone pour l’instant."
-        actions={[{ label: 'Fermer', onClick: () => setNotice(null), tone: 'primary' }]}
+        actions={[{ label: 'Fermer', onClick: () => setNotice(null), role: 'cancel' }]}
       />
       <AlertDialog
         open={copyLink !== null}
@@ -216,7 +216,7 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
         dismissible={false}
         title="Partager l’annonce"
         message="Copiez ce lien pour partager l’annonce."
-        actions={[{ label: 'Fermer', onClick: () => setCopyLink(null), tone: 'primary' }]}
+        actions={[{ label: 'Fermer', onClick: () => setCopyLink(null), role: 'cancel' }]}
       >
         <input className="copy-link" type="url" readOnly value={copyLink ?? ''} aria-label="Lien de l’annonce" onFocus={(event) => event.currentTarget.select()} autoFocus />
       </AlertDialog>

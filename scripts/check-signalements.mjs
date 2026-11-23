@@ -383,7 +383,7 @@ async function act(page, reason, label, name, { cancel = false } = {}) {
   const tone = await openDialog(page).getByRole('button', { name: label, exact: true }).getAttribute('class');
   await openDialog(page).getByRole('button', { name: cancel ? 'Annuler' : label, exact: true }).click();
   await page.waitForSelector('dialog[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${name} : la fenêtre reste ouverte`));
-  return { title, danger: (tone ?? '').includes('dsc-btn-danger') };
+  return { title, danger: (tone ?? '').includes('btn-danger') };
 }
 
 // MARK: - Vérifications

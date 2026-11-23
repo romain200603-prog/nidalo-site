@@ -131,7 +131,7 @@ function MandateList({ rows: all, listings, scope }: { rows: MandateRow[]; listi
   return (
     <div className="space sales">
       <Toast text={toast} />
-      <ScreenHeader title="Mes mandats" action={<a className="save-capsule" href={NEW_MANDATE_PATH}>Ajouter</a>} />
+      <ScreenHeader title="Mes mandats" action={<a className="nav-text-button" href={NEW_MANDATE_PATH}>Ajouter</a>} />
       {scope && <TeamViewSwitch value={view} onChange={chooseView} mine="Les miens" />}
       {rows.length === 0 ? (
         <EmptyState
@@ -231,7 +231,7 @@ function MandateDetail({ row, listing, scope }: { row: MandateRow; listing: List
   return (
     <div className="space sales sale-page">
       <Toast text={toast} />
-      <ScreenHeader title="Mandat" back={MANDATES_PATH} action={editable ? <a className="save-capsule" href={mandatePath(row.id, true)}>Modifier</a> : undefined} />
+      <ScreenHeader title="Mandat" back={MANDATES_PATH} action={editable ? <a className="nav-text-button" href={mandatePath(row.id, true)}>Modifier</a> : undefined} />
       <section className="sale-head space-card">
         <MandateThumb listing={listing} size="large" />
         <div className="sale-head-text">
@@ -301,8 +301,8 @@ function MandateDetail({ row, listing, scope }: { row: MandateRow; listing: List
         title="Terminer ce mandat ?"
         message="Il passera dans « Terminés », daté d'aujourd'hui. Vous pourrez le reprendre."
         actions={[
-          { label: 'Terminer le mandat', onClick: () => void changeEnded(true), tone: 'primary' },
-          { label: 'Garder le mandat', onClick: () => setDialog(false), tone: 'quiet' },
+          { label: 'Terminer le mandat', onClick: () => void changeEnded(true), role: 'destructive' },
+          { label: 'Garder le mandat', onClick: () => setDialog(false), role: 'cancel' },
         ]}
       />
     </div>
@@ -502,9 +502,9 @@ function MandateEditor({ row, listings, scope }: { row: MandateRow | null; listi
         title="Quitter sans enregistrer ?"
         message="Vos modifications ne sont pas encore enregistrées."
         actions={[
-          { label: 'Enregistrer', onClick: () => { setDialog(null); void save(); }, tone: 'primary' },
-          { label: 'Quitter sans enregistrer', href: backPath },
-          { label: 'Continuer', onClick: () => setDialog(null), tone: 'quiet' },
+          { label: 'Enregistrer', onClick: () => { setDialog(null); void save(); } },
+          { label: 'Quitter sans enregistrer', href: backPath, role: 'destructive' },
+          { label: 'Continuer', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
       <AlertDialog
@@ -515,8 +515,8 @@ function MandateEditor({ row, listings, scope }: { row: MandateRow | null; listi
           ? 'Ses informations, son PDF et sa note seront effacés pour toute l\'agence. L\'annonce ne change pas.'
           : 'Ses informations, son PDF et votre note seront effacés. L\'annonce ne change pas.'}
         actions={[
-          { label: 'Supprimer', onClick: () => void remove(), tone: 'primary' },
-          { label: 'Annuler', onClick: () => setDialog(null), tone: 'quiet' },
+          { label: 'Supprimer', onClick: () => void remove(), role: 'destructive' },
+          { label: 'Annuler', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
     </div>

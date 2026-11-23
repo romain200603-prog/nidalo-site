@@ -49,7 +49,7 @@
   .cmp-delta.is-favorable { background: rgba(87, 121, 101, 0.12); color: var(--d-green); }
   .cmp-delta.is-unfavorable { background: rgba(192, 57, 43, 0.1); color: var(--d-red); }
   .cmp-delta.is-neutral { background: rgba(117, 128, 139, 0.12); color: var(--d-grey); }
-  .cmp-energy { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 24px; border-radius: 6px; font-size: 14px; font-weight: 800; }
+  .cmp-energy { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 24px; border-radius: 6px; font-size: 14px; font-weight: 700; }
   .cmp-notes { margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; list-style: none; }
   .cmp-notes li { display: flex; align-items: flex-start; gap: 6px; color: var(--d-text); font-size: 13px; line-height: 18px; }
   .cmp-notes .icon { flex: none; width: 14px; height: 14px; margin-top: 2px; }
@@ -75,10 +75,4 @@
   .cmp-error.app-offline { margin-top: 24px; padding: 48px 32px; border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; }
 
   .cmp-loading { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 48px; color: var(--d-grey); font-size: 15px; }
-  .cmp-spinner { width: 20px; height: 20px; border: 2px solid var(--d-blue-line); border-top-color: var(--d-blue); border-radius: 50%; animation: cmp-spin 0.8s linear infinite; }
-  @keyframes cmp-spin { to { transform: rotate(360deg); } }
-}
-
-@media (min-width: 1024px) and (prefers-reduced-motion: reduce) {
-  .cmp-spinner { animation-duration: 2.4s; }
 }

@@ -267,9 +267,9 @@ export function MyInfo({ account }: { account: Account }) {
         title="Quitter sans enregistrer ?"
         message="Vos modifications ne sont pas encore enregistrées."
         actions={[
-          { label: 'Enregistrer les modifications', onClick: () => { setDialog(null); void save().then((ok) => { if (ok) window.location.assign(leaveTo); }); }, tone: 'primary' },
-          { label: 'Quitter sans enregistrer', href: leaveTo },
-          { label: 'Continuer', onClick: () => setDialog(null), tone: 'quiet' },
+          { label: 'Enregistrer les modifications', onClick: () => { setDialog(null); void save().then((ok) => { if (ok) window.location.assign(leaveTo); }); } },
+          { label: 'Quitter sans enregistrer', href: leaveTo, role: 'destructive' },
+          { label: 'Continuer', onClick: () => setDialog(null) },
         ]}
       />
       <AlertDialog
@@ -278,8 +278,8 @@ export function MyInfo({ account }: { account: Account }) {
         title="Permettre aux personnes qui ont votre numéro de vous retrouver ?"
         message="Elles vous trouvent dans « Nouveau contact ». Votre numéro ne leur est jamais montré. Modifiable dans Confidentialité et données."
         actions={[
-          { label: 'Oui', onClick: () => { setDialog(null); void saveFindableByPhone(true); }, tone: 'primary' },
-          { label: 'Plus tard', onClick: () => setDialog(null) },
+          { label: 'Oui', onClick: () => { setDialog(null); void saveFindableByPhone(true); } },
+          { label: 'Plus tard', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
       <AlertDialog
@@ -294,9 +294,8 @@ export function MyInfo({ account }: { account: Account }) {
             label: isPro ? 'Passer en particulier' : 'Passer en professionnel',
             // Sans fiche agence, l'app ouvre d'abord le formulaire professionnel : le site aussi (Profil agence).
             onClick: () => (!isPro && !account.profile.professional_profile_id ? leave(AGENCY_FORM_PATH) : void switchType()),
-            tone: 'primary',
           },
-          { label: 'Annuler', onClick: () => setDialog(null) },
+          { label: 'Annuler', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
     </div>

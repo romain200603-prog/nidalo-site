@@ -144,7 +144,7 @@ export function EnergyPicker({ value, onChange }: { value: EnergyClass | null; o
               key={energy}
               type="button"
               className={`energy-step${included ? '' : ' is-excluded'}`}
-              style={{ background: DPE_COLORS[energy], color: energy === 'D' || energy === 'E' ? '#0A1A44' : '#FFFFFF' }}
+              style={{ background: DPE_COLORS[energy], color: energy === 'D' || energy === 'E' ? '#000000' : '#FFFFFF' }}
               aria-pressed={value === energy}
               aria-label={`DPE ${energy}`}
               onClick={() => onChange(value === energy ? null : energy)}

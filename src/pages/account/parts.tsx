@@ -1,26 +1,31 @@
 import { useState, type ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
+import { useFitTexts } from '../listing/fitText';
 import type { IconName } from '../../components/iconPaths';
 import { avatarUrl, initials } from '../../lib/account/profile';
 import { PATHS } from '../../lib/paths';
 
 // Briques des écrans de Mon compte (Features/Profile/MySpaceComponents.swift).
 
-/** En-tête d'un écran : bouton retour, titre au centre, action à droite. */
+/**
+ * En-tête d'un écran : bouton retour, titre au centre de la page, action à droite. Un titre trop long rapetisse jusqu'à
+ * 80 % avant d'être coupé (minimumScaleFactor de NidaloPageHeader).
+ */
 export function ScreenHeader({ title, back = PATHS.account, onBack, action }: {
   title: string;
   back?: string;
   onBack?: () => void;
   action?: ReactNode;
 }) {
+  const ref = useFitTexts<HTMLDivElement>();
   return (
-    <div className="screen-header">
+    <div ref={ref} className="screen-header">
       {onBack ? (
         <button type="button" className="round-back" onClick={onBack} aria-label="Retour"><Icon name="arrowLeft" /></button>
       ) : (
         <a className="round-back" href={back} aria-label="Retour"><Icon name="arrowLeft" /></a>
       )}
-      <h1>{title}</h1>
+      <h1 data-fit="0.8">{title}</h1>
       <div className="screen-header-action">{action}</div>
     </div>
   );

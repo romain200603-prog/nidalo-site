@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ContentUnavailable } from '../../components/ContentUnavailable';
 import { Icon } from '../../components/Icon';
 import { LargeHeader } from '../../components/LargeHeader';
+import { OfflineState } from '../../components/OfflineState';
 import { SectionLabel } from '../../components/MenuRows';
 import { RoundButton } from '../../components/RoundButton';
 import {
@@ -233,6 +234,9 @@ export function AgendaScreen() {
   let content;
   if (state.status === 'loading' && state.visits.length === 0) {
     content = <Spinner label="Chargement des visites…" />;
+  } else if (state.status === 'error' && state.visits.length === 0 && state.offline) {
+    // Coupure de connexion : « Pas de connexion Internet », comme l'app (VisitsAgendaView).
+    content = <OfflineState onRetry={() => void loadAgenda()} />;
   } else if (state.status === 'error' && state.visits.length === 0) {
     content = (
       <ContentUnavailable icon="triangleAlert" title="Visites indisponibles" text={AGENDA_LOAD_ERROR}>
@@ -290,8 +294,8 @@ export function AgendaScreen() {
         </>
       )}
       <div className="app-agenda-panel" role="tabpanel" aria-label={TAB_TITLES[tab]}>{content}</div>
-      <ChoiceDialog open={notice !== null} title={notice ?? ''} onClose={() => setNotice(null)}
-        actions={[{ label: 'OK', onClick: () => setNotice(null), tone: 'primary' }]} />
+      <ChoiceDialog open={notice !== null} title={notice ?? ''} onClose={() => setNotice(null)} dismissible={false}
+        actions={[{ label: 'OK', onClick: () => setNotice(null), role: 'cancel' }]} />
       <IphoneOnlyDialog title={iphoneOnly} onClose={() => setIphoneOnly(null)} />
     </div>
   );

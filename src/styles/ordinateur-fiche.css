@@ -53,7 +53,7 @@
 
   /* Prix (40/800) et prix au m², ou « /mois hors charges ». */
   .dl-price-line { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 12px; }
-  .dl-price-value { color: var(--d-text); font-size: 40px; font-weight: 800; letter-spacing: -0.02em; line-height: 48px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .dl-price-value { color: var(--d-text); font-size: 40px; font-weight: 700; letter-spacing: -0.02em; line-height: 48px; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .dl-price-secondary { color: var(--d-grey); font-size: 16px; font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .dl-condition { margin: 4px 0 0; color: var(--d-grey); font-size: 14px; font-weight: 500; }
   .dl-price-note { margin: 4px 0 0; color: var(--d-grey); font-size: 14px; font-weight: 500; }
@@ -79,7 +79,7 @@
   .dl .spec-banner-label, .dl .spec-banner-detail { color: #E4E9F6; font-size: 15px; font-weight: 400; line-height: 20px; }
   .dl .spec-banner-value { height: 48px; margin-top: 4px; gap: 8px; font-size: 40px; }
   .dl .spec-banner-value.has-unit { margin-bottom: 0; }
-  .dl .spec-banner-amount { font-weight: 800; letter-spacing: -0.02em; line-height: 48px; }
+  .dl .spec-banner-amount { font-weight: 700; letter-spacing: -0.02em; line-height: 48px; }
   .dl .spec-banner-unit { font-size: 0.45em; font-weight: 700; }
   .dl .spec-banner-detail { margin-top: 10px; }
   .dl .spec-banner-hotel .spec-banner-value { height: 44px; font-size: 34px; }
@@ -87,7 +87,7 @@
   .dl .spec-value-box { margin-top: 15px; padding: 16px 20px; border-color: var(--d-card-border); border-radius: 14px; background: #FFFFFF; }
   .dl .spec-value-title { color: var(--d-text); font-size: 16px; font-weight: 700; line-height: 22px; }
   .dl .spec-value-subtitle { color: var(--d-grey); font-size: 14px; font-weight: 400; line-height: 20px; }
-  .dl .spec-box-value { font-size: 22px; font-weight: 800; line-height: 28px; }
+  .dl .spec-box-value { font-size: 22px; font-weight: 700; line-height: 28px; }
   .dl .spec-value-caption { gap: 6px; height: 22px; font-size: 16px; font-weight: 700; }
   .dl .spec-value-caption .icon { width: 16px; height: 16px; }
   .dl .spec-block-title h3, .dl .spec-simulator h3 { color: var(--d-text); font-size: 17px; font-weight: 700; }
@@ -207,7 +207,7 @@
   .dl-label { padding: 0; color: var(--d-text); font-size: 14px; font-weight: 600; line-height: 20px; }
   .dl-amount { display: flex; align-items: center; gap: 8px; height: 56px; padding: 0 16px; border: 1px solid var(--d-field-border); border-radius: 14px; background: #FFFFFF; }
   .dl-amount:focus-within { border-color: var(--d-blue); box-shadow: 0 0 0 3px rgba(60, 92, 176, 0.16); }
-  .dl-amount input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: 0; background: transparent; color: var(--d-text); font: inherit; font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .dl-amount input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: 0; background: transparent; color: var(--d-text); font: inherit; font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .dl-amount input::placeholder { color: var(--d-help); font-weight: 700; }
   .dl-amount span { color: var(--d-grey); font-size: 20px; font-weight: 700; }
   .dl-gap { margin: 0; color: var(--d-text); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -217,7 +217,7 @@
   .dl-yield-title { margin: 0; color: var(--d-text); font-size: 14px; font-weight: 700; line-height: 20px; font-variant-numeric: tabular-nums; }
   .dl-yield-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; column-gap: 12px; row-gap: 2px; margin: 0; }
   .dl-yield-label { color: var(--d-grey); font-size: 14px; font-weight: 600; line-height: 20px; }
-  .dl-yield-value { color: var(--d-text); font-size: 18px; font-weight: 800; line-height: 24px; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  .dl-yield-value { color: var(--d-text); font-size: 18px; font-weight: 700; line-height: 24px; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
   .dl-yield-listed { grid-column: 2; color: var(--d-grey); font-size: 13px; line-height: 18px; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
   .dl-textarea { width: 100%; min-height: 84px; padding: 12px 14px; border: 1px solid var(--d-field-border); border-radius: 14px; background: #FFFFFF; color: var(--d-text); font: inherit; font-size: 15px; line-height: 22px; resize: vertical; }
   .dl-textarea:focus { border-color: var(--d-blue); outline: 0; box-shadow: 0 0 0 3px rgba(60, 92, 176, 0.16); }

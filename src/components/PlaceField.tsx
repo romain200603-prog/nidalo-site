@@ -351,7 +351,7 @@ export function PlaceField({
             aria-describedby={`${id}-proche`} aria-busy={nearby === 'locating' || undefined}>
             <span className="place-shortcut-tile is-nearby"><Icon name="locate" /></span>
             <span className="place-shortcut-name is-nearby">{NEARBY_LABEL}</span>
-            {nearby === 'locating' && <span className="place-shortcut-spinner" aria-hidden="true" />}
+            {nearby === 'locating' && <span className="spinner place-shortcut-spinner" aria-hidden="true" />}
           </button>
           <span id={`${id}-proche`} hidden>Cherche autour de votre position</span>
           <div className="place-nearby-problem" role="status" aria-live="polite">

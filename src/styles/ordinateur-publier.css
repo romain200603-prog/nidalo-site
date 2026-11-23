@@ -40,7 +40,7 @@
   .dpub-head-actions { display: flex; align-items: center; gap: 10px; }
   /* « Publier mon annonce » atténué tant qu'il manque quelque chose : un clic mène au champ à compléter. */
   .dpub .dsc-button.is-dimmed { opacity: 0.45; }
-  .dpub-spinner { width: 18px; height: 18px; border-width: 2px; }
+  .dpub-spinner { width: 18px; height: 18px; }
   .dpub-progress-text { color: var(--d-grey); font-size: 14px; font-weight: 600; text-align: center; }
   .dpub .dsc-action-buttons.is-single { grid-template-columns: minmax(0, 1fr); }
 
@@ -134,7 +134,7 @@
   .dpub-indicator-top { display: flex; align-items: center; gap: 8px; }
   .dpub-indicator-title { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; }
   .dpub-hypothesis { flex: none; padding: 2px 8px; border-radius: 999px; background: #FDF1E1; color: #A25311; font-size: 12px; font-weight: 700; }
-  .dpub-indicator-value { flex: none; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .dpub-indicator-value { flex: none; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .dpub-indicator-value.is-empty { color: var(--d-help); }
   .dpub-indicator-formula { color: var(--d-grey); font-size: 13px; line-height: 18px; }
 
@@ -148,7 +148,7 @@
   .dpub-photo-menu:hover { background: #FFFFFF; }
   .dpub-photo-menu .icon { width: 18px; height: 18px; }
   .dpub-importing { display: flex; align-items: center; gap: 8px; color: var(--d-grey); font-size: 14px; font-weight: 600; }
-  .dpub-importing .spinner { width: 16px; height: 16px; border-width: 2px; }
+  .dpub-importing .spinner { width: 16px; height: 16px; }
 
   /* Description et aperçu. */
   .dpub-propose { align-self: flex-start; padding: 2px 0; border: 0; background: none; color: var(--d-blue); font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; }
@@ -181,8 +181,6 @@
   .dpub-success p { max-width: 460px; color: var(--d-grey); font-size: 15px; line-height: 22px; }
   .dpub-success-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 8px; }
 
-  /* « Votre prénom » avant la première publication. */
-  .dpub-name-input { margin-top: 4px; }
 }
 
 @keyframes dpub-step-from-right { from { opacity: 0; transform: translateX(100%); } }

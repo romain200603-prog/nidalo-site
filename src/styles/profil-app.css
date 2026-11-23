@@ -6,7 +6,7 @@
 
 /* 6 au-dessus du retour, comme l'app. */
 .account-wrap:has(> .app-profile-step) { padding-top: 6px; }
-@media (max-width: 760px) {
+@media (max-width: 1023px) {
   body:has(.app-profile-step) { padding-bottom: 0; }
   body:has(.app-profile-step) .tabbar { display: none; }
 }
@@ -17,7 +17,7 @@
 .app-profile-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .app-profile-step-text { color: var(--app-text-secondary); font-size: 13px; font-weight: 600; line-height: 18px; }
 .app-profile-bar { margin-top: 6px; }
-.app-profile-title { margin-top: 20px; color: var(--app-navy); font-size: 26px; font-weight: 800; line-height: 32px; }
+.app-profile-title { margin-top: 20px; color: var(--app-navy); font-size: 26px; font-weight: 700; line-height: 32px; }
 .app-profile-subtitle { margin-top: 6px; color: var(--app-text-secondary); font-size: 15px; font-weight: 500; line-height: 20px; }
 
 /* Cartes de choix : 12 entre elles, 20 sous le texte. Choisie : bordure bleue de 2, ombre bleue (rayon 10 de l'app :

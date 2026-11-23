@@ -55,9 +55,9 @@
 }
 /* Fenêtre d'une action (favori, recherche enregistrée…) : plein écran sur téléphone, 480 px sur ordinateur. */
 .signin-sheet { width: 100vw; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: #FAF9F6; color: #1F2430; overflow: hidden; overscroll-behavior: contain; }
-.signin-sheet::backdrop { background: rgba(10, 26, 68, 0.45); }
+.signin-sheet::backdrop { background: rgba(36, 45, 56, 0.45); }
 @media (min-width: 1024px) {
-  .signin-sheet { width: 480px; height: min(760px, calc(100dvh - 48px)); margin: auto; border-radius: 28px; box-shadow: 0 24px 64px rgba(10, 26, 68, 0.28); }
+  .signin-sheet { width: 480px; height: min(760px, calc(100dvh - 48px)); margin: auto; border-radius: 28px; box-shadow: 0 24px 64px rgba(36, 45, 56, 0.28); }
 }
 .auth.is-dialog { height: 100%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: none; }
 
@@ -90,7 +90,7 @@
 /* Le lancement en boucle : entre le bas de la croix (43 sous le haut) et le haut du titre, sur toute la largeur. */
 .auth-loop-zone { position: relative; flex: 1 1 0; min-height: 0; margin: -11px -20px 0; }
 .auth-welcome-head { padding: 0 4px; }
-.auth-hero-title { color: var(--auth-ink); font-size: 33px; font-weight: 800; line-height: 37px; letter-spacing: -1px; }
+.auth-hero-title { color: var(--auth-ink); font-size: 33px; font-weight: 700; line-height: 37px; letter-spacing: -1px; }
 .auth-hero-subtitle { margin-top: 13px; color: var(--auth-subtle); font-size: 15px; font-weight: 500; line-height: calc(1.21em + 2px); }
 .auth-welcome-head .team-intro { margin-top: 14px; }
 .auth-hero-space { height: 6px; margin-top: 18px; }
@@ -108,7 +108,7 @@
 .auth-apple .auth-provider-logo { width: 18px; height: 18px; margin-top: -2px; }
 .auth-provider .icon { width: 19px; height: 19px; stroke-width: 1.75; }
 .auth-provider[disabled] { cursor: default; }
-.auth-provider .spinner { width: 19px; height: 19px; border-width: 2.5px; }
+.auth-provider .spinner { width: 19px; height: 19px; }
 @media (hover: hover) {
   .auth-provider:not([disabled]):hover { background: #F7F6F3; }
   .auth-provider.auth-apple:not([disabled]):hover { background: #1A1A1A; }
@@ -150,7 +150,7 @@
 .auth-steps { justify-content: flex-end; }
 .auth-head-box { position: relative; }
 .auth-step-head { position: relative; padding: 16px 24px 24px; }
-.auth-step-title { color: var(--auth-ink); font-size: 30px; font-weight: 800; line-height: 1.21; }
+.auth-step-title { color: var(--auth-ink); font-size: 30px; font-weight: 700; line-height: 1.21; }
 .auth-step-subtitle { margin-top: 8px; color: var(--auth-subtle); font-size: 15px; font-weight: 500; line-height: calc(1.21em + 2px); }
 .auth-step-head .team-intro { margin-top: 14px; }
 .auth h1:focus { outline: none; }

@@ -17,6 +17,7 @@ import { replyComposerTitle } from '../../lib/messages/interactions';
 import { sendAttachments, sendText } from '../../lib/messages/store';
 import { groupSender, needsFirstName } from '../../lib/messages/thread';
 import { ReplyComposerBar } from './MessageInteractions';
+import { DialogContent } from '../listing/Dialogs';
 import { Dialog, Sheet, showIphoneOnly, showNotice } from './parts';
 
 // Zone de saisie (demande de Romain du 14 novembre 2026) : réponses rapides selon le contexte, puis « + » (pièces
@@ -408,10 +409,14 @@ function FirstNameDialog({ open, lastName, onClose, onSend }: { open: boolean; l
 function FirstNameForm({ id, lastName, onClose, onSend }: { id: string; lastName: string; onClose: () => void; onSend: (first: string) => void }) {
   const [value, setValue] = useState('');
   return (
-    <form
-      className="alert-body"
-      onSubmit={(event) => {
-        event.preventDefault();
+    <DialogContent
+      titleId={`${id}-titre`}
+      textId={`${id}-texte`}
+      title="Votre prénom"
+      message={`Affiché à votre interlocuteur : ${publicName(value === '' ? 'Prénom' : value, lastName, false)}.`}
+      alert
+      onDismiss={onClose}
+      onSubmit={() => {
         const first = value.trim();
         // Comme l'alerte de l'app : « Envoyer » la referme ; sans prénom, rien n'est envoyé.
         if (!first) {
@@ -420,11 +425,10 @@ function FirstNameForm({ id, lastName, onClose, onSend }: { id: string; lastName
         }
         onSend(first);
       }}
+      actions={[{ label: 'Envoyer', submit: true }, { label: 'Annuler', onClick: onClose, role: 'cancel' }]}
     >
-      <h2 id={`${id}-titre`}>Votre prénom</h2>
-      <p id={`${id}-texte`}>Affiché à votre interlocuteur : {publicName(value === '' ? 'Prénom' : value, lastName, false)}.</p>
       <input
-        className="text-input dm-name-input"
+        className="dialog-field dm-name-input"
         value={value}
         onChange={(event) => setValue(event.currentTarget.value)}
         placeholder="Prénom"
@@ -432,11 +436,7 @@ function FirstNameForm({ id, lastName, onClose, onSend }: { id: string; lastName
         autoComplete="given-name"
         autoFocus
       />
-      <div className="alert-actions">
-        <button type="submit" className="btn btn-primary">Envoyer</button>
-        <button type="button" className="btn btn-quiet" onClick={onClose}>Annuler</button>
-      </div>
-    </form>
+    </DialogContent>
   );
 }
 

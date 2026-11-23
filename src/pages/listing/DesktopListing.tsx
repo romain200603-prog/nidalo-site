@@ -278,8 +278,8 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
         title="Numéro non disponible"
         message={`Ce ${isRental ? 'propriétaire' : 'vendeur'} ne communique pas son numéro. Écrivez-lui sur Nidalo.`}
         actions={[
-          { label: 'Envoyer un message', onClick: () => { setNotice(null); contactSeller(); }, tone: 'primary' },
-          { label: 'Fermer', onClick: () => setNotice(null), tone: 'quiet' },
+          { label: 'Envoyer un message', onClick: () => { setNotice(null); contactSeller(); } },
+          { label: 'Fermer', onClick: () => setNotice(null), role: 'cancel' },
         ]}
       />
       {conversationAlert}
@@ -289,7 +289,7 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
         dismissible={false}
         title={notice === 'manage' ? NOTICE_TITLES.manage : NOTICE_TITLES.requests}
         message="Dans l’app iPhone pour l’instant."
-        actions={[{ label: 'Fermer', onClick: () => setNotice(null), tone: 'primary' }]}
+        actions={[{ label: 'Fermer', onClick: () => setNotice(null), role: 'cancel' }]}
       />
       <AlertDialog
         open={copyLink !== null}
@@ -297,7 +297,7 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
         dismissible={false}
         title="Partager l’annonce"
         message="Copiez ce lien pour partager l’annonce."
-        actions={[{ label: 'Fermer', onClick: () => setCopyLink(null), tone: 'primary' }]}
+        actions={[{ label: 'Fermer', onClick: () => setCopyLink(null), role: 'cancel' }]}
       >
         <input className="copy-link" type="url" readOnly value={copyLink ?? ''} aria-label="Lien de l’annonce" onFocus={(event) => event.currentTarget.select()} autoFocus />
       </AlertDialog>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Icon } from '../../components/Icon';
-import { AlertDialog, Modal } from '../listing/Dialogs';
+import { AlertDialog, DialogContent, Modal } from '../listing/Dialogs';
 import { FiltersDialog } from '../FiltersDialog';
 import {
   budgetLabelOf, criteriaLabelsOf, deleteSearch, draftFromQuery, loadSavedSearches, markViewed, MODE_TITLES, modeOf,
@@ -202,15 +202,11 @@ export function SavedSearchesList({ embedded = false, counts: provided }: {
           }}
         />
       )}
-      <Modal open={renaming !== null} onClose={() => setRenaming(null)} className="alert-dialog" label="Renommer la recherche">
-        <form className="alert-body" onSubmit={(event) => { event.preventDefault(); void confirmRename(); }}>
-          <h2>Renommer la recherche</h2>
-          <input className="text-input" aria-label="Nom" placeholder="Nom" value={newName} maxLength={80} onChange={(event) => setNewName(event.target.value)} autoFocus />
-          <div className="alert-actions">
-            <button type="submit" className="btn btn-primary">Renommer</button>
-            <button type="button" className="btn btn-light" onClick={() => setRenaming(null)}>Annuler</button>
-          </div>
-        </form>
+      <Modal open={renaming !== null} onClose={() => setRenaming(null)} className="alert-dialog" label="Renommer la recherche" dismissible={false}>
+        <DialogContent title="Renommer la recherche" alert onDismiss={() => setRenaming(null)} onSubmit={() => void confirmRename()}
+          actions={[{ label: 'Annuler', onClick: () => setRenaming(null), role: 'cancel' }, { label: 'Renommer', submit: true }]}>
+          <input className="dialog-field" aria-label="Nom" placeholder="Nom" value={newName} maxLength={80} onChange={(event) => setNewName(event.target.value)} autoFocus />
+        </DialogContent>
       </Modal>
       <AlertDialog
         open={toDelete !== null}
@@ -218,16 +214,16 @@ export function SavedSearchesList({ embedded = false, counts: provided }: {
         title="Supprimer cette recherche ?"
         message=""
         actions={[
-          { label: `Supprimer « ${toDelete?.name ?? ''} »`, onClick: () => void confirmDelete(), tone: 'primary' },
-          { label: 'Annuler', onClick: () => setToDelete(null) },
+          { label: `Supprimer « ${toDelete?.name ?? ''} »`, onClick: () => void confirmDelete(), role: 'destructive' },
+          { label: 'Annuler', onClick: () => setToDelete(null), role: 'cancel' },
         ]}
       />
       <AlertDialog
         open={notice !== null}
         onClose={() => setNotice(null)}
         title={notice ?? ''}
-        message=""
-        actions={[{ label: 'OK', onClick: () => setNotice(null), tone: 'primary' }]}
+        dismissible={false}
+        actions={[{ label: 'OK', onClick: () => setNotice(null), role: 'cancel' }]}
       />
     </div>
   );

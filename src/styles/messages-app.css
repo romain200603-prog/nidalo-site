@@ -177,7 +177,7 @@
   .dm-side-top { gap: 0; padding: 8px 16px 10px; }
   .dm-side-head { align-items: center; }
   .dm-side-title { gap: 4px; }
-  .dm-side-head h1 { font-size: 30px; font-weight: 800; line-height: 36px; letter-spacing: -0.01em; }
+  .dm-side-head h1 { font-size: 30px; font-weight: 700; line-height: 36px; letter-spacing: -0.01em; }
   .dm-side-sub { font-size: 15px; line-height: 20px; }
   .dm-search-line { margin-top: 15px; }
   .dm-search { height: 52px; padding-left: 13px; }
@@ -185,7 +185,7 @@
   .dm-tabs { gap: 8px; margin-top: 13px; }
   .dm-tab { padding: 0 15px; }
   .dm-list-scroll { padding: 0 16px 20px; }
-  .dm-list-title { display: block; margin: 12px 0 10px; font-size: 18px; font-weight: 800; line-height: 24px; }
+  .dm-list-title { display: block; margin: 12px 0 10px; font-size: 18px; font-weight: 700; line-height: 24px; }
   .dm-list { gap: 0; padding: 4px 0; border: 1px solid var(--m-line); border-radius: 22px; background: #FFFFFF; box-shadow: 0 2px 8px rgba(36, 45, 56, 0.05); }
   .dm-list > li { position: relative; }
   /* Trait fin entre deux discussions, aligné sur le nom. */

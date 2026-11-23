@@ -125,8 +125,8 @@ export function Hub({ account }: { account: Account }) {
         title="Se déconnecter ?"
         message="Vous pourrez vous reconnecter à tout moment."
         actions={[
-          { label: 'Se déconnecter', onClick: () => { setDialog(null); void signOut(); }, tone: 'primary' },
-          { label: 'Annuler', onClick: () => setDialog(null) },
+          { label: 'Se déconnecter', onClick: () => { setDialog(null); void signOut(); }, role: 'destructive' },
+          { label: 'Annuler', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
       <AlertDialog
@@ -137,9 +137,9 @@ export function Hub({ account }: { account: Account }) {
         actions={[
           // Sans fiche agence, l'app ouvre d'abord le formulaire professionnel : le site aussi (Profil agence).
           !isPro && !account.profile.professional_profile_id
-            ? { label: 'Passer en professionnel', href: AGENCY_FORM_PATH, tone: 'primary' }
-            : { label: isPro ? 'Passer en particulier' : 'Passer en professionnel', onClick: () => void switchType(), tone: 'primary' },
-          { label: 'Annuler', onClick: () => setDialog(null) },
+            ? { label: 'Passer en professionnel', href: AGENCY_FORM_PATH }
+            : { label: isPro ? 'Passer en particulier' : 'Passer en professionnel', onClick: () => void switchType() },
+          { label: 'Annuler', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
     </div>

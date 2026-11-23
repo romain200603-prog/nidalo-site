@@ -85,7 +85,7 @@
 /* Bloc date de 52 × 60 (coins 14) : jour abrégé, numéro en grand, mois, très gras, aux couleurs de l'état. */
 .app-visit-date {
   display: flex; flex: none; flex-direction: column; align-items: center; justify-content: center; width: 52px; height: 60px;
-  border-radius: 14px; background: var(--tone-bg); color: var(--tone-ink); font-weight: 800;
+  border-radius: 14px; background: var(--tone-bg); color: var(--tone-ink); font-weight: 700;
 }
 .app-visit-weekday { font-size: 11px; line-height: 14px; }
 .app-visit-day { font-size: 22px; line-height: 27px; font-variant-numeric: tabular-nums; }
@@ -95,7 +95,7 @@
 /* L'horaire, puis l'état à droite ; quand la place manque (téléphone étroit), l'état passe dessous, à gauche. */
 .app-visit-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 16px; }
 .app-visit-time {
-  min-width: 0; overflow: hidden; color: var(--app-navy); font-size: 15.5px; font-weight: 800; line-height: 20px; font-variant-numeric: tabular-nums;
+  min-width: 0; overflow: hidden; color: var(--app-navy); font-size: 15.5px; font-weight: 700; line-height: 20px; font-variant-numeric: tabular-nums;
   text-overflow: ellipsis; white-space: nowrap;
 }
 .app-visit-time.is-cancelled { text-decoration: line-through; text-decoration-color: rgba(36, 45, 56, 0.6); }

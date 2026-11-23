@@ -565,8 +565,8 @@ export function AddVisit({ fromAgenda }: { fromAgenda: boolean }) {
         message="Les modifications de cette visite seront perdues."
         onClose={() => setLeaving(false)}
         actions={[
-          { label: 'Quitter sans enregistrer', onClick: () => window.location.assign(back), tone: 'danger' },
-          { label: 'Continuer la saisie', onClick: () => setLeaving(false) },
+          { label: 'Quitter sans enregistrer', onClick: () => window.location.assign(back), role: 'destructive' },
+          { label: 'Continuer la saisie', onClick: () => setLeaving(false), role: 'cancel' },
         ]}
       />
       <IphoneOnlyDialog title={iphoneOnly} onClose={() => setIphoneOnly(null)} />

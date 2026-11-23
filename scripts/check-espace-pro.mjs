@@ -2444,7 +2444,7 @@ try {
     const all = (selector) => [...document.querySelectorAll(selector)];
     return {
       header: text(document.querySelector('.screen-header h1')),
-      invite: document.querySelector('.screen-header .save-capsule')?.getAttribute('href') ?? null,
+      invite: document.querySelector('.screen-header .nav-text-button')?.getAttribute('href') ?? null,
       title: text(document.querySelector('.team-head .sale-title')),
       line: text(document.querySelector('.team-head .sale-city')),
       role: text(document.querySelector('.team-head .sale-state')),
@@ -2683,7 +2683,7 @@ try {
       const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : null);
       const team = document.querySelector('.agency-card a[href="/compte/?vue=equipes"]');
       return {
-        edit: Boolean(document.querySelector('.screen-header .save-capsule')),
+        edit: Boolean(document.querySelector('.screen-header .nav-text-button')),
         name: text(document.querySelector('.agency-name')),
         place: text(document.querySelector('.agency-place')),
         cards: [...document.querySelectorAll('.agency-card-title')].map(text),
@@ -2957,11 +2957,11 @@ try {
     await page.locator('.contact-row', { hasText: 'Bruno Lefèvre' }).click();
     await page.locator('.contact-head').waitFor();
     expectSame(N, 'fiche du contact de Julien', [
-      tidy(await page.locator('.screen-header .save-capsule').textContent()), tidy(await page.locator('.contact-head .team-author').textContent()),
+      tidy(await page.locator('.screen-header .nav-text-button').textContent()), tidy(await page.locator('.contact-head .team-author').textContent()),
       await page.locator('textarea.contact-note').inputValue(), await texts(page, '.contact-card .contact-caption'),
     ], ['Modifier', 'Ajouté par Julien B.', JULIEN_CONTACT.note, ['L\'équipe de l\'agence voit ce contact et sa note.']]);
     await shot(page, 'partage-telephone-contact.png');
-    await page.locator('.screen-header .save-capsule').click();
+    await page.locator('.screen-header .nav-text-button').click();
     await page.locator('form.info-form').waitFor();
     expectSame(N, 'formulaire du contact de Julien', tidy(await page.locator('.contact-form-screen .field-hint').textContent()), 'L\'équipe de l\'agence voit ce contact et sa note.');
     await field(page, 'Note (facultative)').fill('Estimation faite le 6, à rappeler.');
@@ -2985,10 +2985,10 @@ try {
     await page.locator('.sale-row', { hasText: 'T2 meublé Jean Macé' }).click();
     await page.locator('.sale-head').waitFor();
     expectSame(N, 'fiche du mandat d\'Inès', [
-      tidy(await page.locator('.screen-header .save-capsule').textContent()), tidy(await page.locator('.sale-head .team-author').textContent()),
+      tidy(await page.locator('.screen-header .nav-text-button').textContent()), tidy(await page.locator('.sale-head .team-author').textContent()),
       await texts(page, '.sale-card-title'), await texts(page, '.sale-card .sale-caption'), await page.locator('.mandate-end').count(),
     ], ['Modifier', 'Ajouté par Inès K.', ['Le mandat', 'Mandat signé', 'Note'], ['L\'équipe de l\'agence voit cette note.'], 1]);
-    await page.locator('.screen-header .save-capsule').click();
+    await page.locator('.screen-header .nav-text-button').click();
     await page.locator('form.info-form').waitFor();
     expectSame(N, 'formulaire du mandat d\'Inès', [
       await page.locator('.mandate-select select').inputValue(), await texts(page, '.mandate-select option'),
@@ -3042,7 +3042,7 @@ try {
     const readOnlyContact = async (what) => {
       await page.locator('.contact-head').waitFor();
       expectSame(N, what, [
-        await page.locator('.screen-header .save-capsule').count(), tidy(await page.locator('.contact-head .team-author').textContent()),
+        await page.locator('.screen-header .nav-text-button').count(), tidy(await page.locator('.contact-head .team-author').textContent()),
         await page.locator('textarea.contact-note').count(), tidy(await page.locator('.contact-note-text').textContent()),
         await texts(page, '.contact-card .contact-caption'),
       ], [0, 'Ajouté par Gérard G.', 0, GERARD_CONTACT.note, ['Seuls son auteur, le gérant et les responsables de l\'agence peuvent modifier ce contact.']]);
@@ -3061,7 +3061,7 @@ try {
     const readOnlyMandate = async (what) => {
       await page.locator('.sale-head').waitFor();
       expectSame(N, what, [
-        await page.locator('.screen-header .save-capsule').count(), tidy(await page.locator('.sale-head .team-author').textContent()),
+        await page.locator('.screen-header .nav-text-button').count(), tidy(await page.locator('.sale-head .team-author').textContent()),
         await page.locator('.mandate-end, .sale-resume').count(), await texts(page, '.sale-caption'),
       ], [0, 'Ajouté par Gérard G.', 0, [
         'Aucun PDF pour ce mandat.', 'L\'équipe de l\'agence voit cette note.',

@@ -167,8 +167,8 @@ export function Reports() {
         message={asked?.message}
         onClose={() => { if (!busy) setPending(null); }}
         actions={pending && asked ? [
-          { label: busy ? 'Un instant…' : ACTION_LABELS[pending.action], onClick: () => void confirm(), tone: asked.danger ? 'danger' : 'primary' },
-          { label: 'Annuler', onClick: () => { if (!busy) setPending(null); } },
+          { label: busy ? 'Un instant…' : ACTION_LABELS[pending.action], onClick: () => void confirm(), role: asked.danger ? 'destructive' : undefined },
+          { label: 'Annuler', onClick: () => { if (!busy) setPending(null); }, role: 'cancel' },
         ] : []}
       />
     </div>

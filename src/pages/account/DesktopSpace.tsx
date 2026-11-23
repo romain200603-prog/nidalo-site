@@ -222,8 +222,8 @@ export function DesktopSpace({ account }: { account: Account }) {
         title="Se déconnecter ?"
         message="Vous pourrez vous reconnecter à tout moment."
         actions={[
-          { label: 'Se déconnecter', onClick: () => { setDialog(null); void signOut(); }, tone: 'danger' },
-          { label: 'Annuler', onClick: () => setDialog(null) },
+          { label: 'Se déconnecter', onClick: () => { setDialog(null); void signOut(); }, role: 'destructive' },
+          { label: 'Annuler', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
       <ChoiceDialog
@@ -233,8 +233,8 @@ export function DesktopSpace({ account }: { account: Account }) {
         message="Vous pourrez revenir en arrière à tout moment depuis Type de compte."
         actions={[
           // Sans fiche agence, l'app ouvre d'abord le parcours professionnel : le site aussi (Profil agence, comme Hub).
-          { label: 'Passer en professionnel', onClick: () => (account.profile.professional_profile_id ? void switchType() : window.location.assign(AGENCY_FORM_PATH)), tone: 'primary' },
-          { label: 'Annuler', onClick: () => setDialog(null) },
+          { label: 'Passer en professionnel', onClick: () => (account.profile.professional_profile_id ? void switchType() : window.location.assign(AGENCY_FORM_PATH)) },
+          { label: 'Annuler', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
       <IphoneOnlyDialog title={iphoneOnly} onClose={() => setIphoneOnly(null)} />

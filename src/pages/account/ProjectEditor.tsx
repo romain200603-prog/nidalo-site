@@ -667,8 +667,8 @@ function Editor({ saved }: { saved: Project }) {
         message="Les critères des autres parcours sont conservés."
         onClose={() => setResetting(false)}
         actions={[
-          { label: 'Réinitialiser', onClick: () => { setDraft((current) => resetCategory(current)); setResetting(false); }, tone: 'danger' },
-          { label: 'Annuler', onClick: () => setResetting(false) },
+          { label: 'Réinitialiser', onClick: () => { setDraft((current) => resetCategory(current)); setResetting(false); }, role: 'destructive' },
+          { label: 'Annuler', onClick: () => setResetting(false), role: 'cancel' },
         ]}
       />
       <ChoiceDialog
@@ -676,9 +676,9 @@ function Editor({ saved }: { saved: Project }) {
         title="Enregistrer les modifications ?"
         onClose={() => setLeaving(false)}
         actions={[
-          { label: 'Enregistrer', onClick: () => { setLeaving(false); void save().then((project) => { if (project) window.location.assign(back); }); }, tone: 'primary' },
-          { label: 'Quitter sans enregistrer', onClick: () => window.location.assign(back), tone: 'danger' },
-          { label: 'Continuer la saisie', onClick: () => setLeaving(false) },
+          { label: 'Enregistrer', onClick: () => { setLeaving(false); void save().then((project) => { if (project) window.location.assign(back); }); } },
+          { label: 'Quitter sans enregistrer', onClick: () => window.location.assign(back), role: 'destructive' },
+          { label: 'Continuer la saisie', onClick: () => setLeaving(false), role: 'cancel' },
         ]}
       />
     </div>

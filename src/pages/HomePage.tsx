@@ -4,6 +4,7 @@ import { Icon } from '../components/Icon';
 import type { IconName } from '../components/iconPaths';
 import { Page } from '../components/Layout';
 import { ModeTabs } from '../components/ModeTabs';
+import { OfflineState } from '../components/OfflineState';
 import { PlaceField } from '../components/PlaceField';
 import { SelectionDialog } from '../components/SelectionDialog';
 import { FiltersDialog } from './FiltersDialog';
@@ -15,6 +16,7 @@ import { notificationsLabel } from '../lib/badges';
 import { highlightsFor } from '../lib/highlights';
 import { categoryFields, categoryMoreHint, categorySearchTitle, homeTiles, moreCriteriaHint, type CriterionTileSpec } from '../lib/homeCriteria';
 import { loadHomeFeed, type HomeFeed } from '../lib/homeFeed';
+import { isOfflineFailure } from '../lib/loadFailure';
 import type { SearchMode } from '../lib/labels';
 import type { ListingRow } from '../lib/listings';
 import { loadNotifications, notificationsStore, unreadNotificationCount } from '../lib/notifications';
@@ -376,13 +378,21 @@ function ResumeSearchCard({ item }: { item: SavedSearch }) {
 
 type Extras = { viewed: ListingRow[]; similar: Result[] };
 
+/**
+ * Sections sous la carte de recherche (HomeView.feedContent de l'app, ScreenLoadState) : les sections ; sans réseau et
+ * sans rien à montrer, « Pas de connexion Internet » à leur place (les villes restent) ; pendant « Réessayer », la roue.
+ */
+type FeedStatus = 'content' | 'offline' | 'loading';
+
 type PhoneHomeProps = CategoryCardProps & {
   drafts: Record<SearchMode, SearchDraft>;
   feed: HomeFeed | null;
+  feedStatus: FeedStatus;
+  onRetryFeed: () => void;
   extras: Extras;
 };
 
-function PhoneHome({ mode, draft, drafts, feed, extras, changeMode, update, choosePlace, startSearch, openFilters }: PhoneHomeProps) {
+function PhoneHome({ mode, draft, drafts, feed, feedStatus, onRetryFeed, extras, changeMode, update, choosePlace, startSearch, openFilters }: PhoneHomeProps) {
   const session = useSession();
   const userId = session.status === 'signedIn' ? session.userId : null;
   const saved = useStore(savedSearchesStore);
@@ -394,12 +404,12 @@ function PhoneHome({ mode, draft, drafts, feed, extras, changeMode, update, choo
     void loadSavedSearches();
   }, [session.status, userId]);
 
-  // Cloche : les notifications non lues font le point rouge. Lues une fois, sans temps réel (la barre du haut n'est
-  // visible que sous 761 px ; au-dessus, l'en-tête bleu du site prend sa place).
+  // Cloche : les notifications non lues font le point rouge. Lues une fois, sans temps réel (la barre du haut de
+  // l'accueil n'est visible que sous 1024 px ; au-dessus, la barre du haut de l'ordinateur prend sa place).
   useEffect(() => {
     if (userId === null) return;
     const phone = () => {
-      try { return window.matchMedia('(max-width: 760px)').matches; } catch { return false; }
+      try { return window.matchMedia('(max-width: 1023px)').matches; } catch { return false; }
     };
     if (phone()) void loadNotifications();
     const onShow = (event: PageTransitionEvent) => { if (event.persisted && phone()) void loadNotifications(); };
@@ -410,7 +420,8 @@ function PhoneHome({ mode, draft, drafts, feed, extras, changeMode, update, choo
   const unread = userId !== null && notifications.status === 'ready' ? unreadNotificationCount(notifications.items) : 0;
   const resume = saved.status === 'ready' && userId !== null ? lastSavedSearch(saved.items) : null;
   const sectionHref = searchHref(draft);
-  const opportunities = feed?.opportunities ?? [];
+  const sections = feedStatus === 'content';
+  const opportunities = sections ? feed?.opportunities ?? [] : [];
   const highlightsOf = (row: ListingRow) => highlightsFor(row, null);
   return (
     <div className="home-app">
@@ -419,7 +430,9 @@ function PhoneHome({ mode, draft, drafts, feed, extras, changeMode, update, choo
         startSearch={startSearch} openFilters={openFilters} />
       {resume && <ResumeSearchCard item={resume} />}
 
-      <div className="home-app-sections" aria-busy={feed === null}>
+      <div className="home-app-sections" aria-busy={feed === null || feedStatus === 'loading'}>
+        {feedStatus === 'offline' && <OfflineState onRetry={onRetryFeed} className="home-feed-state" />}
+        {feedStatus === 'loading' && <div className="home-feed-state home-feed-loading"><span className="spinner" role="status" aria-label="Chargement" /></div>}
         {opportunities.length > 0 && (
           <section className="home-app-section is-first" aria-labelledby="opportunites">
             <AppSectionHeader id="opportunites" title="Opportunités du moment" subtitle="Sélectionnés selon vos critères et le marché."
@@ -449,7 +462,7 @@ function PhoneHome({ mode, draft, drafts, feed, extras, changeMode, update, choo
           </ul>
         </section>
 
-        {extras.viewed.length > 0 && (
+        {sections && extras.viewed.length > 0 && (
           <section className="home-app-section" aria-labelledby="consultes">
             <AppSectionHeader id="consultes" title="Consultés récemment" href={sectionHref} icon="clock" tint="gray" />
             <ul className="home-app-carousel">
@@ -462,7 +475,7 @@ function PhoneHome({ mode, draft, drafts, feed, extras, changeMode, update, choo
           </section>
         )}
 
-        {extras.similar.length > 0 && (
+        {sections && extras.similar.length > 0 && (
           <section className="home-app-section" aria-labelledby="similaires">
             <AppSectionHeader id="similaires" title="Biens similaires à vos recherches" href={sectionHref} icon="crosshair" tint="green" />
             <ul className="home-app-carousel">
@@ -475,7 +488,7 @@ function PhoneHome({ mode, draft, drafts, feed, extras, changeMode, update, choo
           </section>
         )}
 
-        {feed && feed.newest.length > 0 && (
+        {sections && feed && feed.newest.length > 0 && (
           <section className="home-app-section" aria-labelledby="nouveautes">
             <AppSectionHeader id="nouveautes" title="Nouveautés" subtitle="Les dernières annonces publiées sur Nidalo." href={sectionHref}
               icon="zap" tint="amber" />
@@ -489,7 +502,7 @@ function PhoneHome({ mode, draft, drafts, feed, extras, changeMode, update, choo
           </section>
         )}
 
-        {feed && feed.priceDrops.length > 0 && (
+        {sections && feed && feed.priceDrops.length > 0 && (
           <section className="home-app-section" aria-labelledby="baisses">
             <AppSectionHeader id="baisses" title="Baisses de prix" subtitle="Des biens qui ont récemment baissé leur prix." href={sectionHref}
               icon="trendingDown" tint="red" />
@@ -613,6 +626,8 @@ type DesktopHomeProps = {
   drafts: Record<SearchMode, SearchDraft>;
   tiles: CriterionTileSpec[];
   feed: HomeFeed | null;
+  feedStatus: FeedStatus;
+  onRetryFeed: () => void;
   extras: Extras;
   update: (change: (current: SearchDraft) => SearchDraft) => void;
   changeMode: (next: SearchMode) => void;
@@ -621,8 +636,12 @@ type DesktopHomeProps = {
   openFilters: () => void;
 };
 
-function DesktopHome({ greeting, mode, draft, drafts, tiles, feed, extras, update, changeMode, choosePlace, startSearch, openFilters }: DesktopHomeProps) {
-  const { viewed, similar } = extras;
+function DesktopHome({ greeting, mode, draft, drafts, tiles, feed: loadedFeed, feedStatus, onRetryFeed, extras, update, changeMode, choosePlace, startSearch, openFilters }: DesktopHomeProps) {
+  // Sans réseau ou pendant « Réessayer » : l'état de l'app à la place des sections.
+  const sections = feedStatus === 'content';
+  const feed = sections ? loadedFeed : null;
+  const viewed = sections ? extras.viewed : [];
+  const similar = sections ? extras.similar : [];
   const sectionHref = searchHref(draft);
   return (
     <div className="dhome">
@@ -668,7 +687,9 @@ function DesktopHome({ greeting, mode, draft, drafts, tiles, feed, extras, updat
         </form>
       </div>
 
-      <div className="dhome-sections" aria-busy={feed === null}>
+      <div className="dhome-sections" aria-busy={loadedFeed === null || feedStatus === 'loading'}>
+        {feedStatus === 'offline' && <div className="dhome-inner"><OfflineState onRetry={onRetryFeed} className="home-feed-state" /></div>}
+        {feedStatus === 'loading' && <div className="dhome-inner home-feed-state home-feed-loading"><span className="spinner" role="status" aria-label="Chargement" /></div>}
         {feed && feed.opportunities.length > 0 && (
           <section className="home-section dhome-section dhome-opportunities" aria-labelledby="opportunites">
             <div className="dhome-inner">
@@ -742,6 +763,10 @@ export function HomePage() {
   );
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [feed, setFeed] = useState<HomeFeed | null>(null);
+  // Coupure de connexion à la dernière lecture des sections (LoadFailure.offline(among:) de l'app), lecture en cours.
+  const [feedOffline, setFeedOffline] = useState(false);
+  const [feedLoading, setFeedLoading] = useState(true);
+  const [feedAttempt, setFeedAttempt] = useState(0);
   const draft = drafts[mode];
   const session = useSession();
   const account = useStore(accountStore);
@@ -752,18 +777,34 @@ export function HomePage() {
 
   useEffect(() => {
     let cancelled = false;
+    setFeedLoading(true);
     loadHomeFeed((row) => highlightsFor(row, null))
-      .then((loaded) => { if (!cancelled) setFeed(loaded); })
-      // Sections en plus de la recherche : sans réseau, l'accueil reste utilisable sans elles.
-      .catch(() => { if (!cancelled) setFeed({ opportunities: [], newest: [], priceDrops: [] }); });
+      .then((loaded) => {
+        if (cancelled) return;
+        setFeed(loaded);
+        setFeedOffline(false);
+      })
+      // Sections en plus de la recherche : une autre erreur les laisse vides, l'accueil reste utilisable sans elles ;
+      // une coupure de connexion le dit, comme l'app.
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setFeed({ opportunities: [], newest: [], priceDrops: [] });
+        setFeedOffline(isOfflineFailure(error));
+      })
+      .finally(() => { if (!cancelled) setFeedLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [feedAttempt]);
 
   // Le projet du compte règle la recherche de sa catégorie (AppRouter.applyProject), sauf si elle a déjà été
   // modifiée sur la page.
   const applyProject = (kind: SearchMode, next: SearchDraft, untouched: SearchDraft) =>
     setDrafts((all) => (all[kind] === untouched ? { ...all, [kind]: next } : all));
   const extras = useHomeExtras(mode, draft, drafts, applyProject);
+  // ScreenLoadState.resolve de l'app : ce qui est déjà là reste ; sinon la coupure, ou la roue pendant « Réessayer ».
+  const hasContent = feed !== null
+    && feed.opportunities.length + feed.newest.length + feed.priceDrops.length + extras.viewed.length + extras.similar.length > 0;
+  const feedStatus: FeedStatus = hasContent || !feedOffline ? 'content' : feedLoading ? 'loading' : 'offline';
+  const retryFeed = () => setFeedAttempt((n) => n + 1);
 
   const update = (change: (current: SearchDraft) => SearchDraft) =>
     setDrafts((all) => ({ ...all, [mode]: change(all[mode]) }));
@@ -794,10 +835,12 @@ export function HomePage() {
   return (
     <Page section="home">
       {desktop ? (
-        <DesktopHome greeting={greeting} mode={mode} draft={draft} drafts={drafts} tiles={homeTiles(draft)} feed={feed} extras={extras}
+        <DesktopHome greeting={greeting} mode={mode} draft={draft} drafts={drafts} tiles={homeTiles(draft)} feed={feed}
+          feedStatus={feedStatus} onRetryFeed={retryFeed} extras={extras}
           update={update} changeMode={changeMode} choosePlace={choosePlace} startSearch={startSearch} openFilters={openFilters} />
       ) : (
-        <PhoneHome mode={mode} draft={draft} drafts={drafts} feed={feed} extras={extras} changeMode={changeMode} update={update}
+        <PhoneHome mode={mode} draft={draft} drafts={drafts} feed={feed} feedStatus={feedStatus} onRetryFeed={retryFeed} extras={extras}
+          changeMode={changeMode} update={update}
           choosePlace={choosePlace} startSearch={startSearch} openFilters={openFilters} />
       )}
       <FiltersDialog

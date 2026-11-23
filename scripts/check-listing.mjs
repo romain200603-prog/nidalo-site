@@ -671,7 +671,7 @@ async function checkMap(page, name, { coordinate, approximate, shots }) {
   if (!(await page.$('dialog.map-dialog[open]'))) problems.push(`${name}: Échap sur « Itinéraire » ferme aussi la carte`);
   await page.click('dialog.map-dialog[open] .full-map-card .btn-primary');
   expect(name, 'titre de la fenêtre rouverte', await dialogTitle(page), 'Itinéraire');
-  await page.click('dialog.alert-dialog[open] .btn-quiet');
+  await page.click('dialog.alert-dialog[open] .btn-light');
   await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached' });
   await page.click('dialog.map-dialog[open] [aria-label="Retour"]');
   await page.waitForSelector('dialog.map-dialog[open]', { state: 'detached' });
@@ -1029,7 +1029,7 @@ async function checkOwnerBar(page, name) {
  * Pastille « Demander » : 32 px, comme « Agenda » à côté d'elle (téléphone : 13 px gras, aux couleurs des pastilles de
  * la fiche ; ordinateur : celles de la colonne).
  */
-const PHONE_PILL = '32 13px 700 rgb(234, 240, 251) rgb(31, 91, 198)';
+const PHONE_PILL = '32 13px 700 rgb(238, 242, 250) rgb(60, 92, 176)';
 const DESKTOP_PILL = '32 14px 600 rgb(238, 242, 250) rgb(60, 92, 176)';
 
 /** Pastille « Demander » de la carte « Aucune visite prévue » (agendaCard de l'app) : la capsule d'« Agenda ». */
@@ -1162,7 +1162,7 @@ async function checkDesktopLayout(page, name) {
   const gap = width >= 1280 ? 40 : 32;
   if (m.main && m.aside && Math.abs(m.aside.x - (m.main.x + m.main.w) - gap) > 1) problems.push(`${name}: ${Math.round(m.aside.x - m.main.x - m.main.w)} px entre les colonnes au lieu de ${gap}`);
   expect(name, 'taille du titre', m.title, '36px');
-  expect(name, 'taille du prix', `${m.price} ${m.priceWeight}`, '40px 800');
+  expect(name, 'taille du prix', `${m.price} ${m.priceWeight}`, '40px 700');
   if (m.buttons.some((h) => h !== 48)) problems.push(`${name}: boutons de ${m.buttons.join(', ')} px au lieu de 48`);
   if (m.buttons.length + m.capsules.length === 0) problems.push(`${name}: ni boutons ni capsules dans la colonne de droite`);
   if (m.capsules.length && (m.capsules.length !== 2 || m.capsules.some((c) => c.h !== 56) || Math.abs(m.capsules[0].top - m.capsules[1].top) > 0.5)) {
@@ -1624,7 +1624,7 @@ try {
     await page.waitForSelector('dialog.signin-sheet[open] .signin-card', { timeout: 5000 }).catch(() => problems.push(`${name}: la connexion ne s'ouvre pas`));
     expect(name, 'adresse', page.url(), `${base}/annonce/?id=${SALE}`);
     if (await page.$('.dl-screen')) problems.push(`${name}: l'écran s'affiche sans compte`);
-    if (await page.$('.card.state')) problems.push(`${name}: un message « bientôt » est affiché`);
+    if (await page.$('.soon-page')) problems.push(`${name}: un message « bientôt » est affiché`);
     await page.keyboard.press('Escape');
     await page.waitForSelector('dialog.signin-sheet[open]', { state: 'detached' });
     await page.close();
@@ -1636,9 +1636,9 @@ try {
     ['/comparer/', 'comparer-telephone', 'Comparer', screenSoon],
   ]) {
     page = await open(phone, path, name);
-    await page.waitForSelector('.card.state h1');
-    expect(name, 'titre', await page.textContent('.card.state h1'), title);
-    expect(name, 'message', await page.textContent('.card.state p'), text);
+    await page.waitForSelector('.soon-page h1');
+    expect(name, 'titre', await page.textContent('.soon-page h1'), title);
+    expect(name, 'message', await page.textContent('.soon-page p'), text);
     expect(name, 'titre de la page', await page.title(), `${title} · Nidalo`);
     if (await page.$('.dl, .dl-screen, .cmp, .action-bar')) problems.push(`${name}: autre chose que le message « bientôt »`);
     await page.screenshot({ path: join(out, `${name}.png`) });
@@ -2285,7 +2285,10 @@ try {
   if (!(await page.$('.cmp-add'))) problems.push('comparer: « Ajouter un bien » absent avec deux biens');
   await page.click('.cmp-clear');
   expect('comparer', 'fenêtre pour vider', await dialogTitle(page), 'Vider la comparaison ?');
-  await page.click('dialog[open] .alert-actions .btn-primary');
+  // « Vider » est destructif dans l'app (CompareView) : bouton rouge, et le triangle d'alerte en tête de la fenêtre.
+  expect('comparer', 'boutons pour vider', JSON.stringify(await page.$$eval('dialog[open] .alert-actions .btn', (els) => els.map((el) => [el.textContent, el.className]))),
+    JSON.stringify([['Vider', 'btn btn-danger'], ['Annuler', 'btn btn-light']]));
+  await page.click('dialog[open] .alert-actions .btn-danger');
   await page.waitForSelector('.cmp-empty');
   expectJSON('comparer', 'comparaison vidée', JSON.parse(await page.evaluate(() => sessionStorage.getItem('nidalo.comparer'))), { ids: [], referenceId: null });
   await page.screenshot({ path: join(out, 'comparer-vide-1440.png') });

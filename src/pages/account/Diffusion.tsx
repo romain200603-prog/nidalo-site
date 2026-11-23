@@ -76,7 +76,7 @@ export function Diffusion() {
         onClose={() => setOpen(null)}
         title="Lien de l'annonce"
         message="Copiez ce lien pour le partager."
-        actions={[{ label: 'Fermer', onClick: () => setOpen(null), tone: 'primary' }]}
+        actions={[{ label: 'Fermer', onClick: () => setOpen(null), role: 'cancel' }]}
       >
         {open?.kind === 'link' && <input className="text-input diffusion-link" readOnly value={publicListingUrl(open.row.id)} onFocus={(event) => event.target.select()} />}
       </AlertDialog>
@@ -141,8 +141,8 @@ function QrDialog({ row, onClose }: { row: ListingRow | null; onClose: () => voi
       title="QR code de l'annonce"
       message="Scanné avec un téléphone, il ouvre cette annonce sur nidalo.fr."
       actions={[
-        { label: 'Télécharger le QR code', onClick: () => void download(), tone: 'primary' },
-        { label: 'Fermer', onClick: () => { setError(null); onClose(); } },
+        { label: 'Télécharger le QR code', onClick: () => void download() },
+        { label: 'Fermer', onClick: () => { setError(null); onClose(); }, role: 'cancel' },
       ]}
     >
       {row && (
@@ -181,8 +181,8 @@ function TextDialog({ row, onClose, onCopied }: { row: ListingRow | null; onClos
       title="Texte pour les réseaux sociaux"
       message="À coller dans une publication ou un message, avec le lien de l'annonce."
       actions={[
-        { label: 'Copier le texte', onClick: () => void copy(), tone: 'primary' },
-        { label: 'Fermer', onClick: () => { setHint(null); onClose(); } },
+        { label: 'Copier le texte', onClick: () => void copy() },
+        { label: 'Fermer', onClick: () => { setHint(null); onClose(); }, role: 'cancel' },
       ]}
     >
       {row && (

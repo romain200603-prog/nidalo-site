@@ -237,7 +237,7 @@ function DesktopCompare({ mode }: { mode: SearchMode | null }) {
           <a className="cmp-discover" href={mode ? searchModePath(mode) : PATHS.search}>Découvrir les biens</a>
         </div>
       )}
-      {waiting && <div className="cmp-loading" role="status" aria-busy="true"><span className="cmp-spinner" aria-hidden="true" />Chargement…</div>}
+      {waiting && <div className="cmp-loading" role="status" aria-busy="true"><span className="spinner" aria-hidden="true" />Chargement…</div>}
       {/* Aucun bien lu (pas de connexion, serveur qui ne répond pas) : l'état commun de l'app (n° 64). */}
       {unavailable && <OfflineState className="cmp-error" onRetry={retry} />}
       {!empty && !waiting && !unavailable && (
@@ -262,8 +262,8 @@ function DesktopCompare({ mode }: { mode: SearchMode | null }) {
         title="Vider la comparaison ?"
         message="Les biens restent dans vos favoris et vos recherches."
         actions={[
-          { label: 'Vider', onClick: () => { clearCompare(); setConfirmClear(false); }, tone: 'primary' },
-          { label: 'Annuler', onClick: () => setConfirmClear(false), tone: 'quiet' },
+          { label: 'Vider', onClick: () => { clearCompare(); setConfirmClear(false); }, role: 'destructive' },
+          { label: 'Annuler', onClick: () => setConfirmClear(false), role: 'cancel' },
         ]}
       />
     </div>

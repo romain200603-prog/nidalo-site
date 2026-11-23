@@ -5,6 +5,7 @@ import { Page } from '../components/Layout';
 import { cardTag, ListingCard } from '../components/ListingCard';
 import { CriterionChipsRow, FiltersButton } from '../components/CriterionChips';
 import { ModeTabs } from '../components/ModeTabs';
+import { LoadErrorState, OfflineState } from '../components/OfflineState';
 import { PlaceField } from '../components/PlaceField';
 import { ListingPhoto } from '../components/PhotoPager';
 import { SearchNoResults } from '../components/SearchNoResults';
@@ -28,6 +29,7 @@ import { sortedPhotos } from '../lib/listings';
 import { listingPath, PATHS } from '../lib/paths';
 import { circle, distanceMeters, isUsable as isUsableZone, largestLoop, rounded, scaled, SCALE_STEP, simplified, smoothed } from '../lib/drawnZone';
 import type { Coordinate, PlaceSuggestion } from '../lib/places';
+import { isOfflineFailure, SEARCH_LOAD_ERROR } from '../lib/loadFailure';
 import { recentlyViewedIds } from '../lib/recentlyViewed';
 import {
   activeFilterCount, boxAround, chosenFromSuggestion, defaultDraft, draftFromParams, drawnZoneOf, effectiveSort, filterChips,
@@ -37,7 +39,8 @@ import {
 import { GOOD_YIELD, grossYieldText } from '../lib/cardContent';
 import '../styles/recherche-app.css';
 
-type Status = { kind: 'loading' } | { kind: 'ready'; results: Result[] } | { kind: 'error' };
+/** `offline` : la demande n'a pas pu partir (LoadFailure.isOffline de l'app) : « Pas de connexion Internet ». */
+type Status = { kind: 'loading' } | { kind: 'ready'; results: Result[] } | { kind: 'error'; offline: boolean };
 
 /**
  * Zone dessinée en cours (MapTabView de l'app) : tracé, ou zone proposée à ajuster puis valider ; elle ne remplace le
@@ -229,7 +232,7 @@ export function SearchPage() {
           : [{ latitude: Number(row.public_latitude), longitude: Number(row.public_longitude) }]));
         setFrame((f) => ({ token: f.token + 1, box: points.length || box ? box : null, points, zone: drawnZoneOf(draft) !== null }));
       })
-      .catch(() => { if (!cancelled) setStatus({ kind: 'error' }); });
+      .catch((error: unknown) => { if (!cancelled) setStatus({ kind: 'error', offline: isOfflineFailure(error) }); });
     return () => { cancelled = true; };
   }, [key, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -305,7 +308,8 @@ export function SearchPage() {
   const filterCount = activeFilterCount(draft);
   const sort = effectiveSort(draft);
   /** En-tête des résultats (nombre, tri, « Enregistrer ») : pendant la recherche et avec des annonces, comme l'app. */
-  const showsHeader = status.kind === 'loading' || results.length > 0;
+  // Comme l'app : l'en-tête des résultats (nombre, tri) seulement quand il y a des annonces.
+  const showsHeader = results.length > 0;
   const statusText = status.kind === 'loading' ? 'Recherche…' : status.kind === 'error' ? 'Recherche impossible' : countLabel(results.length, draft.mode);
   /** Bouton « Carte » : avec des annonces, hors saisie du lieu et sans message en bas de l'écran. */
   const showsMapButton = results.length > 0 && !editingPlace && !toastShown;
@@ -495,19 +499,13 @@ export function SearchPage() {
             </div>
           )}
 
-          {status.kind === 'loading' && (
-            <div className="results-list" aria-hidden="true">
-              {[0, 1].map((i) => <div key={i} className="card listing-card skeleton-card"><div className="skeleton photo-skeleton" /><div className="skeleton line" /><div className="skeleton line short" /></div>)}
-            </div>
-          )}
-          {status.kind === 'error' && (
-            <div className="card state">
-              <Icon name="triangleAlert" />
-              <h3>La recherche n’a pas pu se faire</h3>
-              <p>Vérifiez votre connexion à internet, puis réessayez.</p>
-              <button type="button" className="btn btn-primary" onClick={() => setAttempt((a) => a + 1)}>Réessayer</button>
-            </div>
-          )}
+          {/* Chargement : la roue grise de l'app (ProgressView), 32 sous les critères ; « Recherche… » pour les lecteurs
+              d'écran (ligne cachée au-dessus). */}
+          {status.kind === 'loading' && <div className="search-loading" aria-hidden="true"><span className="spinner" /></div>}
+          {/* Échec : « Pas de connexion Internet » sans réseau, sinon « Erreur » et le texte de l'app (SearchViewModel). */}
+          {status.kind === 'error' && (status.offline
+            ? <OfflineState onRetry={() => setAttempt((a) => a + 1)} className="search-failure" />
+            : <LoadErrorState title="Erreur" message={SEARCH_LOAD_ERROR} onRetry={() => setAttempt((a) => a + 1)} className="search-failure" />)}
           {status.kind === 'ready' && results.length === 0 && (
             <SearchNoResults
               draft={draft}

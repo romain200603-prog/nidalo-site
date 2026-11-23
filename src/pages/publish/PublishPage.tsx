@@ -20,7 +20,7 @@ import {
 } from '../../lib/publish/flow';
 import { loadListingForEdit, saveListing, type Loaded } from '../../lib/publish/save';
 import { knownCityCenter } from '../../lib/search';
-import { Modal } from '../listing/Dialogs';
+import { DialogContent, Modal } from '../listing/Dialogs';
 import { ChoiceDialog, ScreenHead } from '../account/DesktopParts';
 import { Spinner } from '../account/parts';
 import { type Update } from './controls';
@@ -615,7 +615,8 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
         title={refusal?.firstName ? 'Prénom non enregistré' : 'Publication refusée'}
         message={refusal?.message ?? ''}
         onClose={() => setRefusal(null)}
-        actions={[{ label: 'Compris', onClick: () => setRefusal(null), tone: 'primary' }]}
+        dismissible={false}
+        actions={[{ label: 'Compris', onClick: () => setRefusal(null), role: 'cancel' }]}
       />
       <ChoiceDialog
         open={leaving}
@@ -624,9 +625,9 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
         onClose={() => setLeaving(false)}
         actions={[
           editing
-            ? { label: 'Enregistrer les modifications', tone: 'primary', onClick: () => { setLeaving(false); void publish(); } }
-            : { label: 'Enregistrer le brouillon', tone: 'primary', onClick: () => { setLeaving(false); void saveDraft().then((ok) => { if (ok) leaveNow(); }); } },
-          { label: 'Quitter sans enregistrer', tone: 'danger', onClick: () => { setLeaving(false); leaveNow(); } },
+            ? { label: 'Enregistrer les modifications', onClick: () => { setLeaving(false); void publish(); } }
+            : { label: 'Enregistrer le brouillon', onClick: () => { setLeaving(false); void saveDraft().then((ok) => { if (ok) leaveNow(); }); } },
+          { label: 'Quitter sans enregistrer', role: 'destructive', onClick: () => { setLeaving(false); leaveNow(); } },
           { label: 'Continuer', onClick: () => setLeaving(false) },
         ]}
       />
@@ -647,7 +648,7 @@ function PublishFlow({ start, account, fromMyListings, photosFirst }: { start: S
 function FirstNameDialog({ open, lastName, onClose, onPublish }: { open: boolean; lastName: string; onClose: () => void; onPublish: (first: string) => void }) {
   const id = useId();
   return (
-    <Modal open={open} onClose={onClose} className="alert-dialog dsc-dialog" labelledBy={`${id}-titre`} describedBy={`${id}-texte`}>
+    <Modal open={open} onClose={onClose} className="alert-dialog" labelledBy={`${id}-titre`} describedBy={`${id}-texte`} dismissible={false}>
       <FirstNameForm id={id} lastName={lastName} onClose={onClose} onPublish={onPublish} />
     </Modal>
   );
@@ -657,10 +658,15 @@ function FirstNameForm({ id, lastName, onClose, onPublish }: { id: string; lastN
   const [value, setValue] = useState('');
   const shown = publicName(value === '' ? 'Prénom' : value, lastName, false);
   return (
-    <form
-      className="alert-body"
-      onSubmit={(event) => {
-        event.preventDefault();
+    <DialogContent
+      titleId={`${id}-titre`}
+      textId={`${id}-texte`}
+      title="Votre prénom"
+      // « Claire M. » finit déjà par un point : pas de second point (l'app affiche « Claire M.. »).
+      message={`Affiché sur l'annonce : ${shown.endsWith('.') ? shown : `${shown}.`}`}
+      alert
+      onDismiss={onClose}
+      onSubmit={() => {
         const first = value.trim();
         // Comme l'alerte de l'app : « Publier » la referme ; sans prénom, rien n'est publié.
         if (!first) {
@@ -669,16 +675,10 @@ function FirstNameForm({ id, lastName, onClose, onPublish }: { id: string; lastN
         }
         onPublish(first);
       }}
+      actions={[{ label: 'Publier', submit: true }, { label: 'Annuler', onClick: onClose, role: 'cancel' }]}
     >
-      <h2 id={`${id}-titre`}>Votre prénom</h2>
-      {/* « Claire M. » finit déjà par un point : pas de second point (l'app affiche « Claire M.. »). */}
-      <p id={`${id}-texte`}>Affiché sur l'annonce : {shown.endsWith('.') ? shown : `${shown}.`}</p>
-      <input className="dsc-input dpub-name-input" value={value} onChange={(event) => setValue(event.currentTarget.value)} placeholder="Prénom"
+      <input className="dialog-field dpub-name-input" value={value} onChange={(event) => setValue(event.currentTarget.value)} placeholder="Prénom"
         aria-label="Prénom" autoComplete="given-name" maxLength={50} autoFocus />
-      <div className="alert-actions">
-        <button type="submit" className="btn dsc-btn-primary">Publier</button>
-        <button type="button" className="btn dsc-btn-quiet" onClick={onClose}>Annuler</button>
-      </div>
-    </form>
+    </DialogContent>
   );
 }

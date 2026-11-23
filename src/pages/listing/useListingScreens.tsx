@@ -246,7 +246,7 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
       dismissible={false}
       title={CONVERSATION_ERROR_TITLE}
       message={conversationError}
-      actions={[{ label: 'OK', onClick: () => setConversationError(null), tone: 'light' }]}
+      actions={[{ label: 'OK', onClick: () => setConversationError(null), role: 'cancel' }]}
     />
   );
 

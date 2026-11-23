@@ -47,7 +47,7 @@ function ItineraryDialog({ open, onClose, coordinate, isApproximate }: { open: b
         : 'L\'itinéraire mène au point indiqué sur l\'annonce.'}
       actions={[
         ...directionsLinks(coordinate).map((link) => ({ ...link, external: true })),
-        { label: 'Annuler', onClick: onClose, tone: 'quiet' as const },
+        { label: 'Annuler', onClick: onClose, role: 'cancel' as const },
       ]}
     />
   );

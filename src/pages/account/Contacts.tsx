@@ -98,7 +98,7 @@ function ContactList({ contacts: all, scope }: { contacts: Contact[]; scope: Tea
   return (
     <div className="space contacts">
       <Toast text={toast} />
-      <ScreenHeader title="Mes contacts" action={<a className="save-capsule" href={NEW_CONTACT_PATH}>Ajouter</a>} />
+      <ScreenHeader title="Mes contacts" action={<a className="nav-text-button" href={NEW_CONTACT_PATH}>Ajouter</a>} />
       {scope && <TeamViewSwitch value={view} onChange={chooseView} mine="Les miens" />}
       {contacts.length === 0 ? (
         <EmptyState
@@ -209,7 +209,7 @@ function ContactDetail({ contact, scope }: { contact: Contact; scope: TeamScope 
       <ScreenHeader
         title="Contact"
         back={CONTACTS_PATH}
-        action={isManual && editable ? <a className="save-capsule" href={contactPath(contact.key, true)}>Modifier</a> : undefined}
+        action={isManual && editable ? <a className="nav-text-button" href={contactPath(contact.key, true)}>Modifier</a> : undefined}
       />
       <section className="contact-head space-card">
         <Avatar name={contact.name} path={contact.avatarPath} size={76} />
@@ -395,9 +395,9 @@ function ContactEditor({ contact, scope }: { contact: Contact | null; scope: Tea
         title="Quitter sans enregistrer ?"
         message="Vos modifications ne sont pas encore enregistrées."
         actions={[
-          { label: 'Enregistrer', onClick: () => { setDialog(null); void save(); }, tone: 'primary' },
-          { label: 'Quitter sans enregistrer', href: backPath },
-          { label: 'Continuer', onClick: () => setDialog(null), tone: 'quiet' },
+          { label: 'Enregistrer', onClick: () => { setDialog(null); void save(); } },
+          { label: 'Quitter sans enregistrer', href: backPath, role: 'destructive' },
+          { label: 'Continuer', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
       <AlertDialog
@@ -406,8 +406,8 @@ function ContactEditor({ contact, scope }: { contact: Contact | null; scope: Tea
         title="Supprimer ce contact ?"
         message={authorOf(scope, contact?.ownerId) ? 'Ses coordonnées et sa note seront effacées pour toute l\'agence.' : 'Ses coordonnées et votre note seront effacées.'}
         actions={[
-          { label: 'Supprimer', onClick: () => void remove(), tone: 'primary' },
-          { label: 'Annuler', onClick: () => setDialog(null), tone: 'quiet' },
+          { label: 'Supprimer', onClick: () => void remove(), role: 'destructive' },
+          { label: 'Annuler', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
     </div>

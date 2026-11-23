@@ -258,8 +258,8 @@ export function useBadges(): Badges {
   };
 }
 
-/** Barre d'onglets du bas : affichée sous 761 px (styles/app.css). */
-const TAB_BAR_QUERY = '(max-width: 760px)';
+/** Barre d'onglets du bas : affichée sous 1024 px (styles/app.css). */
+const TAB_BAR_QUERY = '(max-width: 1023px)';
 
 function tabBarQuery(): MediaQueryList | null {
   try {

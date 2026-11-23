@@ -614,8 +614,8 @@ try {
     await mock(context, state);
     for (const path of ['/publier/', `/publier/?annonce=${ONLINE_ID}`]) {
       const page = await open(context, path, `${name} ${path}`);
-      await page.waitForSelector('.card.state h1');
-      expectSame(`${name} ${path}`, 'page « bientôt »', [await textOf(page, '.card.state h1'), await textOf(page, '.card.state p'), await page.locator('.dpub').count()],
+      await page.waitForSelector('.soon-page h1');
+      expectSame(`${name} ${path}`, 'page « bientôt »', [await textOf(page, '.soon-page h1'), await textOf(page, '.soon-page p'), await page.locator('.dpub').count()],
         ['Publier une annonce', 'Bientôt sur le site. Pour l’instant, une annonce se publie dans l’app : touchez le bouton + au centre de la barre du bas.', 0]);
       await page.close();
     }
@@ -650,11 +650,11 @@ try {
       await page.locator(CONTINUE).isDisabled()], ['Résidentiel', 'Appartement', 1, false]);
     // Fenêtre rétrécie un instant sous 1024 px : le message du téléphone à la place, puis la saisie revient telle quelle.
     await page.setViewportSize({ width: 800, height: 900 });
-    await page.waitForSelector('.card.state h1');
-    expectSame(N, 'fenêtre étroite', [await page.locator('.dpub-root').isHidden(), await textOf(page, '.card.state h1')], [true, 'Publier une annonce']);
+    await page.waitForSelector('.soon-page h1');
+    expectSame(N, 'fenêtre étroite', [await page.locator('.dpub-root').isHidden(), await textOf(page, '.soon-page h1')], [true, 'Publier une annonce']);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.waitForSelector('.dpub .dpub-category-grid');
-    expectSame(N, 'saisie gardée', [...await chosen(), await page.locator('.card.state').count()], ['Résidentiel', 'Appartement', 0]);
+    expectSame(N, 'saisie gardée', [...await chosen(), await page.locator('.soon-page').count()], ['Résidentiel', 'Appartement', 0]);
     await shot(page, 'publier-1-categorie.png');
     expectSame(N, 'saisie gardée après la capture', await chosen(), ['Résidentiel', 'Appartement']);
     await page.click(CONTINUE);
@@ -887,7 +887,8 @@ try {
     await page.click('.dpub-close');
     await page.waitForSelector('dialog.alert-dialog[open]');
     expectSame(N, 'quitter ?', [await textOf(page, 'dialog[open] h2'), await page.$$eval('dialog[open] .alert-actions button', (els) => els.map((el) => el.textContent.trim()))],
-      ['Quitter la publication ?', ['Enregistrer le brouillon', 'Quitter sans enregistrer', 'Continuer']]);
+      // « Continuer » n'a pas le rôle d'annulation dans l'app : la fenêtre de choix ajoute son « Annuler » (DomiaDialog).
+      ['Quitter la publication ?', ['Enregistrer le brouillon', 'Quitter sans enregistrer', 'Continuer', 'Annuler']]);
     await shot(page, 'publier-brouillon-quitter.png');
     await page.click('dialog[open] button:text("Continuer")');
     await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached' }).catch(() => undefined);

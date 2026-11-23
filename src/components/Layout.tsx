@@ -4,12 +4,14 @@ import '../styles/app.css';
 // Ordinateur (≥ 1024 px seulement) : police Inter, couleurs, barre du haut, pied de page, colonne de 640 px.
 import '../styles/ordinateur.css';
 import { ToastHost } from './AppToast';
+import { ContentUnavailable } from './ContentUnavailable';
 import { DesktopFooter } from './DesktopFooter';
 import { DesktopHeader } from './DesktopHeader';
 import { Icon } from './Icon';
 import type { IconName } from './iconPaths';
 import { PageHeader } from './PageHeader';
 import { SignInSheet } from './account/SignInSheet';
+import { StrokeIcon } from './StrokeIcon';
 import { badgeText, messagesLabel, useTabBarBadge } from '../lib/badges';
 import { CONTACT_EMAIL } from '../lib/config';
 import { useDesktop } from '../lib/desktop';
@@ -65,36 +67,38 @@ function isListingPage(): boolean {
 }
 
 /**
- * Barre du bas sur téléphone, comme l'app : Accueil · Favoris · + · Messages · Mon compte, avec la pastille des
- * messages non lus sur Messages (« 99+ » au-delà de 99, n° 44). La page Messages lit déjà ses non-lus en direct.
+ * Barre d'onglets de l'app (AppTabBar.swift), sous 1024 px : Accueil · Favoris · « + » Publier · Messages · Mon compte,
+ * chacun avec son libellé dessous, et la pastille des messages non lus sur Messages (« 99+ » au-delà de 99, n° 44). La
+ * page Messages lit déjà ses non-lus en direct. Icônes de l'app : maison redessinée (encre de 18, trait de 1,6), cœur
+ * Lucide de 24, carré bleu de 28 au « + » de 18, bulle message-square-text de 19,56, circle-user de 22.
  */
 export function TabBar({ section }: { section: Section }) {
   const unread = useTabBarBadge(section !== 'messages' && !isListingPage());
   return (
     <nav className="tabbar" aria-label="Menu">
       <a href={PATHS.home} aria-current={current(section === 'home' || section === 'search')}>
-        <Icon name="house" />
-        Accueil
+        <span className="tabbar-icon"><StrokeIcon glyph="house" inkWidth={18} lineWidth={1.6} className="icon tabbar-house" /></span>
+        <span className="tabbar-label">Accueil</span>
       </a>
       <a href={PATHS.favorites} aria-current={current(section === 'favorites')}>
-        <Icon name="heart" />
-        Favoris
+        <span className="tabbar-icon"><Icon name="heart" className="icon tabbar-heart" /></span>
+        <span className="tabbar-label">Favoris</span>
       </a>
-      <a href={PATHS.publish} aria-current={current(section === 'publish')} aria-label="Publier une annonce">
-        <span className="plus">
-          <Icon name="plus" />
-        </span>
+      {/* Un bouton, pas un onglet, dans l'app : jamais en bleu ; son libellé pour les lecteurs d'écran. */}
+      <a className="tabbar-publish" href={PATHS.publish} aria-current={current(section === 'publish')} aria-label="Publier une annonce">
+        <span className="tabbar-icon"><span className="plus"><Icon name="plus" /></span></span>
+        <span className="tabbar-label">Publier</span>
       </a>
       <a href={PATHS.messages} aria-current={current(section === 'messages')} aria-label={unread > 0 ? messagesLabel(unread) : undefined}>
         <span className="tabbar-icon">
-          <Icon name="messages" />
-          {unread > 0 && <span className="tabbar-badge" aria-hidden="true">{badgeText(unread, 99)}</span>}
+          <Icon name="messageSquareText" className="icon tabbar-messages" />
+          {unread > 0 && <span className={`tabbar-badge${unread > 9 ? ' is-wide' : ''}`} aria-hidden="true">{badgeText(unread, 99)}</span>}
         </span>
-        Messages
+        <span className="tabbar-label">Messages</span>
       </a>
       <a href={PATHS.account} aria-current={current(section === 'account')}>
-        <Icon name="user" />
-        Mon compte
+        <span className="tabbar-icon"><Icon name="user" className="icon tabbar-account" /></span>
+        <span className="tabbar-label">Mon compte</span>
       </a>
     </nav>
   );
@@ -129,13 +133,12 @@ export function isFramed(): boolean {
 export function Framed() {
   return (
     <main className="wrap wrap-narrow">
-      <div className="card state">
-        <h1>Ouvrez Nidalo dans son propre onglet</h1>
-        <p>Pour votre sécurité, Nidalo ne s’affiche pas à l’intérieur d’un autre site.</p>
-        <a className="btn btn-primary" href="https://nidalo.fr/" target="_top" rel="noopener">
+      <ContentUnavailable icon="lock" title="Ouvrez Nidalo dans son propre onglet" heading="h1"
+        text="Pour votre sécurité, Nidalo ne s’affiche pas à l’intérieur d’un autre site.">
+        <a className="btn btn-light" href="https://nidalo.fr/" target="_top" rel="noopener">
           Aller sur nidalo.fr
         </a>
-      </div>
+      </ContentUnavailable>
     </main>
   );
 }

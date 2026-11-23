@@ -6,7 +6,7 @@ import { knownSignedUrl, signedUrl } from '../../lib/messages/files';
 import { avatarUrl } from '../../lib/account/profile';
 import { avatarColors, avatarKey, counterpartInitials, type Conversation, type Counterpart } from '../../lib/messages/inbox';
 import { profileOf } from '../../lib/messages/store';
-import { AlertDialog, Modal } from '../listing/Dialogs';
+import { AlertDialog, DialogContent, Modal } from '../listing/Dialogs';
 
 // Morceaux communs de la page Messages : avatars à initiales (InitialsAvatar), badge PRO / Particulier
 // (PublisherBadge), images du bucket privé par URL signée, menus ⋮, avis « OK » (domiaAlert) et fenêtre
@@ -136,19 +136,15 @@ export function NoticeDialogs() {
   return (
     <>
       <Dialog open={notice?.kind === 'notice'} onClose={close} className="alert-dialog dm-dialog" labelledBy={`${id}-avis`} dismissible={false}>
-        <div className="alert-body">
-          <h2 id={`${id}-avis`}>{notice?.kind === 'notice' ? notice.text : ''}</h2>
-          <div className="alert-actions">
-            <button type="button" className="btn btn-primary" onClick={close} autoFocus>OK</button>
-          </div>
-        </div>
+        <DialogContent titleId={`${id}-avis`} title={notice?.kind === 'notice' ? notice.text : ''} alert onDismiss={close}
+          actions={[{ label: 'OK', onClick: close, role: 'cancel' }]} />
       </Dialog>
       <AlertDialog
         open={notice?.kind === 'iphone'}
         onClose={closeIphone}
         title={notice?.kind === 'iphone' ? notice.title : ''}
         message={IPHONE_ONLY}
-        actions={[{ label: 'Fermer', onClick: close, tone: 'primary' }]}
+        actions={[{ label: 'Fermer', onClick: close, role: 'cancel' }]}
         dismissible={false}
       />
     </>
@@ -168,16 +164,11 @@ export function ConfirmDialog({ open, title, message, confirm, destructive = fal
   const id = useId();
   return (
     <Dialog open={open} onClose={onClose} className="alert-dialog dm-dialog" labelledBy={`${id}-titre`} describedBy={message ? `${id}-texte` : undefined}>
-      <div className="alert-body">
-        <h2 id={`${id}-titre`}>{title}</h2>
-        {message && <p id={`${id}-texte`}>{message}</p>}
-        <div className="alert-actions">
-          <button type="button" className={`btn ${destructive ? 'dm-btn-danger' : 'btn-primary'}`} onClick={() => { onClose(); onConfirm(); }}>
-            {confirm}
-          </button>
-          <button type="button" className="btn btn-quiet" onClick={onClose}>Annuler</button>
-        </div>
-      </div>
+      <DialogContent titleId={`${id}-titre`} textId={`${id}-texte`} title={title} message={message} onDismiss={onClose}
+        actions={[
+          { label: confirm, onClick: () => { onClose(); onConfirm(); }, role: destructive ? 'destructive' : undefined },
+          { label: 'Annuler', onClick: onClose, role: 'cancel' },
+        ]} />
     </Dialog>
   );
 }

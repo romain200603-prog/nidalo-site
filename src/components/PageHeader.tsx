@@ -1,4 +1,5 @@
 import type { MouseEvent, ReactNode } from 'react';
+import { useFitTexts } from '../pages/listing/fitText';
 import { RoundButton } from './RoundButton';
 import '../styles/pieces-app.css';
 
@@ -20,7 +21,8 @@ function backInHistory(event: MouseEvent<HTMLElement>) {
 
 /**
  * En-tête d'une page poussée de l'app (NidaloPageHeader, DesignSystem/Components/NidaloMenuComponents.swift) : retour
- * rond à gauche, titre de 17 gras centré sur la page (56 de marge de chaque côté), élément facultatif à droite.
+ * rond à gauche, titre de 17 gras centré sur la page (56 de marge de chaque côté), élément facultatif à droite. Comme
+ * `minimumScaleFactor(0.8)`, un titre trop long rapetisse jusqu'à 80 % de sa taille avant d'être coupé par « … ».
  */
 export function PageHeader({ title, back, onBack, trailing, className, history = false, decorative = false }: {
   title: string;
@@ -35,10 +37,11 @@ export function PageHeader({ title, back, onBack, trailing, className, history =
   decorative?: boolean;
 }) {
   const Title = decorative ? 'p' : 'h1';
+  const ref = useFitTexts<HTMLDivElement>();
   return (
-    <div className={className ? `app-page-header ${className}` : 'app-page-header'}>
+    <div ref={ref} className={className ? `app-page-header ${className}` : 'app-page-header'}>
       <RoundButton icon="arrowLeft" label="Retour" href={onBack ? undefined : back} onClick={onBack ?? (history ? backInHistory : undefined)} />
-      <Title className="app-page-header-title" aria-hidden={decorative || undefined}>{title}</Title>
+      <Title className="app-page-header-title" data-fit="0.8" aria-hidden={decorative || undefined}>{title}</Title>
       {trailing && <div className="app-page-header-trailing">{trailing}</div>}
     </div>
   );

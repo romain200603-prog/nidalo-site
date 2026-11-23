@@ -2,6 +2,7 @@ import { appDate, appDateString } from '../appDates';
 import { conversationFrom, fetchConversations, type InboxRow } from '../listing/conversation';
 import { requestDisplayStatus, type AgendaRow, type VisitRequestRow, type VisitSlot } from '../listing/visits';
 import { photoUrl } from '../listings';
+import { isOfflineFailure } from '../loadFailure';
 import { fetchProfiles } from '../messages/api';
 import { normalizedPhoneNumber } from '../messages/format';
 import { sameId, type ProfileRow } from '../messages/inbox';
@@ -470,6 +471,8 @@ export type AgendaState = {
   visits: AgendaItem[];
   /** Demandes de visite du compte (VisitRequestStore.requests). */
   requests: AgendaRequestRow[];
+  /** Dernière lecture des visites empêchée par une coupure de connexion (VisitStore.loadState == .offline). */
+  offline?: boolean;
 };
 
 export const agendaStore = createStore<AgendaState>({ status: 'none', visits: [], requests: [] });
@@ -490,7 +493,8 @@ export async function loadAgenda(): Promise<void> {
   if (currentUserId() !== session.userId) return;
   const loadedRequests = requests.error ? agendaStore.get().requests : ((requests.data as AgendaRequestRow[] | null) ?? []);
   if (visits.error) {
-    agendaStore.set({ status: before.status === 'ready' ? 'ready' : 'error', visits: agendaStore.get().visits, requests: loadedRequests });
+    agendaStore.set({ status: before.status === 'ready' ? 'ready' : 'error', visits: agendaStore.get().visits, requests: loadedRequests,
+      offline: isOfflineFailure(visits.error) });
     return;
   }
   const items = ((visits.data as AgendaRow[] | null) ?? []).map(visitFromRow).filter((item): item is AgendaItem => item !== null);

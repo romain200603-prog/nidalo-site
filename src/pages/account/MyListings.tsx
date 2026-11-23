@@ -200,16 +200,16 @@ export function MyListings() {
         title="Supprimer cette annonce ?"
         message={`« ${toDelete?.title ?? ''} » sera retirée de l'application. Pour la masquer temporairement, suspendez-la plutôt.`}
         actions={[
-          { label: 'Supprimer définitivement', onClick: () => void confirmDelete(), tone: 'primary' },
-          { label: 'Annuler', onClick: () => setToDelete(null) },
+          { label: 'Supprimer définitivement', onClick: () => void confirmDelete(), role: 'destructive' },
+          { label: 'Annuler', onClick: () => setToDelete(null), role: 'cancel' },
         ]}
       />
       <AlertDialog
         open={notice !== null}
         onClose={() => setNotice(null)}
         title={notice ?? ''}
-        message=""
-        actions={[{ label: 'OK', onClick: () => setNotice(null), tone: 'primary' }]}
+        dismissible={false}
+        actions={[{ label: 'OK', onClick: () => setNotice(null), role: 'cancel' }]}
       />
     </div>
   );

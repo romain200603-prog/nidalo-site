@@ -121,7 +121,7 @@ function OpportunityList({ rows, listings }: { rows: OpportunityRow[]; listings:
   return (
     <div className="space sales">
       <Toast text={toast} />
-      <ScreenHeader title="Mes opportunités" action={<a className="save-capsule" href={NEW_OPPORTUNITY_PATH}>Ajouter</a>} />
+      <ScreenHeader title="Mes opportunités" action={<a className="nav-text-button" href={NEW_OPPORTUNITY_PATH}>Ajouter</a>} />
       {rows.length === 0 ? (
         <EmptyState
           icon="sparkles"
@@ -202,7 +202,7 @@ function OpportunityDetail({ row, listing }: { row: OpportunityRow; listing: Lis
   return (
     <div className="space sales sale-page">
       <Toast text={toast} />
-      <ScreenHeader title="Opportunité" back={OPPORTUNITIES_PATH} action={<a className="save-capsule" href={opportunityPath(row.id, true)}>Modifier</a>} />
+      <ScreenHeader title="Opportunité" back={OPPORTUNITIES_PATH} action={<a className="nav-text-button" href={opportunityPath(row.id, true)}>Modifier</a>} />
       <section className="sale-head space-card">
         <OpportunityThumb listing={listing} kind={row.kind} size="large" />
         <div className="sale-head-text">
@@ -424,9 +424,9 @@ function OpportunityEditor({ row, listings }: { row: OpportunityRow | null; list
         title="Quitter sans enregistrer ?"
         message="Vos modifications ne sont pas encore enregistrées."
         actions={[
-          { label: 'Enregistrer', onClick: () => { setDialog(null); void save(); }, tone: 'primary' },
-          { label: 'Quitter sans enregistrer', href: backPath },
-          { label: 'Continuer', onClick: () => setDialog(null), tone: 'quiet' },
+          { label: 'Enregistrer', onClick: () => { setDialog(null); void save(); } },
+          { label: 'Quitter sans enregistrer', href: backPath, role: 'destructive' },
+          { label: 'Continuer', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
       <AlertDialog
@@ -435,8 +435,8 @@ function OpportunityEditor({ row, listings }: { row: OpportunityRow | null; list
         title="Supprimer cette opportunité ?"
         message="La personne, son projet et votre note seront effacés. L'annonce ne change pas."
         actions={[
-          { label: 'Supprimer', onClick: () => void remove(), tone: 'primary' },
-          { label: 'Annuler', onClick: () => setDialog(null), tone: 'quiet' },
+          { label: 'Supprimer', onClick: () => void remove(), role: 'destructive' },
+          { label: 'Annuler', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
     </div>

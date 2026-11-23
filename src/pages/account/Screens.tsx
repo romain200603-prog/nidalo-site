@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { ContentUnavailable } from '../../components/ContentUnavailable';
+import { HidesTabBar } from '../../components/HidesTabBar';
 import { Icon } from '../../components/Icon';
 import { usesApple } from '../../lib/account/auth';
 import { deleteMyAccount } from '../../lib/account/deleteAccount';
@@ -45,12 +47,11 @@ export function SoonScreen({ screen }: { screen: string | null }) {
   const title = (screen && SOON_TITLES[screen]) || 'Bientôt sur le site';
   return (
     <div className="space">
+      {/* Mon projet et une demande de visite masquent la barre d'onglets dans l'app (hidesTabBar). */}
+      {(screen === 'projet' || screen === 'demande-visite') && <HidesTabBar />}
       <ScreenHeader title={title} />
-      <div className="soon-card space-card">
-        <Icon name="hammer" />
-        <h2>{title}</h2>
-        <p>Cet écran arrive bientôt sur le site. En attendant, il est dans l’app Nidalo, avec le même compte.</p>
-      </div>
+      <ContentUnavailable icon="hammer" title={title} className="soon-state"
+        text="Cet écran arrive bientôt sur le site. En attendant, il est dans l’app Nidalo, avec le même compte." />
     </div>
   );
 }

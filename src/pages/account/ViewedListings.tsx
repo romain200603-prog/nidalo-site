@@ -139,8 +139,8 @@ export function ViewedListings() {
         message={clearHistoryMessage(ids.length)}
         onClose={() => setConfirming(false)}
         actions={[
-          { label: 'Vider l\'historique', onClick: clear, tone: 'danger' },
-          { label: 'Annuler', onClick: () => setConfirming(false) },
+          { label: 'Vider l\'historique', onClick: clear, role: 'destructive' },
+          { label: 'Annuler', onClick: () => setConfirming(false), role: 'cancel' },
         ]}
       />
     </div>

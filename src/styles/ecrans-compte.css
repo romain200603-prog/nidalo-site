@@ -84,7 +84,7 @@
 .dsc-button-quiet { padding: 0 12px; background: transparent; color: var(--d-blue); }
 .dsc-button-quiet:hover { background: var(--d-blue-light); }
 .dsc-button:disabled { opacity: 0.45; cursor: default; }
-.dsc-button-spinner { width: 18px; height: 18px; border-width: 2px; border-color: rgba(255, 255, 255, 0.35); border-top-color: #FFFFFF; }
+.dsc-button-spinner { width: 18px; height: 18px; color: #FFFFFF; }
 .dsc-small { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 12px; border: 0; border-radius: 11px; background: var(--d-blue-light); color: var(--d-blue); font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer; }
 .dsc-small:hover:not(:disabled) { background: #E2E8F6; }
 .dsc-small:disabled { opacity: 0.45; cursor: default; }
@@ -270,7 +270,7 @@
 .dsc-kind:hover { background: var(--d-hover); }
 .dsc-kind[aria-pressed="true"] { padding: 13.5px; border: 1.5px solid var(--d-blue); background: var(--d-blue-light); }
 .dsc-kind > .icon { width: 26px; height: 26px; color: var(--d-icon); }
-.dsc-kind-title { font-size: 16px; font-weight: 800; line-height: 21px; }
+.dsc-kind-title { font-size: 16px; font-weight: 700; line-height: 21px; }
 .dsc-kind-subtitle { color: var(--d-grey); font-size: 13.5px; font-weight: 500; line-height: 18px; }
 .dsc-kind-check { position: absolute; top: 10px; right: 10px; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: var(--d-blue); color: #FFFFFF; }
 .dsc-kind-check .icon { width: 13px; height: 13px; stroke-width: 3; }
@@ -330,18 +330,6 @@
 .dsc-small.is-danger:hover:not(:disabled) { background: #F6DCD8; }
 .dsc-report-failure { display: flex; align-items: flex-start; gap: 8px; padding: 12px 14px; border-radius: 12px; background: #FBEDEB; color: var(--d-red); font-size: 14px; font-weight: 600; line-height: 20px; }
 .dsc-report-failure > .icon { flex: none; width: 17px; height: 17px; margin-top: 1px; }
-
-/* ——— Fenêtres de l'app : bouton plein, rouge pour une action destructive, ou discret ——— */
-.dsc-dialog .alert-body h2 { color: var(--d-text); }
-.dsc-dialog .alert-body p { color: var(--d-grey); }
-.dsc-dialog .btn { min-height: var(--d-button-height); border-radius: var(--d-button-radius); font-size: 15px; font-weight: 600; }
-.dsc-btn-primary { background: var(--d-blue); color: #FFFFFF; }
-.dsc-btn-primary:hover { background: var(--d-blue-hover); }
-.dsc-btn-danger { background: var(--d-red); color: #FFFFFF; }
-.dsc-btn-danger:hover { background: #A93226; }
-.dsc-btn-quiet { background: var(--d-blue-light); color: var(--d-blue); }
-.dsc-btn-quiet:hover { background: #E2E8F6; }
-.dsc-dialog .btn:focus-visible { outline: 3px solid var(--d-blue); outline-offset: 2px; }
 
 /* ——— Notifications (NotificationsView de l'app) ———
    Groupes par jour : petit titre (4 au-dessus d'« Aujourd'hui », 14 au-dessus des autres) puis la carte de groupe,
@@ -411,8 +399,6 @@
   .dsc-picker { width: calc(100% - 32px); max-width: calc(100% - 32px); max-height: calc(100dvh - 48px); }
   .dsc-picker-body { padding: 16px; }
 
-  /* Au-dessus de la barre du bas (téléphone, jusqu'à 760 px) quand la page défile pour montrer un menu « … ». */
-  @media (max-width: 760px) {
-    .dsc-menu-list { scroll-margin-bottom: calc(var(--tabbar-height) + env(safe-area-inset-bottom) + 12px); }
-  }
+  /* Au-dessus de la barre d'onglets quand la page défile pour montrer un menu « … ». */
+  .dsc-menu-list { scroll-margin-bottom: calc(var(--tabbar-height) + var(--tabbar-bottom) + 12px); }
 }

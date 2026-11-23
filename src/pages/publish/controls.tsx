@@ -229,7 +229,7 @@ export function EnergyClassChoice({ title, value, onChange, guide }: {
             key={energy}
             type="button"
             className={`energy-step${value !== null && value !== energy ? ' is-excluded' : ''}`}
-            style={{ background: DPE_COLORS[energy], color: energy === 'D' || energy === 'E' ? '#0A1A44' : '#FFFFFF' }}
+            style={{ background: DPE_COLORS[energy], color: energy === 'D' || energy === 'E' ? '#000000' : '#FFFFFF' }}
             aria-pressed={value === energy}
             aria-label={`${title} ${energy}`}
             onClick={() => onChange(value === energy ? null : energy)}

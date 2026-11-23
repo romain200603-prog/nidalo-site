@@ -206,6 +206,8 @@ function DesktopFavorites({ items, offline = false }: { items: Favorite[]; offli
       icon: 'columns',
       text: message.text,
       action: message.action ? { label: message.action, accessibilityLabel: message.action, run: () => window.location.assign(comparePath()) } : undefined,
+      // Tout le message ouvre Comparer, comme l'app (pas « Retiré de la comparaison », sans action).
+      wholeToast: true,
     });
   }
 

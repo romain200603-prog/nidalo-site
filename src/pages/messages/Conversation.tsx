@@ -565,7 +565,7 @@ function DeclineForm({ id, offer, onClose }: { id: string; offer: OfferRow; onCl
       {error && <p className="dm-error" role="alert">{error}</p>}
       <div className="dm-decline-actions">
         <button type="button" className="btn btn-light" onClick={onClose}>Annuler</button>
-        <button type="submit" className="btn dm-btn-danger" aria-busy={busy}>Refuser</button>
+        <button type="submit" className="btn btn-danger" aria-busy={busy}>Refuser</button>
       </div>
     </form>
   );

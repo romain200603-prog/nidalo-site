@@ -67,8 +67,8 @@ export function DescriptionStep({ draft, update, showsErrors, ownerId }: StepPro
         title="Remplacer la description actuelle ?"
         onClose={() => setReplacing(false)}
         actions={[
-          { label: 'Remplacer', tone: 'danger', onClick: () => { setDescription(proposedDescription(draft)); setReplacing(false); } },
-          { label: 'Annuler', onClick: () => setReplacing(false) },
+          { label: 'Remplacer', role: 'destructive', onClick: () => { setDescription(proposedDescription(draft)); setReplacing(false); } },
+          { label: 'Annuler', onClick: () => setReplacing(false), role: 'cancel' },
         ]}
       />
     </>

@@ -122,7 +122,7 @@ function AgencyView({ agency, toast, member = false }: { agency: AgencyRecord; t
   return (
     <div className="space agency-page">
       <Toast text={toast} />
-      <ScreenHeader title="Profil agence" action={member ? undefined : <a className="save-capsule" href={AGENCY_FORM_PATH}>Modifier</a>} />
+      <ScreenHeader title="Profil agence" action={member ? undefined : <a className="nav-text-button" href={AGENCY_FORM_PATH}>Modifier</a>} />
       <section className="agency-head space-card">
         <AgencyLogo name={agency.agency_name} url={avatarUrl(agency.logo_path)} size={88} />
         <h2 className="agency-name">{agency.agency_name}</h2>
@@ -344,9 +344,9 @@ function AgencyEditor({ account, agency, onSaved }: { account: Account; agency: 
         title="Quitter sans enregistrer ?"
         message="Vos modifications ne sont pas encore enregistrées."
         actions={[
-          { label: 'Enregistrer les modifications', onClick: () => { setLeaving(false); void save(); }, tone: 'primary' },
-          { label: 'Quitter sans enregistrer', href: backPath },
-          { label: 'Continuer', onClick: () => setLeaving(false), tone: 'quiet' },
+          { label: 'Enregistrer les modifications', onClick: () => { setLeaving(false); void save(); } },
+          { label: 'Quitter sans enregistrer', href: backPath, role: 'destructive' },
+          { label: 'Continuer', onClick: () => setLeaving(false) },
         ]}
       />
     </div>

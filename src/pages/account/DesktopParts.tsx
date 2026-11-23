@@ -3,40 +3,29 @@ import { Icon } from '../../components/Icon';
 import type { IconName } from '../../components/iconPaths';
 import { useDesktop } from '../../lib/desktop';
 import { PATHS } from '../../lib/paths';
-import { Modal } from '../listing/Dialogs';
+import { AlertDialog, type AlertAction } from '../listing/Dialogs';
 
-// Briques de Mon espace sur ordinateur (≥ 1024 px) : fenêtres de confirmation de l'app
-// (domiaConfirmationDialog, rouge pour une action destructive) et avis « Dans l'app iPhone pour l'instant ».
+// Briques de Mon espace sur ordinateur (≥ 1024 px) : fenêtres de confirmation de l'app (la fenêtre Nidalo commune,
+// rouge pour une action destructive) et avis « Dans l'app iPhone pour l'instant ».
 
 /** Ce que l'app garde sur l'iPhone (documents, alertes, préférences, calendrier). */
 export const IPHONE_ONLY = 'Dans l’app iPhone pour l’instant';
 
-export type DialogAction = { label: string; onClick: () => void; tone?: 'primary' | 'danger' | 'quiet' };
+export type DialogAction = AlertAction;
 
-/** Fenêtre de l'app : titre, message facultatif, puis les boutons l'un sous l'autre. */
-export function ChoiceDialog({ open, title, message, actions, onClose }: {
+/**
+ * Fenêtre de l'app (domiaConfirmationDialog) : la fenêtre Nidalo commune (AlertDialog), titre, message facultatif,
+ * puis les boutons l'un sous l'autre. `dismissible={false}` : une alerte (domiaAlert), que seuls ses boutons ferment.
+ */
+export function ChoiceDialog({ open, title, message, actions, onClose, dismissible = true }: {
   open: boolean;
   title: string;
   message?: ReactNode;
   actions: DialogAction[];
   onClose: () => void;
+  dismissible?: boolean;
 }) {
-  const id = useId();
-  return (
-    <Modal open={open} onClose={onClose} className="alert-dialog dsc-dialog" labelledBy={`${id}-titre`} describedBy={message ? `${id}-texte` : undefined}>
-      <div className="alert-body">
-        <h2 id={`${id}-titre`}>{title}</h2>
-        {message && <p id={`${id}-texte`}>{message}</p>}
-        <div className="alert-actions">
-          {actions.map((action) => (
-            <button key={action.label} type="button" className={`btn dsc-btn-${action.tone ?? 'quiet'}`} onClick={action.onClick}>
-              {action.label}
-            </button>
-          ))}
-        </div>
-      </div>
-    </Modal>
-  );
+  return <AlertDialog open={open} onClose={onClose} title={title} message={message} actions={actions} dismissible={dismissible} />;
 }
 
 /**
@@ -45,8 +34,8 @@ export function ChoiceDialog({ open, title, message, actions, onClose }: {
  */
 export function IphoneOnlyDialog({ title, onClose }: { title: string | null; onClose: () => void }) {
   return (
-    <ChoiceDialog open={title !== null} title={title ?? ''} message={`${IPHONE_ONLY}.`} onClose={onClose}
-      actions={[{ label: 'Fermer', onClick: onClose, tone: 'primary' }]} />
+    <ChoiceDialog open={title !== null} title={title ?? ''} message={`${IPHONE_ONLY}.`} onClose={onClose} dismissible={false}
+      actions={[{ label: 'Fermer', onClick: onClose, role: 'cancel' }]} />
   );
 }
 
