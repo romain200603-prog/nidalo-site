@@ -72,9 +72,18 @@ function showZone(map: MapLibreMap, zone: Coordinate[] | null | undefined, satel
   map.addLayer({ id: 'zone-dessinee-bord', type: 'line', source: ZONE_SOURCE, layout: round, paint: { 'line-color': ZONE_BLUE, 'line-width': 3.5 } });
 }
 
-/** Marges du cadrage d'une zone : sous la ligne du haut et sa pastille, à gauche des commandes. */
-function zonePadding(width: number) {
-  return width >= 1024 ? { top: 84, bottom: 48, left: 60, right: 84 } : { top: 124, bottom: 40, left: 40, right: 80 };
+/**
+ * Marges du cadrage des biens, d'une zone ou de la France (MapTabView.searchedRegion de l'app). Téléphone : sous la
+ * ligne du haut et la hauteur d'une vignette, au-dessus du panneau du bas en hauteur moyenne (362 + 30, + 60 pour la
+ * France), à gauche des commandes ; ramenées à la hauteur de la carte sur un écran bas. Ordinateur : sous la ligne du
+ * haut (et la pastille d'une zone), à gauche des commandes.
+ */
+function framePadding(map: MapLibreMap, kind: 'results' | 'zone' | 'france') {
+  const { clientWidth: width, clientHeight: height } = map.getContainer();
+  if (width >= 1024) return kind === 'zone' ? { top: 84, bottom: 48, left: 60, right: 84 } : { top: 60, bottom: 60, left: 40, right: 40 };
+  const [top, left, bottom, right] = kind === 'zone' ? [124, 40, 392, 80] : kind === 'france' ? [66, 16, 452, 16] : [126, 50, 392, 80];
+  const scale = Math.min(1, Math.max(0, height - 80) / (top + bottom));
+  return { top: Math.round(top * scale), left, bottom: Math.round(bottom * scale), right };
 }
 
 type Point = { x: number; y: number };
@@ -147,6 +156,11 @@ export function ResultsMap({
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const [ready, setReady] = useState(false);
+  /**
+   * Cadrage demandé pendant que la carte est cachée (liste du téléphone, carte fermée) : sans taille, MapLibre ne peut
+   * rien cadrer ; il se fait quand la carte prend la sienne (son « resize »), sauf si un autre l'a remplacé.
+   */
+  const pendingFrame = useRef<(() => void) | null>(null);
   const [failed, setFailed] = useState(false);
   const [, setTick] = useState(0);
   const [satellite, setSatellite] = useState(() => mapSession.isSatellite);
@@ -206,7 +220,14 @@ export function ResultsMap({
       });
     };
     map.on('move', redraw);
-    map.on('resize', redraw);
+    map.on('resize', () => {
+      redraw();
+      const pending = pendingFrame.current;
+      if (pending && map.getContainer().clientWidth > 0 && map.getContainer().clientHeight > 0) {
+        pendingFrame.current = null;
+        pending();
+      }
+    });
     map.on('load', () => {
       setReady(true);
       redraw();
@@ -242,14 +263,25 @@ export function ResultsMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    const padding = frame.zone ? zonePadding(map.getContainer().clientWidth) : { top: 60, bottom: 60, left: 40, right: 40 };
-    if (frame.box) {
-      map.fitBounds(frame.box, { padding, duration: 0, maxZoom: 15 });
-      return;
+    const apply = () => {
+      const padding = framePadding(map, frame.zone ? 'zone' : 'results');
+      if (frame.box) {
+        map.fitBounds(frame.box, { padding, duration: 0, maxZoom: 15 });
+        return;
+      }
+      const bounds = boundsOf(frame.points);
+      if (bounds) map.fitBounds(bounds, { padding, duration: 0, maxZoom: 14 });
+      else map.fitBounds(FRANCE, { padding: framePadding(map, 'france'), duration: 0 });
+    };
+    if (map.getContainer().clientWidth > 0 && map.getContainer().clientHeight > 0) {
+      pendingFrame.current = null;
+      // Carte tout juste ouverte (« Voir sur la carte ») : sa nouvelle taille d'abord, puis le cadrage.
+      const canvas = map.getCanvas();
+      if (canvas.clientWidth !== map.getContainer().clientWidth || canvas.clientHeight !== map.getContainer().clientHeight) map.resize();
+      apply();
+    } else {
+      pendingFrame.current = apply;
     }
-    const bounds = boundsOf(frame.points);
-    if (bounds) map.fitBounds(bounds, { padding, duration: 0, maxZoom: 14 });
-    else map.fitBounds(FRANCE, { padding, duration: 0 });
   }, [frame.token, ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { mapSession.isSatellite = satellite; }, [satellite]);
@@ -327,11 +359,11 @@ export function ResultsMap({
     const box = searchedZone ? zoneBox(searchedZone) : null;
     if (box && map) {
       map.fitBounds([box.southWest.longitude, box.southWest.latitude, box.northEast.longitude, box.northEast.latitude],
-        { padding: zonePadding(width), duration: 350 });
+        { padding: framePadding(map, 'zone'), duration: 350 });
       return;
     }
     const bounds = boundsOf(results.flatMap((r) => { const c = coordinateOf(r); return c ? [c] : []; }));
-    if (bounds && map) map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 350 });
+    if (bounds && map) map.fitBounds(bounds, { padding: width >= 1024 ? 60 : framePadding(map, 'results'), maxZoom: 14, duration: 350 });
   }
 
   // MARK: Tracé (handleDraw de l'app) : un seul pointeur, capturé ; le trait commence après un petit déplacement (un
@@ -444,6 +476,8 @@ export function ResultsMap({
   return (
     <div className={`results-map${drawing ? ' is-drawing' : ''} ${className ?? ''}`}>
       <div ref={container} className="map-canvas" role="region" aria-label="Carte des biens" data-ready={ready ? "oui" : "non"} />
+      {/* Avant les vignettes et les commandes, comme la mention de MapLibre : Tab va du crayon au bandeau de la zone. */}
+      <MapAttribution satellite={satellite} className="results-map-attribution" />
       {/* Tracé : surface au-dessus de la carte et sous les vignettes et les commandes (un trait ne commence jamais sur un
           bouton) ; elle seule bloque le défilement et le zoom de la page, et seulement pendant le tracé. */}
       {drawing && (
@@ -498,7 +532,12 @@ export function ResultsMap({
                       return;
                     }
                     onMarkerTap(row.id, () => {
-                      if (coordinate && map) map.easeTo({ center: [coordinate.longitude, coordinate.latitude], duration: reducedMotion() ? 0 : 350 });
+                      if (!coordinate || !map) return;
+                      // Au centre de la carte, comme l'app ; sur un écran plus bas que l'iPhone, le pied de la vignette
+                      // reste 20 au-dessus du panneau en hauteur moyenne (362), sans passer sous la ligne du haut.
+                      const height = map.getContainer().clientHeight;
+                      const y = Math.max(124, Math.min(height / 2, height - 362 - 20));
+                      map.easeTo({ center: [coordinate.longitude, coordinate.latitude], offset: [0, Math.min(0, y - height / 2)], duration: reducedMotion() ? 0 : 350 });
                     });
                   }}
                 >
@@ -531,7 +570,6 @@ export function ResultsMap({
         {tools}
       </div>
       {traceRef.current?.begun && radiusTag(traceRef.current)}
-      <MapAttribution satellite={satellite} className="results-map-attribution" />
     </div>
   );
 }
