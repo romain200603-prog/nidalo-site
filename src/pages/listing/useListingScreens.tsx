@@ -12,6 +12,7 @@ import type { ListingRow, PhotoRow } from '../../lib/listings';
 import { isDesktop } from '../../lib/desktop';
 import { conversationPath, listingPath, listingScreenFromParams, wantsVideoVisit, type ListingScreen } from '../../lib/paths';
 import { AlertDialog } from './Dialogs';
+import { ListingRequestsScreen } from './ListingRequestsScreen';
 import { OfferScreen } from './OfferScreen';
 import { ProfileScreen } from './ProfileScreen';
 import { useListingAccount } from './useListingAccount';
@@ -22,15 +23,17 @@ import { VisitRequestScreen } from './VisitRequestScreen';
 // « Demander une visite » et « Faire une offre » ont leur propre adresse (&vue=visite, &vue=offre). Sans compte, la
 // connexion d'abord ; sa propre annonce n'en a pas. Si la conversation ne s'ouvre pas (message, offre), la fenêtre
 // « Impossible d'ouvrir la conversation » (n° 68), commune aux deux tailles. Le profil du vendeur ou de l'agence
-// (« Voir le profil ») a aussi son adresse (&vue=profil), sans compte.
+// (« Voir le profil ») a aussi son adresse (&vue=profil), sans compte ; « Voir les demandes » de sa propre annonce, la
+// sienne (&vue=demandes).
 
 const sameId = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
-/** Écrans ouverts depuis la fiche : ceux de lib/paths, et le profil public de l'interlocuteur. */
-type Screen = ListingScreen | 'profil';
+/** Écrans ouverts depuis la fiche : ceux de lib/paths, le profil public de l'interlocuteur et les demandes de sa propre annonce. */
+type Screen = ListingScreen | 'profil' | 'demandes';
 
 function screenFromParams(params: URLSearchParams): Screen | null {
-  return params.get('vue') === 'profil' ? 'profil' : listingScreenFromParams(params);
+  const view = params.get('vue');
+  return view === 'profil' || view === 'demandes' ? view : listingScreenFromParams(params);
 }
 
 /** Ce que l'écran ouvert montre du bien : la photo et le destinataire (visite), la rentabilité (offre), le profil. */
@@ -66,7 +69,7 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
   }, []);
 
   const go = useCallback((next: Screen | null, how: 'push' | 'replace') => {
-    const url = next === 'profil' ? `${listingPath(row.id, mode)}&vue=profil` : listingPath(row.id, mode, next);
+    const url = next === 'profil' || next === 'demandes' ? `${listingPath(row.id, mode)}&vue=${next}` : listingPath(row.id, mode, next);
     if (how === 'push') {
       window.history.pushState(null, '', url);
       pushed.current = true;
@@ -143,6 +146,8 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
   const makeOffer = () => void requireAccount(() => void resolveOffer('push'));
   /** « Voir le profil » ou « Voir l'agence » : le profil public, sans compte. */
   const openProfile = () => go('profil', 'push');
+  /** « Voir les demandes » (sa propre annonce) : les demandes de visite du bien (MyVisitsView de l'app). */
+  const openRequests = () => go('demandes', 'push');
 
   /**
    * « Envoyer un message » : ouvre (ou crée) la conversation avec le vendeur, dans Messages. Une seule ouverture à la
@@ -167,6 +172,11 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
   // pour l'offre) revient à la fiche ; « Faire une offre » retrouve d'abord la conversation.
   useEffect(() => {
     if (screen === null || screen === 'profil' || session.status === 'loading') return;
+    // Les demandes d'une annonce : seulement la sienne ; sinon la fiche.
+    if (screen === 'demandes') {
+      if (!isOwn) go(null, 'replace');
+      return;
+    }
     if (session.status === 'signedOut') {
       const wanted = screen;
       go(null, 'replace');
@@ -195,7 +205,7 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
     return () => window.removeEventListener('pageshow', onShow);
   }, []);
 
-  const shown: Screen | null = screen === 'profil' ? 'profil' : me && !isOwn
+  const shown: Screen | null = screen === 'profil' ? 'profil' : screen === 'demandes' ? (isOwn ? 'demandes' : null) : me && !isOwn
     ? (screen === 'visite' ? 'visite' : screen === 'offre' && offerConversation ? 'offre' : null)
     : null;
 
@@ -210,7 +220,7 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
     if (!sheet) window.scrollTo(0, shown ? 0 : listingScroll.current);
     // L'écran ouvert reçoit le focus sur son titre (ou, sur téléphone, sur son retour rond, le premier élément de
     // l'écran poussé), sauf si un de ses champs l'a déjà (le montant de l'offre).
-    const opened = shown ? document.querySelector<HTMLElement>('.dl-screen, .listing-profile') : null;
+    const opened = shown ? document.querySelector<HTMLElement>('.dl-screen, .listing-profile, .app-requests') : null;
     if (opened && !opened.contains(document.activeElement)) {
       opened.querySelector<HTMLElement>('h1[tabindex], .app-page-header .app-round')?.focus({ preventScroll: true });
     }
@@ -220,6 +230,7 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
     document.title = shown === 'visite' ? `Demander une visite · ${row.title} · Nidalo`
       : shown === 'offre' ? `Faire une offre · ${row.title} · Nidalo`
         : shown === 'profil' ? `Profil · ${row.title} · Nidalo`
+          : shown === 'demandes' ? `Demandes de visite · ${row.title} · Nidalo`
           : `${row.title} à ${row.city} · Nidalo`;
   }, [row, shown]);
 
@@ -229,6 +240,7 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
       // Profil encore en lecture (adresse ouverte directement) : la fiche d'abord, le profil dès qu'il est là.
       return publisher ? <ProfileScreen publisher={publisher} onClose={close} onContact={isOwn ? undefined : contactSeller} /> : null;
     }
+    if (shown === 'demandes') return <ListingRequestsScreen listingId={row.id} me={me} onClose={close} />;
     if (shown === 'visite') {
       const params = new URLSearchParams(window.location.search);
       // « Proposer une autre date » (écran « Demande de visite ») : la demande refusée, parmi celles du compte.
@@ -279,5 +291,8 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
     />
   );
 
-  return { session, me, isOwn, account, opening, shown, renderScreen, closeScreen: close, requestVisit, makeOffer, contactSeller, openProfile, conversationAlert };
+  return {
+    session, me, isOwn, account, opening, shown, renderScreen, closeScreen: close, requestVisit, makeOffer, contactSeller, openProfile, openRequests,
+    conversationAlert,
+  };
 }

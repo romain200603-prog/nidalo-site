@@ -47,12 +47,14 @@ import { useListingScreens } from './useListingScreens';
 /** Chiffres du numéro gardés pour l'appel (« tel: »), comme l'app : les chiffres et le « + ». */
 const telHref = (phone: string) => `tel:${phone.replace(/[^\d+]/g, '')}`;
 
-/** Fenêtre ouverte : sans numéro, ou une action qui reste dans l'app iPhone (sa propre annonce). */
-type Notice = 'noPhone' | 'requests' | null;
+/** Fenêtre ouverte : « Appeler » sans numéro publié. */
+type Notice = 'noPhone' | null;
 
 export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMode | null }) {
   // Écrire, visiter, faire une offre : communs avec le téléphone (useListingScreens).
-  const { session, me, isOwn, account, opening, renderScreen, requestVisit, makeOffer, contactSeller, openProfile, conversationAlert } = useListingScreens(row, mode);
+  const {
+    session, me, isOwn, account, opening, renderScreen, requestVisit, makeOffer, contactSeller, openProfile, openRequests, conversationAlert,
+  } = useListingScreens(row, mode);
   const [publisher, setPublisher] = useState<Publisher | null>(null);
   const [activeCount, setActiveCount] = useState<number | null>(null);
   const [choice, setChoice] = useState(STANDARD_CHOICE);
@@ -226,7 +228,7 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
               {publisher && <SellerRow publisher={publisher} />}
               {isOwn ? (
                 <div className="dl-actions">
-                  <button type="button" className="dl-button dl-button-light" onClick={() => setNotice('requests')}>
+                  <button type="button" className="dl-button dl-button-light" onClick={openRequests}>
                     <Icon name="calendarCheck" />
                     Voir les demandes
                   </button>
@@ -274,14 +276,6 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
         ]}
       />
       {conversationAlert}
-      <AlertDialog
-        open={notice === 'requests'}
-        onClose={() => setNotice(null)}
-        dismissible={false}
-        title="Voir les demandes"
-        message="Dans l’app iPhone pour l’instant."
-        actions={[{ label: 'Fermer', onClick: () => setNotice(null), role: 'cancel' }]}
-      />
       <ReportListingSheet open={reporting} listingId={row.id} onClose={() => setReporting(false)}
         onSent={(text) => { setReporting(false); setReportNotice(text); }} />
       <AlertDialog

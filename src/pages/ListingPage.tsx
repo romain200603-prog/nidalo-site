@@ -47,12 +47,13 @@ import { useListingScreens } from './listing/useListingScreens';
 
 type State = { status: 'loading' } | { status: 'notFound' } | { status: 'error' } | { status: 'offline' } | { status: 'ready'; row: ListingRow };
 
-type Notice = 'noPhone' | 'requests' | null;
+type Notice = 'noPhone' | null;
 
 function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }) {
   // Écrire, visiter, faire une offre : communs avec l'ordinateur (useListingScreens).
   const {
-    session, me, isOwn, account, opening, shown, renderScreen, closeScreen, requestVisit, makeOffer, contactSeller, openProfile, conversationAlert,
+    session, me, isOwn, account, opening, shown, renderScreen, closeScreen, requestVisit, makeOffer, contactSeller, openProfile, openRequests,
+    conversationAlert,
   } = useListingScreens(row, mode);
   const [notice, setNotice] = useState<Notice>(null);
   const [publisher, setPublisher] = useState<Publisher | null>(null);
@@ -171,7 +172,7 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
               isRental={isRental}
               playsArrival={!arrived.current}
               onArrived={() => { arrived.current = true; }}
-              owner={isOwn ? { onRequests: () => setNotice('requests'), onManage: () => window.location.assign(publishPath(row.id)) } : null}
+              owner={isOwn ? { onRequests: openRequests, onManage: () => window.location.assign(publishPath(row.id)) } : null}
             />
             {!isOwn && <VisitCard upcoming={upcoming} request={request} now={now} isRental={isRental} onRequest={requestVisit} />}
           </div>
@@ -217,14 +218,6 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
         head={null}>
         {shown === 'offre' ? opened : null}
       </ListingSheet>
-      <AlertDialog
-        open={notice === 'requests'}
-        onClose={() => setNotice(null)}
-        dismissible={false}
-        title="Voir les demandes"
-        message="Dans l’app iPhone pour l’instant."
-        actions={[{ label: 'Fermer', onClick: () => setNotice(null), role: 'cancel' }]}
-      />
       <ReportListingSheet open={reporting} listingId={row.id} onClose={() => setReporting(false)}
         onSent={(text) => { setReporting(false); setReportNotice(text); }} />
       <AlertDialog
