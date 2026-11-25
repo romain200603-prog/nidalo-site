@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { CompareButton } from '../components/CompareButton';
 import { CriterionChipsRow } from '../components/CriterionChips';
 import { FavoritesEmptyState } from '../components/FavoritesEmptyState';
+import { ShortFactsLine } from '../components/HomeListingCard';
 import { Icon } from '../components/Icon';
 import { ModeTabs } from '../components/ModeTabs';
 import { Page } from '../components/Layout';
@@ -16,15 +18,15 @@ import {
 import { loadFavorites, useFavorites, type Favorite } from '../lib/account/favorites';
 import { loadSavedSearches, savedSearchesStore } from '../lib/account/savedSearches';
 import { useSession, useStore } from '../lib/account/session';
-import { formatCardPrice, yieldTone } from '../lib/cardContent';
+import { formatCardPrice, shortFacts, yieldTone } from '../lib/cardContent';
+import { fillCompareIfEmpty, useCompare } from '../lib/compare';
 import { formatFraction, formatPrice } from '../lib/format';
 import { DPE_COLORS } from '../lib/labels';
 import { useDesktop } from '../lib/desktop';
 import { sortedPhotos } from '../lib/listings';
-import { listingPath, PATHS } from '../lib/paths';
+import { comparePath, listingPath, PATHS } from '../lib/paths';
 import { defaultDraft, filterChips, pricePerSquareMeter, type SearchDraft } from '../lib/search';
 import { FiltersDialog, type DraftsByMode } from './FiltersDialog';
-import { soonPath } from './account/Screens';
 import { SavedSearchesList, useSearchCounts } from './account/SavedSearchesList';
 import { EmptyState, Spinner } from './account/parts';
 import { DesktopFavoritesPage } from './favorites/DesktopFavorites';
@@ -55,7 +57,10 @@ function FavoriteHeart({ onRemove }: { onRemove: () => void }) {
   );
 }
 
-/** Carte d'un favori : grande photo (rendement, cœur, compteur), puis prix, prix au m², DPE, titre, infos clés. */
+/**
+ * Carte d'un favori : grande photo (rendement, cœur et Comparer, compteur), puis prix, prix au m², DPE, titre, infos
+ * clés et, sauf en Résidentiel, la petite ligne des cartes de l'accueil (HomeShortFactsLine).
+ */
 function FavoriteListingCard({ card, onRemove }: { card: FavoriteCard; onRemove: () => void }) {
   const { row, content, grossYield } = card;
   const photos = sortedPhotos(row).slice(0, 10);
@@ -84,7 +89,9 @@ function FavoriteListingCard({ card, onRemove }: { card: FavoriteCard; onRemove:
             {formatFraction(grossYield)}
           </span>
         )}
+        {/* Cœur et Comparer côte à côte, carrés de 36 à 8 l'un de l'autre (zones de 44 qui se touchent). */}
         <FavoriteHeart onRemove={onRemove} />
+        <CompareButton listingId={row.id} style="favoriteCard" className="favorite-compare" />
         {photos.length > 1 && (
           <span className="favorite-counter" aria-hidden="true">
             <Icon name="camera" />
@@ -109,6 +116,7 @@ function FavoriteListingCard({ card, onRemove }: { card: FavoriteCard; onRemove:
         </div>
         <h2 className="favorite-title"><a className="stretched" href={href}>{row.title}</a></h2>
         <p className="favorite-details">{favoriteDetails(row, content.kind)}</p>
+        {content.kind !== 'purchase' && shortFacts(content).length > 0 && <ShortFactsLine row={row} highlights={null} content={content} />}
       </div>
     </article>
   );
@@ -179,6 +187,14 @@ function FavoritesContent({ items, offline = false }: { items: Favorite[]; offli
   );
   const suggestions = focused ? favoriteSuggestions(query, cards.map((card) => card.row)) : [];
   const sortTitle = FAVORITE_SORTS.find((entry) => entry.sort === sort)!;
+  const compareCount = useCompare().ids.length;
+  const compareLabel = compareCount > 0 ? `Comparer, ${compareCount} bien${compareCount > 1 ? 's' : ''}` : 'Comparer vos favoris';
+
+  /** Bouton rond : une comparaison vide reprend les trois premiers favoris (dans l'ordre du tri), puis Comparer s'ouvre. */
+  function openCompare() {
+    fillCompareIfEmpty(sortFavorites(cards, sort, addedAt).map((card) => card.row.id));
+    window.location.assign(comparePath());
+  }
 
   function showAll() {
     setQuery('');
@@ -190,9 +206,17 @@ function FavoritesContent({ items, offline = false }: { items: Favorite[]; offli
     <>
       <div className="favorites-head">
         <h1>Vos favoris</h1>
-        <a className="compare-button" href={soonPath('comparer')} aria-label="Comparer vos favoris" title="Comparer vos favoris">
+        <button
+          type="button"
+          className="compare-button"
+          aria-label={compareLabel}
+          title={compareLabel}
+          disabled={cards.length === 0 && compareCount === 0}
+          onClick={openCompare}
+        >
           <Icon name="columns" />
-        </a>
+          {compareCount > 0 && <span className="compare-button-count" aria-hidden="true">{compareCount}</span>}
+        </button>
       </div>
       <p className="favorites-subtitle">Retrouvez vos biens favoris et vos recherches</p>
       <FavoritesTabs tab={tab} onChange={changeTab} searchCount={searchItems.length} hasNews={hasNews} />

@@ -1,6 +1,7 @@
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Icon } from '../Icon';
 import { showToast } from '../AppToast';
+import { useSheetDrag } from '../useSheetDrag';
 import { Modal } from '../../pages/listing/Dialogs';
 import {
   loadSavedSearches, markViewed, newSavedSearch, proposedName, queryFromDraft, sameQuery, savedSearchesStore, saveSearch,
@@ -18,6 +19,21 @@ import '../../styles/recherche-app.css';
 
 /** Nom de la recherche : 80 caractères au plus, comme l'app. */
 const MAX_NAME_LENGTH = 80;
+
+/** Largeur où la feuille est posée en bas (recherche-app.css) : elle s'y referme aussi en la tirant vers le bas. */
+const SHEET_QUERY = '(max-width: 759px)';
+
+function useBottomSheet(): boolean {
+  const [matches, setMatches] = useState(() => typeof window !== 'undefined' && window.matchMedia(SHEET_QUERY).matches);
+  useEffect(() => {
+    const query = window.matchMedia(SHEET_QUERY);
+    const update = () => setMatches(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  return matches;
+}
 
 /** La recherche enregistrée qui a exactement ces critères (avec le compte), sinon `null`. */
 export function useSavedSearchFor(draft: SearchDraft): SavedSearch | null {
@@ -50,7 +66,8 @@ export function SaveSearchButton({ saved, onOpen }: { saved: boolean; onOpen: ()
 
 /**
  * Feuille « Enregistrer cette recherche » : titre 19 gras, précision 13, champ du nom de 48, interrupteur « M'alerter
- * des nouveautés », « Enregistrer ». Posée en bas sur téléphone, fenêtre au centre sur ordinateur.
+ * des nouveautés », « Enregistrer ». Sur téléphone, la feuille de l'app à mi-hauteur (presentationDetents .medium),
+ * avec sa poignée, qui monte du bas et se referme en la tirant vers le bas ; fenêtre au centre au-delà.
  */
 export function SaveSearchSheet({ open, draft, onClose }: { open: boolean; draft: SearchDraft; onClose: () => void }) {
   const id = useId();
@@ -60,6 +77,9 @@ export function SaveSearchSheet({ open, draft, onClose }: { open: boolean; draft
   const [alerts, setAlerts] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const form = useRef<HTMLFormElement>(null);
+  const bottomSheet = useBottomSheet();
+  useSheetDrag(form, onClose, open && bottomSheet);
 
   // À chaque ouverture : le nom proposé et l'alerte activée.
   useEffect(() => {
@@ -90,7 +110,8 @@ export function SaveSearchSheet({ open, draft, onClose }: { open: boolean; draft
 
   return (
     <Modal open={open} onClose={onClose} className="save-search-sheet" labelledBy={`${id}-titre`} describedBy={`${id}-texte`}>
-      <form className="save-search-form" onSubmit={(event) => { event.preventDefault(); if (!busy) void save(); }}>
+      <form ref={form} className="save-search-form" data-sheet-grab="" onSubmit={(event) => { event.preventDefault(); if (!busy) void save(); }}>
+        <span className="save-search-grabber" aria-hidden="true" />
         <div className="save-search-titles">
           <h2 id={`${id}-titre`}>Enregistrer cette recherche</h2>
           <p id={`${id}-texte`}>Vous la retrouverez dans Favoris, onglet Recherches.</p>

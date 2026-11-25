@@ -1,0 +1,159 @@
+/* Panneau du bas de la carte du téléphone (MapBottomPanel, MapResultsPanel et MapResultCard de l'app,
+   Features/Map/MapResultsPanel.swift). 1 pt de l'app = 1 px ici ; ombres : flou CSS = 2 × le rayon SwiftUI. */
+
+/* Hauteur de l'écran sans ses zones du haut et du bas : mesurée par le panneau. */
+.map-panel-probe { position: absolute; top: env(safe-area-inset-top); bottom: env(safe-area-inset-bottom); left: 0; width: 0; visibility: hidden; pointer-events: none; }
+
+/* ——— Conteneur : fond de page, coins de 28 en haut, ombre bleu nuit vers le haut ; toujours à sa grande hauteur,
+   décalé vers le bas (rien ne se recalcule pendant le geste) ; ressort de 0,36 s au calage. ——— */
+.map-panel {
+  position: absolute; z-index: 5; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column;
+  border-radius: 28px 28px 0 0; background: var(--app-page); box-shadow: 0 -2px 28px rgba(36, 45, 56, 0.14);
+  color: var(--app-navy); font-family: var(--app-font); touch-action: pan-x;
+  transition: transform 0.36s cubic-bezier(0.25, 0.9, 0.3, 1), opacity 0.3s ease;
+  -webkit-user-select: none; user-select: none;
+}
+.map-panel.is-dragging { transition: none; }
+/* Tracé ou ajustement d'une zone : le panneau glisse hors de l'écran. */
+.map-panel.is-hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
+
+/* Poignée de 40 × 5, 8 au-dessus et 10 dessous ; la toucher replie ou ouvre le panneau. */
+.map-panel-grabber {
+  flex: none; display: block; width: 100%; height: 23px; padding: 0; border: 0; background: none; cursor: grab; touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.map-panel-grabber > span { display: block; width: 40px; height: 5px; margin: 8px auto 10px; border-radius: 999px; background: var(--app-placeholder); }
+.map-panel-grabber:focus-visible { outline: none; }
+.map-panel-grabber:focus-visible > span { outline: 3px solid var(--app-brand); outline-offset: 3px; }
+.map-panel-content { display: flex; flex: none; flex-direction: column; min-height: 0; overflow: hidden; }
+
+/* ——— En-tête : « 42 biens sur la carte » (20 gras), le lieu (14 gris), le tri à droite ——— */
+.map-panel-head { display: flex; flex: none; align-items: flex-start; gap: 8px; padding: 2px 20px 0; touch-action: none; }
+.map-panel-titles { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
+.map-panel-titles h2 { margin: 0; overflow: hidden; color: var(--app-navy); font: 700 20px/24px var(--app-font); white-space: nowrap; text-overflow: ellipsis; }
+.map-panel-titles p { margin: 0; overflow: hidden; color: var(--app-text-secondary); font: 400 14px/18px var(--app-font); white-space: nowrap; text-overflow: ellipsis; }
+/* Tri : flèches de 13, « Pertinence » 14 semibold, chevron de 14 ; le menu natif, transparent, les couvre (44 au doigt). */
+.map-panel-sort {
+  position: relative; display: inline-flex; flex: none; align-items: center; gap: 6px; padding-top: 4px; color: var(--app-navy);
+  font: 600 14px/18px var(--app-font); white-space: nowrap; cursor: pointer;
+}
+.map-panel-sort .icon { flex: none; width: 13px; height: 13px; stroke-width: 2.4; }
+.map-panel-sort .icon:last-of-type { width: 14px; height: 14px; stroke-width: 2; }
+.map-panel-sort select {
+  position: absolute; inset: -6px -10px; width: calc(100% + 20px); height: calc(100% + 12px); opacity: 0; font-size: 16px; cursor: pointer;
+  -webkit-appearance: none; appearance: none;
+}
+.map-panel-sort:has(select:focus-visible) { outline: 3px solid var(--app-brand); outline-offset: 4px; border-radius: 8px; }
+/* « Agrandir la zone » : 40 de haut, coins de 12, fond bleu pâle, icône maximize de 16. */
+.map-panel-grow {
+  display: inline-flex; flex: none; align-items: center; gap: 6px; min-height: 40px; margin: 2px 0; padding: 11px 14px; border: 0;
+  border-radius: 12px; background: var(--app-brand-soft); color: var(--app-brand); font: 600 14px/18px var(--app-font); white-space: nowrap;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.map-panel-grow .icon { width: 16px; height: 16px; }
+.map-panel-grow:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+
+/* ——— Carrousel (compact et moyen) : fiches de 270, 12 entre elles, calées au centre ; replié, il s'efface. ——— */
+.map-panel-carousel { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; transition: opacity 0.15s ease-out; }
+.map-panel.is-compact .map-panel-carousel, .map-panel.is-compact .map-panel-state { opacity: 0; pointer-events: none; }
+.map-panel-strip {
+  display: flex; gap: 12px; margin: 0; padding: 0 20px; overflow-x: auto; list-style: none; scroll-snap-type: x mandatory;
+  scroll-padding: 0 20px; scrollbar-width: none; overscroll-behavior-x: contain; touch-action: pan-x;
+}
+.map-panel-strip::-webkit-scrollbar { display: none; }
+.map-panel-strip > li { flex: none; width: 270px; scroll-snap-align: center; }
+/* Points : 6 × 6, celui de la fiche du centre en bleu sur 16 ; au-delà de 8 biens, « 3 / 42 ». */
+.map-panel-pages { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 16px; }
+.map-panel-dot { flex: none; width: 6px; height: 6px; border-radius: 999px; background: var(--app-placeholder); transition: width 0.2s ease, background-color 0.2s ease; }
+.map-panel-dot.is-current { width: 16px; background: var(--app-brand); }
+.map-panel-count { color: var(--app-text-secondary); font: 400 12.5px/16px var(--app-font); font-variant-numeric: tabular-nums; }
+
+/* ——— Liste (grande hauteur) : fiches larges, 12 entre elles, 20 des bords et 14 en haut et en bas ——— */
+.map-panel-list {
+  display: flex; flex: 1; flex-direction: column; gap: 12px; min-height: 0; margin: 0; padding: 14px 20px; overflow-y: auto;
+  list-style: none; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch;
+}
+.map-panel-list > li { flex: none; }
+
+/* ——— Sans bien : la roue, « Pas de connexion Internet » ou « Aucun bien ici », au milieu de la place restante ——— */
+.map-panel-state { display: flex; flex: 1; align-items: center; justify-content: center; min-height: 0; padding: 0 20px; transition: opacity 0.15s ease-out; }
+.map-panel-state > .app-unavailable { padding: 0; }
+
+/* ——— Fiche (MapResultCard) : blanche, coins de 18, contour de 1 (bleu de 2 quand le bien est sélectionné) ——— */
+.map-card { position: relative; display: flex; flex-direction: column; overflow: hidden; border-radius: 18px; background: #FFFFFF; color: var(--app-navy); }
+.map-card::before { content: ''; position: absolute; inset: 0; z-index: 4; border: 1px solid var(--app-border); border-radius: inherit; pointer-events: none; }
+.map-card.is-selected::before { border: 2px solid var(--app-brand); }
+.map-card:has(.stretched:focus-visible) { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+.map-card .stretched:focus-visible { outline: none; }
+.map-card-photo { position: relative; flex: none; height: 96px; overflow: hidden; background: #F2F0EC; }
+.map-card.is-wide .map-card-photo { height: 160px; }
+.map-card-badge { position: absolute; z-index: 2; left: 10px; top: 10px; pointer-events: none; }
+.map-card-heart.heart-photo { right: 8px; top: 8px; }
+.map-card-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 12px; }
+.map-card-title { margin: 0; overflow: hidden; color: var(--app-navy); font: 700 15px/19px var(--app-font); white-space: nowrap; text-overflow: ellipsis; }
+.map-card-title a { color: inherit; text-decoration: none; }
+.map-card-place { margin: 0; overflow: hidden; color: var(--app-text-secondary); font: 400 12.5px/16px var(--app-font); white-space: nowrap; text-overflow: ellipsis; }
+.map-card-price { display: flex; align-items: baseline; gap: 3px; min-width: 0; margin: 1px 0 0; overflow: hidden; white-space: nowrap; }
+.map-card-price strong { color: var(--app-navy); font: 700 20px/24px var(--app-font); font-variant-numeric: tabular-nums; }
+.map-card-price span { color: var(--app-text-secondary); font: 600 12px/16px var(--app-font); }
+/* Faits : icône de 13, texte de 12,5 (semibold s'il a une couleur), « estimation » orange. */
+.map-card-facts { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+.map-card-fact { display: flex; align-items: center; gap: 6px; min-width: 0; color: rgba(36, 45, 56, 0.85); }
+.map-card-fact .icon { flex: none; width: 13px; height: 13px; color: var(--app-text-secondary); }
+.map-card-fact-text { min-width: 0; overflow: hidden; font: 400 12.5px/16px var(--app-font); white-space: nowrap; text-overflow: ellipsis; }
+.map-card-fact.tone-muted .map-card-fact-text { color: var(--app-text-secondary); }
+.map-card-fact.tone-positive { color: var(--green); }
+.map-card-fact.tone-negative { color: var(--red); }
+.map-card-fact.tone-caution { color: var(--orange); }
+.map-card-fact.tone-positive .icon, .map-card-fact.tone-negative .icon, .map-card-fact.tone-caution .icon { color: inherit; }
+.map-card-fact.tone-positive .map-card-fact-text, .map-card-fact.tone-negative .map-card-fact-text, .map-card-fact.tone-caution .map-card-fact-text { font-weight: 600; }
+.map-card-estimate {
+  display: inline-flex; flex: none; align-items: center; height: 16px; padding: 0 5px; border-radius: 999px;
+  background: rgba(180, 83, 9, 0.1); color: var(--estimated); font: 600 10px/1 var(--app-font);
+}
+
+/* Le panneau déplié en grand recouvre la carte : ses commandes s'effacent (0,2 s). */
+.map-column .map-tools { transition: opacity 0.2s ease-out; }
+.map-column.is-panel-large .map-tools, .map-column.is-panel-large .maplibregl-ctrl-top-right { opacity: 0; pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .map-panel { transition: opacity 0.25s ease-in-out; }
+  .map-panel.is-hidden { transform: none; }
+  .map-panel-dot { transition: none; }
+}
+
+/* ——— Marqueurs (MapPhotoMarker) : la vignette est un bouton, le cœur des favoris un autre, posé en haut à droite de
+   la photo (rond blanc de 24, cœur de 11, 4 du bord de la photo ; 44 au doigt). ——— */
+.map-markers > .map-marker { position: absolute; left: 0; top: 0; pointer-events: none; }
+.map-marker-inner { position: relative; }
+.map-marker-button {
+  display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 0; border: 0; background: none; color: inherit;
+  font: inherit; cursor: pointer; pointer-events: auto; -webkit-tap-highlight-color: transparent;
+}
+.map-marker-button:focus-visible { outline: none; }
+.map-marker-button:focus-visible .map-marker-card { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+.heart-button.map-marker-heart {
+  right: 8px; top: 8px; width: 24px; height: 24px; border-radius: 50%; background: #FFFFFF; color: var(--app-navy);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12); pointer-events: auto; --heart-full: var(--app-brand);
+}
+.heart-button.map-marker-heart::after { inset: -10px; }
+.map-marker-heart .icon { width: 11px; height: 11px; margin-top: 1px; stroke-width: 2.4; }
+.map-column.is-editing-zone .map-markers .map-marker-button, .map-column.is-editing-zone .map-markers .map-marker-heart { pointer-events: none; }
+
+/* ——— Mention des sources (MapTabView.attribution) : capsule blanche à 80 %, 9 gris, en bas à gauche, 10 au-dessus du
+   panneau ; masquée pendant la saisie du lieu. ——— */
+.results-map-attribution {
+  position: absolute; z-index: 4; left: 14px; bottom: calc(var(--map-attribution-bottom, 10px) + env(safe-area-inset-bottom)); margin: 0;
+  display: inline-flex; flex-wrap: wrap; gap: 4px; max-width: calc(100% - 28px); padding: 3px 6px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8); color: var(--app-text-secondary); font: 400 9px/1.25 var(--app-font);
+  transition: bottom 0.36s cubic-bezier(0.25, 0.9, 0.3, 1), opacity 0.2s ease;
+}
+.results-map-attribution a { color: inherit; text-decoration: none; }
+.results-map-attribution a:hover { text-decoration: underline; }
+.map-column.is-editing-place .results-map-attribution { opacity: 0; pointer-events: none; }
+@media (min-width: 1024px) {
+  .results-map-attribution { left: 10px; bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .results-map-attribution { transition: opacity 0.2s ease; }
+}

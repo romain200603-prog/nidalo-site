@@ -359,7 +359,7 @@ export const CRITERION_LABELS: Record<Criterion, { icon: IconName; text: string 
   estimatedMonthlyPayment: { icon: 'wallet', text: 'Mensualité (est.)' },
   furnished: { icon: 'bedDouble', text: 'Meublé' },
   availableFrom: { icon: 'calendarBlank', text: 'Disponibilité' },
-  currentMonthlyRent: { icon: 'euro', text: 'Loyer actuel' },
+  currentMonthlyRent: { icon: 'euro', text: 'Loyer encaissé' },
   potentialMonthlyRent: { icon: 'euro', text: 'Loyer potentiel' },
   annualRent: { icon: 'euro', text: 'Loyers annuels' },
   grossYield: { icon: 'chart', text: 'Rentabilité brute' },

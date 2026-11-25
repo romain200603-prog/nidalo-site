@@ -1132,7 +1132,7 @@ export function filterChips(draft: SearchDraft): FilterChip[] {
       add('tax', `Taxe foncière : ${compactPrice(draft.maxAnnualPropertyTax)} max`, (d) => ({ ...d, maxAnnualPropertyTax: null }));
     }
     // Situation locative et immeuble mixte (les types d'actif ont déjà leur pastille).
-    if (draft.leasedOnly) add('leased', 'Vendu loué', (d) => ({ ...d, leasedOnly: false }));
+    if (draft.leasedOnly) add('leased', 'Vendu occupé', (d) => ({ ...d, leasedOnly: false }));
     if (draft.vacantOnly) add('vacant', 'Bien libre', (d) => ({ ...d, vacantOnly: false }));
     if (draft.mixedBuilding) add('investmentKind', 'Immeuble mixte', (d) => withInvestmentKind(d, 'classic'));
     if (draft.requiresDeclaredRent) add('declaredRent', 'Loyer déclaré', (d) => ({ ...d, requiresDeclaredRent: false }));
@@ -1152,7 +1152,7 @@ export function filterChips(draft: SearchDraft): FilterChip[] {
     if (draft.zoning.trim()) add('zoning', `Zone ${draft.zoning.trim()}`, (d) => ({ ...d, zoning: '' }));
   }
   if (invest && draft.minCurrentMonthlyRent !== null) {
-    add('currentRent', `Loyer actuel : ${euroFormat.format(draft.minCurrentMonthlyRent)} min`, (d) => ({ ...d, minCurrentMonthlyRent: null }));
+    add('currentRent', `Loyers encaissés : ${euroFormat.format(draft.minCurrentMonthlyRent)} min`, (d) => ({ ...d, minCurrentMonthlyRent: null }));
   }
   if (invest && draft.maxAnnualCharges !== null) {
     add('annualCharges', `Charges : ${compactPrice(draft.maxAnnualCharges)}/an max`, (d) => ({ ...d, maxAnnualCharges: null }));

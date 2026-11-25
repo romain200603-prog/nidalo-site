@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
-import { CompactListingCard, HomeListingCard, SimilarListingCard } from '../components/HomeListingCard';
+import { HomeListingCard } from '../components/HomeListingCard';
 import { Icon } from '../components/Icon';
 import type { IconName } from '../components/iconPaths';
 import { Page } from '../components/Layout';
@@ -31,9 +31,9 @@ import '../styles/accueil-app.css';
 
 // Accueil. Sous 1024 px, celui de l'app (Features/Home : HomeView.swift, HomeCategoryCard.swift, HomeSections.swift) :
 // barre du haut sans fond (logo, nom, cloche), carte des catégories dont les filtres s'ouvrent dans la carte,
-// « Reprendre ma recherche », puis les sections de biens réels, chacune avec la carte d'annonce que l'app y montre
-// (HomeListingCard, CompactListingCard, SimilarListingCard). Sur ordinateur, la mise en page de la maquette 1 de
-// Romain, avec les cartes de l'app.
+// « Reprendre ma recherche », puis les sections de biens réels, toutes avec la grande carte de l'app (HomeListingCard,
+// version 1.0.1) et la pastille de leur section. Sur ordinateur, la mise en page de la maquette 1 de Romain, avec la
+// même carte.
 
 const MODES: SearchMode[] = ['buy', 'rent', 'invest', 'hotel'];
 
@@ -153,12 +153,16 @@ function useShrinkToFit() {
 
 // ——— Téléphone et tablette (moins de 1024 px) : l'accueil de l'app ———
 
-/** Couleur d'une rubrique : fond clair du pavé et encre du pictogramme (palette NidaloTint de l'app). */
-type SectionTint = 'blue' | 'green' | 'teal' | 'amber' | 'gray' | 'red';
+/**
+ * Rubrique de l'accueil (HomeSection de l'app) : elle donne la couleur du pavé et de son pictogramme (inkHex,
+ * softHex), qui suit la rubrique, jamais sa place.
+ */
+type SectionTint = 'opportunities' | 'cities' | 'viewed' | 'similar' | 'newest' | 'drops';
 
 /**
  * En-tête d'une rubrique (HomeSectionHeader) : pavé de 36 (coins 10, fond clair) au pictogramme de 22 dans la couleur
- * de la rubrique, titre 18 gras, « Voir tout » à droite, sous-titre aligné sur le titre.
+ * de la rubrique (les flèches de tendance, plus plates, à 112 %), titre 18 gras, « Voir tout » à droite, sous-titre
+ * aligné sur le titre.
  */
 function AppSectionHeader({ id, title, subtitle, href, icon, tint }: {
   id: string; title: string; subtitle?: string; href?: string; icon: IconName; tint: SectionTint;
@@ -182,13 +186,16 @@ function AppSectionHeader({ id, title, subtitle, href, icon, tint }: {
   );
 }
 
-/** Barre du haut sans fond (HomeTopBar) : logo maison et « NIDΛLO », cloche dans un rond blanc avec son point rouge. */
+/**
+ * Barre du haut sans fond (HomeTopBar) : logo maison et « NIDΛLO » en texte (DomiaWordmark : police système très
+ * grasse de 19, lettres espacées de 26 %, Λ grec), cloche dans un rond blanc avec son point rouge.
+ */
 function HomeTopBar({ unread }: { unread: number }) {
   return (
     <div className="home-app-top">
       <h1 className="home-app-brand">
         <img className="home-app-logo" src="/assets/logo-maison.svg" width={32} height={27} alt="" />
-        <img className="home-app-word" src="/assets/wordmark-accueil.svg" width={90} height={14} alt="" />
+        <span className="home-app-word" aria-hidden="true">NID{'\u039B'}LO</span>
         <span className="visually-hidden">Nidalo</span>
       </h1>
       <a className="home-app-bell" href={accountPath('notifications')} aria-label={notificationsLabel(unread)}>
@@ -435,12 +442,12 @@ function PhoneHome({ mode, draft, drafts, feed, feedStatus, onRetryFeed, extras,
         {feedStatus === 'loading' && <div className="home-feed-state home-feed-loading"><span className="spinner" role="status" aria-label="Chargement" /></div>}
         {opportunities.length > 0 && (
           <section className="home-app-section is-first" aria-labelledby="opportunites">
-            <AppSectionHeader id="opportunites" title="Opportunités du moment" subtitle="Sélectionnés selon vos critères et le marché."
-              href={searchHref(switchMode(draft, 'invest', drafts.invest))} icon="sparkles" tint="blue" />
+            <AppSectionHeader id="opportunites" title="Opportunités du moment" subtitle="Les dernières annonces pour investir."
+              href={searchHref(switchMode(draft, 'invest', drafts.invest))} icon="trend" tint="opportunities" />
             <ul className="home-app-carousel">
               {opportunities.map(({ row, highlights }) => (
                 <li key={row.id}>
-                  <HomeListingCard row={row} highlights={highlights} badge="yield" heart href={listingPath(row.id, 'invest')} investment className="opportunity-card" />
+                  <HomeListingCard row={row} highlights={highlights} badge="yield" heart href={listingPath(row.id, 'invest')} className="opportunity-card" />
                 </li>
               ))}
             </ul>
@@ -448,7 +455,7 @@ function PhoneHome({ mode, draft, drafts, feed, feedStatus, onRetryFeed, extras,
         )}
 
         <section className={`home-cities${opportunities.length > 0 ? '' : ' is-first'}`} aria-labelledby="villes">
-          <AppSectionHeader id="villes" title="Explorer par ville" icon="pin" tint="teal" />
+          <AppSectionHeader id="villes" title="Explorer par ville" icon="map" tint="cities" />
           <ul className="home-app-carousel">
             {EXPLORED_CITIES.map((city) => (
               <li key={city}>
@@ -462,13 +469,16 @@ function PhoneHome({ mode, draft, drafts, feed, feedStatus, onRetryFeed, extras,
           </ul>
         </section>
 
+        {/* Toutes les rangées ont la carte des « Opportunités du moment » (HomeView.sections) : rien sur les biens vus,
+            le rendement et le cœur sur ceux de la recherche, « Nouveau » et le cœur sur les nouvelles annonces, la baisse
+            et l'ancien prix barré, sans cœur, sur les baisses de prix. */}
         {sections && extras.viewed.length > 0 && (
           <section className="home-app-section" aria-labelledby="consultes">
-            <AppSectionHeader id="consultes" title="Consultés récemment" href={sectionHref} icon="clock" tint="gray" />
+            <AppSectionHeader id="consultes" title="Vus récemment" href={sectionHref} icon="history" tint="viewed" />
             <ul className="home-app-carousel">
               {extras.viewed.map((row) => (
                 <li key={row.id}>
-                  <CompactListingCard row={row} highlights={highlightsOf(row)} accessory="none" href={listingPath(row.id)} />
+                  <HomeListingCard row={row} highlights={highlightsOf(row)} badge="none" heart={false} href={listingPath(row.id)} />
                 </li>
               ))}
             </ul>
@@ -477,11 +487,11 @@ function PhoneHome({ mode, draft, drafts, feed, feedStatus, onRetryFeed, extras,
 
         {sections && extras.similar.length > 0 && (
           <section className="home-app-section" aria-labelledby="similaires">
-            <AppSectionHeader id="similaires" title="Biens similaires à vos recherches" href={sectionHref} icon="crosshair" tint="green" />
+            <AppSectionHeader id="similaires" title="Selon votre recherche" href={sectionHref} icon="search" tint="similar" />
             <ul className="home-app-carousel">
               {extras.similar.map(({ row, highlights }) => (
                 <li key={row.id}>
-                  <SimilarListingCard row={row} highlights={highlights} href={listingPath(row.id)} />
+                  <HomeListingCard row={row} highlights={highlights} badge="yield" heart href={listingPath(row.id)} />
                 </li>
               ))}
             </ul>
@@ -490,12 +500,12 @@ function PhoneHome({ mode, draft, drafts, feed, feedStatus, onRetryFeed, extras,
 
         {sections && feed && feed.newest.length > 0 && (
           <section className="home-app-section" aria-labelledby="nouveautes">
-            <AppSectionHeader id="nouveautes" title="Nouveautés" subtitle="Les dernières annonces publiées sur Nidalo." href={sectionHref}
-              icon="zap" tint="amber" />
+            <AppSectionHeader id="nouveautes" title="Nouvelles annonces" subtitle="Les dernières annonces publiées." href={sectionHref}
+              icon="sparkles" tint="newest" />
             <ul className="home-app-carousel">
               {feed.newest.map((row) => (
                 <li key={row.id}>
-                  <CompactListingCard row={row} highlights={highlightsOf(row)} accessory="new" href={listingPath(row.id)} />
+                  <HomeListingCard row={row} highlights={highlightsOf(row)} badge="new" heart href={listingPath(row.id)} />
                 </li>
               ))}
             </ul>
@@ -504,12 +514,12 @@ function PhoneHome({ mode, draft, drafts, feed, feedStatus, onRetryFeed, extras,
 
         {sections && feed && feed.priceDrops.length > 0 && (
           <section className="home-app-section" aria-labelledby="baisses">
-            <AppSectionHeader id="baisses" title="Baisses de prix" subtitle="Des biens qui ont récemment baissé leur prix." href={sectionHref}
-              icon="trendingDown" tint="red" />
+            <AppSectionHeader id="baisses" title="Baisses de prix" subtitle="Leur prix vient de baisser." href={sectionHref}
+              icon="trendingDown" tint="drops" />
             <ul className="home-app-carousel">
               {feed.priceDrops.map((row) => (
                 <li key={row.id}>
-                  <CompactListingCard row={row} highlights={highlightsOf(row)} accessory="priceDrop" href={listingPath(row.id)} />
+                  <HomeListingCard row={row} highlights={highlightsOf(row)} badge="priceDrop" heart={false} href={listingPath(row.id)} />
                 </li>
               ))}
             </ul>
@@ -598,9 +608,8 @@ function useHomeExtras(mode: SearchMode, draft: SearchDraft, drafts: Record<Sear
 }
 
 // ——— Ordinateur (≥ 1024 px) : mise en page de la maquette 1 de Romain ———
-// Même état, mêmes tuiles, même recherche et mêmes filtres que l'accueil du téléphone ; les cartes d'annonce sont
-// celles de l'accueil de l'app : HomeListingCard en grille, et CompactListingCard (la carte compacte du téléphone,
-// de la largeur de sa colonne) pour les listes.
+// Même état, mêmes tuiles, même recherche et mêmes filtres que l'accueil du téléphone ; mêmes titres et même carte
+// d'annonce que l'accueil de l'app (HomeListingCard, avec la pastille de chaque section), en grille.
 
 function DesktopSectionHead({ id, title, subtitle, href, picto }: { id: string; title: string; subtitle?: string; href: string; picto?: IconName }) {
   return (
@@ -693,11 +702,11 @@ function DesktopHome({ greeting, mode, draft, drafts, tiles, feed: loadedFeed, f
         {feed && feed.opportunities.length > 0 && (
           <section className="home-section dhome-section dhome-opportunities" aria-labelledby="opportunites">
             <div className="dhome-inner">
-              <DesktopSectionHead id="opportunites" title="Opportunités du moment" subtitle="Des biens sélectionnés selon vos critères et le marché actuel."
+              <DesktopSectionHead id="opportunites" title="Opportunités du moment" subtitle="Les dernières annonces pour investir."
                 href={searchHref(switchMode(draft, 'invest', drafts.invest))} picto="pictoOpportunites" />
               <div className="dhome-grid">
                 {feed.opportunities.map(({ row, highlights }) => (
-                  <HomeListingCard key={row.id} row={row} highlights={highlights} badge="yield" heart href={listingPath(row.id, 'invest')} investment className="opportunity-card" />
+                  <HomeListingCard key={row.id} row={row} highlights={highlights} badge="yield" heart href={listingPath(row.id, 'invest')} className="opportunity-card" />
                 ))}
               </div>
             </div>
@@ -706,10 +715,10 @@ function DesktopHome({ greeting, mode, draft, drafts, tiles, feed: loadedFeed, f
         {viewed.length > 0 && (
           <section className="home-section dhome-section" aria-labelledby="consultes">
             <div className="dhome-inner">
-              <DesktopSectionHead id="consultes" title="Consultés récemment" href={sectionHref} picto="pictoConsultes" />
-              <div className="dhome-list">
+              <DesktopSectionHead id="consultes" title="Vus récemment" href={sectionHref} picto="pictoConsultes" />
+              <div className="dhome-grid">
                 {viewed.map((row) => (
-                  <CompactListingCard key={row.id} row={row} highlights={highlightsFor(row, null)} accessory="none" href={listingPath(row.id)} />
+                  <HomeListingCard key={row.id} row={row} highlights={highlightsFor(row, null)} badge="none" heart={false} href={listingPath(row.id)} />
                 ))}
               </div>
             </div>
@@ -718,10 +727,10 @@ function DesktopHome({ greeting, mode, draft, drafts, tiles, feed: loadedFeed, f
         {similar.length > 0 && (
           <section className="home-section dhome-section" aria-labelledby="similaires">
             <div className="dhome-inner">
-              <DesktopSectionHead id="similaires" title="Biens similaires à vos recherches" href={sectionHref} picto="pictoSimilaires" />
+              <DesktopSectionHead id="similaires" title="Selon votre recherche" href={sectionHref} picto="pictoSimilaires" />
               <div className="dhome-grid">
                 {similar.map(({ row, highlights }) => (
-                  <HomeListingCard key={row.id} row={row} highlights={highlights} badge="yield" heart href={listingPath(row.id)} investment={mode === 'invest'} />
+                  <HomeListingCard key={row.id} row={row} highlights={highlights} badge="yield" heart href={listingPath(row.id)} />
                 ))}
               </div>
             </div>
@@ -730,10 +739,10 @@ function DesktopHome({ greeting, mode, draft, drafts, tiles, feed: loadedFeed, f
         {feed && feed.newest.length > 0 && (
           <section className="home-section dhome-section" aria-labelledby="nouveautes">
             <div className="dhome-inner">
-              <DesktopSectionHead id="nouveautes" title="Nouveautés" subtitle="Les dernières annonces publiées sur Nidalo." href={sectionHref} picto="pictoNouveautes" />
-              <div className="dhome-list">
+              <DesktopSectionHead id="nouveautes" title="Nouvelles annonces" subtitle="Les dernières annonces publiées." href={sectionHref} picto="pictoNouveautes" />
+              <div className="dhome-grid">
                 {feed.newest.map((row) => (
-                  <CompactListingCard key={row.id} row={row} highlights={highlightsFor(row, null)} accessory="new" href={listingPath(row.id)} />
+                  <HomeListingCard key={row.id} row={row} highlights={highlightsFor(row, null)} badge="new" heart href={listingPath(row.id)} />
                 ))}
               </div>
             </div>
@@ -742,10 +751,10 @@ function DesktopHome({ greeting, mode, draft, drafts, tiles, feed: loadedFeed, f
         {feed && feed.priceDrops.length > 0 && (
           <section className="home-section dhome-section" aria-labelledby="baisses">
             <div className="dhome-inner">
-              <DesktopSectionHead id="baisses" title="Baisses de prix" subtitle="Des biens qui ont récemment baissé leur prix." href={sectionHref} picto="pictoBaisses" />
-              <div className="dhome-list">
+              <DesktopSectionHead id="baisses" title="Baisses de prix" subtitle="Leur prix vient de baisser." href={sectionHref} picto="pictoBaisses" />
+              <div className="dhome-grid">
                 {feed.priceDrops.map((row) => (
-                  <CompactListingCard key={row.id} row={row} highlights={highlightsFor(row, null)} accessory="priceDrop" href={listingPath(row.id)} />
+                  <HomeListingCard key={row.id} row={row} highlights={highlightsFor(row, null)} badge="priceDrop" heart={false} href={listingPath(row.id)} />
                 ))}
               </div>
             </div>
