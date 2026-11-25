@@ -1,4 +1,4 @@
-import { daysBetween, daySeparatorLabel, DISTANT_FUTURE } from './format';
+import { clock, daysBetween, daySeparatorLabel, DISTANT_FUTURE } from './format';
 import type { Message } from './api';
 import { contentPreview, type Attachment, type MessageContent } from './content';
 import { isDeletedAccount, sameId, type Conversation, type ListingSnapshot } from './inbox';
@@ -182,15 +182,16 @@ export type SiteThreadItem =
   | { kind: 'visit'; key: string; at: Date; senderId: string | null; request: ConversationVisitRequest };
 
 export type SiteThreadRow = { item: SiteThreadItem; startsGroup: boolean; endsGroup: boolean };
-export type SiteThreadDay = { key: string; label: string; rows: SiteThreadRow[] };
+/** Un jour du fil : « Aujourd'hui · 10:42 » (le jour et l'heure de son premier message), sa date, ses lignes. */
+export type SiteThreadDay = { key: string; label: string; date: Date; rows: SiteThreadRow[] };
 
 /** Expéditeur pour les séries : une ligne système est seule dans sa série. */
 const seriesKey = (item: SiteThreadItem) =>
   (item.kind === 'message' && isSystem(item.message.content) ? `system:${item.key}` : (item.senderId ?? '').toLowerCase());
 
 /**
- * Jours (« Aujourd'hui », « Hier », « Mer. 12 nov. ») et séries : messages et demandes de visite qui se suivent du même
- * expéditeur forment une série (4 px entre eux, 14 px quand l'expéditeur change ; l'avatar à côté du dernier).
+ * Jours (« Aujourd'hui · 10:42 », « Hier · 18:03 », « Lundi 28 septembre · 09:12 », comme l'app) et séries : messages
+ * et demandes de visite qui se suivent du même expéditeur forment une série (l'avatar à côté du dernier).
  */
 export function siteThreadDays(messages: Message[], requests: ConversationVisitRequest[], now: Date = new Date()): SiteThreadDay[] {
   const items: SiteThreadItem[] = [
@@ -204,7 +205,7 @@ export function siteThreadDays(messages: Message[], requests: ConversationVisitR
     const key = dayKey(item.at);
     let day = days[days.length - 1];
     if (!day || day.key !== key) {
-      day = { key, label: daySeparatorLabel(item.at, now), rows: [] };
+      day = { key, label: `${daySeparatorLabel(item.at, now)} · ${clock(item.at)}`, date: item.at, rows: [] };
       days.push(day);
     }
     day.rows.push({ item, startsGroup: true, endsGroup: true });

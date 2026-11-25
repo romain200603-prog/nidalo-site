@@ -9,7 +9,7 @@ import { contentPreview } from '../../lib/messages/content';
 import { keepNumbersTogether } from '../../lib/messages/format';
 import { isDeletedAccount, matchesListSearch, membersLabel, sameId, type Conversation } from '../../lib/messages/inbox';
 import {
-  forwardSendTitle, forwardTargets, MAX_FORWARD_TARGETS, myReaction, QUICK_REACTIONS, reactionSummary, toggledTarget,
+  forwardSendTitle, forwardTargets, MAX_FORWARD_TARGETS, MORE_REACTIONS, myReaction, QUICK_REACTIONS, reactionSummary, toggledTarget,
 } from '../../lib/messages/interactions';
 import { blockedStore, forwardMessage, inboxStore, profileOf, removeMyReaction, threadStore } from '../../lib/messages/store';
 import { senderName } from '../../lib/messages/thread';
@@ -23,6 +23,11 @@ import { ConversationAvatar, CounterpartAvatar, Dialog, Sheet, showNotice } from
 /** Appui long (toucher) et double toucher, comme l'app. */
 const LONG_PRESS_MS = 350;
 const DOUBLE_TAP_MS = 300;
+/** Glisser pour répondre (ReplySwipeGesture) : course amortie de 70 px, réponse au-delà de 56 px, jamais à moins de
+ * 30 px du bord gauche (le retour par balayage reste libre), seulement pour un geste surtout horizontal. */
+const SWIPE_MAX = 70;
+const SWIPE_THRESHOLD = 56;
+const SWIPE_EDGE = 30;
 /** Le cœur rejoint la pastille : la réaction change à ce moment-là (InteractiveMessage.doubleTap). */
 const HEART_DELAY_MS = 420;
 
@@ -30,10 +35,13 @@ const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.
 
 /**
  * Bulle avec ses gestes : double clic ou double toucher pour ❤️ (un cœur grossit puis rejoint la pastille) ; appui long
- * (0,35 s), clic droit ou « … » pour la barre d'emojis et le menu ; pastille des réactions dessous, à gauche.
+ * (0,35 s), clic droit ou « … » pour la barre d'emojis et le menu ; glisser vers la droite (au doigt) pour répondre ;
+ * pastille des réactions dessous, à gauche.
  */
-export function InteractiveMessage({ message, flashing, onHeart, onMenu, onShowReactions, children }: {
+export function InteractiveMessage({ message, flashing, onHeart, onMenu, onShowReactions, onReply = null, children }: {
   message: Message;
+  /** « Répondre » permis : le balayage vers la droite répond. */
+  onReply?: (() => void) | null;
   /** Original atteint depuis une citation : la bulle s'éclaire un instant. */
   flashing: boolean;
   onHeart: () => void;
@@ -48,6 +56,9 @@ export function InteractiveMessage({ message, flashing, onHeart, onMenu, onShowR
   const heartAt = useRef(-Infinity);
   const timers = useRef<number[]>([]);
   const [burst, setBurst] = useState(0);
+  // Balayage en cours : départ du doigt, puis la course amortie de la bulle.
+  const swipe = useRef<{ x: number; y: number; active: boolean } | null>(null);
+  const [offset, setOffset] = useState(0);
   useEffect(() => () => {
     timers.current.forEach((timer) => window.clearTimeout(timer));
     if (press.current) window.clearTimeout(press.current.timer);
@@ -76,6 +87,7 @@ export function InteractiveMessage({ message, flashing, onHeart, onMenu, onShowR
     if (event.pointerType === 'mouse' || !event.isPrimary) return;
     cancelPress();
     const { clientX: x, clientY: y } = event;
+    swipe.current = onReply && x > SWIPE_EDGE ? { x, y, active: false } : null;
     press.current = {
       x, y,
       timer: window.setTimeout(() => {
@@ -88,9 +100,34 @@ export function InteractiveMessage({ message, flashing, onHeart, onMenu, onShowR
   const onPointerMove = (event: PointerEvent) => {
     const current = press.current;
     if (current && Math.hypot(event.clientX - current.x, event.clientY - current.y) > 10) cancelPress();
+    const start = swipe.current;
+    if (!start) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    if (!start.active) {
+      if (Math.abs(dy) > 10 && Math.abs(dy) * 1.4 >= Math.abs(dx)) swipe.current = null;
+      else if (dx > 10 && dx > Math.abs(dy) * 1.4) {
+        start.active = true;
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+      }
+      if (!start.active) return;
+    }
+    setOffset(SWIPE_MAX * (1 - Math.exp(-Math.max(0, dx) / SWIPE_MAX)));
+  };
+  const endSwipe = (reply: boolean) => {
+    const wasActive = swipe.current?.active ?? false;
+    swipe.current = null;
+    if (!wasActive) return false;
+    if (reply && offset >= SWIPE_THRESHOLD) onReply?.();
+    setOffset(0);
+    return true;
   };
   const onPointerUp = (event: PointerEvent) => {
     if (event.pointerType === 'mouse') return;
+    if (endSwipe(true)) {
+      cancelPress();
+      return;
+    }
     const tapped = press.current !== null;
     cancelPress();
     if (!tapped) return;
@@ -112,7 +149,10 @@ export function InteractiveMessage({ message, flashing, onHeart, onMenu, onShowR
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerCancel={cancelPress}
+      onPointerCancel={() => {
+        endSwipe(false);
+        cancelPress();
+      }}
       onContextMenu={(event) => {
         event.preventDefault();
         cancelPress();
@@ -122,7 +162,20 @@ export function InteractiveMessage({ message, flashing, onHeart, onMenu, onShowR
       // Pas de mot sélectionné par le double clic.
       onMouseDown={(event) => { if (event.detail > 1) event.preventDefault(); }}
     >
-      <div className="dm-interactive-body" ref={body}>
+      {onReply && offset > 0 && (
+        <span
+          className={`dm-swipe-reply${offset >= SWIPE_THRESHOLD ? ' is-reached' : ''}`}
+          style={{ opacity: Math.min(1, offset / 30), transform: `scale(${0.6 + 0.4 * Math.min(1, offset / SWIPE_THRESHOLD)})` }}
+          aria-hidden="true"
+        >
+          <Icon name="reply" />
+        </span>
+      )}
+      <div
+        className={`dm-interactive-body${offset > 0 ? ' is-swiping' : ''}`}
+        ref={body}
+        style={offset > 0 ? { transform: `translateX(${offset}px)` } : undefined}
+      >
         {children}
         {burst > 0 && <span key={burst} className="dm-burst" aria-hidden="true" onAnimationEnd={() => setBurst(0)}>❤️</span>}
       </div>
@@ -199,8 +252,11 @@ export type FocusedMessage = { message: Message; rect: DOMRect; outgoing: boolea
 export type FocusMenuItem = { label: string; icon: IconName; onSelect: () => void };
 
 const BAR_HEIGHT = 50;
-const BAR_WIDTH = QUICK_REACTIONS.length * 40 + 12;
+/** Les 6 emojis et « + » (plus d'emojis), 40 px chacun, 6 px de chaque côté. */
+const BAR_WIDTH = (QUICK_REACTIONS.length + 1) * 40 + 12;
 const ROW_HEIGHT = 46;
+/** Bande grise de 6 px au-dessus de « Signaler » ou « Supprimer ». */
+const BAND_HEIGHT = 6;
 const MENU_WIDTH = 230;
 const GAP = 8;
 const MARGIN = 12;
@@ -210,8 +266,8 @@ const MARGIN = 12;
  * l'ensemble dépasse en haut, tout descend (la bulle aussi). Alignés sur la bulle : à droite pour un message envoyé.
  */
 export function focusLayout(bubble: { top: number; bottom: number; left: number; right: number; height: number }, rows: number, outgoing: boolean,
-  screen: { width: number; height: number }) {
-  const menuHeight = rows * ROW_HEIGHT;
+  screen: { width: number; height: number }, destructive = false) {
+  const menuHeight = rows * ROW_HEIGHT + (destructive ? ROW_HEIGHT + BAND_HEIGHT : 0);
   let bubbleY = bubble.top;
   const menuBelow = bubble.bottom + GAP + menuHeight <= screen.height - MARGIN;
   const above = BAR_HEIGHT + GAP + (menuBelow ? 0 : menuHeight + GAP);
@@ -225,12 +281,19 @@ export function focusLayout(bubble: { top: number; bottom: number; left: number;
   return { bubbleY, barY, menuY, barX: x(BAR_WIDTH), menuX: x(MENU_WIDTH) };
 }
 
-/** La bulle mise en avant (sa copie, à sa place), la barre des 6 emojis et le menu ; un clic à côté ferme tout. */
-export function MessageMenu({ focused, myEmoji, items, onEmoji, onClose }: {
+/**
+ * La bulle mise en avant (sa copie, à sa place), la barre des 6 emojis et « + », puis le menu : Répondre, Transférer,
+ * Copier, et après une bande grise « Signaler » (message reçu) ou « Supprimer » (message envoyé), en rouge. Un clic à
+ * côté ferme tout.
+ */
+export function MessageMenu({ focused, myEmoji, items, destructive, onEmoji, onMore, onClose }: {
   focused: FocusedMessage | null;
   myEmoji: string | null;
   items: FocusMenuItem[];
+  destructive: FocusMenuItem | null;
   onEmoji: (emoji: string) => void;
+  /** « + » : la page de tous les emojis. */
+  onMore: () => void;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -240,7 +303,7 @@ export function MessageMenu({ focused, myEmoji, items, onEmoji, onClose }: {
     return () => window.removeEventListener('resize', onClose);
   }, [focused, onClose]);
   const layout = focused
-    ? focusLayout(focused.rect, items.length, focused.outgoing, { width: window.innerWidth, height: window.innerHeight })
+    ? focusLayout(focused.rect, items.length, focused.outgoing, { width: window.innerWidth, height: window.innerHeight }, destructive !== null)
     : null;
   return (
     <Dialog open={focused !== null} onClose={onClose} className="dm-focus" label="Réagir, répondre ou transférer">
@@ -271,8 +334,11 @@ export function MessageMenu({ focused, myEmoji, items, onEmoji, onClose }: {
                 <span aria-hidden="true">{emoji}</span>
               </button>
             ))}
+            <button type="button" className="dm-focus-more" aria-label="Plus d'emojis" title="Plus d'emojis" onClick={onMore}>
+              <Icon name="plus" />
+            </button>
           </div>
-          {items.length > 0 && (
+          {(items.length > 0 || destructive) && (
             <div className="dm-focus-menu" role="menu" style={{ left: layout.menuX, top: layout.menuY, width: MENU_WIDTH }}>
               {items.map((item) => (
                 <button key={item.label} type="button" role="menuitem" onClick={item.onSelect}>
@@ -280,11 +346,58 @@ export function MessageMenu({ focused, myEmoji, items, onEmoji, onClose }: {
                   <Icon name={item.icon} />
                 </button>
               ))}
+              {destructive && (
+                <>
+                  {items.length > 0 && <span className="dm-focus-band" aria-hidden="true" />}
+                  <button type="button" role="menuitem" className="is-destructive" onClick={destructive.onSelect}>
+                    <span>{destructive.label}</span>
+                    <Icon name={destructive.icon} />
+                  </button>
+                </>
+              )}
             </div>
           )}
         </>
       )}
     </Dialog>
+  );
+}
+
+// MARK: - Plus d'emojis (EmojiPickerPage)
+
+/** Tous les emojis par section (Immobilier, Visages, Gestes, Cœurs), 7 par ligne ; le mien sur un rond bleu clair. */
+export function EmojiPickerSheet({ open, myEmoji, onPick, onClose }: {
+  open: boolean;
+  myEmoji: string | null;
+  onPick: (emoji: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Sheet open={open} title="Plus d'emojis" onClose={onClose} className="dm-emoji-sheet">
+      <div className="dm-emoji-page">
+        {MORE_REACTIONS.map((section) => (
+          <section key={section.title} className="dm-emoji-section" aria-label={section.title}>
+            <h3 className="dm-emoji-title">{section.title}</h3>
+            <div className="dm-emoji-grid">
+              {section.emojis.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  className={`dm-emoji-choice${myEmoji === emoji ? ' is-mine' : ''}`}
+                  aria-label={myEmoji === emoji ? `${emoji}, votre réaction` : emoji}
+                  onClick={() => {
+                    onClose();
+                    onPick(emoji);
+                  }}
+                >
+                  <span aria-hidden="true">{emoji}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </Sheet>
   );
 }
 

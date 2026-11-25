@@ -5,10 +5,14 @@ import { allowedActions, effectiveStatus, offerGapLabel, offerStatusLabel, type 
 import { visitErrorMessage } from '../../lib/listing/visits';
 import type { Message } from '../../lib/messages/api';
 import { fileExtension, isMedia, UNSUPPORTED_ATTACHMENT, type Attachment } from '../../lib/messages/content';
-import { clock, durationLabel, keepNumbersTogether, sizeLabel } from '../../lib/messages/format';
+import { signedUrl } from '../../lib/messages/files';
+import { clock, durationLabel, floatingDayLabel, keepNumbersTogether, sizeLabel } from '../../lib/messages/format';
 import { sameId, type Conversation } from '../../lib/messages/inbox';
 import { canForward, canReply, DELETED_QUOTE, firstName, quoteText, replyHeader } from '../../lib/messages/interactions';
-import { loadQuotedOriginal, profileOf, quotedOriginal, quotedStore, react, refreshAfterVisit, toggleHeart } from '../../lib/messages/store';
+import { contactCardFile, safeFileName, saveFile } from '../../lib/messages/exportFiles';
+import {
+  deleteMessage, loadQuotedOriginal, profileOf, quotedOriginal, quotedStore, react, refreshAfterVisit, toggleHeart,
+} from '../../lib/messages/store';
 import { bubbleText, groupSender, mediaEntries, senderName, siteThreadDays, type SiteThreadRow } from '../../lib/messages/thread';
 import {
   acceptVisitRequest, openSlots, requestCardTitle, requestDateShort, requestDateWide, requestOutcome, requestPlaceLine, shownSlot,
@@ -16,16 +20,21 @@ import {
 } from '../../lib/messages/visitRequests';
 import { avatarUrl } from '../../lib/account/profile';
 import { useStore } from '../../lib/account/session';
+import { Spinner } from '../account/parts';
+import { ReportSheet } from './actions';
 import {
-  ForwardedLabel, InteractiveMessage, MessageMenu, myEmojiOn, ReactionsSheet, ReplyContext, type FocusedMessage, type FocusMenuItem,
+  EmojiPickerSheet, ForwardedLabel, InteractiveMessage, MessageMenu, myEmojiOn, ReactionsSheet, ReplyContext, type FocusedMessage,
+  type FocusMenuItem,
 } from './MessageInteractions';
-import { ActionMenu, ConversationAvatar, CounterpartAvatar, Dialog, showIphoneOnly, useSignedUrl } from './parts';
+import { ActionMenu, ConfirmDialog, ConversationAvatar, CounterpartAvatar, Dialog, PlainSheet, showNotice, useSignedUrl, type MenuItem } from './parts';
+import { VisitEventCard } from './VisitEventCard';
 import { GifBubble, VoiceBubble } from './VoiceGif';
 
-// Fil de la conversation ouverte (demande de Romain du 14 novembre 2026) : toute la largeur, reçus collés à gauche et
-// miens à droite ; séparateurs de date en pastille ; bulles serrées (4 px dans une série, 14 px quand l'expéditeur
-// change), l'heure et les coches dans la bulle ; l'avatar de 28 px à côté de la dernière bulle reçue d'une série.
-// Messages enrichis : photos dans la bulle, fichiers en carte, offres, demandes de visite (carte de 340 px).
+// Fil de la conversation ouverte, comme l'app (ConversationView.swift) : reçus à gauche et miens à droite, 18,5 px de
+// marge ; séparateur de jour en texte gris (« Aujourd'hui · 10:42 ») et pastille du jour en haut pendant le
+// défilement ; bulles de 289 px au plus, serrées dans une série (2 px, 8 px quand l'expéditeur change) ; l'avatar de
+// 23 px à côté de la dernière bulle reçue d'une série. L'heure et les coches restent dans la bulle (demande de Romain du
+// 14 novembre 2026). Messages enrichis : photos, fichiers, offres, visite confirmée, demandes de visite.
 
 const dayMonthWide = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long' });
 
@@ -95,6 +104,8 @@ type Interactions = {
   flashed: string | null;
   onMenu: (message: Message, outgoing: boolean, rect: DOMRect, preview: ReactNode) => void;
   onShowReactions: (message: Message) => void;
+  /** Glisser pour répondre (quand « Répondre » est permis). */
+  onReply: (message: Message) => void;
   onOpenQuote: (id: string) => void;
 };
 
@@ -117,6 +128,19 @@ export function Thread({
   const [flashed, setFlashed] = useState<string | null>(null);
   const flashTimers = useRef<number[]>([]);
   useEffect(() => () => flashTimers.current.forEach((timer) => window.clearTimeout(timer)), []);
+  // « + » de la barre d'emojis, « Signaler » (reçu) et « Supprimer » (envoyé) de l'appui long.
+  const [emojiFor, setEmojiFor] = useState<Message | null>(null);
+  const [reported, setReported] = useState<Message | null>(null);
+  const [toDelete, setToDelete] = useState<Message | null>(null);
+  // Pastille du jour (floatingDayLabel) : seulement pendant un défilement de la personne (molette, doigt, clavier,
+  // barre de défilement), jamais à l'ouverture ni quand la liste descend seule ; elle part 1,2 s après.
+  const [pill, setPill] = useState<{ label: string; shown: boolean } | null>(null);
+  const pillTimer = useRef<number | undefined>(undefined);
+  const userScroll = useRef(0);
+  useEffect(() => () => window.clearTimeout(pillTimer.current), []);
+  const markUserScroll = () => {
+    userScroll.current = Date.now();
+  };
   // Les originaux cités qui ne sont pas dans les messages lus : relus une fois, la citation suit.
   useStore(quotedStore);
   const replyKey = messages.map((message) => message.replyToId ?? '').join(',');
@@ -243,9 +267,33 @@ export function Thread({
     me, canWrite, messages, flashed,
     onMenu: (message, outgoing, rect, preview) => setFocused({ message, rect, outgoing, preview }),
     onShowReactions: (message) => setReactionsOf(message.id),
+    onReply,
     onOpenQuote: openQuote,
   };
   const closeMenu = useCallback(() => setFocused(null), []);
+  /** Jour dont le séparateur est passé sous le haut de la liste (topVisibleDay), sinon le premier. */
+  const showDayPill = (el: HTMLDivElement) => {
+    if (Date.now() - userScroll.current > 1500) return;
+    const top = el.getBoundingClientRect().top;
+    let current = days[0] ?? null;
+    for (const section of el.querySelectorAll<HTMLElement>('[data-day]')) {
+      if (section.getBoundingClientRect().top - top > 10) break;
+      current = days.find((day) => day.key === section.dataset.day) ?? current;
+    }
+    if (!current) return;
+    setPill({ label: floatingDayLabel(current.date, new Date()), shown: true });
+    window.clearTimeout(pillTimer.current);
+    pillTimer.current = window.setTimeout(() => setPill((value) => (value ? { ...value, shown: false } : null)), 1200);
+  };
+  /** « Supprimer » confirmé : pour tout le monde ; un refus le dit sans rien retirer du fil. */
+  const removeMessage = async (message: Message) => {
+    if (!(await deleteMessage(message.id))) showNotice('Ce message n\'a pas pu être supprimé.');
+  };
+  const destructiveItem = (message: Message, outgoing: boolean): FocusMenuItem | null => {
+    const close = () => setFocused(null);
+    if (outgoing) return { label: 'Supprimer', icon: 'trash', onSelect: () => { close(); setToDelete(message); } };
+    return { label: 'Signaler', icon: 'flag', onSelect: () => { close(); setReported(message); } };
+  };
   const menuItems = (message: Message): FocusMenuItem[] => {
     const items: FocusMenuItem[] = [];
     const close = () => setFocused(null);
@@ -259,11 +307,18 @@ export function Thread({
   };
 
   return (
+    <div className="dm-thread-box">
+    {pill && <p className={`dm-day-pill${pill.shown ? ' is-shown' : ''}`} aria-hidden="true"><span>{pill.label}</span></p>}
     <div
       className="dm-thread"
       ref={scroller}
+      onWheel={markUserScroll}
+      onTouchMove={markUserScroll}
+      onPointerDown={markUserScroll}
+      onKeyDown={markUserScroll}
       onScroll={(event) => {
         const el = event.currentTarget;
+        showDayPill(el);
         stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM;
         if (el.scrollTop >= NEAR_TOP) armed.current = true;
         // Page demandée : le repère suit le défilement, pour que ce que l'on voit reste en place quand elle arrive.
@@ -282,7 +337,7 @@ export function Thread({
           </p>
         )}
         {days.map((day) => (
-          <section key={day.key} className="dm-day" aria-label={day.label}>
+          <section key={day.key} className="dm-day" aria-label={day.label} data-day={day.key}>
             <p className="dm-day-label">{day.label}</p>
             {day.rows.map((row) => (
               <ThreadRowView
@@ -305,12 +360,46 @@ export function Thread({
         focused={focused}
         myEmoji={myEmojiOn(focused?.message ?? null, me)}
         items={focused ? menuItems(focused.message) : []}
+        destructive={focused ? destructiveItem(focused.message, focused.outgoing) : null}
         onEmoji={(emoji) => {
           const message = focused?.message;
           setFocused(null);
           if (message) void react(message.id, emoji);
         }}
+        onMore={() => {
+          const message = focused?.message ?? null;
+          setFocused(null);
+          setEmojiFor(message);
+        }}
         onClose={closeMenu}
+      />
+      <EmojiPickerSheet
+        open={emojiFor !== null}
+        myEmoji={myEmojiOn(emojiFor, me)}
+        onPick={(emoji) => {
+          if (emojiFor) void react(emojiFor.id, emoji);
+        }}
+        onClose={() => setEmojiFor(null)}
+      />
+      <ReportSheet
+        open={reported !== null}
+        title="Signaler le message"
+        conversationId={conversation.id}
+        messageId={reported?.id ?? null}
+        onClose={() => setReported(null)}
+      />
+      <ConfirmDialog
+        open={toDelete !== null}
+        title="Supprimer ce message ?"
+        message={toDelete?.content.kind === 'attachments' && toDelete.content.items.length > 0
+          ? 'Ce message sera supprimé pour tout le monde, avec ses fichiers.'
+          : undefined}
+        confirm="Supprimer"
+        destructive
+        onConfirm={() => {
+          if (toDelete) void removeMessage(toDelete);
+        }}
+        onClose={() => setToDelete(null)}
       />
       <ReactionsSheet messageId={reactionsOf} conversation={conversation} me={me} onClose={() => setReactionsOf(null)} />
       <MediaViewer
@@ -322,32 +411,22 @@ export function Thread({
         onClose={() => setViewer(null)}
       />
     </div>
+    </div>
   );
 }
 
-/** Fil en cours de lecture : quelques bulles grises, reçues à gauche et envoyées à droite. */
-export function ThreadSkeleton() {
-  const bubbles: { width: string; out?: boolean; tall?: boolean }[] = [
-    { width: '42%' }, { width: '28%' }, { width: '50%', out: true, tall: true }, { width: '36%' }, { width: '24%', out: true },
-  ];
+/** Fil en cours de lecture : la roue, 40 px sous le haut (ProgressView de l'app). */
+export function ThreadLoading() {
   return (
-    <div className="dm-thread is-skeleton" role="status" aria-label="Chargement des messages">
-      <div className="dm-skel-thread" aria-hidden="true">
-        {bubbles.map((bubble, index) => (
-          <span
-            key={index}
-            className={`dm-skel dm-skel-bubble${bubble.out ? ' is-out' : ''}${bubble.tall ? ' is-tall' : ''}`}
-            style={{ width: bubble.width }}
-          />
-        ))}
-      </div>
+    <div className="dm-thread is-loading">
+      <Spinner label="Chargement des messages" />
     </div>
   );
 }
 
 const findOffer = (offers: OfferRow[], id: string) => offers.find((offer) => sameId(offer.id, id)) ?? null;
 
-/** Avatar de 28 px de l'expéditeur, à côté de la dernière bulle reçue d'une série ; sinon un espace de 28 px. */
+/** Avatar de 23 px de l'expéditeur, à côté de la dernière bulle reçue d'une série ; sinon un espace de 23 px. */
 function SenderAvatar({ conversation, senderId, shown }: { conversation: Conversation; senderId: string | null; shown: boolean }) {
   if (!shown) return <span className="dm-msg-avatar is-empty" aria-hidden="true" />;
   const member = groupSender(conversation, senderId);
@@ -449,23 +528,38 @@ function ThreadRowView({ row, fresh, conversation, offers, me, onOfferAction, on
   // Contenu que le site ne sait pas lire : rien (l'app ne lit pas non plus ces lignes).
   if (content.kind === 'unknown') return null;
 
+  // Visite confirmée : la carte, puis l'avatar et l'heure sous la dernière d'une série (comme l'app).
+  if (content.kind === 'visitConfirmed') {
+    const slot = new Date(content.slot);
+    if (!Number.isNaN(slot.getTime())) {
+      return (
+        <div className={`dm-msg is-card${spacing}`} data-message-id={message.id}>
+          <VisitEventCard id={message.id} slot={slot} address={content.address} className="dm-card-in-thread" />
+          {endsGroup && (
+            <p className="dm-card-foot">
+              <ConversationAvatar conversation={conversation} size={23} fontSize={8.5} className="dm-msg-avatar" />
+              <time dateTime={message.createdAt.toISOString()}>{clock(message.createdAt)}</time>
+            </p>
+          )}
+        </div>
+      );
+    }
+  }
+
   if (content.kind === 'offer') {
     const offer = offers ? findOffer(offers, content.offerId) : null;
     if (!offer && offers === null) return <div className={`dm-msg${outgoing ? ' is-out' : ''}${spacing}`} aria-busy="true" />;
     if (!offer) return <p className={`dm-system is-plain${spacing}`}><span>Offre indisponible</span></p>;
+    // Carte de 300 px au plus, décalée de 31 px (reçue) ou 40 px (envoyée) ; l'heure dessous comme un message.
     return (
-      <div className={`dm-msg${outgoing ? ' is-out' : ''}${spacing}`}>
-        {name}
-        <div className="dm-msg-line">
-          {avatar}
-          <OfferCard
-            offer={offer}
-            listingPrice={conversation.listing?.price ?? null}
-            isMine={outgoing}
-            time={<StatusLabel time={message.createdAt} outgoing={outgoing} read={message.isRead} className="dm-card-time" />}
-            onAction={(action) => onOfferAction(offer, action)}
-          />
-        </div>
+      <div className={`dm-msg is-card${outgoing ? ' is-out' : ''}${spacing}`} data-message-id={message.id}>
+        <OfferCard
+          offer={offer}
+          listingPrice={conversation.listing?.price ?? null}
+          isMine={outgoing}
+          onAction={(action) => onOfferAction(offer, action)}
+        />
+        <StatusLabel time={message.createdAt} outgoing={outgoing} read={message.isRead} className="dm-msg-status" />
       </div>
     );
   }
@@ -478,6 +572,7 @@ function ThreadRowView({ row, fresh, conversation, offers, me, onOfferAction, on
       onHeart={() => void toggleHeart(message.id)}
       onMenu={(rect) => interactions.onMenu(message, outgoing, rect, bubble())}
       onShowReactions={() => interactions.onShowReactions(message)}
+      onReply={interactions.canWrite && canReply(message.content) ? () => interactions.onReply(message) : null}
     >
       {bubble()}
     </InteractiveMessage>
@@ -613,12 +708,15 @@ const STATUS_CLASSES: Record<string, string> = {
   pending: 'is-pending', accepted: 'is-accepted', rejected: 'is-closed', expired: 'is-closed', withdrawn: 'is-closed', countered: 'is-countered',
 };
 
-export function OfferCard({ offer, listingPrice, isMine, time, onAction }: {
+/**
+ * Carte d'offre (OfferCard de l'app) : « OFFRE » ou « CONTRE-OFFRE » en bleu avec la poignée de main, l'état en
+ * pastille à droite, le montant, l'écart avec le prix, les conditions, le motif d'un refus, la validité, puis les
+ * boutons de 36 px (« Accepter » plein, les autres bleu clair).
+ */
+export function OfferCard({ offer, listingPrice, isMine, onAction }: {
   offer: OfferRow;
   listingPrice: number | null;
   isMine: boolean;
-  /** Heure (et coches) en bas à droite de la carte. */
-  time?: ReactNode;
   onAction: (action: OfferAction) => void;
 }) {
   const now = new Date();
@@ -629,8 +727,8 @@ export function OfferCard({ offer, listingPrice, isMine, time, onAction }: {
   return (
     <div className="dm-offer">
       <div className="dm-offer-head">
-        <span className="dm-offer-icon" aria-hidden="true"><Icon name="handshake" /></span>
-        <span>{offer.parent_offer_id ? 'Contre-offre' : 'Offre'}</span>
+        <Icon name="handshake" />
+        <span className="dm-offer-kind">{offer.parent_offer_id ? 'Contre-offre' : 'Offre'}</span>
         <span className={`dm-offer-status ${STATUS_CLASSES[status]}`}>{offerStatusLabel(status, isMine)}</span>
       </div>
       <p className="dm-offer-amount">{keepNumbersTogether(formatPrice(amount))}</p>
@@ -648,7 +746,6 @@ export function OfferCard({ offer, listingPrice, isMine, time, onAction }: {
           {actions.has('withdraw') && <button type="button" onClick={() => onAction('withdraw')}>Retirer</button>}
         </div>
       )}
-      {time}
     </div>
   );
 }
@@ -789,17 +886,64 @@ function LocationCard({ item, outgoing }: { item: Attachment; outgoing: boolean 
   ) : <span className={`dm-place${outgoing ? ' is-out' : ''}`}>{body}</span>;
 }
 
-/** Contact partagé : nom et numéros ; l'ajouter aux contacts se fait dans l'app iPhone. */
+/** Numéros d'un contact partagé : un par ligne dans `detail`, comme l'app. */
+const contactPhones = (item: Attachment) => (item.detail ?? '').split('\n').map((phone) => phone.trim()).filter(Boolean);
+
+/** Contact partagé : nom et numéros ; un clic ouvre sa fiche (Appeler, Ajouter aux contacts). */
 function ContactCard({ item, outgoing }: { item: Attachment; outgoing: boolean }) {
+  const [open, setOpen] = useState(false);
   return (
-    <button type="button" className={`dm-contact-card${outgoing ? ' is-out' : ''}`} onClick={() => showIphoneOnly('Ajouter aux contacts')}>
-      <CounterpartAvatar counterpart={{ name: item.fileName, kind: 'individual', imagePath: null }} size={40} />
-      <span className="dm-contact-card-text">
-        <span className="dm-contact-card-name">{item.fileName}</span>
-        {item.detail && <span className="dm-contact-card-detail">{item.detail}</span>}
-      </span>
-      <Icon name="chevronRight" className="icon dm-chevron" />
-    </button>
+    <>
+      <button type="button" className={`dm-contact-card${outgoing ? ' is-out' : ''}`} onClick={() => setOpen(true)}>
+        <CounterpartAvatar counterpart={{ name: item.fileName, kind: 'individual', imagePath: null }} size={40} />
+        <span className="dm-contact-card-text">
+          <span className="dm-contact-card-name">{item.fileName}</span>
+          {item.detail && <span className="dm-contact-card-detail">{item.detail}</span>}
+        </span>
+        <Icon name="chevronRight" className="icon dm-chevron" />
+      </button>
+      <ContactSheet item={item} open={open} onClose={() => setOpen(false)} />
+    </>
+  );
+}
+
+/**
+ * Fiche d'un contact partagé (ContactCardScreen de l'app) : avatar, nom, chaque numéro avec « Appeler » (lien tel:),
+ * « Ce contact n'a pas de numéro. » sinon, puis « Ajouter aux contacts » : une fiche .vcf que l'appareil ouvre avec
+ * son carnet d'adresses, où rien n'est enregistré sans validation.
+ */
+function ContactSheet({ item, open, onClose }: { item: Attachment; open: boolean; onClose: () => void }) {
+  const phones = contactPhones(item);
+  const titleId = `dm-contact-${item.id}`;
+  return (
+    <PlainSheet open={open} onClose={onClose} className="dm-contact-sheet" labelledBy={titleId}>
+      <div className="dm-contact-sheet-body">
+        <button type="button" className="dm-contact-sheet-close" onClick={onClose}>Fermer</button>
+        <CounterpartAvatar counterpart={{ name: item.fileName, kind: 'individual', imagePath: null }} size={72} fontSize={24} />
+        <h2 id={titleId} className="dm-contact-sheet-name">{item.fileName}</h2>
+        {phones.length > 0 ? (
+          <div className="dm-contact-sheet-phones">
+            {phones.map((phone, index) => (
+              <a key={`${phone}-${index}`} className="dm-contact-sheet-row" href={`tel:${phone.replace(/[^\d+]/g, '')}`}>
+                <span className="dm-contact-sheet-icon" aria-hidden="true"><Icon name="phone" /></span>
+                <span className="dm-contact-sheet-text">
+                  <span className="dm-contact-sheet-phone">{phone}</span>
+                  <span className="dm-contact-sheet-call">Appeler</span>
+                </span>
+                <Icon name="chevronRight" className="icon dm-chevron" />
+              </a>
+            ))}
+          </div>
+        ) : <p className="dm-contact-sheet-empty">Ce contact n'a pas de numéro.</p>}
+        <button
+          type="button"
+          className="btn btn-light dm-wide-button"
+          onClick={() => saveFile(`${safeFileName(item.fileName, 'contact')}.vcf`, contactCardFile(item.fileName, phones), 'text/vcard;charset=utf-8')}
+        >
+          Ajouter aux contacts
+        </button>
+      </div>
+    </PlainSheet>
   );
 }
 
@@ -807,6 +951,31 @@ function ContactCard({ item, outgoing }: { item: Attachment; outgoing: boolean }
 
 const viewerDate = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
 
+/** Télécharge un fichier reçu (« Enregistrer dans Photos » de l'app : ici, dans les téléchargements). */
+async function downloadAttachment(attachment: Attachment) {
+  const url = attachment.storagePath ? await signedUrl(attachment.storagePath) : null;
+  try {
+    if (!url) throw new Error('indisponible');
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(String(response.status));
+    const blob = await response.blob();
+    const link = document.createElement('a');
+    const objectUrl = URL.createObjectURL(blob);
+    link.href = objectUrl;
+    link.download = attachment.fileName || (attachment.kind === 'video' ? 'video.mp4' : 'photo.jpg');
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  } catch {
+    showNotice('Le téléchargement n\'a pas abouti.');
+  }
+}
+
+/**
+ * Visionneuse des photos et vidéos : auteur, date et position ; « Télécharger », et « Supprimer » sur les miennes
+ * (« Supprimer ce message ? », pour tout le monde, avec ses fichiers).
+ */
 export function MediaViewer({ entries, index, conversation, me, onIndex, onClose }: {
   entries: ReturnType<typeof mediaEntries>;
   index: number | null;
@@ -817,11 +986,18 @@ export function MediaViewer({ entries, index, conversation, me, onIndex, onClose
 }) {
   const entry = index !== null ? entries[index] ?? null : null;
   const count = entries.length;
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const mine = entry !== null && sameId(entry.senderId, me);
+  const actions: MenuItem[] = entry ? [
+    { label: 'Télécharger', icon: 'arrowDownRight', onSelect: () => void downloadAttachment(entry.attachment) },
+    ...(mine ? [{ label: 'Supprimer', icon: 'trash' as const, destructive: true, onSelect: () => setConfirming(entry.messageId) }] : []),
+  ] : [];
   const go = (step: number) => {
     if (index === null || count < 2) return;
     onIndex((index + step + count) % count);
   };
   return (
+    <>
     <Dialog open={entry !== null} onClose={onClose} className="dm-viewer" label="Photos et vidéos">
       {entry && (
         <div
@@ -837,11 +1013,7 @@ export function MediaViewer({ entries, index, conversation, me, onIndex, onClose
               <span>{[`${viewerDate.format(entry.date)} à ${clock(entry.date)}`, count > 1 ? `${index! + 1} sur ${count}` : null].filter(Boolean).join(' · ')}</span>
             </div>
             <div className="dm-viewer-tools">
-              <ActionMenu
-                label="Plus d'actions"
-                className="dm-viewer-button"
-                items={[{ label: 'Enregistrer dans Photos', icon: 'arrowDownRight', onSelect: () => showIphoneOnly('Enregistrer dans Photos') }]}
-              >
+              <ActionMenu label="Plus d'actions" className="dm-viewer-button" items={actions}>
                 <Icon name="ellipsisVertical" />
               </ActionMenu>
               <button type="button" className="dm-viewer-button" onClick={onClose} aria-label="Fermer" title="Fermer" autoFocus>
@@ -861,6 +1033,23 @@ export function MediaViewer({ entries, index, conversation, me, onIndex, onClose
         </div>
       )}
     </Dialog>
+    <ConfirmDialog
+        open={confirming !== null}
+        title="Supprimer ce message ?"
+        message="Ce message sera supprimé pour tout le monde, avec ses fichiers."
+        confirm="Supprimer"
+        destructive
+        onConfirm={() => {
+          const id = confirming;
+          if (!id) return;
+          void deleteMessage(id).then((deleted) => {
+            if (deleted) onClose();
+            else showNotice('Ce message n\'a pas pu être supprimé.');
+          });
+        }}
+        onClose={() => setConfirming(null)}
+      />
+    </>
   );
 }
 

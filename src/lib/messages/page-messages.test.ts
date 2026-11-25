@@ -181,7 +181,7 @@ describe('Demandes de visite dans la conversation', () => {
       message('c', new Date(2026, 10, 13, 14, 9)),
       message('d', new Date(2026, 10, 13, 14, 20), ME),
     ], [request()], NOW);
-    expect(days.map((day) => day.label)).toEqual(['Hier', 'Aujourd\'hui']);
+    expect(days.map((day) => day.label)).toEqual(['Hier · 18:50', 'Aujourd\'hui · 14:09']);
     expect(days[1].rows.map((row) => `${row.item.key}${row.startsGroup ? '<' : ''}${row.endsGroup ? '>' : ''}`))
       .toEqual(['c<', 'visite-e1000000-0000-4000-8000-000000000001>', 'd<>']);
     const withSystem = siteThreadDays([message('s', new Date(2026, 10, 13, 9, 0), AGENT, 'system'), message('t', new Date(2026, 10, 13, 9, 1))], [], NOW);

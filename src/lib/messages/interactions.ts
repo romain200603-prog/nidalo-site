@@ -10,6 +10,19 @@ export type Reaction = { userId: string; emoji: string; createdAt: Date };
 
 /** Barre du menu d'un message (MessageReactions.quick). */
 export const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏'] as const;
+
+/** « Plus d'emojis » (MessageReactions.more) : par section, dans l'ordre de l'app. */
+export const MORE_REACTIONS: { title: string; emojis: string[] }[] = [
+  { title: 'Immobilier', emojis: ['🏠', '🔑', '📅', '✅', '📄', '💶'] },
+  {
+    title: 'Visages',
+    emojis: ['😀', '😃', '😄', '😁', '😅', '🤣', '😊', '😇', '🙂', '😉', '😍', '🥰', '😘', '🤩', '🤔', '🤨',
+      '😐', '😶', '🙄', '😏', '😌', '😴', '😎', '🤓', '😕', '🙁', '😮', '😲', '😳', '🥺', '😢', '😭',
+      '😤', '😡', '🤯', '😱', '🥳', '🤗'],
+  },
+  { title: 'Gestes', emojis: ['👍', '👎', '👌', '✌️', '🤞', '🤝', '👏', '🙌', '👋', '🙏', '💪', '👀'] },
+  { title: 'Cœurs', emojis: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🤍', '🖤', '💔', '❣️', '💕', '💯'] },
+];
 /** Double clic (double toucher) : le cœur rouge, qui s'écrit désormais. */
 export const HEART = '❤️';
 

@@ -6,6 +6,7 @@ import { knownSignedUrl, signedUrl } from '../../lib/messages/files';
 import { avatarUrl } from '../../lib/account/profile';
 import { avatarPalette, counterpartInitials, type Conversation, type Counterpart } from '../../lib/messages/inbox';
 import { profileOf } from '../../lib/messages/store';
+import { useSheetDrag } from '../../components/useSheetDrag';
 import { AlertDialog, DialogContent, Modal } from '../listing/Dialogs';
 
 // Morceaux communs de la page Messages : avatars à initiales (InitialsAvatar), badge PRO / Particulier
@@ -101,11 +102,18 @@ export function ConversationAvatar({ conversation, size, className, fontSize, on
   );
 }
 
-/** « PRO » sur fond bleu, ou « Particulier » cerclé ; rien pour un groupe ou une communauté. */
-export function PublisherBadge({ kind }: { kind: Counterpart['kind'] }) {
+/**
+ * « PRO » sur fond bleu, ou « Particulier » cerclé (PublisherBadge de l'app) ; `compact` : la version de l'en-tête de la
+ * conversation (10 au lieu de 11). Rien pour un groupe ou une communauté.
+ */
+export function PublisherBadge({ kind, compact = false }: { kind: Counterpart['kind']; compact?: boolean }) {
   if (kind === 'group' || kind === 'community') return null;
   const pro = kind === 'agency';
-  return <span className={`dm-badge${pro ? ' is-pro' : ''}`} aria-label={pro ? 'Professionnel' : 'Particulier'}>{pro ? 'PRO' : 'Particulier'}</span>;
+  return (
+    <span className={`dm-badge${pro ? ' is-pro' : ''}${compact ? ' is-compact' : ''}`} aria-label={pro ? 'Professionnel' : 'Particulier'}>
+      {pro ? 'PRO' : 'Particulier'}
+    </span>
+  );
 }
 
 // MARK: - Fenêtres
@@ -276,7 +284,11 @@ export function ActionMenu({ label, items, className, children }: { label: strin
   );
 }
 
-/** Fenêtre de la page (feuille de l'app) : titre, bouton « Fermer », contenu. */
+/**
+ * Feuille de l'app (presentationDragIndicator, coins de 32) : sous 1024 px, posée en bas avec sa poignée, elle monte
+ * comme une feuille de l'iPhone et se referme en la tirant vers le bas par son en-tête (useSheetDrag) ; sur ordinateur,
+ * la même au centre. En-tête : « Retour » éventuel, titre de 20 en gras, croix ronde bleu pâle de 34 (« Fermer »).
+ */
 export function Sheet({ open, title, onClose, onBack, className = '', children, closeLabel = 'Fermer' }: {
   open: boolean;
   title: string;
@@ -290,20 +302,66 @@ export function Sheet({ open, title, onClose, onBack, className = '', children, 
   const id = useId();
   return (
     <Dialog open={open} onClose={onClose} className={`dm-dialog dm-sheet ${className}`} labelledBy={`${id}-titre`}>
-      <div className="dm-sheet-body">
-        <header className="dm-sheet-head">
-          {onBack && (
-            <button type="button" className="dm-sheet-back" onClick={onBack} aria-label="Retour" title="Retour">
-              <Icon name="chevronLeft" />
-            </button>
-          )}
-          <h2 id={`${id}-titre`} tabIndex={-1}>{title}</h2>
-          <button type="button" className="dm-sheet-close" onClick={onClose} aria-label={closeLabel} title={closeLabel}>
-            <Icon name="x" />
-          </button>
-        </header>
-        {children}
-      </div>
+      <SheetBody titleId={`${id}-titre`} title={title} onClose={onClose} onBack={onBack} closeLabel={closeLabel}>{children}</SheetBody>
     </Dialog>
+  );
+}
+
+/**
+ * Petite feuille du bas sans en-tête (refus d'une offre : presentationDetents de l'app) : la poignée, puis le contenu,
+ * qu'on tire vers le bas pour la fermer ; au centre sur ordinateur.
+ */
+export function PlainSheet({ open, onClose, className = '', labelledBy, children }: {
+  open: boolean;
+  onClose: () => void;
+  className?: string;
+  labelledBy?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Dialog open={open} onClose={onClose} className={`dm-dialog dm-sheet is-plain ${className}`} labelledBy={labelledBy}>
+      <PlainSheetBody onClose={onClose}>{children}</PlainSheetBody>
+    </Dialog>
+  );
+}
+
+function PlainSheetBody({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const root = useRef<HTMLDivElement>(null);
+  useSheetDrag(root, onClose, true);
+  return (
+    <div className="dm-sheet-body" ref={root} data-sheet-grab="">
+      <span className="dm-sheet-grabber" aria-hidden="true" />
+      {children}
+    </div>
+  );
+}
+
+/** Contenu d'une feuille ouverte : la poignée et le glissement vers le bas ne vivent que pendant qu'elle est ouverte. */
+function SheetBody({ titleId, title, onClose, onBack, closeLabel, children }: {
+  titleId: string;
+  title: string;
+  onClose: () => void;
+  onBack?: () => void;
+  closeLabel: string;
+  children: ReactNode;
+}) {
+  const root = useRef<HTMLDivElement>(null);
+  useSheetDrag(root, onClose, true);
+  return (
+    <div className="dm-sheet-body" ref={root}>
+      <header className="dm-sheet-head" data-sheet-grab="">
+        <span className="dm-sheet-grabber" aria-hidden="true" />
+        {onBack && (
+          <button type="button" className="dm-sheet-back" onClick={onBack} aria-label="Retour" title="Retour">
+            <Icon name="chevronLeft" />
+          </button>
+        )}
+        <h2 id={titleId} tabIndex={-1}>{title}</h2>
+        <button type="button" className="dm-sheet-close" onClick={onClose} aria-label={closeLabel} title={closeLabel}>
+          <Icon name="x" />
+        </button>
+      </header>
+      {children}
+    </div>
   );
 }

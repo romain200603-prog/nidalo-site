@@ -2079,7 +2079,10 @@ try {
   await page.waitForSelector('.dm-thread .dm-offer .dm-offer-amount', { timeout: 10000 })
     .catch(() => problems.push('offre: la carte de l’offre n’apparaît pas dans la conversation'));
   expect('offre', 'carte dans la conversation', await page.textContent('.dm-thread .dm-offer').catch(() => null),
-    /^Offre\s*En attente\s*228\s000\s€\s*4,2\s%\ssous le prix affiché\s*Sous réserve d'obtention du prêt\s*Valable jusqu'au .+Retirer\s*\d{2}:\d{2}$/);
+    /^Offre\s*En attente\s*228\s000\s€\s*4,2\s%\ssous le prix affiché\s*Sous réserve d'obtention du prêt\s*Valable jusqu'au .+Retirer$/);
+  // Comme l'app (OfferCard dans le fil) : l'heure sous la carte, comme un message.
+  expect('offre', 'heure sous la carte', await page.textContent('.dm-thread .dm-msg.is-card:has(.dm-offer) .dm-msg-status time').catch(() => null),
+    /^\d{2}:\d{2}$/);
   const offerCalls = calls.length;
   // « Retour » : la fiche, avec « Offre en attente ».
   await page.goBack();

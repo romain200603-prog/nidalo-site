@@ -315,12 +315,40 @@ export const REPORT_REASONS = [
 export const REPORT_DETAILS_LIMIT = 500;
 export type ReportReason = (typeof REPORT_REASONS)[number]['value'];
 
-/** Signalement d'une conversation (reports) ; un signalement rejoué (23505) est déjà enregistré. */
-export async function reportConversation(id: string, conversationId: string, reason: ReportReason, details: string | null): Promise<void> {
-  const row: Record<string, unknown> = { id: upper(id), target_type: 'conversation', target_id: upper(conversationId), reason };
+/** Ce qui est signalé : une conversation, ou un message (« Signaler le message » de l'appui long). */
+export type ReportTargetType = 'conversation' | 'message';
+
+/** Signalement (reports, SupabaseMessagingRepository.report) ; un signalement rejoué (23505) est déjà enregistré. */
+export async function sendReport(id: string, targetType: ReportTargetType, targetId: string, reason: ReportReason, details: string | null): Promise<void> {
+  const row: Record<string, unknown> = { id: upper(id), target_type: targetType, target_id: upper(targetId), reason };
   if (details !== null) row.details = [...details].slice(0, 2000).join('');
   const { error } = await supabase.from('reports').insert(row);
   if (error && error.code !== '23505') throw error;
+}
+
+/** Signalement d'une conversation. */
+export function reportConversation(id: string, conversationId: string, reason: ReportReason, details: string | null): Promise<void> {
+  return sendReport(id, 'conversation', conversationId, reason, details);
+}
+
+/** Refus de suppression : le message est encore là (pas l'auteur, ou pas un message ordinaire). */
+export class DeleteRefused extends Error {}
+
+/**
+ * Supprime un de mes messages, comme l'app (deleteMessage, n° 234) : le contenu est lu d'abord (pour ses fichiers),
+ * puis la ligne supprimée est demandée en retour. Zéro ligne : déjà partie (succès, rien à effacer) ou encore là
+ * (refus). Renvoie le contenu supprimé, dont les fichiers sont ensuite effacés.
+ */
+export async function deleteMessageRow(id: string): Promise<unknown> {
+  const before = await supabase.from('messages').select('content').eq('id', upper(id)).single();
+  const row = before.error ? null : (before.data as { content: unknown } | null);
+  const { data, error } = await supabase.from('messages').delete().eq('id', upper(id)).select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) {
+    if (!row) return null;
+    throw new DeleteRefused('Ce message n\'a pas pu être supprimé.');
+  }
+  return row?.content ?? null;
 }
 
 // MARK: - Nouvelle discussion
