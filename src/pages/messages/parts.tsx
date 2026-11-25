@@ -4,8 +4,9 @@ import type { IconName } from '../../components/iconPaths';
 import { createStore, useStore } from '../../lib/account/session';
 import { knownSignedUrl, signedUrl } from '../../lib/messages/files';
 import { avatarUrl } from '../../lib/account/profile';
-import { avatarColors, avatarKey, counterpartInitials, type Conversation, type Counterpart } from '../../lib/messages/inbox';
+import { avatarPalette, counterpartInitials, type Conversation, type Counterpart } from '../../lib/messages/inbox';
 import { profileOf } from '../../lib/messages/store';
+import { useSheetDrag } from '../../components/useSheetDrag';
 import { AlertDialog, DialogContent, Modal } from '../listing/Dialogs';
 
 // Morceaux communs de la page Messages : avatars à initiales (InitialsAvatar), badge PRO / Particulier
@@ -28,28 +29,32 @@ export function useSignedUrl(path: string | null | undefined): string | null {
 }
 
 /**
- * Avatar rond : la photo (photo de profil, logo de l'agence ou photo du groupe), sinon les initiales sur une couleur
- * pastel fixe, calculée à partir de l'identifiant de la personne (`colorKey`) ; un groupe a l'icône « users », une
- * communauté un carré arrondi et l'icône « users-round ».
+ * Avatar rond (InitialsAvatar de l'app) : la photo (photo de profil, logo de l'agence ou photo du groupe), sinon les
+ * initiales en demi-gras sur la couleur de l'interlocuteur (agence en vert, particulier en beige, groupe en bleu
+ * clair) ; un groupe a l'icône « users », une communauté un carré arrondi et l'icône « users-round ». `online` : le
+ * point vert « en ligne » en bas à droite (17 % de l'avatar, cerclé de blanc).
  */
-export function CounterpartAvatar({ counterpart, size, className = '', photo = null, colorKey }: {
+export function CounterpartAvatar({ counterpart, size, className = '', photo = null, fontSize, online }: {
   counterpart: Pick<Counterpart, 'name' | 'kind' | 'imagePath'>;
   size: number;
   className?: string;
   /** Photo publique (bucket avatars), si la personne en a une. */
   photo?: string | null;
-  colorKey?: string;
+  /** Taille des initiales (celle de l'app à chaque endroit) ; un tiers de l'avatar sinon. */
+  fontSize?: number;
+  /** Point vert « en ligne » ; `undefined` : pas de point à cet endroit. */
+  online?: boolean;
 }) {
   const image = useSignedUrl(counterpart.imagePath);
   const [failed, setFailed] = useState<string | null>(null);
   const isGroup = counterpart.kind === 'group' || counterpart.kind === 'community';
   const source = image ?? photo;
-  const colors = avatarColors(colorKey ?? counterpart.name);
-  return (
+  const colors = avatarPalette(counterpart.kind);
+  const avatar = (
     <span
-      className={`dm-avatar is-${counterpart.kind} ${className}`}
+      className={`dm-avatar is-${counterpart.kind} ${online === undefined ? className : ''}`}
       style={{
-        width: size, height: size, fontSize: Math.round(size * 0.36), borderRadius: counterpart.kind === 'community' ? size * 0.28 : '50%',
+        width: size, height: size, fontSize: fontSize ?? Math.round(size * 0.33), borderRadius: counterpart.kind === 'community' ? size * 0.28 : '50%',
         background: colors.background, color: colors.color,
       }}
       aria-hidden="true"
@@ -57,6 +62,14 @@ export function CounterpartAvatar({ counterpart, size, className = '', photo = n
       {source && failed !== source ? <img src={source} alt="" onError={() => setFailed(source)} /> : isGroup ? (
         <Icon name={counterpart.kind === 'group' ? 'users' : 'usersRound'} />
       ) : counterpartInitials(counterpart.name)}
+    </span>
+  );
+  if (online === undefined) return avatar;
+  const dot = size * 0.17;
+  return (
+    <span className={`dm-avatar-wrap ${className}`} style={{ width: size, height: size }}>
+      {avatar}
+      {online && <span className="dm-presence" style={{ width: dot, height: dot, right: size * 0.04, bottom: size * 0.04 }} aria-hidden="true" />}
     </span>
   );
 }
@@ -69,24 +82,38 @@ export function counterpartPhoto(conversation: Pick<Conversation, 'isGroup' | 'o
   return avatarUrl(conversation.counterpart.kind === 'agency' ? profile.agency_logo_path ?? null : profile.avatar_path);
 }
 
-/** Avatar d'une conversation : photo de l'interlocuteur (ou du groupe), couleur fixe de la personne. */
-export function ConversationAvatar({ conversation, size, className }: { conversation: Conversation; size: number; className?: string }) {
+/** Avatar d'une conversation : photo de l'interlocuteur (ou du groupe), sinon ses initiales. */
+export function ConversationAvatar({ conversation, size, className, fontSize, online }: {
+  conversation: Conversation;
+  size: number;
+  className?: string;
+  fontSize?: number;
+  online?: boolean;
+}) {
   return (
     <CounterpartAvatar
       counterpart={conversation.counterpart}
       size={size}
       className={className}
       photo={counterpartPhoto(conversation)}
-      colorKey={avatarKey(conversation)}
+      fontSize={fontSize}
+      online={online}
     />
   );
 }
 
-/** « PRO » sur fond bleu, ou « Particulier » cerclé ; rien pour un groupe ou une communauté. */
-export function PublisherBadge({ kind }: { kind: Counterpart['kind'] }) {
+/**
+ * « PRO » sur fond bleu, ou « Particulier » cerclé (PublisherBadge de l'app) ; `compact` : la version de l'en-tête de la
+ * conversation (10 au lieu de 11). Rien pour un groupe ou une communauté.
+ */
+export function PublisherBadge({ kind, compact = false }: { kind: Counterpart['kind']; compact?: boolean }) {
   if (kind === 'group' || kind === 'community') return null;
   const pro = kind === 'agency';
-  return <span className={`dm-badge${pro ? ' is-pro' : ''}`} aria-label={pro ? 'Professionnel' : 'Particulier'}>{pro ? 'PRO' : 'Particulier'}</span>;
+  return (
+    <span className={`dm-badge${pro ? ' is-pro' : ''}${compact ? ' is-compact' : ''}`} aria-label={pro ? 'Professionnel' : 'Particulier'}>
+      {pro ? 'PRO' : 'Particulier'}
+    </span>
+  );
 }
 
 // MARK: - Fenêtres
@@ -257,7 +284,11 @@ export function ActionMenu({ label, items, className, children }: { label: strin
   );
 }
 
-/** Fenêtre de la page (feuille de l'app) : titre, bouton « Fermer », contenu. */
+/**
+ * Feuille de l'app (presentationDragIndicator, coins de 32) : sous 1024 px, posée en bas avec sa poignée, elle monte
+ * comme une feuille de l'iPhone et se referme en la tirant vers le bas par son en-tête (useSheetDrag) ; sur ordinateur,
+ * la même au centre. En-tête : « Retour » éventuel, titre de 20 en gras, croix ronde bleu pâle de 34 (« Fermer »).
+ */
 export function Sheet({ open, title, onClose, onBack, className = '', children, closeLabel = 'Fermer' }: {
   open: boolean;
   title: string;
@@ -271,20 +302,66 @@ export function Sheet({ open, title, onClose, onBack, className = '', children, 
   const id = useId();
   return (
     <Dialog open={open} onClose={onClose} className={`dm-dialog dm-sheet ${className}`} labelledBy={`${id}-titre`}>
-      <div className="dm-sheet-body">
-        <header className="dm-sheet-head">
-          {onBack && (
-            <button type="button" className="dm-sheet-back" onClick={onBack} aria-label="Retour" title="Retour">
-              <Icon name="chevronLeft" />
-            </button>
-          )}
-          <h2 id={`${id}-titre`} tabIndex={-1}>{title}</h2>
-          <button type="button" className="dm-sheet-close" onClick={onClose} aria-label={closeLabel} title={closeLabel}>
-            <Icon name="x" />
-          </button>
-        </header>
-        {children}
-      </div>
+      <SheetBody titleId={`${id}-titre`} title={title} onClose={onClose} onBack={onBack} closeLabel={closeLabel}>{children}</SheetBody>
     </Dialog>
+  );
+}
+
+/**
+ * Petite feuille du bas sans en-tête (refus d'une offre : presentationDetents de l'app) : la poignée, puis le contenu,
+ * qu'on tire vers le bas pour la fermer ; au centre sur ordinateur.
+ */
+export function PlainSheet({ open, onClose, className = '', labelledBy, children }: {
+  open: boolean;
+  onClose: () => void;
+  className?: string;
+  labelledBy?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Dialog open={open} onClose={onClose} className={`dm-dialog dm-sheet is-plain ${className}`} labelledBy={labelledBy}>
+      <PlainSheetBody onClose={onClose}>{children}</PlainSheetBody>
+    </Dialog>
+  );
+}
+
+function PlainSheetBody({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const root = useRef<HTMLDivElement>(null);
+  useSheetDrag(root, onClose, true);
+  return (
+    <div className="dm-sheet-body" ref={root} data-sheet-grab="">
+      <span className="dm-sheet-grabber" aria-hidden="true" />
+      {children}
+    </div>
+  );
+}
+
+/** Contenu d'une feuille ouverte : la poignée et le glissement vers le bas ne vivent que pendant qu'elle est ouverte. */
+function SheetBody({ titleId, title, onClose, onBack, closeLabel, children }: {
+  titleId: string;
+  title: string;
+  onClose: () => void;
+  onBack?: () => void;
+  closeLabel: string;
+  children: ReactNode;
+}) {
+  const root = useRef<HTMLDivElement>(null);
+  useSheetDrag(root, onClose, true);
+  return (
+    <div className="dm-sheet-body" ref={root}>
+      <header className="dm-sheet-head" data-sheet-grab="">
+        <span className="dm-sheet-grabber" aria-hidden="true" />
+        {onBack && (
+          <button type="button" className="dm-sheet-back" onClick={onBack} aria-label="Retour" title="Retour">
+            <Icon name="chevronLeft" />
+          </button>
+        )}
+        <h2 id={titleId} tabIndex={-1}>{title}</h2>
+        <button type="button" className="dm-sheet-close" onClick={onClose} aria-label={closeLabel} title={closeLabel}>
+          <Icon name="x" />
+        </button>
+      </header>
+      {children}
+    </div>
   );
 }

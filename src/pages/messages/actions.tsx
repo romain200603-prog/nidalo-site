@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Icon } from '../../components/Icon';
-import { REPORT_DETAILS_LIMIT, REPORT_REASONS, reportConversation, type ReportReason } from '../../lib/messages/api';
+import { currentUserId } from '../../lib/account/session';
+import { REPORT_DETAILS_LIMIT, REPORT_REASONS, type ReportReason, type ReportTargetType } from '../../lib/messages/api';
 import { DISTANT_FUTURE, telHref } from '../../lib/messages/format';
 import { isDeletedAccount, isMuted, type Conversation } from '../../lib/messages/inbox';
+import { REPORT_SAVE_FAILED, saveReport } from '../../lib/messages/reportQueue';
 import { block, setArchived, unblock, updateSettings } from '../../lib/messages/store';
 import { ConfirmDialog, Sheet, showIphoneOnly, showNotice, type MenuItem } from './parts';
 
@@ -74,29 +76,6 @@ export function directMenuItems({ conversation, isBlocked, onBlock, onReport }: 
   return items;
 }
 
-/** Menu « … » de l'en-tête d'une conversation à deux sur le site (demande du 14 novembre 2026) : Archiver, Signaler, Bloquer. */
-export function headerMenuItems({ conversation, isBlocked, onBlock, onReport }: {
-  conversation: Conversation;
-  isBlocked: boolean;
-  onBlock: () => void;
-  onReport: () => void;
-}): MenuItem[] {
-  const items: MenuItem[] = [
-    {
-      label: conversation.isArchived ? 'Désarchiver' : 'Archiver', icon: 'archive',
-      onSelect: () => void toggleArchived(conversation),
-    },
-    { label: 'Signaler', icon: 'flag', destructive: true, onSelect: onReport },
-  ];
-  const other = conversation.otherUserId;
-  if (!isDeletedAccount(conversation) && other) {
-    items.push(isBlocked
-      ? { label: 'Débloquer', icon: 'ban', onSelect: () => void unblockWithNotice(other) }
-      : { label: 'Bloquer', icon: 'ban', destructive: true, onSelect: onBlock });
-  }
-  return items;
-}
-
 /**
  * Menu ⋮ d'un groupe : infos (dans l'app iPhone), favori, sourdine « toujours », archiver, signaler le groupe ; pour
  * une communauté, « Communauté ajoutée aux favoris. » et « Signaler la communauté » (n° 212).
@@ -161,15 +140,26 @@ export function BlockDialog({ open, userId, onClose }: { open: boolean; userId: 
  * Il part tout de suite dans la table reports, comme l'app avec un compte connecté (n° 2) ; le site n'a pas la file
  * de l'iPhone qui le garde sans réseau : un échec le dit, et le bouton reste là pour réessayer.
  */
-export function ReportSheet({ open, title, conversationId, onClose }: { open: boolean; title: string; conversationId: string; onClose: () => void }) {
+export function ReportSheet({ open, title, conversationId, messageId = null, onClose }: {
+  open: boolean;
+  title: string;
+  conversationId: string;
+  /** « Signaler le message » (appui long sur un message reçu) : le message plutôt que la conversation. */
+  messageId?: string | null;
+  onClose: () => void;
+}) {
   return (
     <Sheet open={open} title={title} onClose={onClose} className="dm-report" closeLabel="Annuler">
-      <ReportForm conversationId={conversationId} onClose={onClose} />
+      <ReportForm target={messageId ? { type: 'message', id: messageId } : { type: 'conversation', id: conversationId }} onClose={onClose} />
     </Sheet>
   );
 }
 
-function ReportForm({ conversationId, onClose }: { conversationId: string; onClose: () => void }) {
+/**
+ * Enregistre le signalement puis le transmet (ReportSheet.save de l'app) : « Signalement envoyé à l'équipe Nidalo. »,
+ * ou, sans réseau, « Signalement enregistré. Il partira dès le retour de la connexion. ».
+ */
+function ReportForm({ target, onClose }: { target: { type: ReportTargetType; id: string }; onClose: () => void }) {
   const [reason, setReason] = useState<ReportReason | null>(null);
   const [details, setDetails] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -181,15 +171,16 @@ function ReportForm({ conversationId, onClose }: { conversationId: string; onClo
     setSaving(true);
     setError(null);
     const text = details.trim();
-    try {
-      await reportConversation(crypto.randomUUID(), conversationId, reason, text ? text : null);
-    } catch {
+    const owner = currentUserId();
+    const report = { id: crypto.randomUUID().toUpperCase(), targetType: target.type, targetId: target.id, reason, details: text ? text : null };
+    const result = owner ? await saveReport(owner, report) : { error: REPORT_SAVE_FAILED };
+    if ('error' in result) {
       setSaving(false);
-      setError('Le signalement n\'a pas pu être enregistré. Réessayez.');
+      setError(result.error);
       return;
     }
     onClose();
-    showNotice('Signalement envoyé à l\'équipe Nidalo.');
+    showNotice(result.notice);
   };
 
   return (

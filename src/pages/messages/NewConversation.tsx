@@ -44,10 +44,12 @@ export async function openContact(contact: Contact): Promise<boolean> {
 }
 
 /** Carte blanche de contacts (ContactsCard) : avatar, nom, dernier message ou sujet. */
-export function ContactsList({ contacts, showsLastMessage, onOpened }: {
+export function ContactsList({ contacts, showsLastMessage, onOpened, onSelect }: {
   contacts: Contact[];
   showsLastMessage: boolean;
   onOpened?: () => void;
+  /** Contact touché, avant l'ouverture (recherche récente). */
+  onSelect?: (contact: Contact) => void;
 }) {
   const busy = useRef(false);
   return (
@@ -64,6 +66,7 @@ export function ContactsList({ contacts, showsLastMessage, onOpened }: {
               onClick={async () => {
                 if (busy.current) return;
                 busy.current = true;
+                onSelect?.(contact);
                 const opened = await openContact(contact);
                 busy.current = false;
                 // L'app le dit dans son bandeau ; sur le site, une fenêtre, au-dessus de la feuille ouverte (n° 109).
@@ -71,7 +74,7 @@ export function ContactsList({ contacts, showsLastMessage, onOpened }: {
                 else showNotice(OPEN_FAILED);
               }}
             >
-              <CounterpartAvatar counterpart={contact.counterpart} size={44} />
+              <CounterpartAvatar counterpart={contact.counterpart} size={44} fontSize={14} />
               <span className="dm-contact-text">
                 <span className="dm-contact-name">{contact.counterpart.name}</span>
                 <span className="dm-contact-detail">{detail}</span>

@@ -1,7 +1,8 @@
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
+import { LoadErrorState, OfflineState } from '../../components/OfflineState';
 import { useStore } from '../../lib/account/session';
-import { formatPerMonth, formatPrice } from '../../lib/format';
+import { formatArea, formatPrice } from '../../lib/format';
 import { highlightsFor } from '../../lib/highlights';
 import { answerOffer, canMakeOffer, offerErrorMessage, offersIn, type OfferAction, type OfferRow } from '../../lib/listing/offers';
 import { profitabilityFor } from '../../lib/listing/profitability';
@@ -10,12 +11,12 @@ import {
 } from '../../lib/listing/visits';
 import { sortedPhotos } from '../../lib/listings';
 import type { Message } from '../../lib/messages/api';
-import { keepNumbersTogether, lastSeenLabel } from '../../lib/messages/format';
+import { keepNumbersTogether } from '../../lib/messages/format';
 import { groupSummary, isDeletedAccount, sameId, type Conversation, type ListingSnapshot } from '../../lib/messages/inbox';
 import { lotsLabel } from '../../lib/messages/listingBar';
 import { isOnline } from '../../lib/messages/presence';
 import {
-  loadOffers, loadOlderMessages, loadVisitRequests, refreshAfterOffer, refreshAfterVisit, unblock, type Loadable, type ThreadState,
+  loadOffers, loadOlderMessages, loadVisitRequests, refreshAfterOffer, refreshAfterVisit, reloadThread, unblock, type Loadable, type ThreadState,
 } from '../../lib/messages/store';
 import { callState, canOpenDetails, visibleMessages } from '../../lib/messages/thread';
 import {
@@ -25,25 +26,27 @@ import { listingPath } from '../../lib/paths';
 import { hotelPerformanceOf } from '../listing/data';
 import { OfferScreen } from '../listing/OfferScreen';
 import { VisitRequestScreen } from '../listing/VisitRequestScreen';
-import { BlockDialog, CallDialog, groupMenuItems, headerMenuItems, ReportSheet } from './actions';
+import { BlockDialog, CallDialog, directMenuItems, groupMenuItems, ReportSheet } from './actions';
 import { Composer, type Suggestion } from './Composer';
 import { ForwardSheet } from './MessageInteractions';
 import { listingStore, loadListingRow, loadLots, lotsStore } from './listingRow';
-import { ActionMenu, ConfirmDialog, ConversationAvatar, Dialog, showIphoneOnly, showNotice } from './parts';
+import { ActionMenu, ConfirmDialog, ConversationAvatar, PlainSheet, PublisherBadge, Sheet, showIphoneOnly, showNotice } from './parts';
 import { navigate, openOnClick, routePath } from './route';
-import { Thread, ThreadSkeleton } from './Thread';
+import { Thread, ThreadLoading } from './Thread';
 
-// Conversation ouverte, à droite (demande de Romain du 14 novembre 2026) : en-tête blanc de 72 px (avatar, nom, « En
-// ligne » ou « Vu il y a … » ; « Proposer une visite », Appeler si le numéro est partagé, « … »), barre de l'annonce,
-// messages, puis les réponses rapides selon le contexte et la barre d'écriture. Sur téléphone, une flèche ramène à la
-// liste.
+// Conversation ouverte, comme l'app (ConversationView.swift) : une ligne blanche qui s'efface vers le bas, avec le
+// retour rond, l'avatar de 38 (point vert « en ligne »), le nom et sa pastille PRO ou Particulier, « En ligne » en vert
+// ou le sous-titre, puis la capsule Appeler | « … » (le téléphone reste, en gris sans numéro partagé) ; la carte de
+// l'annonce flotte dessous (photo de 40, « Lyon 2e · 62 m² », prix et « Voir › »). Puis les messages, les réponses
+// proposées selon le contexte et la barre d'écriture. Sur ordinateur, à droite de la liste, l'en-tête garde
+// « Proposer une visite » (demande de Romain du 14 novembre 2026) et la carte de l'annonce le rendement et les lots.
 
 type Screen = { kind: 'offer'; parent: OfferRow | null } | { kind: 'visit' };
 
-/** Retour à la liste (téléphone) : la conversation se ferme. */
+/** Retour à la liste (téléphone) : rond « en verre » de 40, la conversation se ferme. */
 function BackToList() {
   return (
-    <button type="button" className="dm-back" onClick={() => navigate({ conversationId: null })} aria-label="Retour aux conversations" title="Retour aux conversations">
+    <button type="button" className="dm-back" onClick={() => navigate({ conversationId: null })} aria-label="Retour" title="Retour">
       <Icon name="chevronLeft" />
     </button>
   );
@@ -193,11 +196,12 @@ export function ConversationPane({ conversation, thread, offers, visitRequests, 
       </div>
 
       {thread.status === 'error' ? (
-        <div className="dm-thread dm-thread-state" role="alert">
-          <p>Impossible de charger les messages. Réessayez dans un instant.</p>
+        <div className="dm-thread dm-thread-state">
+          {thread.offline ? <OfflineState onRetry={reloadThread} />
+            : <LoadErrorState title="Erreur" message="Impossible de charger les messages. Réessayez dans un instant." onRetry={reloadThread} />}
         </div>
       ) : thread.status !== 'ready' || !sameId(thread.conversationId, conversation.id) ? (
-        <ThreadSkeleton />
+        <ThreadLoading />
       ) : (
         <Thread
           conversation={conversation}
@@ -244,13 +248,35 @@ export function ConversationPane({ conversation, thread, offers, visitRequests, 
 
 // MARK: - En-têtes
 
-/** « En ligne » (point vert) quand l'autre personne a la page Messages ouverte ; sinon « Vu il y a … ». */
+/**
+ * Sous le nom (ConversationView.header) : « En ligne » en vert demi-gras quand l'autre personne a la page Messages
+ * ouverte, sinon le sous-titre de la conversation (le bien, ou le rôle) en gris clair.
+ */
 function StatusLine({ conversation, online }: { conversation: Conversation; online: boolean }) {
-  if (online) {
-    return <span className="dm-head-sub"><span className="dm-online-dot" aria-hidden="true" /><span>En ligne</span></span>;
-  }
-  const seen = conversation.otherLastReadAt;
-  return <span className="dm-head-sub"><span>{seen ? lastSeenLabel(seen) : conversation.counterpart.subtitle}</span></span>;
+  if (online) return <span className="dm-head-sub is-online"><span>En ligne</span></span>;
+  return <span className="dm-head-sub"><span>{conversation.counterpart.subtitle}</span></span>;
+}
+
+/**
+ * Capsule « en verre » de l'en-tête : Appeler (bleu ; en gris sans numéro partagé, et l'avis le dit au clic), un trait,
+ * puis « … ».
+ */
+function HeaderCapsule({ hasPhone, onCall, children }: { hasPhone: boolean; onCall: () => void; children: ReactNode }) {
+  return (
+    <div className="dm-capsule">
+      <button
+        type="button"
+        className={`dm-capsule-button${hasPhone ? ' is-call' : ' is-off'}`}
+        onClick={onCall}
+        aria-label={hasPhone ? 'Appeler' : 'Appeler, numéro non partagé'}
+        title={hasPhone ? 'Appeler' : 'Appeler, numéro non partagé'}
+      >
+        <Icon name="phone" />
+      </button>
+      <span className="dm-capsule-line" aria-hidden="true" />
+      {children}
+    </div>
+  );
 }
 
 function DirectHeader({ conversation, online, isBlocked, onVisit, onCall, onBlock, onReport }: {
@@ -266,9 +292,12 @@ function DirectHeader({ conversation, online, isBlocked, onVisit, onCall, onBloc
   const hasPhone = !!counterpart.phone?.trim();
   const who = (
     <>
-      <ConversationAvatar conversation={conversation} size={44} />
+      <ConversationAvatar conversation={conversation} size={38} fontSize={13} online={online} />
       <span className="dm-head-text">
-        <span className="dm-head-name"><span className="dm-head-title">{counterpart.name}</span></span>
+        <span className="dm-head-name">
+          <span className="dm-head-title">{counterpart.name}</span>
+          {!isDeletedAccount(conversation) && <PublisherBadge kind={counterpart.kind} compact />}
+        </span>
         <StatusLine conversation={conversation} online={online} />
       </span>
     </>
@@ -281,6 +310,7 @@ function DirectHeader({ conversation, online, isBlocked, onVisit, onCall, onBloc
           className="dm-head-who"
           href={routePath({ conversationId: conversation.id, view: 'details' })}
           onClick={openOnClick(conversation.id, { view: 'details' })}
+          aria-description="Ouvre les détails de la conversation"
           title="Ouvre les détails de la conversation"
         >
           {who}
@@ -293,14 +323,11 @@ function DirectHeader({ conversation, online, isBlocked, onVisit, onCall, onBloc
             <span className="dm-outline-label">Proposer une visite</span>
           </button>
         )}
-        {hasPhone && (
-          <button type="button" className="dm-round" onClick={onCall} aria-label="Appeler" title="Appeler">
-            <Icon name="phone" />
-          </button>
-        )}
-        <ActionMenu label="Plus d'options" className="dm-round" items={headerMenuItems({ conversation, isBlocked, onBlock, onReport })}>
-          <Icon name="ellipsis" />
-        </ActionMenu>
+        <HeaderCapsule hasPhone={hasPhone} onCall={onCall}>
+          <ActionMenu label="Plus d'options" className="dm-capsule-button" items={directMenuItems({ conversation, isBlocked, onBlock, onReport })}>
+            <Icon name="ellipsis" />
+          </ActionMenu>
+        </HeaderCapsule>
       </div>
     </header>
   );
@@ -315,7 +342,7 @@ function GroupHeader({ conversation, me, onReport }: { conversation: Conversatio
     <header className="dm-head">
       <BackToList />
       <button type="button" className="dm-head-who" onClick={() => showIphoneOnly(info)} aria-label={info}>
-        <ConversationAvatar conversation={conversation} size={44} />
+        <ConversationAvatar conversation={conversation} size={38} fontSize={13} />
         <span className="dm-head-text">
           <span className="dm-head-name"><span className="dm-head-title">{conversation.counterpart.name}</span></span>
           <span className="dm-head-sub"><span>{conversation.hasLeft ? 'Vous avez quitté le groupe' : groupSummary(conversation.members)}</span></span>
@@ -335,11 +362,12 @@ function GroupHeader({ conversation, me, onReport }: { conversation: Conversatio
   );
 }
 
-// MARK: - Barre de l'annonce
+// MARK: - Carte de l'annonce
 
 /**
- * Photo de 52 px, titre, « Ville · prix · rendement brut · nombre de lots » (rendement en vert, seulement pour une vente
- * qui a sa carte « Rentabilité » ; lots à partir de deux), et « Voir l'annonce › » quand la fiche a pu être lue.
+ * Carte flottante de l'annonce (ConversationView.banner) : photo de 40, titre, « Lyon 2e · 62 m² », à droite le prix
+ * (« /mois » pour une location) et « Voir › » quand la fiche a pu être lue ; elle ouvre l'annonce. Sur ordinateur,
+ * la ligne garde aussi le rendement brut (vert, ventes avec leur carte « Rentabilité ») et les lots (demande du 14/11).
  */
 function ListingBanner({ listing }: { listing: ListingSnapshot }) {
   const rows = useStore(listingStore);
@@ -348,29 +376,44 @@ function ListingBanner({ listing }: { listing: ListingSnapshot }) {
   const lotState = lots.get(listing.listingId.toLowerCase());
   useEffect(() => { loadLots(listing.listingId); }, [listing.listingId]);
   const opens = state?.status === 'ready';
-  const price = listing.transaction === 'rent' ? formatPerMonth(listing.price) : formatPrice(listing.price);
+  const price = `${formatPrice(listing.price)}${listing.transaction === 'rent' ? '/mois' : ''}`;
+  const area = state?.status === 'ready' && state.row.living_area > 0 ? formatArea(state.row.living_area) : null;
   const grossYield = useMemo(() => {
     if (state?.status !== 'ready' || hotelPerformanceOf(state.row) || !profitabilityFor(state.row)) return null;
     return highlightsFor(state.row, null)?.text?.grossYield ?? null;
   }, [state]);
   const lotText = lotState?.status === 'ready' ? lotsLabel(lotState.statuses) : null;
+  const extra = [grossYield ? `${grossYield} brut` : null, lotText].filter((part): part is string => !!part);
   const body = (
     <>
       <span className="dm-banner-photo">{listing.coverUrl ? <img src={listing.coverUrl} alt="" /> : <Icon name="image" />}</span>
       <span className="dm-banner-text">
         <span className="dm-banner-title">{listing.title}</span>
         <span className="dm-banner-line">
-          {keepNumbersTogether([listing.city, price].filter(Boolean).join(' · '))}
-          {grossYield && <> · <span className="dm-banner-yield">{keepNumbersTogether(`${grossYield} brut`)}</span></>}
-          {lotText && ` · ${lotText}`}
+          {keepNumbersTogether([listing.city, area].filter(Boolean).join(' · '))}
+          {extra.length > 0 && (
+            <span className="dm-banner-extra">
+              {' · '}
+              {grossYield && <span className="dm-banner-yield">{keepNumbersTogether(`${grossYield} brut`)}</span>}
+              {grossYield && lotText && ' · '}
+              {lotText}
+            </span>
+          )}
         </span>
       </span>
-      {opens && <span className="dm-banner-link"><span className="dm-banner-link-label">Voir l'annonce</span><Icon name="chevronRight" /></span>}
+      <span className="dm-banner-end">
+        <span className="dm-banner-price">{keepNumbersTogether(price)}</span>
+        {opens && <span className="dm-banner-link"><span>Voir</span><Icon name="chevronRight" /></span>}
+      </span>
     </>
   );
-  return opens ? (
-    <a className="dm-banner" href={listingPath(listing.listingId)} title="Ouvre l'annonce">{body}</a>
-  ) : <div className="dm-banner">{body}</div>;
+  return (
+    <div className="dm-banner-wrap">
+      {opens ? (
+        <a className="dm-banner" href={listingPath(listing.listingId)} aria-description="Ouvre l'annonce" title="Ouvre l'annonce">{body}</a>
+      ) : <div className="dm-banner">{body}</div>}
+    </div>
+  );
 }
 
 // MARK: - Bas de la conversation
@@ -416,17 +459,23 @@ function BottomBar({ conversation, isBlocked, messages, suggestions, onMakeOffer
 
 // MARK: - Autre créneau
 
-/** « Autre créneau » : un à trois créneaux d'une heure, envoyés par propose_visit_slots (comme l'app). */
+/**
+ * « Proposer d'autres créneaux » (ProposeSlotsSheet de l'app) : feuille avec la carte « Créneaux » (premier, deuxième,
+ * troisième choix, d'une heure chacun), « Ajouter un créneau » et « Retirer le dernier », puis « Envoyer la
+ * proposition » en bas ; propose_visit_slots, comme l'app.
+ */
 function ProposeSlotsDialog({ request, onClose }: { request: ConversationVisitRequest | null; onClose: () => void }) {
-  const id = useId();
+  const title = request?.status === 'accepted' ? 'Proposer un autre créneau' : 'Proposer d\'autres créneaux';
   return (
-    <Dialog open={request !== null} onClose={onClose} className="alert-dialog dm-dialog dm-decline" labelledBy={`${id}-titre`}>
-      {request && <ProposeSlotsForm key={request.id} id={id} request={request} onClose={onClose} />}
-    </Dialog>
+    <Sheet open={request !== null} title={title} onClose={onClose} className="dm-slots-sheet">
+      {request && <ProposeSlotsForm key={request.id} request={request} onClose={onClose} />}
+    </Sheet>
   );
 }
 
-function ProposeSlotsForm({ id, request, onClose }: { id: string; request: ConversationVisitRequest; onClose: () => void }) {
+const CHOICE_TITLES = ['Premier choix', 'Deuxième choix', 'Troisième choix'];
+
+function ProposeSlotsForm({ request, onClose }: { request: ConversationVisitRequest; onClose: () => void }) {
   const [drafts, setDrafts] = useState<SlotDraft[]>(() => [suggestedSlot(new Date())]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -434,7 +483,7 @@ function ProposeSlotsForm({ id, request, onClose }: { id: string; request: Conve
   const change = (index: number, draft: SlotDraft) => setDrafts((current) => current.map((item, at) => (at === index ? draft : item)));
   return (
     <form
-      className="alert-body dm-decline-body"
+      className="dm-sheet-form"
       onSubmit={(event) => {
         event.preventDefault();
         if (busy) return;
@@ -454,41 +503,50 @@ function ProposeSlotsForm({ id, request, onClose }: { id: string; request: Conve
           .finally(() => setBusy(false));
       }}
     >
-      <h2 id={`${id}-titre`}>Proposer un autre créneau</h2>
-      <p className="dm-sheet-note">{request.listingTitle} · chaque créneau dure environ une heure.</p>
-      <div className="dm-slots">
-        {drafts.map((draft, index) => (
-          <div key={index} className="dm-slot-row">
-            <input
-              type="date"
-              min={today}
-              value={draft.day}
-              aria-label={`Jour du créneau ${index + 1}`}
-              onChange={(event) => change(index, { ...draft, day: event.currentTarget.value })}
-            />
-            <select
-              value={draft.minutes}
-              aria-label={`Heure du créneau ${index + 1}`}
-              onChange={(event) => change(index, { ...draft, minutes: Number(event.currentTarget.value) })}
-            >
-              {SLOT_TIMES.map((minutes) => <option key={minutes} value={minutes}>{slotHourLabel(minutes)}</option>)}
-            </select>
+      <div className="dm-sheet-content">
+        <p className="dm-sheet-note">{request.listingTitle} · chaque créneau dure environ une heure.</p>
+        <section className="dm-card dm-slots-card" aria-labelledby="dm-creneaux">
+          <h3 id="dm-creneaux" className="dm-card-title"><Icon name="calendar" />Créneaux</h3>
+          {drafts.map((draft, index) => (
+            <div key={index} className="dm-slot-row">
+              <span className="dm-slot-title">{CHOICE_TITLES[index]}</span>
+              <span className="dm-slot-fields">
+                <input
+                  type="date"
+                  min={today}
+                  value={draft.day}
+                  aria-label={`Jour du créneau ${index + 1}`}
+                  onChange={(event) => change(index, { ...draft, day: event.currentTarget.value })}
+                />
+                <select
+                  value={draft.minutes}
+                  aria-label={`Heure du créneau ${index + 1}`}
+                  onChange={(event) => change(index, { ...draft, minutes: Number(event.currentTarget.value) })}
+                >
+                  {SLOT_TIMES.map((minutes) => <option key={minutes} value={minutes}>{slotHourLabel(minutes)}</option>)}
+                </select>
+              </span>
+            </div>
+          ))}
+          <div className="dm-slot-links">
+            {drafts.length < 3 && (
+              <button
+                type="button"
+                className="dm-link-button"
+                onClick={() => setDrafts((current) => [...current, suggestedSlot(new Date(), current.length ? slotStart(current[current.length - 1]!) : null)])}
+              >
+                Ajouter un créneau
+              </button>
+            )}
+            {drafts.length > 1 && (
+              <button type="button" className="dm-link-button" onClick={() => setDrafts((current) => current.slice(0, -1))}>Retirer le dernier</button>
+            )}
           </div>
-        ))}
+        </section>
+        {error && <p className="dm-error" role="alert"><Icon name="triangleAlert" />{error}</p>}
       </div>
-      {drafts.length < 3 && (
-        <button
-          type="button"
-          className="dm-link-button"
-          onClick={() => setDrafts((current) => [...current, suggestedSlot(new Date(), current.length ? slotStart(current[current.length - 1]!) : null)])}
-        >
-          Ajouter un créneau
-        </button>
-      )}
-      {error && <p className="dm-error" role="alert">{error}</p>}
-      <div className="dm-decline-actions">
-        <button type="button" className="btn btn-light" onClick={onClose}>Annuler</button>
-        <button type="submit" className="btn btn-primary" aria-busy={busy} disabled={busy}>Envoyer</button>
+      <div className="dm-sheet-foot">
+        <button type="submit" className="btn btn-primary" aria-busy={busy} disabled={busy}>Envoyer la proposition</button>
       </div>
     </form>
   );
@@ -532,13 +590,16 @@ function OfferConfirmDialog({ confirmation, onClose }: { confirmation: { offer: 
   );
 }
 
-/** Refus d'une offre, motif facultatif (DeclineOfferSheet). */
+/**
+ * Refus d'une offre, motif facultatif (DeclineOfferSheet) : petite feuille du bas (poignée, glisser pour fermer), le
+ * titre de 19, le motif sur 2 à 4 lignes, puis « Annuler » (bleu pâle) et « Refuser » (rouge) côte à côte.
+ */
 function DeclineOfferDialog({ offer, onClose }: { offer: OfferRow | null; onClose: () => void }) {
   const id = useId();
   return (
-    <Dialog open={offer !== null} onClose={onClose} className="alert-dialog dm-dialog dm-decline" labelledBy={`${id}-titre`}>
+    <PlainSheet open={offer !== null} onClose={onClose} className="dm-decline" labelledBy={`${id}-titre`}>
       {offer && <DeclineForm id={id} offer={offer} onClose={onClose} />}
-    </Dialog>
+    </PlainSheet>
   );
 }
 
@@ -548,7 +609,7 @@ function DeclineForm({ id, offer, onClose }: { id: string; offer: OfferRow; onCl
   const [busy, setBusy] = useState(false);
   return (
     <form
-      className="alert-body dm-decline-body"
+      className="dm-decline-body"
       onSubmit={(event) => {
         event.preventDefault();
         if (busy) return;
@@ -560,7 +621,7 @@ function DeclineForm({ id, offer, onClose }: { id: string; offer: OfferRow; onCl
         });
       }}
     >
-      <h2 id={`${id}-titre`}>Refuser l'offre de {priceOf(offer)} ?</h2>
+      <h2 id={`${id}-titre`}>Refuser l'offre de {keepNumbersTogether(priceOf(offer))} ?</h2>
       <textarea className="dm-textarea" rows={2} value={reason} onChange={(event) => setReason(event.currentTarget.value)} placeholder="Motif (facultatif)" aria-label="Motif (facultatif)" />
       {error && <p className="dm-error" role="alert">{error}</p>}
       <div className="dm-decline-actions">
@@ -571,30 +632,26 @@ function DeclineForm({ id, offer, onClose }: { id: string; offer: OfferRow; onCl
   );
 }
 
-/** Conversation demandée par l'adresse mais absente de la boîte (supprimée, ou d'un autre compte). */
+/**
+ * Conversation demandée par l'adresse mais absente de la boîte (supprimée, ou d'un autre compte) : comme l'app (n° 96),
+ * seulement la flèche de retour en haut et « Conversation introuvable » en bas.
+ */
 export function MissingConversation() {
   return (
-    <div className="dm-pane dm-pane-empty">
-      <button type="button" className="dm-link-button dm-back-link" onClick={() => navigate({ conversationId: null })}>Retour aux conversations</button>
-      <Icon name="messages" />
-      <h2>Conversation introuvable</h2>
-      <p>Elle n'existe plus, ou elle appartient à un autre compte.</p>
-    </div>
+    <section className="dm-pane dm-pane-missing" aria-label="Conversation introuvable">
+      <div className="dm-missing-top"><BackToList /></div>
+      <div className="dm-thread" />
+      <div className="dm-bottom-line"><span>Conversation introuvable</span></div>
+    </section>
   );
 }
 
-/** Conversation de l'adresse pendant la lecture de la liste : un en-tête et un fil en gris. */
+/** Conversation de l'adresse pendant la lecture de la liste : la roue de l'app (ProgressView), 40 px sous le haut. */
 export function PaneSkeleton() {
   return (
     <div className="dm-pane">
-      <div className="dm-skel-head" aria-hidden="true">
-        <span className="dm-skel dm-skel-avatar" />
-        <span className="dm-skel-lines">
-          <span className="dm-skel dm-skel-line" style={{ width: '70%' }} />
-          <span className="dm-skel dm-skel-line is-thin" style={{ width: '45%' }} />
-        </span>
-      </div>
-      <ThreadSkeleton />
+      <div className="dm-missing-top"><BackToList /></div>
+      <ThreadLoading />
     </div>
   );
 }

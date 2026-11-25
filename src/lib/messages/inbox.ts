@@ -422,11 +422,13 @@ export function counterpartInitials(name: string): string {
 
 // MARK: - Page Messages du site (demande de Romain du 14 novembre 2026)
 
-/** Les trois onglets de la liste du site. */
-export const SITE_INBOX_FILTERS: { value: InboxFilter; title: string }[] = [
-  { value: 'all', title: 'Toutes' },
-  { value: 'unread', title: 'Non lues' },
-  { value: 'archived', title: 'Archivées' },
+/** Les cinq filtres de la liste, dans l'ordre de l'app (InboxFilter.title). */
+export const INBOX_FILTERS: { value: InboxFilter; title: string }[] = [
+  { value: 'all', title: 'Tous' },
+  { value: 'unread', title: 'Non lus' },
+  { value: 'favorites', title: 'Favoris' },
+  { value: 'visits', title: 'Visites' },
+  { value: 'archived', title: 'Archivés' },
 ];
 
 /** Recherche de la liste du site : nom de l'interlocuteur ou titre de l'annonce. */
@@ -435,23 +437,15 @@ export function matchesListSearch(conversation: Pick<Conversation, 'counterpart'
   return matchesWords(query, [conversation.counterpart.name, conversation.listing?.title ?? '']);
 }
 
-/** Couleurs pastel des avatars sans photo (fond, texte), dans l'ordre de la demande. */
-export const AVATAR_COLORS: readonly { background: string; color: string }[] = [
-  { background: '#F6E3D7', color: '#9A5B3E' },
-  { background: '#E1E8F8', color: '#3A5BAE' },
-  { background: '#DDEFE4', color: '#2F7A4E' },
-  { background: '#EDE3F6', color: '#6E4A9A' },
-  { background: '#F8ECD2', color: '#946B1E' },
-  { background: '#D9F0EE', color: '#2C7A72' },
-  { background: '#F7E1E4', color: '#A0465A' },
-];
-
-/** Couleur fixe d'une personne ou d'un groupe : toujours la même pour le même identifiant. */
-export function avatarColors(key: string): { background: string; color: string } {
-  let hash = 0;
-  for (const char of key.toLowerCase()) hash = (Math.imul(hash, 31) + (char.codePointAt(0) ?? 0)) >>> 0;
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+/**
+ * Couleurs d'un avatar sans photo selon l'interlocuteur (InitialsAvatar.palette de l'app) : agence en vert, particulier
+ * en beige, groupe et communauté en bleu clair. La même personne a donc la même couleur partout.
+ */
+export function avatarPalette(kind: CounterpartKind): { background: string; color: string } {
+  switch (kind) {
+    case 'agency': return { background: 'var(--green-soft)', color: 'var(--green)' };
+    case 'individual': return { background: '#F9E7DD', color: '#9A6A3C' };
+    case 'group':
+    case 'community': return { background: 'var(--app-brand-soft)', color: 'var(--app-brand)' };
+  }
 }
-
-/** Identifiant qui fixe la couleur de l'avatar d'une conversation : l'autre personne, sinon la conversation. */
-export const avatarKey = (conversation: Pick<Conversation, 'id' | 'otherUserId'>): string => conversation.otherUserId ?? conversation.id;

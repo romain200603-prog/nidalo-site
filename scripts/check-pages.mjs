@@ -850,6 +850,8 @@ function chatState() {
     calls: [],
     signs: [],
     uploads: [],
+    /** Fichiers effacés du bucket (remove de supabase-js). */
+    removed: [],
     tick: 0,
   };
 }
@@ -1060,6 +1062,12 @@ function chatRespond(chat, reply, { table, method, params, body, single }) {
         chat.messages.push(row);
         return reply(201, single ? messageColumns(row) : [messageColumns(row)]);
       }
+      if (method === 'DELETE') {
+        // Règle du serveur : seul l'expéditeur supprime son message ; les lignes supprimées reviennent (select=id).
+        const gone = chatFiltered(chat.messages, params).filter((item) => sameChatId(item.sender_id, USER_ID));
+        chat.messages = chat.messages.filter((item) => !gone.includes(item));
+        return reply(200, gone.map((item) => ({ id: item.id })));
+      }
       const rows = chatFiltered(chat.messages, params).sort((a, b) => b.created_at.localeCompare(a.created_at))
         .slice(0, Number(params.get('limit') ?? 1000)).map(messageColumns);
       if (single) return rows.length === 1 ? reply(200, rows[0]) : reply(406, { code: 'PGRST116', message: 'no rows' });
@@ -1235,6 +1243,17 @@ async function mockMessaging(context, chat, { signedIn = true } = {}) {
     const file = parts.find((part) => part.filename !== null);
     if (file) chat.files.set(path, { type: file.type ?? 'application/octet-stream', body: Buffer.from(file.body) });
     return reply(200, { Id: crypto.randomUUID(), Key: `message-attachments/${path}` });
+  });
+  // remove() de supabase-js : DELETE sur le bucket avec { prefixes } ; les fichiers effacés reviennent.
+  await context.route('https://izzsoitqtzzswkpvdozd.supabase.co/storage/v1/object/message-attachments', async (route) => {
+    const request = route.request();
+    if (request.method() !== 'DELETE') return route.fallback();
+    let body = null;
+    try { body = request.postDataJSON(); } catch { body = null; }
+    const paths = Array.isArray(body?.prefixes) ? body.prefixes : [];
+    chat.removed.push(...paths);
+    for (const path of paths) chat.files.delete(path);
+    return route.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify(paths.map((name) => ({ name }))) });
   });
 }
 
@@ -2789,10 +2808,10 @@ try {
   const INITIAL_ROWS = [
     { name: 'Agence Démo Lyon', time: '10:45', listing: 'Appartement 3 pièces · Lyon 2e', preview: 'Bien reçu, je transmets votre offre au propriétaire.', unread: '1', greyPill: false },
     { name: 'Visite groupée Lyon 2e', time: '09:12', listing: '3 membres', preview: 'Merci, à samedi !', unread: '3', greyPill: true },
-    // La demande de visite de Julien, plus récente que son dernier message, en tient lieu.
-    { name: 'Julien M.', time: 'Hier', listing: 'Appartement 2 pièces · Lyon 6e', preview: 'Demande de visite · sam. 7 nov. à 10:00', unread: '2', greyPill: false },
+    // Le dernier message, comme la ligne de l'app (la demande de visite de Julien n'en tient plus lieu).
+    { name: 'Julien M.', time: 'Hier', listing: 'Appartement 2 pièces · Lyon 6e', preview: 'Je peux signer rapidement si l\'offre vous convient.', unread: '2', greyPill: false },
     { name: 'Lucas G.', time: 'Mar.', listing: 'Maison familiale 5 pièces · Écully', preview: 'Nouvelle conversation', unread: null, greyPill: false },
-    { name: 'Compte supprimé', time: '27 oct.', listing: 'Studio rénové', preview: 'Vous : Merci, je reviens vers vous rapidement.', unread: null, greyPill: false },
+    { name: 'Compte supprimé', time: '27 octobre', listing: 'Studio rénové', preview: 'Vous : Merci, je reviens vers vous rapidement.', unread: null, greyPill: false },
   ];
   const ALL_NAMES = INITIAL_ROWS.map((row) => row.name);
   const flat = (text) => text?.replace(/\s+/g, ' ').trim() ?? null;
@@ -2836,48 +2855,57 @@ try {
       };
     });
     expectSame(M, 'mise en page', layout, {
-      side: 360, main: width - 360, top: 72, bottom: height, pageScroll: 0, overflowX: 0, footer: false, active: 'page', search: 44, tabs: [38, 38, 38],
+      side: 360, main: width - 360, top: 72, bottom: height, pageScroll: 0, overflowX: 0, footer: false, active: 'page', search: 44, tabs: [38, 38, 38, 38, 38],
       font: 'Nidalo Inter', rowAvatar: 46,
     });
     expectSame(M, 'en-tête de la colonne', [await textOf(page, '.dm-side-head h1'), await page.getAttribute('.dm-compose', 'aria-label'),
-      await page.getAttribute('.dm-search input', 'placeholder')], ['Messages', 'Nouveau message', 'Rechercher une conversation']);
+      await page.getAttribute('.dm-search-open', 'aria-label'), await textOf(page, '.dm-search-open')],
+    ['Messages', 'Nouveau message', 'Rechercher un contact ou une annonce', 'Rechercher un contact ou un bien']);
     expectSame(M, 'conversations', await inboxRows(page), INITIAL_ROWS);
     expectSame(M, 'filtres', await page.$$eval('.dm-tab', (els) => els.map((el) => [el.getAttribute('aria-label'), el.getAttribute('aria-pressed')])),
-      [['Toutes, 5', 'true'], ['Non lues, 3', 'false'], ['Archivées, 1', 'false']]);
+      [['Tous, 5', 'true'], ['Non lus, 3', 'false'], ['Favoris, 1', 'false'], ['Visites, 1', 'false'], ['Archivés, 1', 'false']]);
     // Aucune conversation n'est ouverte d'elle-même : aucune ligne n'est sélectionnée.
     if (await page.locator('.dm-row[aria-current="true"]').count()) problems.push(`${M} : une conversation est sélectionnée sans ?c=`);
     await chatShot(page, `3-messages-vide-${width}.png`);
 
     if (width === 1440) {
-      // Filtres : non lues (sans les archivées), archivées, toutes.
-      for (const [label, names] of [['Non lues, 3', ['Agence Démo Lyon', 'Visite groupée Lyon 2e', 'Julien M.']], ['Archivées, 1', ['Marc P.']], ['Toutes, 5', ALL_NAMES]]) {
+      // Filtres (capsules de l'app) : non lus, favoris, visites à venir (sans les archivées), archivés, tous.
+      for (const [label, names] of [['Non lus, 3', ['Agence Démo Lyon', 'Visite groupée Lyon 2e', 'Julien M.']], ['Favoris, 1', ['Julien M.']],
+        ['Visites, 1', ['Agence Démo Lyon']], ['Archivés, 1', ['Marc P.']], ['Tous, 5', ALL_NAMES]]) {
         await page.click(`.dm-tab[aria-label="${label}"]`);
         await waitForRows(page, names, `${M} : filtre ${label}`);
         if ((await page.getAttribute(`.dm-tab[aria-label="${label}"]`, 'aria-pressed')) !== 'true') problems.push(`${M} : filtre ${label} non enfoncé`);
       }
-      // Recherche par nom ou par titre d'annonce (pas dans le texte des messages) ; la croix et Échap la vident.
-      await page.fill('.dm-search input', 'lyon');
-      await waitForRows(page, ['Agence Démo Lyon', 'Visite groupée Lyon 2e'], `${M} : recherche « lyon »`);
-      await page.fill('.dm-search input', 'maison');
-      await waitForRows(page, ['Lucas G.'], `${M} : recherche « maison »`);
-      await page.click('.dm-search-clear');
-      await waitForRows(page, ALL_NAMES, `${M} : recherche effacée`);
-      await page.fill('.dm-search input', 'bonjour');
-      await page.waitForSelector('.dm-inbox-empty h3');
-      expectSame(M, 'recherche sans résultat', await textOf(page, '.dm-inbox-empty'), 'Aucune conversation trouvée Essayez un autre nom ou un autre titre d\'annonce.');
-      await page.press('.dm-search input', 'Escape');
-      await waitForRows(page, ALL_NAMES, `${M} : recherche vidée par Échap`);
-      // Clavier : de la recherche, Tab va à « Annuler » (la recherche ouverte, comme l'app), puis aux filtres, avec un
-      // contour bleu visible.
-      await page.focus('.dm-search input');
-      await page.keyboard.press('Tab');
-      expectSame(M, 'focus au clavier sur « Annuler »', await page.evaluate(() => document.activeElement?.textContent ?? null), 'Annuler');
+      // Recherche (MessagingSearchView de l'app) : la ligne ouvre l'écran de recherche, avec son champ et « Annuler » ; les
+      // résultats sont rangés par sorte (conversations par nom ou par titre d'annonce) ; la croix vide le champ.
+      await page.click('.dm-search-open');
+      await page.waitForSelector('.dm-msearch-field input', { timeout: 8000 });
+      expectSame(M, 'écran de recherche', [await page.getAttribute('.dm-msearch-field input', 'placeholder'), await textOf(page, '.dm-msearch-cancel')],
+        ['Rechercher un contact ou une annonce…', 'Annuler']);
+      const found = () => page.$$eval('.dm-found-conversation .dm-contact-name', (els) => els.map((el) => el.textContent));
+      await page.fill('.dm-msearch-field input', 'lyon');
+      await page.waitForSelector('.dm-found-conversation', { timeout: 8000 }).catch(() => problems.push(`${M} : recherche « lyon » sans conversation`));
+      // Par le nom, le bien ou sa ville (MessagingSearchView) : Julien et le compte supprimé ont un bien à Lyon.
+      expectSame(M, 'recherche « lyon »', await found(), ['Agence Démo Lyon', 'Visite groupée Lyon 2e', 'Julien M.', 'Compte supprimé']);
+      await page.fill('.dm-msearch-field input', 'maison');
+      await page.waitForFunction(() => [...document.querySelectorAll('.dm-found-conversation .dm-contact-name')].map((el) => el.textContent).join() === 'Lucas G.,Marc P.', null, { timeout: 8000 })
+        .catch(() => undefined);
+      expectSame(M, 'recherche « maison »', await found(), ['Lucas G.', 'Marc P.']);
+      await page.click('.dm-msearch-clear');
+      expectSame(M, 'recherche effacée', await page.inputValue('.dm-msearch-field input'), '');
+      await page.fill('.dm-msearch-field input', 'zzz');
+      await page.waitForSelector('.dm-results-empty h3', { timeout: 8000 }).catch(() => problems.push(`${M} : recherche sans résultat sans message`));
+      expectSame(M, 'recherche sans résultat', await textOf(page, '.dm-results-empty h3'), 'Aucun résultat pour « zzz »');
+      await page.click('.dm-msearch-cancel');
+      await waitForRows(page, ALL_NAMES, `${M} : recherche refermée par « Annuler »`);
+      // Clavier : de la ligne de recherche, Tab va aux filtres, avec un contour bleu visible.
+      await page.focus('.dm-search-open');
       await page.keyboard.press('Tab');
       expectSame(M, 'focus au clavier', await page.evaluate(() => {
         const el = document.activeElement;
         const style = getComputedStyle(el);
         return [el.getAttribute('aria-label'), style.outlineStyle, style.outlineWidth, style.outlineColor];
-      }), ['Toutes, 5', 'solid', '3px', 'rgb(60, 92, 176)']);
+      }), ['Tous, 5', 'solid', '3px', 'rgb(60, 92, 176)']);
     }
 
     // Ouvrir la conversation de l'agence : elle s'ouvre à droite sans recharger la page, est lue puis marquée lue une fois.
@@ -2916,14 +2944,17 @@ try {
     expectSame(M, 'conversation ouverte', opened, {
       row: 'Agence Démo Lyon', rowBackground: 'rgb(238, 242, 250)', unread: null,
       sent: ['rgb(60, 92, 176)', 'rgb(255, 255, 255)', '16px 16px 4px'], received: ['rgb(255, 255, 255)', 'rgb(36, 45, 56)', '16px 16px 16px 4px'],
-      receivedLeft: [pad + 36], sentRight: [pad], gaps: ['14px', '4px'], avatars: opened.avatars.map(() => 28), fresh: 0,
+      receivedLeft: [pad + 31], sentRight: [pad], gaps: ['14px', '4px'], avatars: opened.avatars.map(() => 23), fresh: 0,
     });
     expectSame(M, 'en-tête', [await textOf(page, '.dm-head-title'), await textOf(page, '.dm-head-sub'), await page.getAttribute('.dm-head-who', 'href'),
       await page.$$eval('.dm-head-tools button', (els) => els.map((el) => el.getAttribute('aria-label')))],
-    ['Agence Démo Lyon', 'Vu il y a 5 min', `/messages/?c=${chatId(1)}&vue=details`, ['Proposer une visite', 'Appeler', 'Plus d\'options']]);
-    expectSame(M, 'barre de l\'annonce', [await textOf(page, '.dm-banner-title'), await textOf(page, '.dm-banner-line'), await textOf(page, '.dm-banner-link'),
-      await page.getAttribute('a.dm-banner', 'href')], ['Appartement 3 pièces', 'Lyon 2e · 238 000 € · 7,8 % brut', 'Voir l\'annonce', `/annonce/?id=${homeId(1)}`]);
-    expectSame(M, 'jours', await page.$$eval('.dm-day-label', (els) => els.map((el) => el.textContent)), ['Hier', 'Aujourd\'hui']);
+    ['Agence Démo Lyon', 'Appartement 3 pièces · Lyon 2e', `/messages/?c=${chatId(1)}&vue=details`, ['Proposer une visite', 'Appeler', 'Plus d\'options']]);
+    // Carte de l'annonce de l'app : la ville et la surface (le rendement en plus sur ordinateur), le prix à droite et « Voir ›».
+    expectSame(M, 'barre de l\'annonce', [await textOf(page, '.dm-banner-title'), await textOf(page, '.dm-banner-line'), await textOf(page, '.dm-banner-price'),
+      await textOf(page, '.dm-banner-link'), await page.getAttribute('a.dm-banner', 'href')],
+    ['Appartement 3 pièces', 'Lyon 2e · 62 m² · 7,8 % brut', '238 000 €', 'Voir', `/annonce/?id=${homeId(1)}`]);
+    // Séparateurs de l'app : le jour et l'heure du premier message (« Aujourd'hui · 09:58 »).
+    expectSame(M, 'jours', await page.$$eval('.dm-day-label', (els) => els.map((el) => el.textContent)), ['Hier · 18:02', 'Aujourd\'hui · 09:58']);
     // Coches dans les bulles : l'agence a tout lu jusqu'à 10:45.
     expectSame(M, 'coches', await page.$$eval('.dm-msg.is-out .dm-status .dm-check', (els) => els.map((el) => el.getAttribute('aria-label'))), ['Lu', 'Lu', 'Lu']);
     expectSame(M, 'demande de visite confirmée', await visitCard(page), {
@@ -2932,7 +2963,7 @@ try {
     });
     expectSame(M, 'carte d\'offre', [await textOf(page, '.dm-offer-head'), await textOf(page, '.dm-offer-amount'), await textOf(page, '.dm-offer-gap'),
       await textOf(page, '.dm-offer-conditions'), await textOf(page, '.dm-offer-expiry'), await page.$$eval('.dm-offer-actions button', (els) => els.map((el) => el.textContent))],
-    ['Offre En attente', '228 000 €', '4,2 % sous le prix affiché', 'Sous réserve d\'obtention du prêt', 'Valable jusqu\'au 13 novembre', ['Retirer']]);
+    ['OFFRE En attente', '228 000 €', '4,2 % sous le prix affiché', 'Sous réserve d\'obtention du prêt', 'Valable jusqu\'au 13 novembre', ['Retirer']]);
     // Les photos plus haut dans le fil se chargent à l'approche (loading="lazy") : on y va, puis on revient en bas.
     await page.locator('.dm-media-tile img').first().scrollIntoViewIfNeeded();
     await imagesLoaded(page, '.dm-media-tile img', 2, `${M} : photos`);
@@ -2944,7 +2975,7 @@ try {
       [[AGENT_PHOTOS[0], { expiresIn: 600 }], [AGENT_PHOTOS[1], { expiresIn: 600 }], [LOAN_PDF, { expiresIn: 600 }]]);
     expectSame(M, 'fichier', [await textOf(page, '.dm-file-name'), await textOf(page, '.dm-file-line'), await textOf(page, '.dm-file-badge'),
       await page.$eval('.dm-file-badge', (el) => getComputedStyle(el).color), await page.getAttribute('a.dm-file', 'href'), await page.getAttribute('a.dm-file', 'target')],
-    ['Simulation_pret.pdf', 'PDF · 245 Ko', 'PDF', 'rgb(229, 72, 77)', `https://izzsoitqtzzswkpvdozd.supabase.co/storage/v1/object/sign/message-attachments/${LOAN_PDF}?token=jeton-de-test`, '_blank']);
+    ['Simulation_pret.pdf', 'PDF · 245 Ko', 'PDF', 'rgb(192, 57, 43)', `https://izzsoitqtzzswkpvdozd.supabase.co/storage/v1/object/sign/message-attachments/${LOAN_PDF}?token=jeton-de-test`, '_blank']);
     // Zone de saisie : bande blanche (12 / 24 / 16 px), « + » de 44 px, champ de 52 px, envoi de 52 px grisé tant que
     // le champ est vide ; une conversation sur une annonce propose « Envoyer le dossier complet ».
     expectSame(M, 'réponses rapides', await quickReplies(page), ['Envoyer le dossier complet']);
@@ -2961,7 +2992,7 @@ try {
     });
     expectSame(M, 'zone de saisie', await composer(), {
       band: ['12px', '24px', '16px', 'rgb(236, 234, 230)', 'rgb(255, 255, 255)'], plus: [44, 44], field: 52, send: [52, 52], sendColor: 'rgb(201, 206, 214)',
-      disabled: true, placeholder: 'Écrivez votre message…', labels: ['Ajouter une pièce jointe', 'Ajouter un émoji', 'Envoyer'], chip: 34,
+      disabled: true, placeholder: 'Votre message...', labels: ['Ajouter une pièce jointe', 'Ajouter un émoji', 'Envoyer'], chip: 34,
     });
     const atBottom = await page.evaluate(() => { const el = document.querySelector('.dm-thread'); return el.scrollHeight - el.scrollTop - el.clientHeight; });
     if (atBottom > 2) problems.push(`${M} : la conversation ne s'ouvre pas en bas (${atBottom} px plus bas)`);
@@ -2976,7 +3007,9 @@ try {
       chatServer.pushPresence(chatId(1), [AGENT_ID]);
       await page.waitForFunction(() => document.querySelector('.dm-head-sub')?.textContent === 'En ligne', null, { timeout: 8000 })
         .catch(async () => problems.push(`${M} : « En ligne » non affiché (${await textOf(page, '.dm-head-sub')})`));
-      expectSame(M, 'point vert', await page.$eval('.dm-head-sub .dm-online-dot', (el) => getComputedStyle(el).backgroundColor).catch(() => null), 'rgb(43, 182, 115)');
+      // « En ligne » en vert demi-gras et le point vert sur l'avatar, comme l'en-tête de l'app.
+      expectSame(M, 'point vert', await page.evaluate(() => [getComputedStyle(document.querySelector('.dm-head-sub.is-online')).color,
+        getComputedStyle(document.querySelector('.dm-head .dm-presence')).backgroundColor]).catch(() => null), ['rgb(87, 121, 101)', 'rgb(87, 121, 101)']);
 
       // Cœur (message_reactions, comme setReaction) : un double clic sur la bulle (le double toucher de l'app) le pose,
       // ❤️ comme l'app ; un autre double clic le retire (demande du 17/11).
@@ -2997,7 +3030,7 @@ try {
       const unliked = await oneCall(chat, 'message_reactions', mark, `${M} : cœur retiré`);
       if (unliked) expectSame(M, 'cœur retiré', [unliked.method, unliked.search], ['DELETE', `?message_id=eq.${messageId(7).toUpperCase()}&user_id=eq.${USER_ID.toUpperCase()}`]);
 
-      // Écrire : le champ grandit jusqu'à 5 lignes ; un émoji choisi dans le panneau se place au curseur ; Maj + Entrée
+      // Écrire : le champ grandit jusqu'à 4 lignes (lineLimit(1...4) de l'app) ; un émoji choisi dans le panneau se place au curseur ; Maj + Entrée
       // va à la ligne ; Entrée envoie, avec exactement les colonnes de l'app (MessageInsert) ; le message arrive en fondu.
       const checkInsert = (call, what, content, preview) => {
         if (!call) return;
@@ -3011,7 +3044,7 @@ try {
       await page.fill('.dm-composer textarea', 'Une\ndeux');
       expectSame(M, 'champ de 2 lignes', await fieldHeight(), 72);
       await page.fill('.dm-composer textarea', 'Un\ndeux\ntrois\nquatre\ncinq\nsix\nsept');
-      expectSame(M, 'champ de 7 lignes (5 affichées)', await fieldHeight(), 138);
+      expectSame(M, 'champ de 7 lignes (4 affichées)', await fieldHeight(), 116);
       await page.fill('.dm-composer textarea', '');
       expectSame(M, 'champ vide', await fieldHeight(), 50);
       mark = chat.calls.length;
@@ -3096,6 +3129,35 @@ try {
       }
       await page.waitForFunction(() => [...document.querySelectorAll('.dm-file-name')].some((el) => el.textContent === 'dpe.pdf'), null, { timeout: 8000 })
         .catch(() => problems.push(`${M} : le document envoyé n'apparaît pas`));
+      // Localisation (LocationShareSheet de l'app) : l'adresse choisie parmi les suggestions de la Géoplateforme, puis
+      // « Joindre cette adresse » ; le message porte l'adresse et sa position, sans fichier, comme celui de l'app.
+      await page.context().route('https://data.geopf.fr/geocodage/search**', (route) => route.fulfill({ status: 200, contentType: 'application/json',
+        headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ type: 'FeatureCollection', features: [{ type: 'Feature',
+          geometry: { type: 'Point', coordinates: [4.8325, 45.7552] }, properties: { id: '69382_0000_00012', type: 'housenumber', name: '12 Rue de l\'Exemple',
+            label: '12 Rue de l\'Exemple 69002 Lyon', postcode: '69002', city: 'Lyon', citycode: '69382', context: '69, Rhône, Auvergne-Rhône-Alpes' } }] }) }));
+      mark = chat.calls.length;
+      uploads = chat.uploads.length;
+      await page.click('.dm-plus');
+      await page.click('dialog[open] .dm-sources button[aria-label="Localisation"]');
+      await page.waitForSelector('dialog.dm-location-sheet[open]', { timeout: 8000 }).catch(() => problems.push(`${M} : « Localisation » ne s'ouvre pas`));
+      expectSame(M, 'localisation', [await dialogTitle(page, 'sheet'), await textOf(page, 'dialog[open] .dm-location-current'),
+        await page.getAttribute('dialog[open] .dm-location-place input', 'placeholder'), await page.isDisabled('dialog[open] .dm-location-share')],
+      ['Localisation', 'Position actuelle', 'Adresse du bien', true]);
+      await page.fill('dialog[open] .dm-location-place input', '12 rue de l\'Exemple');
+      await page.click('dialog[open] .place-list [role="option"]');
+      await page.waitForFunction(() => document.querySelector('dialog[open] .dm-location-share')?.disabled === false, null, { timeout: 8000 })
+        .catch(() => problems.push(`${M} : « Joindre cette adresse » reste grisé`));
+      await page.click('dialog[open] .dm-location-share');
+      await page.waitForSelector('dialog.dm-preview-sheet[open] .dm-tile-doc', { timeout: 8000 }).catch(() => problems.push(`${M} : la localisation n'est pas dans l'aperçu`));
+      await page.click('dialog.dm-preview-sheet[open] .dm-pill');
+      const placeMessage = await oneCall(chat, 'messages', mark, `${M} : localisation`, (call) => call.method === 'POST');
+      if (chat.uploads.length !== uploads) problems.push(`${M} : fichier envoyé pour une localisation`);
+      if (placeMessage) {
+        const item = placeMessage.body?.content?.attachments?._0?.[0] ?? {};
+        if (!UPPER_UUID.test(item.id ?? '')) problems.push(`${M} : identifiant de la localisation ${item.id}`);
+        expectSame(M, 'message de la localisation', [placeMessage.body?.content, placeMessage.body?.preview],
+          [{ attachments: { _0: [{ id: item.id, kind: 'location', fileName: '12 Rue de l\'Exemple, 69002 Lyon', byteCount: 0, latitude: 45.7552, longitude: 4.8325 }] } }, '📍 Localisation']);
+      }
 
       // Temps réel : l'agence lit (coches « Lu »), puis écrit ; tout arrive sans recharger, le nouveau message en fondu,
       // et la conversation est relue puis marquée lue une fois de plus.
@@ -3119,8 +3181,9 @@ try {
       if ((await page.evaluate(() => window.nidaloMarker)) !== 'même page') problems.push(`${M} : la page s'est rechargée`);
       expectSame(M, 'temps réel suivi', ['messages', 'conversation_participants', 'message_reactions', 'offers', 'visit_requests'].filter((table) => !chatServer.followed().includes(table)), []);
 
-      // Menu « … » : Archiver, Signaler, Bloquer. Archiver relit la conversation puis enregistre tous ses réglages.
-      expectSame(M, 'menu « … »', await headerMenu(page), ['Archiver', 'Signaler', 'Bloquer']);
+      // Menu « … » de l'app (DirectConversationMenuItems) : Archiver, Mettre en sourdine, Ajouter aux favoris, Bloquer,
+      // Signaler. Chaque réglage relit la conversation puis enregistre tous ses réglages.
+      expectSame(M, 'menu « … »', await headerMenu(page), ['Archiver', 'Mettre en sourdine', 'Ajouter aux favoris', 'Bloquer', 'Signaler']);
       const settings = { is_archived: false, is_favorite: false, muted_until: null, saves_photos: false, cleared_at: null };
       const setting = async (label, change) => {
         const before = chat.calls.length;
@@ -3138,6 +3201,14 @@ try {
       await waitForRows(page, ALL_NAMES.slice(1), `${M} : après « Archiver »`);
       await setting('Désarchiver', { is_archived: false });
       await waitForRows(page, ALL_NAMES, `${M} : après « Désarchiver »`);
+      // Sourdine « toujours » (la date lointaine de l'app), puis réactivée.
+      await setting('Mettre en sourdine', { muted_until: '4001-01-01T00:00:00.000Z' });
+      await setting('Réactiver les notifications', { muted_until: null });
+      // Favori : l'avis de l'app seulement après l'enregistrement.
+      await setting('Ajouter aux favoris', { is_favorite: true });
+      expectSame(M, 'avis du favori', await noticeText(page, M), 'Conversation ajoutée aux favoris.');
+      await setting('Retirer des favoris', { is_favorite: false });
+      expectSame(M, 'avis du favori retiré', await noticeText(page, M), 'Conversation retirée des favoris.');
       // Bloquer (user_blocks), puis débloquer depuis la barre qui remplace la saisie.
       mark = chat.calls.length;
       await headerMenu(page, 'Bloquer');
@@ -3146,7 +3217,7 @@ try {
       expectSame(M, 'avis du blocage', await noticeText(page, M), 'Compte bloqué.');
       const blocked = await oneCall(chat, 'user_blocks', mark, `${M} : bloquer`, (call) => call.method !== 'GET');
       if (blocked) expectSame(M, 'blocage', [blocked.method, blocked.body], ['POST', { blocked_id: AGENT_ID.toUpperCase() }]);
-      expectSame(M, 'compte bloqué', [await textOf(page, '.dm-bottom-line'), await page.locator('.dm-composer').count(), (await headerMenu(page))[2],
+      expectSame(M, 'compte bloqué', [await textOf(page, '.dm-bottom-line'), await page.locator('.dm-composer').count(), (await headerMenu(page))[3],
         await page.locator('.dm-head-tools button[aria-label="Proposer une visite"]').count()], ['Vous avez bloqué ce compte Débloquer', 0, 'Débloquer', 0]);
       mark = chat.calls.length;
       await page.click('.dm-bottom-line .dm-link-button');
@@ -3215,10 +3286,13 @@ try {
       const readB = await oneCall(chat, 'rpc/mark_conversation_read', mark, `${M} : ouverture de B`);
       if (readB) expectSame(M, 'B marquée lue', readB.body, { p_conversation_id: chatId(2).toUpperCase() });
       await waitForMessagesBadge(page, '3', `${M} : après l'ouverture de B`);
-      expectSame(M, 'en-tête de B (numéro non partagé : pas d\'appel)', [await textOf(page, '.dm-head-sub'), await page.$$eval('.dm-head-tools button', (els) => els.map((el) => el.getAttribute('aria-label'))),
-        await textOf(page, '.dm-banner-line')], ['Vu le 4 nov.', ['Proposer une visite', 'Plus d\'options'], 'Lyon 6e · 265 000 € · 3 lots dont 2 loués']);
+      // Numéro non partagé : le téléphone reste, en gris, et l'avis de l'app l'explique.
+      expectSame(M, 'en-tête de B (numéro non partagé)', [await textOf(page, '.dm-head-sub'), await page.$$eval('.dm-head-tools button', (els) => els.map((el) => el.getAttribute('aria-label'))),
+        await textOf(page, '.dm-banner-line')], ['Appartement 2 pièces · Lyon 6e', ['Proposer une visite', 'Appeler, numéro non partagé', 'Plus d\'options'], 'Lyon 6e · 45 m² · 3 lots dont 2 loués']);
+      await page.click('.dm-head button[aria-label="Appeler, numéro non partagé"]');
+      expectSame(M, 'appel sans numéro', await noticeText(page, M), 'Julien M. n\'a pas partagé son numéro. Vous pouvez lui écrire ici.');
       expectSame(M, 'offre reçue', [await textOf(page, '.dm-offer-head'), await textOf(page, '.dm-offer-gap'), await page.$$eval('.dm-offer-actions button', (els) => els.map((el) => el.textContent))],
-        ['Offre En attente', '3,8 % sous le prix affiché', ['Accepter', 'Contre-offre', 'Refuser']]);
+        ['OFFRE En attente', '3,8 % sous le prix affiché', ['Accepter', 'Contre-offre', 'Refuser']]);
       const pendingVisit = {
         kind: 'Demande de visite', when: 'Samedi 7 novembre · 10:00', where: 'Appartement 2 pièces · sur place',
         slots: [['sam. 7 nov. à 10:00', 'true'], ['dim. 8 nov. à 14:00', 'false']], state: null, actions: [['Accepter', 38], ['Autre créneau', 38]],
@@ -3242,11 +3316,12 @@ try {
       };
       mark = chat.calls.length;
       await page.click('.dm-visit-actions button:text-is("Autre créneau")');
-      expectSame(M, 'autre créneau', await textOf(page, 'dialog.dm-decline[open] h2'), 'Proposer un autre créneau');
-      expectSame(M, 'créneau proposé par défaut', [await page.inputValue('dialog.dm-decline[open] input[aria-label="Jour du créneau 1"]'),
-        await page.inputValue('dialog.dm-decline[open] select[aria-label="Heure du créneau 1"]')], ['2026-11-07', '600']);
-      await page.selectOption('dialog.dm-decline[open] select[aria-label="Heure du créneau 1"]', '900');
-      await page.click('dialog.dm-decline[open] button[type="submit"]');
+      // Feuille de l'app (ProposeSlotsSheet) : « Proposer d'autres créneaux » pour une demande en attente.
+      expectSame(M, 'autre créneau', await textOf(page, 'dialog.dm-slots-sheet[open] h2'), 'Proposer d\'autres créneaux');
+      expectSame(M, 'créneau proposé par défaut', [await page.inputValue('dialog.dm-slots-sheet[open] input[aria-label="Jour du créneau 1"]'),
+        await page.inputValue('dialog.dm-slots-sheet[open] select[aria-label="Heure du créneau 1"]')], ['2026-11-07', '600']);
+      await page.selectOption('dialog.dm-slots-sheet[open] select[aria-label="Heure du créneau 1"]', '900');
+      await page.click('dialog.dm-slots-sheet[open] button[type="submit"]');
       const proposed = await oneCall(chat, 'rpc/propose_visit_slots', mark, `${M} : autre créneau`);
       if (proposed) {
         const slot = proposed.body?.p_slots?.[0] ?? {};
@@ -3429,25 +3504,27 @@ try {
     await chatDesk.close();
   }
 
-  // Chargement : la liste et la conversation de l'adresse en formes grises (squelettes), pendant la lecture.
+  // Chargement : la roue de l'app (ProgressView) dans la liste et dans la conversation de l'adresse, pendant la lecture ;
+  // plus de formes grises.
   {
     const M = 'messages chargement';
     const { context: slowDesk, chat } = await chatContext({ width: 1440, height: 960 });
-    // La liste arrive au bout de 1,5 s, les messages au bout de 3 s : d'abord tout en gris, puis le fil seul.
+    // La liste arrive au bout de 1,5 s, les messages au bout de 3 s : d'abord deux roues, puis celle du fil seule.
     chat.slow = { 'rpc/my_conversations': 1500, messages: 3000 };
     page = await slowDesk.newPage();
     page.on('pageerror', (error) => problems.push(`${M}: erreur ${error.message}`));
     await page.goto(`${base}/messages/?c=${chatId(1)}`);
-    await page.waitForSelector('.dm-skel-list[role="status"]', { timeout: 8000 }).catch(() => problems.push(`${M} : pas de squelette dans la liste`));
-    expectSame(M, 'squelettes', [await page.locator('.dm-skel-row').count(), await page.locator('.dm-main .dm-skel-head').count(),
-      await page.getAttribute('.dm-skel-list', 'aria-label'), await page.locator('.dm-main .dm-thread.is-skeleton[role="status"]').count()],
-    [6, 1, 'Chargement des conversations', 1]);
+    await page.waitForSelector('.dm-side .spinner[role="status"]', { timeout: 8000 }).catch(() => problems.push(`${M} : pas de roue dans la liste`));
+    expectSame(M, 'roues', [await page.getAttribute('.dm-side .spinner', 'aria-label'),
+      await page.$$eval('.dm-main .dm-thread.is-loading .spinner[role="status"]', (els) => els.map((el) => el.getAttribute('aria-label'))),
+      await page.locator('.dm-main .dm-back').count(), await page.locator('[class*="dm-skel"]').count()],
+    ['Chargement des conversations', ['Chargement des messages'], 1, 0]);
     await page.waitForTimeout(300);
     await page.screenshot({ path: join(out, '3-messages-chargement-1440.png') });
     await page.waitForSelector('.dm-head-title', { timeout: 8000 });
-    expectSame(M, 'fil en cours de lecture', [await page.locator('.dm-thread.is-skeleton .dm-skel-bubble').count(), await page.locator('.dm-skel-list').count()], [5, 0]);
-    await page.waitForSelector('.dm-thread-inner .dm-day', { timeout: 8000 }).catch(() => problems.push(`${M} : le fil ne remplace pas le squelette`));
-    if (await page.locator('.dm-skel').count()) problems.push(`${M} : des squelettes restent affichés`);
+    expectSame(M, 'fil en cours de lecture', [await page.locator('.dm-main .dm-thread.is-loading .spinner').count(), await page.locator('.dm-side .spinner').count()], [1, 0]);
+    await page.waitForSelector('.dm-thread-inner .dm-day', { timeout: 8000 }).catch(() => problems.push(`${M} : le fil ne remplace pas la roue`));
+    if (await page.locator('.dm-thread.is-loading').count()) problems.push(`${M} : la roue reste affichée`);
     await page.close();
     await slowDesk.close();
   }
@@ -3502,7 +3579,9 @@ try {
         };
       });
       expectSame(M, 'fil', shape, {
-        days: ['Dim. 1 nov.', 'Lun. 2 nov.', 'Mar. 3 nov.', 'Mer. 4 nov.', 'Hier'], bottom: 0, overflowX: 0, pageScroll: 0,
+        // Séparateurs de l'app : le jour en toutes lettres et l'heure du premier message du jour.
+        days: ['Dimanche 1 novembre · 09:00', 'Lundi 2 novembre · 00:00', 'Mardi 3 novembre · 00:00', 'Mercredi 4 novembre · 00:00', 'Hier · 20:10'],
+        bottom: 0, overflowX: 0, pageScroll: 0,
         visit: label === '390' ? shape.visit : 340, file: 'Diagnostics_appartement.pdf', fileLine: 'PDF · 1,2 Mo', scrolls: true,
       });
       if (label === '390' && !(shape.visit > 260 && shape.visit <= 340)) problems.push(`${M} : carte de visite de ${shape.visit} px sur téléphone`);
@@ -3554,7 +3633,7 @@ try {
       const voiceReads = [];
       voicePage.on('request', (request) => { if (request.method() === 'GET' && request.url().includes(`/object/sign/message-attachments/${VOICE_PATH}`)) voiceReads.push(request.url()); });
       await voicePage.waitForSelector('.dm-list .dm-row');
-      await voicePage.click('.dm-tab[aria-label="Archivées, 1"]');
+      await voicePage.click('.dm-tab[aria-label="Archivés, 1"]');
       await waitForRows(voicePage, ['Marc P.'], `${V} : archivées`);
       expectSame(V, 'aperçu du vocal dans la liste', (await inboxRows(voicePage))[0]?.preview, '🎤 Message vocal (0:03)');
       await voicePage.click(rowLink(3));
@@ -3573,8 +3652,9 @@ try {
           unsupported: [...document.querySelectorAll('.dm-caption.is-unsupported')].map((el) => el.textContent),
         };
       });
+      // Bulle vocale de l'app (VoiceBubble) : 236 de large.
       expectSame(V, 'bulle vocale et GIF', voiceShape, {
-        received: true, bars: 28, time: '0:03', button: 'Écouter le message vocal', label: 'Message vocal, 0:03', width: 250,
+        received: true, bars: 28, time: '0:03', button: 'Écouter le message vocal', label: 'Message vocal, 0:03', width: 236,
         gifMine: true, gifSize: [240, 135], gifStatus: 1, gifOuterStatus: 0, unsupported: ['Ce contenu n\'est pas pris en charge par cette version de Nidalo.'],
       });
       if (!reduced) {
@@ -3627,7 +3707,8 @@ try {
   }
 
   // Premier message sans prénom : « Votre prénom » (comme l'app), enregistré comme updateUser, puis le message part.
-  // Aussi « Faire une offre » proposé à l'acheteur, et les sources du « + » qui restent dans l'app iPhone.
+  // Aussi « Faire une offre » proposé à l'acheteur, et les sources du « + » qui restent dans l'app iPhone (le dossier ;
+  // les contacts sans sélecteur de contacts).
   {
     const M = 'messages prénom';
     const { context: nameDesk, chat } = await chatContext({ account: { profile_details: [{ ...ACCOUNT.profile_details[0], first_name: null }] } });
@@ -3637,11 +3718,12 @@ try {
     expectSame(M, 'réponses rapides', await quickReplies(page), ['Envoyer le dossier complet']);
     await page.click('.dm-plus');
     expectSame(M, '« + » de l\'acheteur', await page.$$eval('dialog[open] .dm-wide-title', (els) => els.map((el) => el.textContent)), ['Documents immobiliers', 'Faire une offre']);
-    await page.click('dialog[open] .dm-sources button[aria-label="Localisation"]');
-    await iphoneOnly(page, M, 'Localisation');
-    await page.click('.dm-plus');
+    // Le dossier reste dans l'app iPhone, comme les contacts sans sélecteur de contacts dans ce navigateur.
     await page.click('dialog[open] .dm-sources button[aria-label="Depuis mon dossier"]');
     await iphoneOnly(page, M, 'Mon dossier');
+    await page.click('.dm-plus');
+    await page.click('dialog[open] .dm-sources button[aria-label="Contacts"]');
+    await iphoneOnly(page, M, 'Contacts');
     const writesMark = writes.length;
     let mark = chat.calls.length;
     await page.fill('.dm-composer textarea', 'Bonjour, la maison est-elle toujours disponible ?');
@@ -3801,11 +3883,11 @@ try {
       .catch(() => problems.push(`${M} : l'original cité reste éclairé`));
 
     // Clic droit : la barre d'emojis et le menu ; Échap referme ; « … » au survol ouvre le même.
-    expectSame(M, 'menu du clic droit', await messageMenu(page, 4), { emojis: ['❤️', '👍', '😂', '😮', '😢', '🙏'], pressed: [], items: ['Répondre', 'Transférer', 'Copier'] });
+    expectSame(M, 'menu du clic droit', await messageMenu(page, 4), { emojis: ['❤️', '👍', '😂', '😮', '😢', '🙏'], pressed: [], items: ['Répondre', 'Transférer', 'Copier', 'Signaler'] });
     await chatShot(page, '3-messages-menu-1440.png');
     await page.keyboard.press('Escape');
     await menuClosed(page, `${M} : Échap`);
-    expectSame(M, 'menu du bouton « … »', (await messageMenu(page, 4, '« … »')).items, ['Répondre', 'Transférer', 'Copier']);
+    expectSame(M, 'menu du bouton « … »', (await messageMenu(page, 4, '« … »')).items, ['Répondre', 'Transférer', 'Copier', 'Signaler']);
     // 👍 posé (message_reactions, comme setReaction), puis retiré depuis la barre, où il est enfoncé.
     let mark = chat.calls.length;
     await menuEmoji(page, '[aria-label="👍"]', `${M} : 👍`);
@@ -3914,7 +3996,7 @@ try {
       [['Julien M.', `Vous : ${FORWARDED_TEXT}`], ['Visite groupée Lyon 2e', `Vous : ${FORWARDED_TEXT}`]]);
     // Des photos : recopiées dans le dossier de la conversation d'arrivée (même nom, en JPEG, comme l'app), puis le
     // message qui les cite, transféré.
-    await messageMenu(page, 2).then((menu) => expectSame(M, 'menu des photos', menu.items, ['Répondre', 'Transférer']));
+    await messageMenu(page, 2).then((menu) => expectSame(M, 'menu des photos', menu.items, ['Répondre', 'Transférer', 'Signaler']));
     await menuChoice(page, 'Transférer', `${M} : transférer les photos`);
     await page.click('dialog.dm-forward-sheet[open] .dm-forward-target:has-text("Lucas G.")');
     mark = chat.calls.length;
@@ -3934,6 +4016,64 @@ try {
         })) } },
       });
     }
+
+    // « + » de la barre : la page d'émojis de l'app (Immobilier, Visages, Gestes, Cœurs) ; 🏠 posé sur le message.
+    await messageMenu(page, 7);
+    await page.click('dialog.dm-focus[open] .dm-focus-more');
+    await page.waitForSelector('dialog.dm-emoji-sheet[open] .dm-emoji-choice', { timeout: 8000 }).catch(() => problems.push(`${M} : « Plus d'emojis » ne s'ouvre pas`));
+    expectSame(M, 'plus d\'emojis', [await dialogTitle(page, 'sheet'), await page.$$eval('dialog.dm-emoji-sheet[open] .dm-emoji-title', (els) => els.map((el) => el.textContent))],
+      ['Plus d\'emojis', ['Immobilier', 'Visages', 'Gestes', 'Cœurs']]);
+    mark = chat.calls.length;
+    await page.click('dialog.dm-emoji-sheet[open] .dm-emoji-choice[aria-label="🏠"]');
+    const house = await oneCall(chat, 'message_reactions', mark, `${M} : 🏠`);
+    if (house) expectSame(M, '🏠 posé', [house.method, house.body], ['POST', { message_id: messageId(7).toUpperCase(), emoji: '🏠' }]);
+    await waitForPill(page, 7, 'Réactions : 🏠, 1', `${M} : 🏠`);
+    // « Signaler » (message reçu) : la feuille de l'app, puis le signalement du message lui-même (target_type message).
+    await messageMenu(page, 7);
+    await menuChoice(page, 'Signaler', `${M} : signaler le message`);
+    expectSame(M, 'signaler le message', await dialogTitle(page, 'sheet'), 'Signaler le message');
+    await page.click('dialog[open] .dm-choice:has-text("Spam")');
+    mark = chat.calls.length;
+    await page.click('dialog[open] button:text-is("Enregistrer le signalement")');
+    expectSame(M, 'avis du signalement du message', await noticeText(page, M), 'Signalement envoyé à l\'équipe Nidalo.');
+    const messageReport = await oneCall(chat, 'reports', mark, `${M} : signaler le message`);
+    if (messageReport) {
+      expectSame(M, 'message signalé', [messageReport.method, messageReport.body],
+        ['POST', { id: messageReport.body?.id, target_type: 'message', target_id: messageId(7).toUpperCase(), reason: 'spam' }]);
+    }
+    // « Supprimer » (message envoyé, avec un fichier) : « Supprimer ce message ? », pour tout le monde avec ses fichiers ;
+    // la ligne est supprimée (demandée en retour), puis son fichier dans message-attachments, comme l'app.
+    expectSame(M, 'menu d\'un document envoyé', (await messageMenu(page, 5)).items, ['Répondre', 'Transférer', 'Supprimer']);
+    await menuChoice(page, 'Supprimer', `${M} : supprimer`);
+    expectSame(M, 'confirmation de la suppression', [await dialogTitle(page), await textOf(page, 'dialog.alert-dialog[open] .alert-body p')],
+      ['Supprimer ce message ?', 'Ce message sera supprimé pour tout le monde, avec ses fichiers.']);
+    mark = chat.calls.length;
+    await alertButton(page, 'Supprimer');
+    await msgRow(page, 5).waitFor({ state: 'detached', timeout: 8000 }).catch(() => problems.push(`${M} : le message supprimé reste dans le fil`));
+    expectSame(M, 'suppression', chatCalls(chat, 'messages', mark).filter((call) => call.method === 'DELETE' || call.search.startsWith('?select=content'))
+      .map((call) => `${call.method} ${call.search}`), [`GET ?select=content&id=eq.${messageId(5).toUpperCase()}`, `DELETE ?id=eq.${messageId(5).toUpperCase()}&select=id`]);
+    await waitFor(() => chat.removed.length > 0, `${M} : fichier du message supprimé`);
+    expectSame(M, 'fichier supprimé', chat.removed, [LOAN_PDF]);
+    // Refus du serveur : l'avis de l'app, et le message reste ; un texte se supprime sans parler de fichiers. Chrome note
+    // le refus simulé (503) dans la console.
+    const deleteRefusal = /status of 503/;
+    expectedConsole.add(deleteRefusal);
+    chat.fail = ({ table, method }) => (table === 'messages' && method === 'DELETE' ? { status: 503 } : null);
+    expectSame(M, 'menu d\'un texte envoyé', (await messageMenu(page, 3)).items, ['Répondre', 'Transférer', 'Copier', 'Supprimer']);
+    await menuChoice(page, 'Supprimer', `${M} : suppression refusée`);
+    expectSame(M, 'confirmation sans fichier', [await dialogTitle(page), await page.locator('dialog.alert-dialog[open] .alert-body p').count()], ['Supprimer ce message ?', 0]);
+    await alertButton(page, 'Supprimer');
+    expectSame(M, 'suppression refusée', await noticeText(page, M), 'Ce message n\'a pas pu être supprimé.');
+    chat.fail = null;
+    expectedConsole.delete(deleteRefusal);
+    if (!(await msgRow(page, 3).count())) problems.push(`${M} : le message dont la suppression est refusée a disparu`);
+    // Visionneuse : « Télécharger » pour une photo reçue ; « Supprimer » est réservé à l'auteur.
+    await msgRow(page, 2).locator('.dm-media-tile').first().click();
+    await page.waitForSelector('dialog.dm-viewer[open]', { timeout: 8000 }).catch(() => problems.push(`${M} : la visionneuse ne s'ouvre pas`));
+    await page.click('dialog.dm-viewer[open] button[aria-label="Plus d\'actions"]');
+    expectSame(M, 'actions de la visionneuse', await page.$$eval('dialog.dm-viewer[open] .dm-menu-list [role="menuitem"]', (els) => els.map((el) => el.textContent.trim())), ['Télécharger']);
+    await page.click('dialog.dm-viewer[open] button[aria-label="Fermer"]');
+    await page.waitForSelector('dialog.dm-viewer[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${M} : la visionneuse reste ouverte`));
 
     // Dans le groupe : la réponse de Camille cite un message supprimé depuis ; l'original est relu une fois par son
     // identifiant (comme message(id:) de l'app), puis « Message supprimé », qui ne mène nulle part.
@@ -3991,7 +4131,7 @@ try {
     await body.dispatchEvent('pointerdown', touch);
     await page.waitForSelector('dialog.dm-focus[open] .dm-focus-menu', { timeout: 4000 }).catch(() => problems.push(`${M} : l'appui long n'ouvre pas le menu`));
     await body.dispatchEvent('pointerup', touch).catch(() => undefined);
-    expectSame(M, 'menu de l\'appui long', await page.$$eval('dialog.dm-focus[open] [role="menuitem"]', (els) => els.map((el) => el.textContent.trim())), ['Répondre', 'Transférer', 'Copier']);
+    expectSame(M, 'menu de l\'appui long', await page.$$eval('dialog.dm-focus[open] [role="menuitem"]', (els) => els.map((el) => el.textContent.trim())), ['Répondre', 'Transférer', 'Copier', 'Signaler']);
     await chatShot(page, '3-messages-menu-telephone.png');
     await menuChoice(page, 'Répondre', `${M} : répondre`);
     expectSame(M, 'barre de réponse', await textOf(page, '.dm-reply-bar-title'), 'Réponse à Agence Démo Lyon');
@@ -4015,22 +4155,25 @@ try {
     chat.messages.push(chatLine(91, chatId(9), PRO_ID, '2026-11-04T10:05:00Z', 'Le studio est libre à partir du 1er décembre.'));
     page = await open(searchDesk, '/messages/', 'messages-recherche');
     await page.waitForSelector('.dm-list .dm-row');
-    if (await page.locator('.dm-activity, .dm-search-cancel').count()) problems.push(`${M} : recherche ouverte d'elle-même`);
-    await page.focus('.dm-search input');
+    if (await page.locator('.dm-activity, .dm-msearch-cancel').count()) problems.push(`${M} : recherche ouverte d'elle-même`);
+    await page.click('.dm-search-open');
     await page.waitForSelector('.dm-activity', { timeout: 8000 }).catch(() => problems.push(`${M} : « Votre activité immobilière » absente`));
     const activity = () => page.$$eval('.dm-activity-row', (els) => els.map((el) => [el.querySelector('.dm-activity-title')?.textContent ?? null,
       el.querySelector('.dm-activity-count')?.textContent ?? null, el.getAttribute('href')]));
     await page.waitForFunction(() => document.querySelectorAll('.dm-activity-count').length >= 3, null, { timeout: 8000 }).catch(() => undefined);
-    // « Toutes les conversations » n'est écrit que sur téléphone (sur ordinateur, la colonne est déjà la liste).
-    expectSame(M, 'activité immobilière', [await textOf(page, '.dm-activity h2'), await activity(), await textOf(page, '.dm-search-cancel'),
-      await page.locator('.dm-list-title').isVisible()], ['Votre activité immobilière', [['Annonces consultées récemment', null, '/compte/?vue=consultes'],
-      ['Biens favoris', '3', '/favoris/'], ['Mes recherches immobilières', '2', '/compte/?vue=recherches'], ['Discussions liées aux annonces', '6', null]], 'Annuler', false]);
+    // La recherche ouverte prend toute la colonne, à la place de la liste (MessagingSearchView plein écran).
+    expectSame(M, 'activité immobilière', [await textOf(page, '.dm-activity h2'), await activity(), await textOf(page, '.dm-msearch-cancel'),
+      await page.locator('.dm-list').count()], ['Votre activité immobilière', [['Annonces consultées récemment', null, '/compte/?vue=consultes'],
+      ['Biens favoris', '3', '/favoris/'], ['Mes recherches immobilières', '2', '/compte/?vue=recherches'], ['Discussions liées aux annonces', '6', null]], 'Annuler', 0]);
     await chatShot(page, '3-messages-recherche-1440.png');
-    // Une recherche saisie remplace l'activité ; vidée, l'activité revient.
-    await page.fill('.dm-search input', 'studio');
-    await waitForRows(page, ['Immo Démo Croix-Rousse', 'Compte supprimé'], `${M} : recherche « studio »`);
+    // Une recherche saisie remplace l'activité (conversations trouvées par le bien ou le dernier message) ; vidée,
+    // l'activité revient.
+    await page.fill('.dm-msearch-field input', 'studio');
+    await page.waitForSelector('.dm-found-conversation', { timeout: 8000 }).catch(() => problems.push(`${M} : recherche « studio » sans conversation`));
+    expectSame(M, 'recherche « studio »', await page.$$eval('.dm-found-conversation .dm-contact-name', (els) => els.map((el) => el.textContent)),
+      ['Immo Démo Croix-Rousse', 'Compte supprimé']);
     if (await page.locator('.dm-activity').count()) problems.push(`${M} : l'activité reste affichée pendant une recherche`);
-    await page.fill('.dm-search input', '');
+    await page.fill('.dm-msearch-field input', '');
     await page.waitForSelector('.dm-activity', { timeout: 8000 }).catch(() => problems.push(`${M} : l'activité ne revient pas`));
     const listingMark = searchServer.requests.length;
     await page.click('.dm-activity-row:has-text("Discussions liées aux annonces")');
@@ -4046,7 +4189,7 @@ try {
       ['Maison 4 pièces avec jardin', 'Caluire-et-Cuire · Marc P.', '420 000 €', '2', `/messages/?c=${chatId(3)}`],
       ['Studio rénové', 'Lyon 8e · Compte supprimé', '98 000 €', null, `/messages/?c=${chatId(6)}`],
     ];
-    expectSame(M, 'discussions pendant la lecture des fiches', [await textOf(page, '.dm-linked-head h2'), await linkedRows()], ['Discussions liées aux annonces', LINKED]);
+    expectSame(M, 'discussions pendant la lecture des fiches', [await textOf(page, '.dm-linked .app-page-header-title'), await linkedRows()], ['Discussions liées aux annonces', LINKED]);
     await page.waitForFunction(() => document.querySelectorAll('.dm-linked-price').length === 6, null, { timeout: 8000 })
       .catch(() => problems.push(`${M} : prix de la location absent après la lecture`));
     // La location : loyer charges comprises (640 € + 50 € de charges), comme les cartes de l'app.
@@ -4055,13 +4198,13 @@ try {
       .map((request) => /[?&]id=eq\.([^&]+)/.exec(request.search)?.[1] ?? request.search).sort(), [homeId(1), homeId(7), RENT.id, homeId(5), homeId(3), homeId(4)].sort());
     await chatShot(page, '3-messages-discussions-1440.png');
     // Retour à l'activité, puis « Annuler » referme la recherche.
-    await page.click('.dm-linked-back');
+    await page.click('.dm-linked .app-page-header button[aria-label="Retour"]');
     await page.waitForSelector('.dm-activity', { timeout: 8000 }).catch(() => problems.push(`${M} : « Retour » ne revient pas à l'activité`));
-    await page.click('.dm-search-cancel');
+    await page.click('.dm-msearch-cancel');
     await page.waitForSelector('.dm-activity', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${M} : « Annuler » ne referme pas la recherche`));
-    expectSame(M, 'recherche refermée', [await page.locator('.dm-search-cancel').count(), await page.inputValue('.dm-search input')], [0, '']);
+    expectSame(M, 'recherche refermée', [await page.locator('.dm-msearch-cancel').count(), await page.locator('.dm-list .dm-row').count() > 0], [0, true]);
     // Une discussion liée ouvre sa conversation.
-    await page.focus('.dm-search input');
+    await page.click('.dm-search-open');
     await page.click('.dm-activity-row:has-text("Discussions liées aux annonces")');
     await page.click(`.dm-linked-row[href="/messages/?c=${chatId(9)}"]`);
     await page.waitForURL(`${base}/messages/?c=${chatId(9)}`);
@@ -4075,11 +4218,11 @@ try {
     emptyChat.conversations = emptyChat.conversations.filter((conversation) => conversation.kind === 'group');
     page = await open(emptyDesk, '/messages/', 'messages-recherche-vide');
     await page.waitForSelector('.dm-list .dm-row');
-    await page.focus('.dm-search input');
+    await page.click('.dm-search-open');
     await page.waitForSelector('.dm-activity');
     expectSame(M, 'aucune discussion liée : compte', (await activity()).at(-1), ['Discussions liées aux annonces', null, null]);
     await page.click('.dm-activity-row:has-text("Discussions liées aux annonces")');
-    expectSame(M, 'aucune discussion liée', await textOf(page, '.dm-linked .dm-inbox-empty'),
+    expectSame(M, 'aucune discussion liée', await textOf(page, '.dm-linked .dm-list-empty'),
       'Aucune discussion liée à un bien Touchez « Message » sur une annonce pour poser vos questions à l\'annonceur.');
     await chatShot(page, '3-messages-discussions-vide-1440.png');
     await page.close();
@@ -4234,7 +4377,7 @@ try {
     await headerMenu(page, 'Bloquer');
     await alertButton(page, 'Bloquer');
     expectSame(M, 'blocage refusé', await noticeText(page, M), 'Le blocage n\'a pas pu être enregistré. Vérifiez votre connexion.');
-    expectSame(M, 'menu après le blocage refusé', await headerMenu(page), ['Archiver', 'Signaler', 'Bloquer']);
+    expectSame(M, 'menu après le blocage refusé', await headerMenu(page), ['Archiver', 'Mettre en sourdine', 'Ajouter aux favoris', 'Bloquer', 'Signaler']);
     chat.fail = null;
     await headerMenu(page, 'Bloquer');
     await alertButton(page, 'Bloquer');
@@ -4242,7 +4385,7 @@ try {
     chat.fail = ({ table, method }) => (table === 'user_blocks' && method !== 'GET' ? unavailable : null);
     await headerMenu(page, 'Débloquer');
     expectSame(M, 'déblocage refusé', await noticeText(page, M), 'Le déblocage n\'a pas pu être enregistré. Vérifiez votre connexion.');
-    expectSame(M, 'menu après le déblocage refusé', await headerMenu(page), ['Archiver', 'Signaler', 'Débloquer']);
+    expectSame(M, 'menu après le déblocage refusé', await headerMenu(page), ['Archiver', 'Mettre en sourdine', 'Ajouter aux favoris', 'Débloquer', 'Signaler']);
     chat.fail = null;
     await headerMenu(page, 'Débloquer');
     expectSame(M, 'déblocage', await noticeText(page, M), 'Compte débloqué.');
@@ -4251,7 +4394,7 @@ try {
     chat.fail = ({ table, method }) => (table === 'conversation_preferences' && method === 'POST' ? unavailable : null);
     await headerMenu(page, 'Archiver');
     expectSame(M, 'archive refusée', await noticeText(page, M), 'La modification n\'a pas pu être enregistrée.');
-    expectSame(M, 'après l\'archive refusée', [await headerMenu(page), (await rowNames(page)).includes('Agence Démo Lyon')], [['Archiver', 'Signaler', 'Bloquer'], true]);
+    expectSame(M, 'après l\'archive refusée', [await headerMenu(page), (await rowNames(page)).includes('Agence Démo Lyon')], [['Archiver', 'Mettre en sourdine', 'Ajouter aux favoris', 'Bloquer', 'Signaler'], true]);
     chat.fail = null;
 
     // Une photo envoyée au dossier, puis le message qui ne part pas : « Réessayer » ne renvoie pas la photo, et le
@@ -4308,15 +4451,25 @@ try {
     const M = `messages hors ligne ${label}`;
     const { context: offlineContext, chat } = await chatContext(size);
     chat.fail = ({ table, body }) => (table === 'rpc/my_conversations' && !body?.p_conversation_id ? { status: 503 } : null);
-    // La lecture refusée exprès (503) est notée par Chrome dans la console.
-    const refusal = /status of 503/;
+    // La lecture refusée exprès (503) et la coupure simulée sont notées par Chrome dans la console.
+    const refusal = /status of 503|ERR_INTERNET_DISCONNECTED/;
     expectedConsole.add(refusal);
+    const offlineScreen = async () => [await textOf(page, '.dm-side .app-offline h2'), await textOf(page, '.dm-side .app-offline p'), await textOf(page, '.dm-side .app-offline button')];
     page = await open(offlineContext, '/messages/', `messages-hors-ligne-${label}`);
-    await page.waitForSelector('.dm-side .app-offline', { timeout: 8000 }).catch(() => problems.push(`${M} : l'écran hors ligne n'apparaît pas`));
-    expectSame(M, 'écran hors ligne', [await textOf(page, '.dm-side .app-offline h2'), await textOf(page, '.dm-side .app-offline p'), await textOf(page, '.dm-side .app-offline button')],
-      ['Pas de connexion Internet', 'Vérifiez votre connexion, puis réessayez.', 'Réessayer']);
-    await chatShot(page, `3-messages-hors-ligne-${label}.png`);
+    // Refus du serveur : « Conversations indisponibles » (LoadErrorState de l'app).
+    await page.waitForSelector('.dm-side .app-offline', { timeout: 8000 }).catch(() => problems.push(`${M} : l'écran d'erreur n'apparaît pas`));
+    expectSame(M, 'écran d\'erreur', await offlineScreen(),
+      ['Conversations indisponibles', 'Vos conversations n\'ont pas pu être chargées. Vérifiez votre connexion, puis réessayez.', 'Réessayer']);
+    // Coupure du réseau, puis « Réessayer » : « Pas de connexion Internet » (OfflineState de l'app).
     chat.fail = null;
+    const conversationsUrl = 'https://izzsoitqtzzswkpvdozd.supabase.co/rest/v1/rpc/my_conversations';
+    await offlineContext.route(conversationsUrl, (route) => route.abort('internetdisconnected'));
+    await page.click('.dm-side .app-offline button');
+    await page.waitForFunction(() => document.querySelector('.dm-side .app-offline h2')?.textContent === 'Pas de connexion Internet', null, { timeout: 8000 })
+      .catch(() => problems.push(`${M} : la coupure ne montre pas « Pas de connexion Internet »`));
+    expectSame(M, 'écran hors ligne', await offlineScreen(), ['Pas de connexion Internet', 'Vérifiez votre connexion, puis réessayez.', 'Réessayer']);
+    await chatShot(page, `3-messages-hors-ligne-${label}.png`);
+    await offlineContext.unroute(conversationsUrl);
     await page.click('.dm-side .app-offline button');
     await page.waitForSelector('.dm-list .dm-row', { timeout: 8000 }).catch(() => problems.push(`${M} : « Réessayer » ne relit pas les conversations`));
     if (label === '1440') {
@@ -4334,8 +4487,8 @@ try {
   }
 
   // Sous 1024 px (iPhone 13, 390 px) : une seule colonne, comme dans l'app, avec sa police (Inter). La liste
-  // au-dessus de la barre du bas, puis la conversation en plein écran (barre cachée, saisie tout en bas) ; « Retour
-  // aux conversations » revient à la liste. Captures : 3-messages-telephone-*.png.
+  // au-dessus de la barre du bas, puis la conversation en plein écran (barre cachée, saisie tout en bas) ; le retour
+  // rond de l'en-tête revient à la liste. Captures : 3-messages-telephone-*.png.
   {
     const M = 'messages téléphone';
     const { context: chatPhone, chat } = await chatContext({ phone: true });
@@ -4361,8 +4514,10 @@ try {
     const readB = await oneCall(chat, 'rpc/mark_conversation_read', mark, `${M} : ouverture de B`);
     if (readB) expectSame(M, 'B marquée lue', readB.body, { p_conversation_id: chatId(2).toUpperCase() });
     expectSame(M, 'conversation', await phoneShape(), { list: false, pane: true, tabbar: false, overflowX: 0, pageScroll: 0, font: 'Nidalo Inter', composerGap: 0 });
-    expectSame(M, 'boutons de l\'en-tête', await page.$$eval('.dm-head button', (els) => els.map((el) => el.getAttribute('aria-label'))),
-      ['Retour aux conversations', 'Proposer une visite', 'Plus d\'options']);
+    // En-tête de l'app : retour, puis la capsule (téléphone, gris sans numéro partagé, et « … ») ; « Proposer une visite »
+    // passe par « Détails » et la fiche, comme dans l'app.
+    expectSame(M, 'boutons de l\'en-tête', await page.$$eval('.dm-head button', (els) => els.filter((el) => el.getClientRects().length).map((el) => el.getAttribute('aria-label'))),
+      ['Retour', 'Appeler, numéro non partagé', 'Plus d\'options']);
     expectSame(M, 'réponses rapides', await quickReplies(page), ['Oui, samedi 10 h', 'Proposer un autre créneau', 'Envoyer le dossier complet']);
     expectSame(M, 'boutons et champs sans nom', await unnamedControls(page), []);
     await chatShot(page, '3-messages-telephone-conversation.png');

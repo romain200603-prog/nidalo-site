@@ -100,8 +100,8 @@ function Messenger({ userId }: { userId: string }) {
     <div className={`dm ${route.conversationId ? 'is-thread' : 'is-list'}`}>
       <Inbox
         inbox={inbox}
-        offers={offers.value}
-        visitRequests={visitRequests.value}
+        visits={visits.value}
+        presence={presence}
         me={userId}
         selectedId={route.conversationId}
         onCompose={() => setComposing(true)}

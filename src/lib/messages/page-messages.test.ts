@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Message } from './api';
-import { daySeparatorLabel, keepNumbersTogether, lastSeenLabel, rowTimeLabel } from './format';
-import { AVATAR_COLORS, avatarColors, conversationFrom, matchesListSearch, type ProfileRow, type ServerInboxRow } from './inbox';
+import { daySeparatorLabel, floatingDayLabel, keepNumbersTogether, lastSeenLabel, rowTimeLabel, visitCardDate, visitLongDate, visitRowDate } from './format';
+import { avatarPalette, conversationFrom, matchesListSearch, type ProfileRow, type ServerInboxRow } from './inbox';
 import { lotsLabel } from './listingBar';
 import { siteThreadDays } from './thread';
 import {
@@ -63,15 +63,28 @@ describe('Libellés de temps de la page Messages', () => {
     expect(rowTimeLabel(new Date(2026, 10, 13, 14, 10), NOW)).toBe('14:10');
     expect(rowTimeLabel(new Date(2026, 10, 12, 23, 0), NOW)).toBe('Hier');
     expect(rowTimeLabel(new Date(2026, 10, 11, 8, 0), NOW)).toBe('Mer.');
-    expect(rowTimeLabel(new Date(2026, 10, 3, 8, 0), NOW)).toBe('3 nov.');
-    expect(rowTimeLabel(new Date(2025, 11, 24, 8, 0), NOW)).toBe('24 déc. 2025');
+    expect(rowTimeLabel(new Date(2026, 10, 3, 8, 0), NOW)).toBe('3 novembre');
+    expect(rowTimeLabel(new Date(2025, 11, 24, 8, 0), NOW)).toBe('24 décembre 2025');
   });
 
   it('séparateurs du fil : « Aujourd’hui », « Hier », puis « Mer. 12 nov. »', () => {
     expect(daySeparatorLabel(new Date(2026, 10, 13, 1, 0), NOW)).toBe('Aujourd\'hui');
     expect(daySeparatorLabel(new Date(2026, 10, 12, 18, 0), NOW)).toBe('Hier');
-    expect(daySeparatorLabel(new Date(2026, 10, 11, 18, 0), NOW)).toBe('Mer. 11 nov.');
-    expect(daySeparatorLabel(new Date(2025, 10, 12, 18, 0), NOW)).toBe('Mer. 12 nov. 2025');
+    expect(daySeparatorLabel(new Date(2026, 10, 11, 18, 0), NOW)).toBe('Mercredi 11 novembre');
+    expect(daySeparatorLabel(new Date(2025, 10, 12, 18, 0), NOW)).toBe('Mercredi 12 novembre');
+    // Pastille flottante : le jour de la semaine jusqu'à une semaine, puis la date (et l'année d'une autre année).
+    expect(floatingDayLabel(new Date(2026, 10, 13, 9, 0), NOW)).toBe('Aujourd\'hui');
+    expect(floatingDayLabel(new Date(2026, 10, 11, 9, 0), NOW)).toBe('Mercredi');
+    expect(floatingDayLabel(new Date(2026, 10, 2, 9, 0), NOW)).toBe('Lundi 2 novembre');
+    expect(floatingDayLabel(new Date(2025, 10, 12, 9, 0), NOW)).toBe('Mercredi 12 novembre 2025');
+  });
+
+  it('dates de visite de l’app (VisitDate)', () => {
+    const start = new Date(2026, 10, 21, 10, 0);
+    expect(visitCardDate(start)).toBe('Sam. 21 nov. · 10\u00a0h\u00a000');
+    expect(visitRowDate(start)).toBe('sam. 21 nov. à 10\u00a0h');
+    expect(visitRowDate(new Date(2026, 10, 21, 10, 30))).toBe('sam. 21 nov. à 10\u00a0h\u00a030');
+    expect(visitLongDate(new Date(2026, 10, 19, 18, 0))).toBe('Jeudi 19 novembre · 18\u00a0h\u00a000');
   });
 
   it('« Vu il y a … » sous le nom', () => {
@@ -90,9 +103,10 @@ describe('Libellés de temps de la page Messages', () => {
 });
 
 describe('Liste des conversations', () => {
-  it('avatar sans photo : toujours la même couleur pour la même personne', () => {
-    expect(avatarColors(AGENT)).toEqual(avatarColors(AGENT.toUpperCase()));
-    expect(AVATAR_COLORS).toContainEqual(avatarColors('x'));
+  it('avatar sans photo : la couleur de l’interlocuteur, comme l’app (agence, particulier, groupe)', () => {
+    expect(avatarPalette('agency')).toEqual({ background: 'var(--green-soft)', color: 'var(--green)' });
+    expect(avatarPalette('individual')).toEqual({ background: '#F9E7DD', color: '#9A6A3C' });
+    expect(avatarPalette('group')).toEqual(avatarPalette('community'));
   });
 
   it('recherche : nom de l’interlocuteur ou titre de l’annonce, pas le texte des messages', () => {
@@ -167,7 +181,7 @@ describe('Demandes de visite dans la conversation', () => {
       message('c', new Date(2026, 10, 13, 14, 9)),
       message('d', new Date(2026, 10, 13, 14, 20), ME),
     ], [request()], NOW);
-    expect(days.map((day) => day.label)).toEqual(['Hier', 'Aujourd\'hui']);
+    expect(days.map((day) => day.label)).toEqual(['Hier · 18:50', 'Aujourd\'hui · 14:09']);
     expect(days[1].rows.map((row) => `${row.item.key}${row.startsGroup ? '<' : ''}${row.endsGroup ? '>' : ''}`))
       .toEqual(['c<', 'visite-e1000000-0000-4000-8000-000000000001>', 'd<>']);
     const withSystem = siteThreadDays([message('s', new Date(2026, 10, 13, 9, 0), AGENT, 'system'), message('t', new Date(2026, 10, 13, 9, 1))], [], NOW);
