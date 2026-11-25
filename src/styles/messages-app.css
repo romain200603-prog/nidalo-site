@@ -202,6 +202,10 @@
   .dm-msg.starts-group { margin-top: 8px; }
   .dm-bubble { padding: 7px 12px; font-size: 16px; line-height: 21px; }
   .dm-media-caption, .dm-caption { font-size: 16px; }
+  /* Photos de l'app (AttachmentBubble) : 3 px entre les vignettes, légende de 14, « +N » de 22. */
+  .dm-media-grid { gap: 3px; }
+  .dm-media-caption { font-size: 14px; line-height: 19px; }
+  .dm-more { font-size: 22px; }
   .dm-reply-bar { margin-bottom: 6px; }
 }
 
