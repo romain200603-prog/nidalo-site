@@ -26,12 +26,15 @@ export function MapAttribution({ satellite, className }: { satellite: boolean; c
   );
 }
 
-/** Liens d'itinéraire vers le point public (jamais l'adresse masquée). */
+/**
+ * Liens d'itinéraire vers le point public (jamais l'adresse masquée), dans l'ordre de l'app (DirectionsApp) : Plans,
+ * puis Google Maps et Waze (l'app ne les propose que s'ils sont installés ; un navigateur ne peut pas le savoir).
+ */
 export function directionsLinks({ latitude, longitude }: Coordinate): { label: string; href: string }[] {
   const point = `${latitude.toFixed(6)},${longitude.toFixed(6)}`;
   return [
+    { label: 'Plans', href: `https://maps.apple.com/?daddr=${point}` },
     { label: 'Google Maps', href: `https://www.google.com/maps/dir/?api=1&destination=${point}` },
-    { label: 'Plans d’Apple', href: `https://maps.apple.com/?daddr=${point}` },
     { label: 'Waze', href: `https://waze.com/ul?ll=${point}&navigate=yes` },
   ];
 }

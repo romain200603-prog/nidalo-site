@@ -7,10 +7,12 @@ import {
 } from '../../lib/listing/conversation';
 import { canMakeOffer } from '../../lib/listing/offers';
 import type { Profitability } from '../../lib/listing/profitability';
+import type { Publisher } from '../../lib/listing/publisher';
 import type { ListingRow, PhotoRow } from '../../lib/listings';
 import { conversationPath, listingPath, listingScreenFromParams, wantsVideoVisit, type ListingScreen } from '../../lib/paths';
 import { AlertDialog } from './Dialogs';
 import { OfferScreen } from './OfferScreen';
+import { ProfileScreen } from './ProfileScreen';
 import { useListingAccount } from './useListingAccount';
 import { VisitRequestScreen } from './VisitRequestScreen';
 
@@ -18,12 +20,20 @@ import { VisitRequestScreen } from './VisitRequestScreen';
 // au téléphone (ListingView) : « Envoyer un message » ouvre (ou crée) la conversation avec le vendeur dans Messages ;
 // « Demander une visite » et « Faire une offre » ont leur propre adresse (&vue=visite, &vue=offre). Sans compte, la
 // connexion d'abord ; sa propre annonce n'en a pas. Si la conversation ne s'ouvre pas (message, offre), la fenêtre
-// « Impossible d'ouvrir la conversation » (n° 68), commune aux deux tailles.
+// « Impossible d'ouvrir la conversation » (n° 68), commune aux deux tailles. Le profil du vendeur ou de l'agence
+// (« Voir le profil ») a aussi son adresse (&vue=profil), sans compte.
 
 const sameId = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
-/** Ce que l'écran ouvert montre du bien : la photo et le destinataire (visite), la rentabilité (offre). */
-export type ScreenDetails = { photo: PhotoRow | undefined; recipientName: string; profitability: Profitability | null };
+/** Écrans ouverts depuis la fiche : ceux de lib/paths, et le profil public de l'interlocuteur. */
+type Screen = ListingScreen | 'profil';
+
+function screenFromParams(params: URLSearchParams): Screen | null {
+  return params.get('vue') === 'profil' ? 'profil' : listingScreenFromParams(params);
+}
+
+/** Ce que l'écran ouvert montre du bien : la photo et le destinataire (visite), la rentabilité (offre), le profil. */
+export type ScreenDetails = { photo: PhotoRow | undefined; recipientName: string; profitability: Profitability | null; publisher?: Publisher | null };
 
 export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
   const session = useSession();
@@ -37,7 +47,7 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
   const contacting = useRef(false);
 
   // ——— Écrans « Demander une visite » et « Faire une offre » (adresse de la fiche avec &vue=…) ———
-  const [screen, setScreen] = useState<ListingScreen | null>(() => listingScreenFromParams(new URLSearchParams(window.location.search)));
+  const [screen, setScreen] = useState<Screen | null>(() => screenFromParams(new URLSearchParams(window.location.search)));
   const [offerConversation, setOfferConversation] = useState<ListingConversation | null>(null);
   const screenRef = useRef(screen);
   /** L'écran a été ouvert depuis la fiche : « Fermer » revient en arrière dans l'historique. */
@@ -48,14 +58,14 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
   const offersRef = useRef(account.offers);
   offersRef.current = account.offers;
 
-  const setView = useCallback((next: ListingScreen | null) => {
+  const setView = useCallback((next: Screen | null) => {
     if (screenRef.current === null && next !== null) listingScroll.current = window.scrollY;
     screenRef.current = next;
     setScreen(next);
   }, []);
 
-  const go = useCallback((next: ListingScreen | null, how: 'push' | 'replace') => {
-    const url = listingPath(row.id, mode, next);
+  const go = useCallback((next: Screen | null, how: 'push' | 'replace') => {
+    const url = next === 'profil' ? `${listingPath(row.id, mode)}&vue=profil` : listingPath(row.id, mode, next);
     if (how === 'push') {
       window.history.pushState(null, '', url);
       pushed.current = true;
@@ -77,7 +87,7 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
   useEffect(() => {
     const onPop = () => {
       pushed.current = false;
-      const next = listingScreenFromParams(new URLSearchParams(window.location.search));
+      const next = screenFromParams(new URLSearchParams(window.location.search));
       // Revenir sur « Faire une offre » relit la conversation : une offre envoyée entre-temps l'interdit.
       if (next === 'offre') setOfferConversation(null);
       setView(next);
@@ -130,6 +140,8 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
   /** « Demander une visite » : connexion d'abord si besoin, puis le formulaire. */
   const requestVisit = () => void requireAccount(showVisitForm);
   const makeOffer = () => void requireAccount(() => void resolveOffer('push'));
+  /** « Voir le profil » ou « Voir l'agence » : le profil public, sans compte. */
+  const openProfile = () => go('profil', 'push');
 
   /**
    * « Envoyer un message » : ouvre (ou crée) la conversation avec le vendeur, dans Messages. Une seule ouverture à la
@@ -153,7 +165,7 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
   // Adresse d'un écran ouverte directement : sans compte, la connexion d'abord ; sa propre annonce (ou une location
   // pour l'offre) revient à la fiche ; « Faire une offre » retrouve d'abord la conversation.
   useEffect(() => {
-    if (screen === null || session.status === 'loading') return;
+    if (screen === null || screen === 'profil' || session.status === 'loading') return;
     if (session.status === 'signedOut') {
       const wanted = screen;
       go(null, 'replace');
@@ -182,7 +194,7 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
     return () => window.removeEventListener('pageshow', onShow);
   }, []);
 
-  const shown: ListingScreen | null = me && !isOwn
+  const shown: Screen | null = screen === 'profil' ? 'profil' : me && !isOwn
     ? (screen === 'visite' ? 'visite' : screen === 'offre' && offerConversation ? 'offre' : null)
     : null;
 
@@ -194,18 +206,23 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
     }
     window.scrollTo(0, shown ? 0 : listingScroll.current);
     // L'écran ouvert reçoit le focus sur son titre, sauf si un de ses champs l'a déjà (le montant de l'offre).
-    const opened = shown ? document.querySelector<HTMLElement>('.dl-screen') : null;
+    const opened = shown ? document.querySelector<HTMLElement>('.dl-screen, .listing-profile') : null;
     if (opened && !opened.contains(document.activeElement)) opened.querySelector<HTMLElement>('h1')?.focus({ preventScroll: true });
   }, [shown]);
 
   useEffect(() => {
     document.title = shown === 'visite' ? `Demander une visite · ${row.title} · Nidalo`
       : shown === 'offre' ? `Faire une offre · ${row.title} · Nidalo`
-        : `${row.title} à ${row.city} · Nidalo`;
+        : shown === 'profil' ? `Profil · ${row.title} · Nidalo`
+          : `${row.title} à ${row.city} · Nidalo`;
   }, [row, shown]);
 
-  /** L'écran ouvert (formulaire de visite ou feuille d'offre), sinon null. */
-  const renderScreen = ({ photo, recipientName, profitability }: ScreenDetails): ReactNode => {
+  /** L'écran ouvert (formulaire de visite, feuille d'offre, profil), sinon null. */
+  const renderScreen = ({ photo, recipientName, profitability, publisher }: ScreenDetails): ReactNode => {
+    if (shown === 'profil') {
+      // Profil encore en lecture (adresse ouverte directement) : la fiche d'abord, le profil dès qu'il est là.
+      return publisher ? <ProfileScreen publisher={publisher} onClose={close} onContact={isOwn ? undefined : contactSeller} /> : null;
+    }
     if (shown === 'visite') {
       return (
         <VisitRequestScreen
@@ -250,5 +267,5 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
     />
   );
 
-  return { session, me, isOwn, account, opening, shown, renderScreen, requestVisit, makeOffer, contactSeller, conversationAlert };
+  return { session, me, isOwn, account, opening, shown, renderScreen, requestVisit, makeOffer, contactSeller, openProfile, conversationAlert };
 }

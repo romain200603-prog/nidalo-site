@@ -14,7 +14,7 @@
   }
   .dl-inner { width: min(var(--d-content), 100% - 2 * var(--d-margin)); margin: 0 auto; }
   .dl :is(.dl-back, .dl-tool, .dl-button, .dl-pill, .dl-pill-wide, .dl-visit-agenda, .dl-screen-close, .dl-option, .dl-chip,
-    .dl-submit, .dl-secondary, .dl-link-button, .gallery-page, .gallery-all, .btn, .dl-toast-box a):focus-visible,
+    .dl-submit, .dl-secondary, .dl-link-button, .gallery-page, .gallery-all, .btn, .publisher-head, .listing-report):focus-visible,
   .dl a.dl-visit-card:focus-visible { outline: 3px solid var(--d-blue); outline-offset: 2px; }
 
   /* ——— Haut : retour, catégorie, titre (36), ville, puis Partager · Enregistrer · Comparer ——— */
@@ -76,7 +76,7 @@
   .dl .spec-banner-left { padding-right: 26px; box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.28); }
   .dl .spec-banner-hotel .spec-banner-left { padding-right: 26px; }
   .dl .spec-banner-right { padding-left: 26px; }
-  .dl .spec-banner-label, .dl .spec-banner-detail { color: #E4E9F6; font-size: 15px; font-weight: 400; line-height: 20px; }
+  .dl .spec-banner-label, .dl .spec-banner-detail { color: var(--spec-banner-label); font-size: 15px; font-weight: 400; line-height: 20px; }
   .dl .spec-banner-value { height: 48px; margin-top: 4px; gap: 8px; font-size: 40px; }
   .dl .spec-banner-value.has-unit { margin-bottom: 0; }
   .dl .spec-banner-amount { font-weight: 700; letter-spacing: -0.02em; line-height: 48px; }
@@ -154,6 +154,8 @@
   .dl .mini-map { height: 260px; border-radius: 14px; }
   .dl .location-caption { color: var(--d-grey); font-size: 14px; }
   .dl .listing-footnote { color: var(--d-grey); font-size: 13px; }
+  .dl .listing-report { font-size: 14px; }
+  .dl .publisher-head:hover .publisher-name > span:first-child { text-decoration: underline; }
 
   /* ——— Colonne de droite : offre, vendeur, boutons de 48 px, visite ——— */
   .dl-aside-card { display: flex; flex-direction: column; gap: 18px; padding: 22px; border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; }
@@ -185,12 +187,6 @@
   .dl-pill-wide.is-confirmed { background: var(--d-green-pill); color: var(--d-green-text); }
   .dl-pill-wide .icon { flex: none; width: 18px; height: 18px; }
   .dl-pill-wide:hover { text-decoration: underline; }
-
-  /* ——— Toast : lien copié, comparaison (« Voir ») ——— */
-  .dl-toast { position: fixed; z-index: 40; left: 50%; bottom: 24px; transform: translateX(-50%); pointer-events: none; }
-  .dl-toast-box { display: inline-flex; align-items: center; gap: 10px; min-height: 50px; padding: 0 18px; border-radius: 14px; background: var(--d-blue); color: #FFFFFF; font-size: 15px; font-weight: 600; white-space: nowrap; box-shadow: 0 10px 28px rgba(36, 45, 56, 0.22); pointer-events: auto; animation: dl-toast-in 0.2s ease-out both; }
-  .dl-toast-box .icon { flex: none; width: 18px; height: 18px; }
-  .dl-toast-box a { margin-left: 6px; color: #FFFFFF; font-weight: 700; text-decoration: underline; }
 
   /* ——— Écrans « Demander une visite » et « Faire une offre » : colonne de 640 px ——— */
   .dl-screen { padding-top: 32px; padding-bottom: 16px; }
@@ -285,17 +281,15 @@
   .dl-sent-slots li { display: flex; align-items: center; gap: 8px; color: var(--d-text); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .dl-sent-slots .icon { flex: none; width: 16px; height: 16px; color: var(--d-icon); }
 
-  /* Chargement de la fiche : mêmes places que la fiche. */
+  /* Chargement de la fiche : la place de la galerie, puis la roue de l'iPhone. */
   .listing-loading .listing-gallery-wrap { width: min(var(--d-content), 100% - 2 * var(--d-margin)); max-width: none; margin: 161px auto 0; padding: 0; }
-  .listing-loading .gallery-skeleton { height: 466px; border-radius: var(--d-card-radius); }
-  .listing-loading .listing-body { width: min(var(--d-content), 100% - 2 * var(--d-margin)); max-width: none; margin: 32px auto 0; padding: 0; column-gap: 40px; }
+  .listing-loading .gallery-loading { height: 466px; border-radius: var(--d-card-radius); }
+  .listing-loading .gallery-bar { display: none; }
 
-  @keyframes dl-toast-in { from { opacity: 0; transform: translateY(8px); } }
   @keyframes dl-spin { to { transform: rotate(360deg); } }
 }
 
 @media (min-width: 1024px) and (prefers-reduced-motion: reduce) {
-  .dl-toast-box { animation: none; }
   .dl-spinner { animation-duration: 2.4s; }
   .dl-visit-card { transition: none; }
   a.dl-visit-card:hover { transform: none; }
@@ -303,7 +297,7 @@
 
 /* Entre 1024 et 1279 px : marges de 32 px, colonnes plus proches, outils plus serrés. */
 @media (min-width: 1024px) and (max-width: 1279px) {
-  .dl-body, .listing-loading .listing-body { column-gap: 32px; }
+  .dl-body { column-gap: 32px; }
   .dl-tools { gap: 8px; }
   .dl-tool { gap: 8px; padding: 0 14px; }
   .dl-head { gap: 16px; }

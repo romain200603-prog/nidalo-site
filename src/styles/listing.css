@@ -27,8 +27,10 @@ body.page-listing-ready .tabbar { display: none; }
 @media (max-width: 1023px) {
   body.page-listing-ready { padding-bottom: calc(56px + max(10px, env(safe-area-inset-bottom) + 2px)); }
   body.page-listing-ready:has(.owner-bar) { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
-  /* « Demander une visite » ou « Faire une offre » ouvert : pas de barre d'actions, donc pas de place pour elle. */
+  /* « Demander une visite » ou « Faire une offre » ouvert : pas de barre d'actions, donc pas de place pour elle ; un
+     écran avec sa barre blanche du bas (profil, formulaire de visite) lui laisse sa place (52 + 10 + 6 et la zone sûre). */
   body.page-listing-ready:has(.listing-screen) { padding-bottom: 0; }
+  body.page-listing-ready:has(.listing-screen .screen-bottom-bar) { padding-bottom: calc(68px + env(safe-area-inset-bottom)); }
 }
 
 /* ——— Mise en page ——— */
@@ -47,6 +49,7 @@ body.page-listing-ready .tabbar { display: none; }
   .listing-body > .listing-aside .visit-card { order: 2; margin: 12px -3px 0; }
   .listing-main > .listing-category { order: 3; margin: 12px -3px 0; }
   .listing-main > :not(.listing-category) { order: 4; margin-top: 14px; }
+  .listing-main > .listing-report { margin-top: 6px; }
 }
 
 /* Ordinateur : galerie large, puis le contenu à gauche et le résumé avec les actions à droite. */
@@ -59,23 +62,43 @@ body.page-listing-ready .tabbar { display: none; }
   .listing-main { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; gap: 14px; }
 }
 
-/* ——— Galerie ——— */
-.gallery { position: relative; height: 260px; overflow: hidden; background: var(--blue-soft); }
+/* ——— Galerie ———
+   Téléphone : 325 de haut sous la barre d'état (la photo monte sous l'heure, ignoresSafeArea), points de 7 à 14 du
+   bas, compteur « 1/2 » à 12 du coin. Retour, Partager, Favori et Comparer : ronds blancs de 44 (PhotoRoundButton),
+   ombre #0D1941 à 12 %, icônes bleu Nidalo, à 12 des bords et 6 sous la barre d'état, 8 entre eux ; l'appui les
+   réduit à 94 % et 85 % d'opacité (PressScaleStyle, 0,12 s). */
+.gallery { position: relative; height: calc(325px + env(safe-area-inset-top)); overflow: hidden; background: var(--photo-tint, var(--blue-soft)); }
 .gallery-strip { display: flex; width: 100%; height: 100%; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
 .gallery-strip::-webkit-scrollbar { display: none; }
-.gallery-page { flex: none; display: block; width: 100%; height: 100%; padding: 0; border: 0; background: var(--blue-soft); scroll-snap-align: start; cursor: zoom-in; overflow: hidden; }
-.gallery .photo-empty { background: var(--blue-soft); color: #A7AEB5; cursor: default; }
-.gallery .photo-empty .icon { width: 44px; height: 44px; }
+.gallery-page { flex: none; display: block; width: 100%; height: 100%; padding: 0; border: 0; background: var(--photo-tint, var(--blue-soft)); scroll-snap-align: start; cursor: zoom-in; overflow: hidden; }
+div.gallery-page { cursor: default; }
+.gallery .photo-empty { background: var(--photo-tint, var(--blue-soft)); color: rgba(36, 45, 56, 0.35); cursor: default; }
+.gallery .photo-empty .icon { width: 28px; height: 28px; }
+/* Annonce sans photo : la teinte du type de bien et l'icône photo (28, encre à 35 %). */
+.photo-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: rgba(36, 45, 56, 0.35); }
+.photo-placeholder .icon { width: 28px; height: 28px; }
 .gallery-dots { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 8px; pointer-events: none; }
 .gallery-dots span { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.5); transition: background 0.2s; }
 .gallery-dots span.on { background: #FFFFFF; }
-.gallery-counter { position: absolute; right: 12px; bottom: 12px; height: 24px; padding: 0 9px; border-radius: 999px; background: rgba(0, 0, 0, 0.5); color: #FFFFFF; font-size: 12px; font-weight: 700; line-height: 24px; pointer-events: none; }
+.gallery-counter { position: absolute; right: 12px; bottom: 12px; height: 24px; padding: 0 9px; border-radius: 999px; background: rgba(0, 0, 0, 0.5); color: #FFFFFF; font-size: 12px; font-weight: 700; line-height: 24px; font-variant-numeric: tabular-nums; pointer-events: none; }
 .gallery-all { display: none; }
-.gallery-actions { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; }
-.gallery-action, .gallery-back { width: 36px; height: 36px; border-radius: 11px; border: 0; background: #FFFFFF; color: #3C5CB0; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); cursor: pointer; transition: transform 0.12s ease-out; }
-.gallery-action:active, .gallery-back:active { transform: scale(0.94); }
-.gallery-action .icon, .gallery-back .icon { width: 18px; height: 18px; stroke-width: 2.3; }
-.gallery-back { position: absolute; top: 12px; left: 12px; }
+.gallery-bar { position: absolute; top: calc(6px + env(safe-area-inset-top)); left: 12px; right: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; pointer-events: none; }
+.gallery-actions { display: flex; gap: 8px; }
+.gallery-action, .gallery-back {
+  flex: none; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: #FFFFFF; color: var(--app-brand);
+  display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(13, 25, 65, 0.12); cursor: pointer;
+  pointer-events: auto; -webkit-tap-highlight-color: transparent; transition: transform 0.12s ease-out, opacity 0.12s ease-out;
+}
+.gallery-action:active, .gallery-back:active { transform: scale(0.94); opacity: 0.85; }
+.gallery-back .icon { width: 20px; height: 20px; }
+.gallery-action .icon { width: 16px; height: 16px; stroke-width: 2.4; }
+.gallery-compare .icon { width: 17px; height: 17px; stroke-width: 2; }
+.gallery-compare.is-active { background: var(--app-brand); color: #FFFFFF; }
+.gallery-heart .heart-icon { color: var(--app-brand); }
+@media (prefers-reduced-motion: reduce) {
+  .gallery-action, .gallery-back { transition: opacity 0.12s ease-out; }
+  .gallery-action:active, .gallery-back:active { transform: none; }
+}
 
 @media (min-width: 1024px) {
   .gallery { height: 440px; border-radius: 20px; background: transparent; }
@@ -88,30 +111,34 @@ body.page-listing-ready .tabbar { display: none; }
   .gallery-empty { height: 300px; }
   .gallery-page .photo { transition: transform 0.3s ease, filter 0.3s ease; }
   .gallery-page:hover .photo { filter: brightness(0.94); }
-  .gallery-dots, .gallery-counter, .gallery-back { display: none; }
+  .gallery-dots, .gallery-counter, .gallery-bar { display: none; }
   .gallery-all { position: absolute; right: 16px; bottom: 16px; display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border: 0; border-radius: 12px; background: #FFFFFF; color: var(--ink); font-size: 14px; font-weight: 700; box-shadow: 0 2px 8px rgba(36, 45, 56, 0.16); cursor: pointer; }
   .gallery-all .icon { width: 18px; height: 18px; color: var(--blue); }
-  .gallery-actions { top: 16px; right: 16px; }
 }
 
-/* Visionneuse plein écran */
+/* Visionneuse plein écran (ListingPhotoViewer) : fond noir, compteur 15 gras dans une capsule blanche à 16 % (34 de
+   haut), croix ronde de 40, flèches rondes de 46 à 20 du bas (cachées quand la photo est agrandie). Les photos sont
+   posées côte à côte et glissent au doigt ; pincer, toucher deux fois, glisser vers le bas : Gallery.tsx. */
 .listing-dialog.viewer-dialog { width: 100vw; height: 100dvh; max-width: 100vw; max-height: 100dvh; margin: 0; padding: 0; border: 0; background: #000000; color: #FFFFFF; }
 .listing-dialog.viewer-dialog::backdrop { background: #000000; }
-.viewer { position: relative; width: 100%; height: 100%; }
-.viewer-strip { display: flex; width: 100%; height: 100%; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior: contain; }
-.viewer-strip::-webkit-scrollbar { display: none; }
-.viewer-page { flex: none; width: 100%; height: 100%; scroll-snap-align: start; display: flex; align-items: center; justify-content: center; }
-.viewer-page .photo { object-fit: contain; }
+.viewer { position: relative; width: 100%; height: 100%; overflow: hidden; }
+.viewer-stage { position: absolute; inset: 0; overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none; }
+.viewer-track { display: flex; width: 100%; height: 100%; will-change: transform; }
+.viewer-page { flex: none; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.viewer-photo { width: 100%; height: 100%; transform-origin: center; }
+.viewer.is-zoomed .viewer-stage { cursor: grab; }
+.viewer-page .photo { object-fit: contain; pointer-events: none; -webkit-user-drag: none; }
 .viewer-page .photo-empty { background: #000000; }
+.viewer-placeholder { width: 100%; height: 100%; }
 .viewer-top { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: 16px; right: 16px; display: flex; align-items: center; justify-content: space-between; pointer-events: none; }
 .viewer-top > * { pointer-events: auto; }
-.viewer-counter { height: 34px; padding: 0 12px; border-radius: 999px; background: rgba(255, 255, 255, 0.16); color: #FFFFFF; font-size: 15px; font-weight: 700; line-height: 34px; }
+.viewer-counter { height: 34px; padding: 0 12px; border-radius: 999px; background: rgba(255, 255, 255, 0.16); color: #FFFFFF; font-size: 15px; font-weight: 700; line-height: 34px; font-variant-numeric: tabular-nums; }
 .viewer-close, .viewer-arrow { border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.16); color: #FFFFFF; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .viewer-close { width: 40px; height: 40px; }
-.viewer-close .icon { width: 18px; height: 18px; stroke-width: 2.6; }
+.viewer-close .icon { width: 16px; height: 16px; stroke-width: 3; }
 .viewer-arrows { position: absolute; left: 16px; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom)); display: flex; justify-content: space-between; pointer-events: none; }
 .viewer-arrow { width: 46px; height: 46px; pointer-events: auto; }
-.viewer-arrow .icon { width: 20px; height: 20px; stroke-width: 2.6; }
+.viewer-arrow .icon { width: 18px; height: 18px; stroke-width: 3; }
 .viewer-arrow:disabled { opacity: 0.3; cursor: default; }
 .viewer-close:hover, .viewer-arrow:not(:disabled):hover { background: rgba(255, 255, 255, 0.24); }
 
@@ -128,7 +155,7 @@ body.page-listing-ready .tabbar { display: none; }
 a.hc-offer { text-decoration: none; }
 .hc-offer:disabled { opacity: 0.6; cursor: default; }
 .hc-condition { margin: 0; color: var(--text-secondary); font-size: 12px; font-weight: 600; letter-spacing: -0.03em; }
-.hc-price-note { margin: 2px 0 0; color: var(--text-secondary); font-size: 12px; font-weight: 500; }
+.hc-price-note { margin: 3px 0 0; color: var(--text-secondary); font-size: 13px; font-weight: 500; }
 .hc-title { margin: 0.8px 0 0; color: var(--ink); font-size: 17px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.366; }
 .hc-location { margin: 2.8px 0 0; display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 12px; font-weight: 500; letter-spacing: -0.018em; }
 .hc-location .icon { width: 13px; height: 13px; }
@@ -390,8 +417,8 @@ a.visit-card { color: inherit; text-decoration: none; }
 .spec-kpi-note { margin-top: calc(12px * var(--k)); }
 
 /* ——— Sections ——— */
-.section-card { display: flex; flex-direction: column; gap: 14px; padding: 18px; border: 1px solid var(--border); border-radius: 20px; background: var(--card); }
-.section-card h2 { color: var(--ink); font-size: 20px; font-weight: 700; }
+.section-card { display: flex; flex-direction: column; gap: 14px; padding: 18px; border: 1px solid var(--border); border-radius: 16px; background: var(--card); }
+.section-card h2 { color: var(--ink); font-size: 18px; font-weight: 700; line-height: 1.3; }
 .feature-rows { margin: 0; display: flex; flex-direction: column; gap: 10px; }
 .feature-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 14px; font-weight: 500; }
 .feature-row dt { color: var(--text-secondary); }
@@ -426,10 +453,18 @@ a.visit-card { color: inherit; text-decoration: none; }
 .energy-lines { display: flex; flex-direction: column; gap: 3px; color: var(--text-secondary); font-size: 13px; font-weight: 500; }
 .energy-lines p { margin: 0; }
 
-.publisher { display: flex; flex-direction: column; gap: 14px; }
-.publisher-head { display: flex; align-items: center; gap: 12px; }
+/* « Votre interlocuteur » : toute la ligne ouvre le profil (flèche de 16 à droite), puis les deux boutons côte à côte,
+   l'un sous l'autre sous 330 de large. */
+.publisher { display: flex; flex-direction: column; gap: 14px; container-type: inline-size; }
+.publisher-head { display: flex; align-items: center; gap: 12px; width: 100%; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.publisher-head:active { opacity: 0.7; }
+.publisher-head .publisher-text { flex: 1; }
+.publisher-chevron { flex: none; width: 16px; height: 16px; color: var(--text-muted); }
+.publisher-buttons { display: flex; gap: 10px; }
+.publisher-buttons .btn { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@container (max-width: 329.98px) { .publisher-buttons { flex-direction: column; } }
 .publisher-avatar { flex: none; width: 52px; height: 52px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 50%; background: #EEF2FA; color: var(--blue); font-size: 16.6px; font-weight: 700; }
-.publisher-avatar.pro { border-radius: 13.5px; background: var(--ink); color: #FFFFFF; }
+.publisher-avatar.pro { border-radius: 13.5px; background: var(--app-navy); color: #FFFFFF; }
 .publisher-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .publisher-text { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .publisher-name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--ink); font-size: 16px; font-weight: 700; }
@@ -437,8 +472,8 @@ a.visit-card { color: inherit; text-decoration: none; }
 .publisher-badge.pro { border-color: transparent; background: var(--blue); color: #FFFFFF; }
 .publisher-line { color: var(--text-secondary); font-size: 12.5px; font-weight: 500; }
 
-/* Boutons de la fiche (DomiaPrimaryButtonStyle / DomiaSecondaryButtonStyle) : 15/700, 52 de haut. */
-.listing .btn-block { width: 100%; min-height: 52px; font-size: 15px; font-weight: 700; }
+/* Boutons de la fiche (DomiaPrimaryButtonStyle / DomiaSecondaryButtonStyle) : 15 semi-gras, 52 de haut, rayon 12. */
+.listing .btn-block { width: 100%; min-height: 52px; border-radius: 12px; font-size: 15px; font-weight: 600; }
 .listing .btn-block .icon { width: 18px; height: 18px; }
 
 .location { display: flex; flex-direction: column; gap: 8px; }
@@ -448,8 +483,15 @@ a.visit-card { color: inherit; text-decoration: none; }
 .mini-map-open:focus-visible { outline-offset: -3px; }
 .mini-map-attribution { position: absolute; z-index: 3; right: 6px; bottom: 6px; }
 .location-caption { margin: 0; color: var(--text-secondary); font-size: 13px; }
-.listing-footnote { margin: 0; color: var(--text-secondary); font-size: 12px; }
-.listing-risks a { color: inherit; text-decoration: underline; }
+/* Pied de la fiche : la mention Géorisques (lien bleu) puis « Publiée le … », un seul bloc de 12 gris, 4 entre les
+   lignes ; puis « Signaler l'annonce », lien discret (drapeau de 14, 13 semi-gras gris, 8 au-dessus et au-dessous). */
+.listing-footnote { display: flex; flex-direction: column; gap: 4px; color: var(--text-secondary); font-size: 12px; line-height: 1.35; }
+.listing-footnote p { margin: 0; }
+.listing-risks a { color: var(--app-brand); text-decoration: none; }
+.listing-risks a:hover { text-decoration: underline; }
+.listing-report { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 8px 0; border: 0; background: none; color: var(--text-secondary); font: 600 13px/1.3 var(--app-font); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.listing-report .icon { width: 14px; height: 14px; }
+.listing-report:active { opacity: 0.6; }
 .publisher-fees-link { align-self: flex-start; color: var(--text-secondary); font-size: 13px; font-weight: 500; text-decoration: underline; }
 
 /* ——— Cartes de localisation ——— */
@@ -476,30 +518,101 @@ a.visit-card { color: inherit; text-decoration: none; }
 .map-button .icon { width: 20px; height: 20px; }
 .full-map-bottom { position: absolute; z-index: 3; left: 16px; right: 16px; bottom: calc(8px + env(safe-area-inset-bottom)); max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; }
 .full-map-bottom > * { pointer-events: auto; }
-.full-map-card { width: 100%; display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: 22px; background: #FFFFFF; box-shadow: 0 4px 28px rgba(36, 45, 56, 0.14); }
+.full-map-card { width: 100%; display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: 18px; background: #FFFFFF; box-shadow: 0 4px 28px rgba(36, 45, 56, 0.14); }
 .full-map-listing { width: 100%; display: flex; align-items: center; gap: 12px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.full-map-photo { flex: none; width: 72px; height: 60px; overflow: hidden; border-radius: 12px; background: #F2F0EC; }
+.full-map-photo { flex: none; width: 72px; height: 60px; overflow: hidden; border-radius: 9px; background: #F2F0EC; }
 .full-map-photo .photo-empty .icon { width: 22px; height: 22px; }
 .full-map-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .full-map-price { color: var(--ink); font-size: 17px; font-weight: 700; }
 .full-map-title { color: var(--ink); font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .full-map-sub { color: var(--text-secondary); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.full-map-chevron { width: 16px; height: 16px; color: #A7AEB5; }
+.full-map-chevron { width: 16px; height: 16px; color: var(--text-muted); }
 
 /* ——— Fenêtres ——— */
 .copy-link { width: 100%; height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--page); color: var(--ink); font: inherit; font-size: 14px; }
 
-.listing-toast { position: fixed; z-index: 40; left: 50%; bottom: calc(56px + max(10px, env(safe-area-inset-bottom) + 2px) + 16px); margin: 0; display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px; background: var(--ink); color: #FFFFFF; font-size: 14px; font-weight: 600; white-space: nowrap; opacity: 0; transform: translate(-50%, 8px); pointer-events: none; transition: opacity 0.2s, transform 0.2s; }
-.listing-toast.is-shown { opacity: 1; transform: translate(-50%, 0); }
-.listing-toast .icon { width: 16px; height: 16px; }
-body:has(.owner-bar) .listing-toast { bottom: calc(60px + env(safe-area-inset-bottom) + 16px); }
-@media (min-width: 1024px) { .listing-toast { bottom: 24px; } }
+/* ——— Feuilles de la fiche (Sheet.tsx) : « Signaler l'annonce », « Faire une offre », « Partager l'annonce » ———
+   Fond de page de l'app, en-tête de 56 (titre de 17 semi-gras centré, « Annuler » bleu à gauche). Sous 1024 px, la
+   feuille monte du bas (rayon 32, 10 sous le haut de l'écran) et se referme en la tirant par son en-tête ; sur
+   ordinateur, au centre (520 de large). */
+.listing-sheet { width: min(520px, calc(100vw - 32px)); max-height: min(760px, calc(100dvh - 48px)); overflow: hidden; border-radius: 24px; background: var(--app-page); box-shadow: 0 24px 60px rgba(36, 45, 56, 0.3); font-family: var(--app-font); transition: translate 0.3s cubic-bezier(0.32, 0.72, 0, 1); }
+.listing-sheet[open] { display: flex; }
+.sheet-body { display: flex; flex-direction: column; width: 100%; min-height: 0; max-height: inherit; }
+.sheet-head { position: relative; flex: none; display: flex; align-items: center; justify-content: center; min-height: 56px; padding: 0 92px; }
+.sheet-head h2 { margin: 0; overflow: hidden; color: var(--app-navy); font: 600 17px/22px var(--app-font); text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.sheet-cancel { position: absolute; top: 6px; left: 8px; height: 44px; padding: 0 10px; border: 0; background: none; color: var(--app-brand); font: 400 17px/22px var(--app-font); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sheet-cancel:active { opacity: 0.6; }
+.sheet-custom-head { position: relative; flex: none; }
+.sheet-grabber { display: none; }
+.sheet-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 16px 16px; }
+.sheet-form { display: flex; flex-direction: column; gap: 16px; padding-top: 4px; }
+/* Pièces des formulaires de l'app (FormCard, FieldLabel, ChoiceChip, LimitedEditor, ErrorLine). */
+.form-card { min-width: 0; display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 16px; border: 0; border-radius: 18px; background: #FFFFFF; }
+.form-label { padding: 0; color: var(--app-text-secondary); font: 600 13px/1.3 var(--app-font); }
+.form-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: -6px; }
+.form-count { color: var(--app-text-muted); font: 400 11.5px/1.3 var(--app-font); font-variant-numeric: tabular-nums; }
+.choice-chip { position: relative; display: flex; align-items: center; min-height: 40px; padding: 0 12px; border: 1px solid var(--app-field-border); border-radius: 12px; background: var(--app-field); color: var(--app-navy); font: 600 13.5px/1.3 var(--app-font); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.choice-chip input { position: absolute; opacity: 0; pointer-events: none; }
+.choice-chip.is-selected { border: 1.5px solid var(--app-brand); background: var(--app-brand-soft); color: var(--app-brand); padding: 0 11.5px; }
+.choice-chip:has(input:focus-visible) { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+.form-editor { width: 100%; min-height: 100px; padding: 12px 13px; border: 0; border-radius: 12px; background: var(--app-page); color: var(--app-navy); font: 400 16px/22px var(--app-font); resize: vertical; }
+.form-editor::placeholder { color: var(--app-text-muted); }
+.form-editor:focus { outline: 2px solid var(--app-brand); outline-offset: 0; }
+.sheet-note { margin: 0; color: var(--app-text-secondary); font: 400 12.5px/1.4 var(--app-font); }
+.form-error { margin: 0; color: var(--red); font: 500 12px/1.4 var(--app-font); }
+.sheet-submit { width: 100%; min-height: 52px; border-radius: 12px; font: 600 15px/1.2 var(--app-font); }
+.sheet-submit:disabled { opacity: 0.45; }
+@media (max-width: 1023px) {
+  .listing-sheet { width: 100%; max-width: 600px; height: calc(100dvh - 10px - env(safe-area-inset-top)); max-height: none; margin: auto auto 0; border-radius: 32px 32px 0 0; box-shadow: none; }
+  .listing-sheet[open] { animation: alert-sheet-up 0.45s cubic-bezier(0.32, 0.72, 0, 1); }
+  .listing-sheet[open]::backdrop { animation: alert-fade-in 0.3s ease-out; }
+  .sheet-head, .sheet-custom-head { touch-action: none; }
+  .sheet-grabber { display: block; position: absolute; top: 5px; left: 50%; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px; background: rgba(60, 60, 67, 0.3); }
+  .sheet-scroll { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+}
+@media (min-width: 1024px) {
+  .listing-sheet[open] { animation: alert-dialog-in 0.25s ease-out; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .listing-sheet[open] { animation: alert-fade-in 0.25s ease-out; }
+  .listing-sheet { transition: none; }
+}
 
-/* ——— Chargement et erreurs ——— */
-.gallery-skeleton { border-radius: 0; }
-.skeleton-card-block { display: flex; flex-direction: column; gap: 12px; padding: 18px 17.5px; }
-.skeleton-card-block .skeleton.line { display: block; height: 14px; margin: 0; }
-.skeleton-card-block .skeleton.line.wide { width: 60%; height: 26px; }
-.skeleton-card-block .skeleton.line.short { width: 40%; }
-@media (min-width: 1024px) { .gallery-skeleton { border-radius: 20px; } }
+/* ——— Profil public (ProfileScreen.tsx) : « Profil » d'un particulier, « Agence » ———
+   Fond de page, 16 autour et entre les blocs ; en-tête blanc de 20 (photo de 88, nom de 22 gras, pastille, ligne de
+   13 grise) ; « Ses annonces » 17 gras ; barre blanche du bas avec « Contacter… » (16 sur les côtés, 10 au-dessus,
+   6 sous le bouton et la zone sûre, ombre bleu marine à 6 %). */
+.listing-profile { padding: 6px 16px 24px; background: var(--app-page); }
+.profile-stack { display: flex; flex-direction: column; gap: 16px; }
+.profile-head { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px; border: 1px solid var(--border); border-radius: 16px; background: #FFFFFF; text-align: center; }
+.profile-avatar .publisher-avatar { width: 88px; height: 88px; font-size: 28px; }
+.profile-avatar .publisher-avatar.pro { border-radius: 23px; }
+.profile-name { margin: 0; color: var(--app-navy); font: 700 22px/1.25 var(--app-font); overflow-wrap: anywhere; }
+.profile-badges { display: inline-flex; align-items: center; gap: 6px; }
+.profile-verified { display: inline-flex; align-items: center; gap: 4px; color: var(--app-brand); font: 700 12px/1 var(--app-font); }
+.profile-verified .icon { width: 14px; height: 14px; }
+.profile-sub { margin: 0; color: var(--app-text-secondary); font: 400 13px/1.3 var(--app-font); }
+.info-line { margin: 0; display: flex; align-items: flex-start; gap: 8px; padding: 10px; border-radius: 12px; background: var(--app-brand-soft); color: var(--app-text-secondary); font: 500 12.5px/1.4 var(--app-font); }
+.info-line .icon { flex: none; width: 13px; height: 13px; margin-top: 2px; }
+.profile-text { margin: 0; color: rgba(36, 45, 56, 0.85); font: 400 14px/1.45 var(--app-font); white-space: pre-line; overflow-wrap: anywhere; }
+.profile-muted { margin: 0; color: var(--app-text-secondary); font: 400 13px/1.4 var(--app-font); }
+.profile-note { margin: 0; color: var(--app-text-muted); font: 400 12px/1.4 var(--app-font); }
+.listing-profile .section-card .btn .icon { width: 17px; height: 17px; }
+.listing-profile .section-card a.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; }
+.profile-listings { display: flex; flex-direction: column; gap: 10px; }
+.profile-listings h2 { margin: 0; color: var(--app-navy); font: 700 17px/1.3 var(--app-font); }
+.profile-listings .account-spinner { padding: 24px 0; }
+.profile-empty { margin: 0; color: var(--app-text-secondary); font: 400 13px/1.4 var(--app-font); }
+.screen-bottom-bar { position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; padding: 10px max(16px, (100% - 600px) / 2) calc(6px + env(safe-area-inset-bottom)); background: #FFFFFF; box-shadow: 0 -2px 20px rgba(36, 45, 56, 0.06); }
+.screen-bottom-bar .btn { width: 100%; min-height: 52px; border-radius: 12px; font: 600 15px/1.2 var(--app-font); }
+@media (min-width: 1024px) {
+  .listing-profile { width: min(640px, 100% - 64px); margin: 0 auto; padding: 32px 0 24px; background: none; }
+  .listing-profile .screen-bottom-bar { position: static; margin-top: 16px; padding: 0; background: none; box-shadow: none; }
+}
+
+/* ——— Chargement et erreurs ———
+   Chargement : la place de la photo (teinte neutre de l'app) avec le retour, puis la roue de l'iPhone. Annonce
+   introuvable, indisponible ou sans connexion : l'état de l'app (ContentUnavailable, OfflineState) sous l'en-tête. */
+.gallery-loading { background: #F2F0EC; }
+.listing-loading .account-spinner { padding: 32px 0; }
 .listing-state { margin-top: 32px; }

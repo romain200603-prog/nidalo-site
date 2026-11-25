@@ -155,7 +155,7 @@ const MESSAGING_TABLES = [
 const ACCOUNT_TABLES = [
   'profiles', 'profile_details', 'favorites', 'notifications', 'rpc/mark_notifications_read', 'rpc/my_conversations',
   'rpc/start_listing_conversation', 'rpc/my_offers', 'rpc/make_offer', 'rpc/my_visit_requests', 'rpc/create_visit_request',
-  'agenda_visits', 'saved_searches', 'real_estate_projects', 'professional_profiles', 'professional_profile_details',
+  'agenda_visits', 'saved_searches', 'real_estate_projects', 'professional_profiles', 'professional_profile_details', 'reports',
   ...MESSAGING_TABLES,
 ];
 /**
@@ -351,6 +351,9 @@ function respond(route, state, table, request, url, body) {
       });
       return json(route, body.p_id);
     }
+    case 'reports':
+      // « Signaler l'annonce » : la ligne est enregistrée, le serveur ne répond rien.
+      return empty(201);
     default:
       // Notifications, recherches enregistrées, projet, profil professionnel : rien pour ce compte.
       return json(route, []);
@@ -657,9 +660,10 @@ async function checkMap(page, name, { coordinate, approximate, shots }) {
   expect(name, 'titre de la fenêtre', await dialogTitle(page), 'Itinéraire');
   const point = `${coordinate[0].toFixed(6)},${coordinate[1].toFixed(6)}`;
   const links = await page.$$eval('dialog.alert-dialog[open] a', (as) => as.map((a) => [a.textContent, a.getAttribute('href'), a.target]));
+  // L'ordre et les noms de l'app (ListingLocationMapView) : Plans d'abord, puis Google Maps et Waze.
   expect(name, 'liens d’itinéraire', JSON.stringify(links), JSON.stringify([
+    ['Plans', `https://maps.apple.com/?daddr=${point}`, '_blank'],
     ['Google Maps', `https://www.google.com/maps/dir/?api=1&destination=${point}`, '_blank'],
-    ['Plans d’Apple', `https://maps.apple.com/?daddr=${point}`, '_blank'],
     ['Waze', `https://waze.com/ul?ll=${point}&navigate=yes`, '_blank'],
   ]));
   expect(name, 'message d’itinéraire', await page.textContent('dialog.alert-dialog[open] .alert-body p'),
@@ -718,6 +722,21 @@ async function checkStates(context, suffix) {
     if (status !== 'introuvable-id') await page.screenshot({ path: join(out, `${name}.png`) });
     await page.close();
   }
+  // Sans connexion : « Pas de connexion Internet » et « Réessayer » (DomiaEmptyState.offline de l'app), puis la fiche.
+  const name = `hors-ligne-${suffix}`;
+  const listingRequest = /\/rest\/v1\/listings\?/;
+  const page = await open(context, `/annonce/?id=${FICHE}`, name, {
+    quiet: /ERR_INTERNET_DISCONNECTED|Failed to fetch/i,
+    before: (p) => p.route(listingRequest, (route) => route.abort('internetdisconnected')),
+  });
+  await page.waitForSelector('.listing-state.app-offline h2');
+  expect(name, 'titre', await page.textContent('.listing-state h2'), 'Pas de connexion Internet');
+  expect(name, 'titre de la page', await page.title(), 'Pas de connexion Internet · Nidalo');
+  await page.screenshot({ path: join(out, `${name}.png`) });
+  await page.unroute(listingRequest);
+  await page.click('.listing-state .app-offline-retry');
+  await ready(page, name);
+  await page.close();
 }
 
 /** Sans compte, l'action ouvre d'abord la connexion du site (requireAccount), qu'on referme. */
@@ -1341,11 +1360,14 @@ try {
   await page.waitForSelector('dialog.signin-sheet[open]', { state: 'detached' });
   if (page.url() !== `${base}/annonce/?id=${SALE}`) problems.push(`vente-ordinateur: adresse ${page.url()} après la connexion refermée`);
   await expectSignIn(page, 'vente-ordinateur', 'Enregistrer', '.dl-tools .dl-save');
+  // « Signaler l'annonce », sous la note des risques : la connexion d'abord, comme dans l'app.
+  await expectSignIn(page, 'vente-ordinateur', 'Signaler l\'annonce', '.dl .listing-report');
   await page.click('.dl-tools .dl-share');
-  await page.waitForSelector('.dl-toast.is-shown');
-  expect('vente-ordinateur', 'message du partage', await page.textContent('.dl-toast'), 'Lien de l’annonce copié');
+  // Le message du bas de l'app (showToast), le même qu'au téléphone.
+  await page.waitForSelector('.app-toast:not(.is-leaving)');
+  expect('vente-ordinateur', 'message du partage', await page.textContent('.app-toast-text'), 'Lien de l’annonce copié');
   expect('vente-ordinateur', 'lien copié', await page.evaluate(() => navigator.clipboard.readText()), `${base}/annonce/?id=${SALE}`);
-  await page.waitForSelector('.dl-toast-box', { state: 'detached', timeout: 6000 }).catch(() => problems.push('vente-ordinateur: le message du partage ne disparaît pas'));
+  await page.waitForSelector('.app-toast', { state: 'detached', timeout: 6000 }).catch(() => problems.push('vente-ordinateur: le message du partage ne disparaît pas'));
   await checkMap(page, 'vente-ordinateur', { coordinate: [45.7597, 4.8491], approximate: true, shots: true });
   await page.close();
 
@@ -1383,7 +1405,7 @@ try {
     text: 'Appartement 3 pièces · Lyon 2e (69002)\n238 000 € · 62 m² · 3 pièces\nÀ voir sur Nidalo',
     url: `${base}/annonce/?id=${FICHE}`,
   });
-  if (await page.$('.dl-toast.is-shown')) problems.push('partage-ordinateur: le lien est copié alors que le navigateur a partagé');
+  if (await page.$('.app-toast')) problems.push('partage-ordinateur: le lien est copié alors que le navigateur a partagé');
   await page.click('.gallery-all');
   await page.waitForSelector('dialog.viewer-dialog[open]');
   expect('partage-ordinateur', 'compteur de « Voir les 3 photos »', await page.textContent('.viewer-counter'), '1/3');
@@ -1558,6 +1580,30 @@ try {
   // Repli en ronds au défilement, puis l'appui (le doigt glisse hors de la capsule : rien ne s'ouvre).
   await checkDuoFold(page, 'vente-telephone', { shot: 'duo-repliee-telephone.png' });
   await checkDuoPress(page, 'vente-telephone', { shot: 'duo-appui-telephone.png' });
+  await page.close();
+
+  // « Voir le profil » (carte « Votre interlocuteur ») : le profil public de l'app à son adresse (&vue=profil), sans
+  // compte ; « Ses annonces » (celles du vendeur), « Contacter le vendeur » demande la connexion, le retour revient à
+  // la fiche. Sa photo ou son nom ouvrent le même écran.
+  page = await open(phone, `/annonce/?id=${SALE}`, 'profil-telephone');
+  await ready(page, 'profil-telephone');
+  await page.tap('.publisher-buttons .btn-light');
+  await waitForAddress(page, `${base}/annonce/?id=${SALE}&vue=profil`);
+  await page.waitForSelector('.listing-profile .profile-name');
+  expect('profil-telephone', 'titre', await page.textContent('.listing-profile .app-page-header-title'), 'Profil');
+  expect('profil-telephone', 'en-tête', await page.textContent('.profile-head'), /^CEClaire EssaiParticulierSur Nidalo depuis mars 2025$/);
+  expect('profil-telephone', 'titre de la page', await page.title(), 'Profil · Appartement lumineux avec balcon · Nidalo');
+  await page.waitForFunction(() => !document.querySelector('.profile-listings .account-spinner'));
+  expect('profil-telephone', 'ses annonces', await page.textContent('.profile-listings h2'), 'Ses annonces · 1');
+  expect('profil-telephone', 'carte de son annonce', await page.getAttribute('.profile-listings a', 'href'), `/annonce/?id=${SALE}`);
+  if (await page.$('.action-bar, .header-card')) problems.push('profil-telephone: la fiche reste affichée sous le profil');
+  await fullShot(page, 'profil-telephone.png');
+  await expectSignIn(page, 'profil-telephone', 'Contacter le vendeur', '.screen-bottom-bar .btn-primary');
+  await page.tap('.listing-profile .app-page-header .app-round');
+  await waitForAddress(page, `${base}/annonce/?id=${SALE}`);
+  await page.waitForSelector('.header-card .hc-price-value');
+  await page.tap('.publisher-head');
+  await waitForAddress(page, `${base}/annonce/?id=${SALE}&vue=profil`);
   await page.close();
 
   page = await open(phone, `/annonce/?id=${LEASED}&mode=invest`, 'investissement-telephone');
@@ -1908,6 +1954,36 @@ try {
   if (saleMessage) expectJSON('vente-telephone-connecte', 'arguments de start_listing_conversation', saleMessage.body, { p_listing_id: SALE });
   await page.close();
 
+  // « Signaler l'annonce » (bas de la fiche) : la feuille de l'app (motif obligatoire, description facultative de 500
+  // caractères), la ligne de « reports » comme l'app, puis l'alerte « Signalement envoyé à l'équipe Nidalo. ».
+  page = await open(phoneFresh, `/annonce/?id=${SALE}`, 'signaler-telephone');
+  await ready(page, 'signaler-telephone');
+  await page.$eval('.listing-report', (el) => el.scrollIntoView({ block: 'center' }));
+  await page.tap('.listing-report');
+  await page.waitForSelector('dialog.report-sheet[open] h2');
+  await page.waitForTimeout(500);
+  expect('signaler-telephone', 'titre', await page.textContent('dialog.report-sheet[open] h2'), 'Signaler l\'annonce');
+  expect('signaler-telephone', 'motifs', await page.$$eval('dialog.report-sheet[open] .choice-chip', (els) => els.map((el) => el.textContent.trim()).join(' | ')),
+    'Fraude immobilière ou arnaque | Annonce trompeuse | Spam | Contenu inapproprié | Autre');
+  expect('signaler-telephone', 'bouton sans motif', await page.$eval('dialog.report-sheet[open] .sheet-submit', (el) => el.disabled), true);
+  await page.tap('dialog.report-sheet[open] .choice-chip:has-text("Annonce trompeuse")');
+  await page.fill('#signalement-details', 'Les photos ne correspondent pas au bien.');
+  expect('signaler-telephone', 'compteur', await page.textContent('dialog.report-sheet[open] .form-count'), '40/500');
+  await page.screenshot({ path: join(out, 'signaler-telephone.png') });
+  phoneMark = calls.length;
+  await page.tap('dialog.report-sheet[open] .sheet-submit');
+  expect('signaler-telephone', 'alerte', await dialogTitle(page), 'Signalement envoyé à l\'équipe Nidalo.');
+  const report = once('signaler-telephone', phoneMark, 'reports');
+  if (report) {
+    if (!/^[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/.test(report.body?.id ?? '')) problems.push(`signaler-telephone: identifiant ${report.body?.id}`);
+    expectJSON('signaler-telephone', 'ligne du signalement', report.body, {
+      id: report.body?.id, target_type: 'listing', target_id: SALE.toUpperCase(), reason: 'misleadingListing', details: 'Les photos ne correspondent pas au bien.',
+    });
+  }
+  if (await page.$('dialog.report-sheet[open]')) problems.push('signaler-telephone: la feuille reste ouverte après l’envoi');
+  await closeAlert(page);
+  await page.close();
+
   // Adresses ouvertes directement : l'offre (aucune en attente) à son adresse, « Fermer » revient à la fiche ; pas
   // d'offre sur une location.
   page = await open(phoneFresh, `/annonce/?id=${SALE}&vue=offre`, 'adresse-offre-telephone');
@@ -1937,13 +2013,14 @@ try {
   }
   // Capture avant les touchers : le reflet bleu du toucher de Chromium resterait sur le bouton.
   await page.screenshot({ path: join(out, 'mon-annonce-telephone.png') });
-  for (const [index, title] of [[0, 'Voir les demandes'], [1, 'Gérer l\'annonce']]) {
-    await page.tap(`.owner-bar-button >> nth=${index}`);
-    expect('mon-annonce-telephone', `fenêtre « ${title} »`, await dialogTitle(page), title);
-    expect('mon-annonce-telephone', `message de « ${title} »`, await page.textContent('dialog[open] .alert-body p'), 'Dans l’app iPhone pour l’instant.');
-    if (index === 0) await expectAlertStays(page, 'mon-annonce-telephone', title);
-    await closeAlert(page);
-  }
+  await page.tap('.owner-bar-button >> nth=0');
+  expect('mon-annonce-telephone', 'fenêtre « Voir les demandes »', await dialogTitle(page), 'Voir les demandes');
+  expect('mon-annonce-telephone', 'message de « Voir les demandes »', await page.textContent('dialog[open] .alert-body p'), 'Dans l’app iPhone pour l’instant.');
+  await expectAlertStays(page, 'mon-annonce-telephone', 'Voir les demandes');
+  await closeAlert(page);
+  // « Gérer l'annonce » ouvre la modification de l'annonce, comme l'app (le dépôt, page /publier/).
+  await page.tap('.owner-bar-button >> nth=1');
+  await waitForAddress(page, `${base}/publier/?annonce=${MINE}`);
   await page.close();
   page = await open(phoneFresh, `/annonce/?id=${MINE}&vue=visite`, 'mon-annonce-visite-telephone');
   await waitForAddress(page, `${base}/annonce/?id=${MINE}`);
@@ -2231,16 +2308,17 @@ try {
   await checkDesktopLayout(page, 'mon-annonce');
   expect('mon-annonce', 'boutons', await page.$$eval('.dl-aside .dl-button', (els) => els.map((el) => el.textContent.trim()).join(' | ')), 'Voir les demandes | Gérer l\'annonce');
   if (await page.$('.dl-offer, .dl-message, .dl-call, .duo-capsule, .dl-visit-card, .dl-visit-request, .dl-pill-wide')) problems.push('mon-annonce: offre, message, appel ou visite proposés sur sa propre annonce');
+  if (await page.$('.listing-report')) problems.push('mon-annonce: « Signaler l\'annonce » sur sa propre annonce');
   for (const table of ['rpc/my_offers', 'rpc/my_visit_requests', 'agenda_visits', 'rpc/start_listing_conversation']) {
     if (since(mark, table).length) problems.push(`mon-annonce: ${table} demandé pour sa propre annonce`);
   }
-  for (const [index, title] of [[0, 'Voir les demandes'], [1, 'Gérer l\'annonce']]) {
-    await page.click(`.dl-aside .dl-button >> nth=${index}`);
-    expect('mon-annonce', `fenêtre « ${title} »`, await dialogTitle(page), title);
-    expect('mon-annonce', `message de « ${title} »`, await page.textContent('dialog[open] .alert-body p'), 'Dans l’app iPhone pour l’instant.');
-    if (index === 1) await page.screenshot({ path: join(out, 'mon-annonce-1440.png') });
-    await closeAlert(page);
-  }
+  await page.click('.dl-aside .dl-button >> nth=0');
+  expect('mon-annonce', 'fenêtre « Voir les demandes »', await dialogTitle(page), 'Voir les demandes');
+  expect('mon-annonce', 'message de « Voir les demandes »', await page.textContent('dialog[open] .alert-body p'), 'Dans l’app iPhone pour l’instant.');
+  await page.screenshot({ path: join(out, 'mon-annonce-1440.png') });
+  await closeAlert(page);
+  // « Gérer l'annonce » : le lien de la modification de l'annonce (le dépôt), comme « Modifier » de Mes annonces.
+  expect('mon-annonce', 'lien de « Gérer l\'annonce »', await page.getAttribute('.dl-aside .dl-button >> nth=1', 'href'), `/publier/?annonce=${MINE}`);
   await page.close();
   page = await open(member, `/annonce/?id=${MINE}&vue=visite`, 'mon-annonce-visite');
   await waitForAddress(page, `${base}/annonce/?id=${MINE}`);
@@ -2259,9 +2337,11 @@ try {
     if (target !== FICHE) await page.goto(`${base}/annonce/?id=${target}`, { waitUntil: 'networkidle' });
     await ready(page, 'comparer');
     await page.click('.dl-tools .dl-compare');
-    await page.waitForSelector('.dl-toast.is-shown');
-    expect('comparer', `toast de ${target.slice(-2)}`, await page.textContent('.dl-toast-text'), text);
-    expect('comparer', `bouton du toast de ${target.slice(-2)}`, `${await page.textContent('.dl-toast-box a')} ${await page.getAttribute('.dl-toast-box a', 'href')}`, `${action} /comparer/`);
+    // Le message du bas de l'app (showToast) : son bouton mène à /comparer/.
+    await page.waitForFunction((wanted) => document.querySelector('.app-toast:not(.is-leaving) .app-toast-text')?.textContent === wanted, text, { timeout: 5000 })
+      .catch(() => {});
+    expect('comparer', `toast de ${target.slice(-2)}`, await page.textContent('.app-toast:not(.is-leaving) .app-toast-text'), text);
+    expect('comparer', `bouton du toast de ${target.slice(-2)}`, await page.textContent('.app-toast:not(.is-leaving) .app-toast-action'), action);
     expect('comparer', `Comparer de ${target.slice(-2)}`, await page.getAttribute('.dl-tools .dl-compare', 'aria-pressed'), pressed);
     if (target === FICHE) {
       await page.waitForTimeout(400);
@@ -2269,7 +2349,7 @@ try {
     }
   }
   expectJSON('comparer', 'comparaison gardée dans l’onglet', JSON.parse(await page.evaluate(() => sessionStorage.getItem('nidalo.comparer'))), { ids: [FICHE, SALE, LEASED], referenceId: FICHE });
-  await page.click('.dl-toast-box a');
+  await page.click('.app-toast:not(.is-leaving) .app-toast-action');
   await waitForAddress(page, `${base}/comparer/`);
   await page.waitForSelector('.cmp-table');
   await page.waitForLoadState('networkidle');
