@@ -1630,17 +1630,17 @@ try {
     await page.close();
   }
 
-  // Comparer, fait pour l'ordinateur, ouvert sur téléphone : le message « bientôt » (règle 6 du brief), rien d'autre.
-  const screenSoon = 'Cet écran arrive bientôt sur le site. En attendant, il est dans l’app Nidalo, avec le même compte.';
-  for (const [path, name, title, text] of [
-    ['/comparer/', 'comparer-telephone', 'Comparer', screenSoon],
+  // Comparer ouvert sur téléphone : l'écran de l'app (CompareView, étape 2 du site comme l'app), vide sans bien
+  // choisi ; plus de message « bientôt ».
+  for (const [path, name, title] of [
+    ['/comparer/', 'comparer-telephone', 'Comparer'],
   ]) {
     page = await open(phone, path, name);
-    await page.waitForSelector('.soon-page h1');
-    expect(name, 'titre', await page.textContent('.soon-page h1'), title);
-    expect(name, 'message', await page.textContent('.soon-page p'), text);
+    await page.waitForSelector('.cmpm h1');
+    expect(name, 'titre', await page.textContent('.cmpm h1'), title);
+    expect(name, 'vide', await page.textContent('.cmpm-empty h2'), 'Comparez vos biens préférés');
     expect(name, 'titre de la page', await page.title(), `${title} · Nidalo`);
-    if (await page.$('.dl, .dl-screen, .cmp, .action-bar')) problems.push(`${name}: autre chose que le message « bientôt »`);
+    if (await page.$('.soon-page, .dl, .dl-screen, .cmp, .action-bar')) problems.push(`${name}: un message « bientôt » ou un autre écran`);
     await page.screenshot({ path: join(out, `${name}.png`) });
     await page.close();
   }

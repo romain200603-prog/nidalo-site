@@ -1525,6 +1525,18 @@ async function phoneFavorites() {
   await page.locator('.favorite-card', { has: page.locator('.favorite-title', { hasText: FAV_HOTEL }) }).locator('.favorite-heart').click();
   await waitForRemovalNotice(page, `${P} : cœur de l'hôtel`);
   await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${favId(4)}` }, null]], `${P} : fin du message`);
+  // Comparer (CompareButton de l'app) : le rond de l'en-tête, « Comparer vos favoris » sans pastille, et un bouton
+  // Comparer par carte ; celui de la première carte ajoute son bien (« Comparer, 1 bien », pastille 1), sans rien
+  // envoyer au serveur.
+  mark = writes.length;
+  const compareHead = () => page.evaluate(() => [document.querySelector('.favorites-head .compare-button')?.getAttribute('aria-label'),
+    document.querySelector('.favorites-head .compare-button-count')?.textContent ?? null]);
+  expectSame(P, 'Comparer [en-tête, boutons des cartes]', [await compareHead(), await page.locator('.favorite-card .favorite-compare').count()], [['Comparer vos favoris', null], 3]);
+  const firstCompared = await page.$eval('.favorite-card a.stretched', (link) => new URL(link.href).searchParams.get('id'));
+  await page.locator('.favorite-card .favorite-compare').first().click();
+  await page.waitForSelector('.favorites-head .compare-button-count', { timeout: 4000 }).catch(() => undefined);
+  expectSame(P, 'un bien comparé [en-tête, comparaison, envois]', [await compareHead(), await page.evaluate(() => JSON.parse(sessionStorage.getItem('nidalo.comparer') ?? 'null')),
+    writes.slice(mark)], [['Comparer, 1 bien', '1'], { ids: [firstCompared], referenceId: firstCompared }, []]);
   // Onglet Recherches : la pastille glisse sous l'onglet, le contenu change.
   await page.click('.favorites-wrap .fav-tab >> nth=1');
   await page.waitForSelector('.favorites-searches .saved-search');
@@ -1534,6 +1546,11 @@ async function phoneFavorites() {
   [['false', 'true'], 195, 0]);
   await waitForSearchCountsIn(page, '.favorites-searches', P);
   await page.screenshot({ path: join(out, 'favoris-onglet-recherches-telephone.png'), fullPage: true });
+  // Le rond de l'en-tête ouvre Comparer (l'écran de l'app sur téléphone), avec le bien ajouté.
+  await Promise.all([page.waitForURL(`${base}/comparer/`, { timeout: 8000 }).catch(() => problems.push(`${P} : le rond de l'en-tête n'ouvre pas Comparer (${page.url()})`)),
+    page.click('.favorites-head .compare-button')]);
+  await page.waitForSelector('.cmpm-column', { timeout: 8000 }).catch(() => undefined);
+  expectSame(P, 'Comparer ouvert depuis les favoris', [await textOf(page, '.cmpm h1'), await page.locator('.cmpm-column').count()], ['Comparer', 1]);
   await page.close();
   await context.close();
 
@@ -2080,7 +2097,7 @@ try {
   page = await open(desktop, '/recherche/?mode=invest', 'investir-ordinateur');
   await page.waitForSelector('.listing-card');
   const investCard = (await page.textContent('.listing-card'))?.replace(/\s/g, ' ') ?? '';
-  for (const expected of [/Rendement brut\s*5,5 %/, /Loyer actuel\s*850 €\/mois/, /Cash-flow estimé\s*−474 €\/mois/]) {
+  for (const expected of [/Rendement brut\s*5,5 %/, /Loyer encaissé\s*850 €\/mois/, /Cash-flow estimé\s*−474 €\/mois/]) {
     if (!expected.test(investCard)) problems.push(`investir : ${expected} absent de la fiche (« ${investCard.slice(0, 200)} »)`);
   }
   await page.screenshot({ path: join(out, 'investir-ordinateur.png') });
@@ -2436,9 +2453,9 @@ try {
   }
 
   // Accueil sur ordinateur (maquette 1), à 1440 × 900 et 1024 × 768, avec les annonces inventées : bonjour, ordre
-  // des sections de l'app (vide = absente), une seule ligne par section (4 grandes cartes, 3 sous 1280 px ; 3 petites)
-  // alors que les annonces lues en remplissent davantage, projet du compte, fiche ouverte dans l'onglet puis
-  // « Consultés récemment », « Plus de critères ». Captures pour Romain : 1-accueil-*.png.
+  // des sections de l'app (vide = absente), une seule ligne par section (4 cartes, 3 sous 1280 px) alors que les
+  // annonces lues en remplissent davantage, projet du compte, fiche ouverte dans l'onglet puis « Vus récemment »,
+  // « Plus de critères ». Captures pour Romain : 1-accueil-*.png.
   const HOME_PROJECT = {
     real_estate_projects: [{ ...ACCOUNT.real_estate_projects[0], criteria: { residential: { maxBudget: 300000, propertyTypes: ['apartment'], location: { place: 'Lyon' } } } }],
   };
@@ -2453,14 +2470,20 @@ try {
     const shown = cards.filter((card) => card.getClientRects().length > 0);
     return { total: cards.length, shown: shown.length, rows: new Set(shown.map((card) => Math.round(card.getBoundingClientRect().top))).size };
   }, id);
+  // Même carte dans toutes les sections (HomeListingCard, étape 2 du site comme l'app) : 4 par ligne, 3 sous 1280 px ;
+  // une section qui lit moins de biens remplit sa ligne avec ce qu'elle a ; au moins une section en lit plus qu'elle
+  // n'en affiche.
   const checkOneRow = async (p, width, label, ids) => {
+    let hidden = false;
     for (const id of ids) {
       const { total, shown, rows } = await sectionRow(p, id);
-      const wanted = ['opportunites', 'similaires'].includes(id) ? (width >= 1280 ? 4 : 3) : 3;
-      if (rows !== 1 || shown !== wanted || total <= shown) {
-        problems.push(`accueil ${width} ${label} : ${id} affiche ${shown} carte(s) sur ${rows} ligne(s), ${total} dans la page, au lieu d'une ligne de ${wanted} (et des biens en plus non affichés)`);
+      const wanted = Math.min(width >= 1280 ? 4 : 3, total);
+      if (total > shown) hidden = true;
+      if (rows !== 1 || shown !== wanted) {
+        problems.push(`accueil ${width} ${label} : ${id} affiche ${shown} carte(s) sur ${rows} ligne(s), ${total} dans la page, au lieu d'une ligne de ${wanted}`);
       }
     }
+    if (!hidden) problems.push(`accueil ${width} ${label} : aucune section ne lit plus de biens qu'elle n'en affiche`);
   };
   for (const [width, height] of [[1440, 900], [1024, 768]]) {
     const guest = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR' });
@@ -2471,7 +2494,7 @@ try {
     const welcome = await page.textContent('h1');
     if (welcome !== 'Bienvenue sur Nidalo') problems.push(`accueil ${width} sans compte : « ${welcome} » au lieu de « Bienvenue sur Nidalo »`);
     const guestSections = await homeSections(page);
-    const guestWanted = ['Opportunités du moment', 'Biens similaires à vos recherches', 'Nouveautés', 'Baisses de prix'];
+    const guestWanted = ['Opportunités du moment', 'Selon votre recherche', 'Nouvelles annonces', 'Baisses de prix'];
     if (JSON.stringify(guestSections) !== JSON.stringify(guestWanted)) problems.push(`accueil ${width} sans compte : sections ${JSON.stringify(guestSections)} au lieu de ${JSON.stringify(guestWanted)}`);
     await checkOneRow(page, width, 'sans compte', ['opportunites', 'similaires', 'nouveautes', 'baisses']);
     const noPhoto = await page.locator('section:has(#opportunites) .home-no-photo').count();
@@ -2535,8 +2558,8 @@ try {
     const similar = await sectionCards(page, 'similaires');
     const similarWanted = [HOME_LISTINGS[0], HOME_LISTINGS[3], HOME_LISTINGS[5], HOME_LISTINGS[6], HOME_LISTINGS[7]].map((row) => row.id);
     if (JSON.stringify(similar) !== JSON.stringify(similarWanted)) problems.push(`accueil ${width} : biens similaires ${JSON.stringify(similar)} au lieu de ${JSON.stringify(similarWanted)}`);
-    if (await page.locator('#consultes').count()) problems.push(`accueil ${width} : « Consultés récemment » affiché sans fiche ouverte`);
-    // Fiche ouverte dans le même onglet, puis retour : elle passe en tête de « Consultés récemment ».
+    if (await page.locator('#consultes').count()) problems.push(`accueil ${width} : « Vus récemment » affiché sans fiche ouverte`);
+    // Fiche ouverte dans le même onglet, puis retour : elle passe en tête de « Vus récemment ».
     await Promise.all([page.waitForURL(/\/annonce\/\?id=/), page.click('.opportunity-card h3 a >> nth=0')]);
     await page.waitForLoadState('networkidle');
     await page.goBack({ waitUntil: 'networkidle' });
@@ -2553,21 +2576,18 @@ try {
     await page.mouse.move(0, 0);
     await page.waitForTimeout(300);
     const memberSections = await homeSections(page);
-    if (JSON.stringify(memberSections) !== JSON.stringify(['Opportunités du moment', 'Consultés récemment', 'Biens similaires à vos recherches', 'Nouveautés', 'Baisses de prix'])) {
+    if (JSON.stringify(memberSections) !== JSON.stringify(['Opportunités du moment', 'Vus récemment', 'Selon votre recherche', 'Nouvelles annonces', 'Baisses de prix'])) {
       problems.push(`accueil ${width} connecté : sections ${JSON.stringify(memberSections)}`);
     }
     const viewed = await sectionCards(page, 'consultes');
     const viewedWanted = [HOME_LISTINGS[2], HOME_LISTINGS[5], HOME_LISTINGS[6], HOME_LISTINGS[0]].map((row) => row.id);
     if (JSON.stringify(viewed) !== JSON.stringify(viewedWanted)) problems.push(`accueil ${width} : consultés ${JSON.stringify(viewed)} au lieu de ${JSON.stringify(viewedWanted)}`);
     await checkOneRow(page, width, 'connecté', ['opportunites', 'consultes', 'similaires', 'nouveautes', 'baisses']);
-    // Listes (Consultés récemment, Nouveautés, Baisses de prix) : la carte compacte de l'app, la même qu'au téléphone,
-    // de la largeur de sa colonne (112 de haut, photo de 88 × 80).
-    expectSame(`accueil ${width} connecté`, 'cartes des listes', await page.$$eval('.dhome-list > article', (articles) => [...new Set(articles
-      .filter((article) => article.getClientRects().length > 0)
-      .map((article) => {
-        const photo = article.querySelector('.clc-photo')?.getBoundingClientRect();
-        return `${article.classList[0]} ${Math.round(article.getBoundingClientRect().height)} ${photo ? `${Math.round(photo.width)}×${Math.round(photo.height)}` : '-'}`;
-      }))]), ['compact-card 112 88×80']);
+    // Toutes les sections : la grande carte de l'accueil de l'app (HomeListingCard), la même qu'au téléphone, de la
+    // largeur de sa colonne, en grille ; plus de petite carte en liste.
+    expectSame(`accueil ${width} connecté`, 'cartes des sections', [await page.$$eval('.dhome-section article', (articles) => [...new Set(articles
+      .filter((article) => article.getClientRects().length > 0).map((article) => `${article.classList[0]} ${article.parentElement.className}`))]),
+    await page.locator('.dhome-list, .compact-card').count()], [['home-listing-card dhome-grid'], 0]);
     await checkChrome(page, `accueil maquette ${width} connecté`, { signedIn: true, margin: width >= 1280 ? 48 : 32 });
     await page.mouse.move(0, 0);
     await page.waitForTimeout(300);
@@ -2612,12 +2632,12 @@ try {
   await samePhone.close();
   if (desktopSearch !== phoneSearch || !desktopSearch.includes('mode=invest')) problems.push(`accueil : recherche ${desktopSearch} sur ordinateur, ${phoneSearch} sur téléphone`);
 
-  // Téléphone : l'accueil de l'app (novembre 2026). Ses sections dans l'ordre de l'app, chacune avec la carte de l'app
-  // (HomeView.swift) : Opportunités du moment, la carte de 248 px (photo de 156) ; Consultés récemment, Nouveautés et
-  // Baisses de prix, la carte compacte de 296 × 112 (photo de 88 × 80 à gauche ; « Nouveau » et le cœur, ou la baisse
-  // et l'ancien prix barré) ; Biens similaires, la carte de 170 px (photo de 100, rendement brut si l'annonce a ses
-  // chiffres, cœur). Avec les lectures de l'ordinateur (projet du compte, fiches consultées, biens similaires) ; avec le
-  // compte, la cloche (point rouge des non lues) et « Reprendre ma recherche ». Pas d'en-tête bleu sous 1024 px.
+  // Téléphone : l'accueil de l'app (version 1.0.1, HomeView.swift). Ses sections dans l'ordre de l'app, toutes avec la
+  // même carte de 248 (photo de 248 × 186) et la pastille et le cœur de leur section : rendement brut et cœur pour
+  // Opportunités du moment et Selon votre recherche (le rendement si l'annonce a ses chiffres), rien pour Vus
+  // récemment, « Nouveau » et cœur pour Nouvelles annonces, baisse et ancien prix barré sans cœur pour Baisses de prix.
+  // Avec les lectures de l'ordinateur (projet du compte, fiches consultées, biens similaires) ; avec le compte, la
+  // cloche (point rouge des non lues) et « Reprendre ma recherche ». Pas d'en-tête bleu sous 1024 px.
   // Captures : accueil-telephone-app-*.png.
   for (const signedIn of [false, true]) {
     const H = `accueil téléphone ${signedIn ? 'connecté' : 'sans compte'}`;
@@ -2637,8 +2657,9 @@ try {
     if (signedIn) await page.waitForSelector('.home-resume', { timeout: 8000 }).catch(() => undefined);
     await page.waitForTimeout(600);
     expectSame(H, 'sections', await page.locator('.home-app h2').allTextContents(), ['Opportunités du moment', 'Explorer par ville',
-      ...(signedIn ? ['Consultés récemment'] : []), 'Biens similaires à vos recherches', 'Nouveautés', 'Baisses de prix']);
-    // Par section, les cartes telles qu'affichées : [classe, taille, photo, pastille, cœurs, ancien prix barré].
+      ...(signedIn ? ['Vus récemment'] : []), 'Selon votre recherche', 'Nouvelles annonces', 'Baisses de prix']);
+    // Par section, les cartes telles qu'affichées : [classe, largeur, photo, pastille, cœurs, ancien prix barré] (le
+    // rendement brut est vérifié plus bas, annonce par annonce).
     const sectionKinds = await page.evaluate(() => Object.fromEntries(['opportunites', 'consultes', 'similaires', 'nouveautes', 'baisses'].map((id) => {
       const size = (el) => {
         const box = el?.getBoundingClientRect();
@@ -2646,58 +2667,65 @@ try {
       };
       const articles = [...(document.getElementById(id)?.closest('section')?.querySelectorAll('article') ?? [])];
       return [id, [...new Set(articles.map((article) => [
-        article.classList[0], article.classList[0] === 'compact-card' ? size(article) : Math.round(article.getBoundingClientRect().width),
-        size(article.querySelector('.hlc-photo, .clc-photo, .slc-photo')),
-        article.classList[0] === 'compact-card' ? (article.querySelector('.hlc-new, .hlc-drop')?.className ?? '-') : '',
-        article.querySelectorAll('.heart-button').length, article.querySelector('.home-card-price s') ? 'barré' : '-',
+        article.classList[0], Math.round(article.getBoundingClientRect().width), size(article.querySelector('.hlc-photo')),
+        article.querySelector('.hlc-new, .hlc-drop')?.className ?? '-',
+        article.querySelectorAll('.heart-button').length, article.querySelector('.hlc-price s') ? 'barré' : '-',
       ].join(' ')))]];
     })));
     expectSame(H, 'cartes des sections', sectionKinds, {
-      opportunites: ['home-listing-card 248 248×156  1 -'],
-      consultes: signedIn ? ['compact-card 296×112 88×80 - 0 -'] : [],
-      similaires: ['similar-card 170 170×100  1 -'],
-      nouveautes: ['compact-card 296×112 88×80 hlc-new 1 -'],
-      baisses: ['compact-card 296×112 88×80 hlc-drop 0 barré'],
+      opportunites: ['home-listing-card 248 248×186 - 1 -'],
+      consultes: signedIn ? ['home-listing-card 248 248×186 - 0 -'] : [],
+      similaires: ['home-listing-card 248 248×186 - 1 -'],
+      nouveautes: ['home-listing-card 248 248×186 hlc-new 1 -'],
+      baisses: ['home-listing-card 248 248×186 hlc-drop 0 barré'],
     });
-    // Carte compacte : la photo à 8 du bord, au milieu de la hauteur ; les quatre lignes tiennent dans la carte.
-    const compactLayout = await page.$$eval('.compact-card', (articles) => [...new Set(articles.map((article) => {
+    // Carte : la photo en haut, sur toute la largeur ; les quatre lignes (prix, petits faits, type, ville) sous la
+    // photo, à 16 des bords, dans la carte.
+    const cardLayout = await page.$$eval('.home-app .home-listing-card', (articles) => [...new Set(articles.map((article) => {
       const card = article.getBoundingClientRect();
-      const photo = article.querySelector('.clc-photo').getBoundingClientRect();
-      const body = article.querySelector('.clc-body');
-      const lines = [...body.children].map((line) => line.getBoundingClientRect());
+      const photo = article.querySelector('.hlc-photo').getBoundingClientRect();
+      const lines = [...article.querySelector('.hlc-body').children].map((line) => line.getBoundingClientRect());
       return [Math.round(photo.left - card.left), Math.round(photo.top - card.top), lines.length,
-        lines.every((line) => line.top >= card.top + 8 && line.bottom <= card.bottom - 8 && line.right <= card.right - 8)].join(' ');
+        lines.every((line) => line.top >= photo.bottom && line.bottom <= card.bottom - 8 && line.left >= card.left + 16 && line.right <= card.right - 16)].join(' ');
     }))]);
-    expectSame(H, 'carte compacte [photo à gauche, en haut, lignes, lignes dans la carte]', compactLayout, ['8 16 4 true']);
+    expectSame(H, 'carte [photo à gauche, en haut, lignes, lignes dans la carte]', cardLayout, ['0 0 4 true']);
+    // Rendement brut : sur toutes les Opportunités du moment, nulle part dans Vus récemment, Nouvelles annonces et
+    // Baisses de prix.
+    expectSame(H, 'rendement des sections', await page.evaluate(() => ['opportunites', 'consultes', 'nouveautes', 'baisses'].map((id) => {
+      const articles = [...(document.getElementById(id)?.closest('section')?.querySelectorAll('article') ?? [])];
+      return articles.filter((article) => article.querySelector('.hlc-yield')).length === (id === 'opportunites' ? articles.length : 0);
+    })), [true, true, true, true]);
     const viewedIds = await page.locator('section:has(#consultes) article a.stretched').evaluateAll((links) => links.map((link) => new URL(link.href).searchParams.get('id')));
     expectSame(H, 'consultés', viewedIds, signedIn ? [homeId(7)] : []);
     if (signedIn) {
-      expectSame(H, 'consultés [titre, lieu, prix]', await page.$eval('section:has(#consultes) article', (article) => ['.home-card-title', '.home-card-location', '.home-card-price']
-        .map((selector) => article.querySelector(selector)?.textContent?.replace(/\s/g, ' '))), ['Appartement 2 pièces', 'Lyon 6e · 45 m²', '265 000 €']);
+      expectSame(H, 'consultés [type, ville, prix]', await page.$eval('section:has(#consultes) article', (article) => ['.hlc-type', '.hlc-city', '.hlc-price']
+        .map((selector) => article.querySelector(selector)?.textContent?.replace(/\s/g, ' ').trim())), ['Appartement 2 pièces · 45 m²', 'Lyon 6e', '265 000 €']);
     }
     expectSame(H, 'ancienne liste de l\'onglet effacée', await page.evaluate(() => sessionStorage.getItem('nidalo.consultes')), null);
-    // Baisses de prix : la baisse et l'ancien prix de l'annonce. Biens similaires : le rendement brut seulement sur les
-    // annonces qui ont un loyer (les seules à avoir leurs chiffres).
+    // Baisses de prix : la baisse et l'ancien prix de l'annonce. Selon votre recherche : le rendement brut seulement sur
+    // les annonces qui ont un loyer (les seules à avoir leurs chiffres).
     const euros = (value) => `${new Intl.NumberFormat('fr-FR').format(value)} €`.replace(/\s/g, ' ');
     for (const [id, drop, previous] of await page.locator('section:has(#baisses) article').evaluateAll((articles) => articles.map((article) => [
       new URL(article.querySelector('a.stretched').href).searchParams.get('id'), article.querySelector('.hlc-drop')?.textContent?.replace(/\s/g, ' '),
-      article.querySelector('.home-card-price s')?.textContent?.replace(/\s/g, ' '),
+      article.querySelector('.hlc-price s')?.getAttribute('aria-label')?.replace(/\s/g, ' '),
     ]))) {
       const row = HOME_LISTINGS.find((listing) => listing.id === id);
       expectSame(H, `baisse de prix ${id}`, [drop, previous], [`${Math.round(((row.price - row.previous_price) / row.previous_price) * 100)} %`, `Ancien prix ${euros(row.previous_price)}`]);
     }
     const withRent = HOME_LISTINGS.filter((row) => row.rental_info?.potentialMonthlyRent || row.rental_info?.currentMonthlyRent).map((row) => row.id);
     const similarYields = await page.locator('section:has(#similaires) article').evaluateAll((articles) => articles.map((article) => [
-      new URL(article.querySelector('a.stretched').href).searchParams.get('id'), article.querySelector('.slc-yield') !== null,
+      new URL(article.querySelector('a.stretched').href).searchParams.get('id'), article.querySelector('.hlc-yield') !== null,
     ]));
     expectSame(H, 'rendement des biens similaires', similarYields, similarYields.map(([id]) => [id, withRent.includes(id)]));
     const projectRead = phoneServer.requests.some((request) => request.path === '/' && request.table === 'real_estate_projects');
     if (projectRead !== signedIn) problems.push(`${H} : projet du compte ${projectRead ? 'lu' : 'non lu'}`);
     const unread = signedIn ? expectedBadges(phoneServer.state).notifications : 0;
-    expectSame(H, 'barre du haut [titre, cloche, point rouge, en-tête bleu, accueil de l\'ordinateur]', [
-      (await page.textContent('h1'))?.trim(), await page.getAttribute('.home-app-bell', 'aria-label'), await page.locator('.home-app-dot').count(),
+    // Titre : la marque de l'app en texte (« NIDΛLO », cachée aux lecteurs d'écran) et « Nidalo » pour eux.
+    expectSame(H, 'barre du haut [marque, titre lu, cloche, point rouge, en-tête bleu, accueil de l\'ordinateur]', [
+      await page.textContent('h1 .home-app-word'), await page.getAttribute('h1 .home-app-word', 'aria-hidden'), await page.textContent('h1 .visually-hidden'),
+      await page.getAttribute('.home-app-bell', 'aria-label'), await page.locator('.home-app-dot').count(),
       await page.locator('.topbar').isVisible(), await page.locator('.dhome').count(),
-    ], ['Nidalo', unread > 0 ? `Notifications, ${unread} non lues` : 'Notifications', unread > 0 ? 1 : 0, false, 0]);
+    ], ['NIDΛLO', 'true', 'Nidalo', unread > 0 ? `Notifications, ${unread} non lues` : 'Notifications', unread > 0 ? 1 : 0, false, 0]);
     if (signedIn) {
       expectSame(H, '« Reprendre ma recherche »', [
         await page.textContent('.home-resume-title'), (await page.textContent('.home-resume-summary'))?.replace(/\s/g, ' '),
@@ -5584,9 +5612,26 @@ try {
   await page.click('.map-open');
   await page.waitForSelector('.map-marker', { timeout: 15000 });
   await page.waitForTimeout(400);
-  await page.tap('.map-marker');
-  await page.waitForSelector('.map-preview');
+  // Panneau du bas de l'app (MapResultsPanel) en hauteur moyenne, la vignette au-dessus (cadrage de l'app : entre la
+  // ligne du haut et le panneau). Premier toucher de la vignette (MapTabView.tap) : le bien est choisi, sa carte au
+  // centre du panneau ; plus d'aperçu flottant. Toucher le fond de la carte le désélectionne.
+  const markerAbovePanel = await page.evaluate(() => document.querySelector('.map-marker-button').getBoundingClientRect().bottom
+    <= document.querySelector('.map-panel').getBoundingClientRect().top);
+  await page.tap('.map-marker-button');
+  await page.waitForSelector('.map-marker.is-selected', { timeout: 4000 }).catch(() => problems.push('carte téléphone : le toucher ne choisit pas le bien'));
+  // La carte se centre sur le bien (0,35 s).
+  await page.waitForTimeout(600);
+  expectSame('carte téléphone', 'premier toucher d\'une vignette [au-dessus du panneau, panneau, titre, carte choisie, encore au-dessus du panneau, aperçu]', [markerAbovePanel,
+    await page.$eval('.map-panel', (panel) => panel.classList.contains('is-medium')), (await page.textContent('.map-panel-titles h2'))?.replace(/\s/g, ' '),
+    await page.locator('.map-panel .map-card.is-selected').count(),
+    await page.evaluate(() => document.querySelector('.map-marker.is-selected .map-marker-button').getBoundingClientRect().bottom
+      <= document.querySelector('.map-panel').getBoundingClientRect().top),
+    await page.locator('.map-preview').count()], [true, true, '1 bien sur la carte', 1, true, 0]);
   await page.screenshot({ path: join(out, 'carte-telephone-apercu.png') });
+  // À gauche, loin du zoom : après la capture pleine page, Chrome remontre le zoom (en haut à droite) sur cette page.
+  await page.tap('.map-canvas', { position: { x: 40, y: 200 } });
+  await page.waitForSelector('.map-marker.is-selected', { state: 'detached', timeout: 4000 })
+    .catch(() => problems.push('carte téléphone : toucher le fond ne désélectionne pas le bien'));
   // Les filtres s'ouvrent depuis la carte, sans « Voir sur la carte » ; Échap les referme sans fermer la carte ;
   // « Retour » rend la liste.
   await page.click('.map-app-top .filters-button');
@@ -5689,6 +5734,23 @@ try {
   page = await open(phone, '/compte/', 'compte-connexion-telephone');
   await page.waitForSelector('.signin-card');
   await page.screenshot({ path: join(out, 'compte-connexion-telephone.png') });
+  // Conditions d'utilisation (LegalPageView de l'app, en feuille ; étape 2 du site comme l'app) : un clic ouvre la
+  // feuille par-dessus la connexion, 24 sous le haut de l'écran, avec l'en-tête « Conditions » et le texte de la page
+  // /conditions/ ; l'adresse ne change pas ; Échap la referme.
+  await page.click('.signin-card .auth-mentions a[href="/conditions/"]');
+  await page.waitForSelector('dialog.legal-sheet[open] .legal-sheet-doc h1', { timeout: 8000 })
+    .catch(() => problems.push('connexion téléphone : la feuille des conditions ne s\'ouvre pas'));
+  await page.waitForTimeout(600);
+  expectSame('connexion téléphone', 'feuille des conditions [adresse, en-tête, titre du texte, haut, bas]', await page.evaluate(() => {
+    const sheet = document.querySelector('dialog.legal-sheet[open]');
+    const box = sheet?.getBoundingClientRect();
+    return [location.pathname, sheet?.querySelector('.app-page-header-title')?.textContent ?? null, sheet?.querySelector('.legal-sheet-doc h1')?.textContent ?? null,
+      box ? Math.round(box.top) : null, box ? Math.round(innerHeight - box.bottom) : null];
+  }), ['/compte/', 'Conditions', 'Conditions d’utilisation', 24, 0]);
+  await page.screenshot({ path: join(out, 'connexion-conditions-telephone.png') });
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('dialog.legal-sheet[open]', { state: 'detached', timeout: 4000 })
+    .catch(() => problems.push('connexion téléphone : Échap ne referme pas la feuille des conditions'));
   await phone.close();
 
   // Téléphone, avec le compte de test.
@@ -5744,6 +5806,28 @@ try {
   await phoneFavorites();
   await page.waitForSelector('input[autocomplete="tel"]');
   await page.screenshot({ path: join(out, 'mes-informations-telephone-long.png'), fullPage: true });
+  // « Enregistrer » sur téléphone (feuille de l'app à mi-hauteur, étape 2 du site comme l'app) : de toute la largeur,
+  // posée en bas, la moitié de l'écran au moins, coins de 32 en haut, poignée de 36 × 5, le contenu au milieu (autant
+  // de place au-dessus du titre que sous « Enregistrer ») ; Échap la referme.
+  page = await open(signedPhone, '/recherche/?mode=buy&lieu=Lyon', 'enregistrer-telephone');
+  await page.waitForSelector('.save-search-button');
+  await page.click('.save-search-button');
+  await page.waitForSelector('dialog.save-search-sheet[open] .save-search-name');
+  await page.waitForTimeout(700);
+  expectSame('enregistrer téléphone', 'feuille [gauche, largeur, bas, moitié de l\'écran, coins, poignée, contenu au milieu]', await page.evaluate(() => {
+    const sheet = document.querySelector('dialog.save-search-sheet[open]');
+    const box = sheet.getBoundingClientRect();
+    const grabber = sheet.querySelector('.save-search-grabber')?.getBoundingClientRect();
+    const above = sheet.querySelector('.save-search-titles').getBoundingClientRect().top - box.top;
+    const below = box.bottom - sheet.querySelector('.save-search-submit').getBoundingClientRect().bottom;
+    return [Math.round(box.left), Math.round(box.width) === innerWidth, Math.round(innerHeight - box.bottom), box.height >= innerHeight / 2 - 1,
+      getComputedStyle(sheet).borderTopLeftRadius, grabber ? `${Math.round(grabber.width)}×${Math.round(grabber.height)}` : null,
+      above > 20 && Math.abs(above - below) <= 2];
+  }), [0, true, 0, true, '32px', '36×5', true]);
+  await page.screenshot({ path: join(out, 'enregistrer-recherche-telephone.png') });
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('dialog.save-search-sheet[open]', { state: 'detached', timeout: 4000 })
+    .catch(() => problems.push('enregistrer téléphone : Échap ne referme pas la feuille'));
   await signedPhone.close();
 
   // « Quel est votre profil ? » comme l'app (étape 3), pour un compte tout neuf : « Étape 2 sur 2 » et sa barre, les deux
@@ -5879,7 +5963,7 @@ try {
     const unknownListing = '6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1aff';
     for (const [path, title, back, file] of [['/aide/', 'Aide', '/', 'aide'], ['/conditions/', 'Conditions d’utilisation', '/', 'conditions'],
       ['/confidentialite/', 'Politique de confidentialité', '/', 'confidentialite'], ['/mentions-legales/', 'Mentions légales', '/', 'mentions-legales'],
-      ['/page-inexistante/', 'Page introuvable', '/', '404'], ['/publier/', 'Publier une annonce', '/', 'publier'], ['/comparer/', 'Comparer', '/favoris/', 'comparer'],
+      ['/page-inexistante/', 'Page introuvable', '/', '404'], ['/publier/', 'Publier une annonce', '/', 'publier'],
       [`/annonce/?id=${unknownListing}`, 'Annonce introuvable', '/recherche/', 'annonce-introuvable']]) {
       // La page 404 répond avec le code 404 (signalé par Chrome, voir open()).
       const name = file === '404' ? `404 ${T}` : `${T} ${file}`;
@@ -5890,6 +5974,20 @@ try {
       await page.screenshot({ path: join(out, `haut-telephone-${file}.png`) });
       await page.close();
     }
+    // Comparer (CompareView de l'app, en plein écran, étape 2 du site comme l'app) : grand titre et « Fermer » en haut,
+    // sans retour rond ni barre d'onglets ; ouvert seul, « Fermer » mène à la recherche.
+    page = await open(context, '/comparer/', `${T} comparer`);
+    await page.waitForSelector('.cmpm h1', { timeout: 8000 }).catch(() => problems.push(`${T} comparer : grand titre absent`));
+    expectSame(`${T} comparer`, '[sans en-tête bleu, fond, titre, titre en haut, Fermer, retour rond, barre d\'onglets]', await page.evaluate(() => [
+      [...document.querySelectorAll('.topbar')].every((bar) => getComputedStyle(bar).display === 'none'), getComputedStyle(document.body).backgroundColor,
+      document.querySelector('.cmpm h1').textContent, Math.round(document.querySelector('.cmpm h1').getBoundingClientRect().top) <= 24,
+      document.querySelector('.cmpm-close')?.textContent.trim(), document.querySelectorAll('.phone-page-head').length, getComputedStyle(document.querySelector('.tabbar')).display]),
+    [true, 'rgb(250, 249, 246)', 'Comparer', true, 'Fermer', 0, 'none']);
+    await phoneFits(page, `${T} comparer`);
+    await page.screenshot({ path: join(out, 'haut-telephone-comparer.png') });
+    await Promise.all([page.waitForURL(`${base}/recherche/`, { timeout: 8000 }).catch(() => problems.push(`${T} : « Fermer » de Comparer ouvert seul mène à ${page.url()}`)),
+      page.click('.cmpm-close')]);
+    await page.close();
     // Onglets : leur grand titre en haut, sans en-tête bleu ; conversation ouverte : sa barre en haut, toute la hauteur.
     // Messages avec ses conversations simulées (chatContext).
     const { context: chatPhone } = await chatContext({ phone: true });
