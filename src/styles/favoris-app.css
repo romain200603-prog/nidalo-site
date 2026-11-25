@@ -1,6 +1,24 @@
 /* Vos favoris comme l'app (FavoritesView.swift, FavoritesEmptyState.swift ; demande du 17/11), téléphone et ordinateur :
    les onglets Favoris · Recherches et l'état vide illustré. 1 pt de l'app = 1 px. */
 
+/* En-tête du téléphone : « Vos favoris » en 28 gras (−0,5) et le bouton rond Comparer de 41 (blanc, filet, colonnes
+   de 20), avec la pastille bleue du nombre de biens comparés (17, cerclée de blanc, décalée de 3 vers le haut et la
+   droite). Vide (ni favori ni bien comparé) : inactif. */
+.favorites-head h1 { color: var(--app-navy); font: 700 28px/34px var(--app-font); letter-spacing: -0.5px; }
+.favorites-head .compare-button { position: relative; padding: 0; border-color: var(--app-border); background: #FFFFFF; color: var(--app-navy); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.favorites-head .compare-button:disabled { opacity: 0.45; cursor: default; }
+.favorites-head .compare-button:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+.compare-button-count {
+  position: absolute; top: -3px; right: -3px; box-sizing: border-box; min-width: 17px; height: 17px; padding: 0 3px;
+  border: 1.5px solid #FFFFFF; border-radius: 999px; background: var(--app-brand); color: #FFFFFF;
+  font: 700 10.5px/14px var(--app-font); font-variant-numeric: tabular-nums; text-align: center;
+}
+/* Carte d'un favori : le cœur (17) et Comparer, deux carrés de 36 en haut à droite, 8 entre eux (zones de 44). */
+.favorite-card .favorite-heart { right: 54px; }
+.favorite-card .favorite-heart svg { width: 17px; height: 17px; }
+.favorite-card .favorite-compare { position: absolute; z-index: 3; top: 12px; right: 10px; }
+.favorite-body .hlc-facts { margin-top: 4px; }
+
 /* Onglets : piste grise de 48 (coins 14, 4 de marge), pastille bleue (coins 10) qui glisse avec le ressort de l'app.
    Icône 17, titre 15 demi-gras ; actif : blanc ; le nombre en bleu, blanc sur la pastille. */
 .fav-tabs {
