@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { AttributionControl, LngLatBounds, Map as MapLibreMap, NavigationControl, setWorkerUrl, type GeoJSONSource } from 'maplibre-gl';
+import { LngLatBounds, Map as MapLibreMap, NavigationControl, setWorkerUrl, type GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import '../styles/carte-panneau.css';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { Icon } from './Icon';
 import { ListingPhoto } from './PhotoPager';
+import { HeartButton } from './account/HeartButton';
+import { MapAttribution } from '../pages/listing/Location';
 import { clusters } from '../lib/clustering';
 import { boundingBox as zoneBox, distanceMeters, encodeZone, radiusLabel } from '../lib/drawnZone';
 import { formatPinPrice } from '../lib/format';
@@ -110,11 +113,24 @@ type Props = {
   onVisibleArea?: (box: BoundingBox) => void;
   /** Commandes ajoutées sous les deux de la carte (le crayon de la zone). */
   tools?: ReactNode;
+  /**
+   * Toucher d'un marqueur, à la place de `onSelect` (téléphone, MapTabView.tap de l'app) : la page choisit entre
+   * sélectionner le bien (et `center()` pour centrer la carte sur lui) et ouvrir son annonce.
+   */
+  onMarkerTap?: (id: string, center: () => void) => void;
 };
 
 function coordinateOf(result: Result): Coordinate | null {
   const { public_latitude: lat, public_longitude: lng } = result.row;
   return lat === null || lng === null ? null : { latitude: Number(lat), longitude: Number(lng) };
+}
+
+function reducedMotion(): boolean {
+  try {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
 }
 
 function boundsOf(points: Coordinate[]): LngLatBounds | null {
@@ -126,7 +142,7 @@ function boundsOf(points: Coordinate[]): LngLatBounds | null {
 
 export function ResultsMap({
   results, showsYield, selectedId, hoveredId, onSelect, frame, onUserMove, className, zone, searchedZone, drawTool = null, onDrawZone,
-  onDrawCircle, onDrawTooSmall, onVisibleArea, tools,
+  onDrawCircle, onDrawTooSmall, onVisibleArea, tools, onMarkerTap,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -180,7 +196,7 @@ export function ResultsMap({
     map.touchZoomRotate.disableRotation();
     map.keyboard.disableRotation();
     map.addControl(new NavigationControl({ showCompass: false }), 'top-right');
-    map.addControl(new AttributionControl({ compact: true }), 'bottom-left');
+    // Mention des sources : celle de l'app (MapTabView.attribution), en bas à gauche, dessinée par la page.
     let frameRequest = 0;
     const redraw = () => {
       if (frameRequest) return;
@@ -461,31 +477,44 @@ export function ResultsMap({
           const good = highlights ? highlights.grossYield >= GOOD_YIELD : false;
           // Location : le loyer charges comprises quand elles sont connues, comme les cartes (MapPricePin, n° 173).
           const price = formatPinPrice(cardPrice(row).value, row.transaction);
+          const coordinate = coordinateOf(result);
+          // Vignette (MapPhotoMarker) : photo, prix et cœur des favoris (rond blanc de 24 en haut à droite de la photo).
           return (
-            <button
+            <div
               key={row.id}
-              type="button"
               className={`map-marker${isSelected ? ' is-selected' : ''}${isHovered ? ' is-hovered' : ''}`}
               style={{ transform: `translate(${group.x}px, ${group.y}px) translate(-50%, calc(-100% + 6px))` }}
-              aria-label={`${price}, ${row.title}, ${row.city}`}
-              aria-pressed={isSelected}
-              onClick={(event) => {
-                event.stopPropagation();
-                onSelect(row.id);
-              }}
             >
               <span className="map-marker-inner">
-                <span className="map-marker-card">
-                  <span className="map-marker-photo"><ListingPhoto photo={sortedPhotos(row)[0]} /></span>
-                  <span className="map-marker-price">
-                    {price}
-                    {/* Verte à partir de 7 %, orange en dessous, comme les cartes (n° 166). */}
-                    {isSelected && showsYield && highlights && <span className={`map-marker-yield${good ? '' : ' is-low'}`}>{grossYieldText(highlights)}</span>}
+                <button
+                  type="button"
+                  className="map-marker-button"
+                  aria-label={`${price}, ${row.title}, ${row.city}`}
+                  aria-pressed={isSelected}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (!onMarkerTap) {
+                      onSelect(row.id);
+                      return;
+                    }
+                    onMarkerTap(row.id, () => {
+                      if (coordinate && map) map.easeTo({ center: [coordinate.longitude, coordinate.latitude], duration: reducedMotion() ? 0 : 350 });
+                    });
+                  }}
+                >
+                  <span className="map-marker-card">
+                    <span className="map-marker-photo"><ListingPhoto photo={sortedPhotos(row)[0]} /></span>
+                    <span className="map-marker-price">
+                      {price}
+                      {/* Verte à partir de 7 %, orange en dessous, comme les cartes (n° 166). */}
+                      {isSelected && showsYield && highlights && <span className={`map-marker-yield${good ? '' : ' is-low'}`}>{grossYieldText(highlights)}</span>}
+                    </span>
                   </span>
-                </span>
-                <span className={`map-marker-dot${good ? ' good' : ''}`} />
+                  <span className={`map-marker-dot${good ? ' good' : ''}`} />
+                </button>
+                <HeartButton listingId={row.id} className="heart-button map-marker-heart" />
               </span>
-            </button>
+            </div>
           );
         })}
       </div>
@@ -497,11 +526,12 @@ export function ResultsMap({
         </button>
         <button type="button" className="map-round" aria-label="Recadrer sur les biens trouvés" title="Recadrer sur les biens trouvés"
           onClick={recenter} disabled={!results.length && !searchedZone}>
-          <Icon name="crosshair" />
+          <Icon name="locate" />
         </button>
         {tools}
       </div>
       {traceRef.current?.begun && radiusTag(traceRef.current)}
+      <MapAttribution satellite={satellite} className="results-map-attribution" />
     </div>
   );
 }

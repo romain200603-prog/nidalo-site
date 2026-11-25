@@ -260,7 +260,7 @@ main:focus { outline: none; }
 .results-list .state { margin: 14px 0; }
 
 /* Fiche d'une annonce */
-.listing-card { overflow: hidden; border-radius: 20px; position: relative; transition: box-shadow 0.15s ease, border-color 0.15s ease; }
+.listing-card { overflow: hidden; border-radius: 16px; position: relative; transition: box-shadow 0.15s ease, border-color 0.15s ease; }
 .listing-card:hover, .listing-card.is-selected { border-color: var(--blue-border); box-shadow: var(--shadow); }
 .listing-card-photo { position: relative; aspect-ratio: 7 / 4; background: #F2F0EC; overflow: hidden; cursor: pointer; }
 .photo { display: block; width: 100%; height: 100%; object-fit: cover; }
@@ -282,24 +282,24 @@ main:focus { outline: none; }
 .listing-card-body { position: relative; padding: 10px 12px 12px; display: grid; gap: 5px; }
 .listing-card-top { display: flex; align-items: center; justify-content: space-between; }
 .listing-card-top .chevron { width: 16px; height: 16px; color: var(--ink); }
-.listing-card-title { font-size: 16px; font-weight: 700; line-height: 1.3; }
+.listing-card-title { display: -webkit-box; overflow: hidden; font-size: 16px; font-weight: 700; line-height: 1.3; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .listing-card-title a { color: var(--ink); text-decoration: none; }
 .stretched::after { content: ''; position: absolute; inset: 0; z-index: 1; }
 .listing-card-title a:focus-visible { outline: none; }
 .listing-card:has(.stretched:focus-visible) { outline: 3px solid var(--blue); outline-offset: 2px; }
-.listing-card-place { display: flex; align-items: center; gap: 4px; margin: 0; color: var(--text-secondary); font-size: 13.5px; font-weight: 500; }
-.listing-card-place .icon { width: 13px; height: 13px; }
+.listing-card-place { display: flex; align-items: center; gap: 4px; margin: -2px 0 0; color: var(--text-secondary); font-size: 13px; font-weight: 500; }
+.listing-card-place .icon { flex: none; width: 12px; height: 12px; }
 .listing-card-price { margin: 1px 0 0; display: flex; align-items: baseline; gap: 3px; }
-.listing-card-price strong { color: var(--ink); font-size: 21px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.listing-card-price span { color: var(--text-secondary); font-size: 13.5px; font-weight: 600; }
+.listing-card-price strong { color: var(--ink); font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.listing-card-price span { color: var(--text-secondary); font-size: 13px; font-weight: 600; }
 .facts-panel { display: flex; gap: 10px; margin-top: 4px; padding: 10px; border-radius: 14px; background: var(--page); }
 .facts-column { flex: 1; min-width: 0; display: grid; gap: 9px; align-content: start; }
 .facts-column + .facts-column { padding-left: 10px; border-left: 1px solid rgba(36, 45, 56, 0.07); }
 .fact { display: flex; gap: 8px; align-items: flex-start; }
-.fact-icon { width: 16px; height: 16px; margin-top: 2px; color: var(--blue); }
+.fact-icon { flex: none; box-sizing: content-box; width: 15px; height: 15px; margin-top: 2px; padding: 0 2.5px; color: var(--blue); }
 .fact.tone-positive .fact-icon, .fact.tone-negative .fact-icon, .fact.tone-caution .fact-icon { color: currentColor; }
-.fact-label { color: var(--ink); font-size: 11.5px; font-weight: 700; line-height: 1.3; }
-.fact-value { font-size: 13px; font-weight: 600; line-height: 1.35; }
+.fact-label { color: var(--ink); font-size: 11px; font-weight: 700; line-height: 1.3; }
+.fact-value { font-size: 12.5px; font-weight: 600; line-height: 1.35; }
 .fact.tone-neutral .fact-value { color: var(--ink); }
 
 /* Galerie à balayer */

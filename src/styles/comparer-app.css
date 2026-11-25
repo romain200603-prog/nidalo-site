@@ -1,0 +1,28 @@
+/* Comparer de l'app (Features/Compare : CompareButton.swift, CompareView.swift). 1 pt de l'app = 1 px ici ; ombres :
+   flou CSS = 2 × le rayon SwiftUI. */
+
+/* ——— Bouton « Comparer » d'une fiche (CompareButton) ——— */
+.compare-toggle {
+  position: relative; display: inline-flex; flex: none; align-items: center; justify-content: center; padding: 0; border: 0;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+/* Zone de toucher de 44, sans changer le dessin (n° 67). */
+.compare-toggle::after { content: ''; position: absolute; }
+.compare-toggle:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+/* Pastille d'une photo (style badge) : rond de 28 en bas à droite, à 8 des bords ; blanc à 90 % et icône bleu nuit,
+   bleue et icône blanche quand le bien est dans la comparaison. */
+.compare-toggle-badge {
+  position: absolute; z-index: 3; right: 8px; bottom: 8px; width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9); color: var(--app-navy); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+.compare-toggle-badge::after { inset: -8px; }
+.compare-toggle-badge .icon { width: 14px; height: 14px; }
+.compare-toggle-badge.is-active { background: var(--app-brand); color: #FFFFFF; }
+/* Carte des favoris (style favoriteCard) : carré blanc de 36 (rayon 11), icône bleue de 17. */
+.compare-toggle-favoriteCard {
+  width: 36px; height: 36px; border-radius: 11px; background: rgba(255, 255, 255, 0.96); color: var(--app-brand);
+  box-shadow: 0 1px 8px rgba(36, 45, 56, 0.16);
+}
+.compare-toggle-favoriteCard::after { inset: -4px; }
+.compare-toggle-favoriteCard .icon { width: 17px; height: 17px; }
+.compare-toggle-favoriteCard.is-active { background: var(--app-brand); color: #FFFFFF; }
