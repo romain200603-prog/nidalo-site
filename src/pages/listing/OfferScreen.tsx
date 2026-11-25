@@ -7,8 +7,9 @@ import {
 } from '../../lib/listing/offers';
 import { offerYields, type Profitability } from '../../lib/listing/profitability';
 
-// « Faire une offre » sur ordinateur, dans une colonne de 640 px (/annonce/?id=…&vue=offre) : la feuille de l'app
-// (OfferComposerSheet, Features/Messages/OfferViews.swift) avec ses textes, son ordre et ses règles. L'offre part avec
+// « Faire une offre » (/annonce/?id=…&vue=offre) : la feuille de l'app (OfferComposerSheet,
+// Features/Messages/OfferViews.swift) avec ses textes, son ordre et ses règles ; sur téléphone dans une feuille sur la
+// fiche, les champs posés sur le fond de page ; sur ordinateur dans une colonne de 640 px. L'offre part avec
 // make_offer et les mêmes arguments que l'app ; le serveur écrit lui-même la bulle d'offre dans la conversation.
 // Dans Messages, la même feuille répond à une offre (contre-offre, counter_offer), comme l'app.
 // Pour une vente avec un loyer (carte « Rentabilité » de la fiche), la rentabilité suit le montant tapé (offerYields).
@@ -81,7 +82,8 @@ export function OfferScreen({ conversationId, title, price, parent = null, profi
 
   return (
     <div className="wrap wrap-narrow dl-screen dl-offer-screen">
-      <header className="dl-screen-head">
+      {/* Dans la feuille de la fiche (téléphone), l'en-tête sert aussi à la tirer vers le bas pour la fermer. */}
+      <header className="dl-screen-head" data-sheet-grab="">
         <div className="dl-screen-titles">
           <h1 tabIndex={-1}>{parent ? 'Faire une contre-offre' : 'Faire une offre'}</h1>
           <p>{title} · prix affiché {formatPrice(price)}</p>

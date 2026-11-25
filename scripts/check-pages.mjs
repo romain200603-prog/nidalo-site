@@ -1794,10 +1794,21 @@ async function mockSpace(context, space) {
         // Upsert sur user_id : la ligne envoyée devient le projet du compte.
         space.project = body;
         return reply(route, 201);
-      case 'agenda_visits':
+      case 'agenda_visits': {
         if (request.method() === 'GET') return reply(route, 200, space.visits);
+        // Annuler (PATCH) et supprimer (DELETE) : la ligne de l'identifiant demandé, majuscules ou minuscules (Postgres).
+        const target = url.searchParams.get('id')?.replace(/^eq\./, '').toLowerCase() ?? null;
+        if (request.method() === 'PATCH') {
+          space.visits = space.visits.map((row) => (row.id.toLowerCase() === target ? { ...row, ...body } : row));
+          return reply(route, 204);
+        }
+        if (request.method() === 'DELETE') {
+          space.visits = space.visits.filter((row) => row.id.toLowerCase() !== target);
+          return reply(route, 204);
+        }
         space.visits.push(body);
         return reply(route, 201);
+      }
       case 'rpc/my_visit_requests':
         return reply(route, 200, space.requests);
       case 'rpc/my_visit_sessions':
@@ -1815,6 +1826,15 @@ async function mockSpace(context, space) {
   await context.route(/^https:\/\/izzsoitqtzzswkpvdozd\.supabase\.co\/auth\/v1\/logout/, (route) => {
     space.logouts.push({ method: route.request().method(), search: new URL(route.request().url()).search });
     return route.fallback();
+  });
+  // Photos du compte rendu d'une visite (visit-reports) : la liste de son dossier (space.reportFiles) et leur suppression.
+  await context.route(/^https:\/\/izzsoitqtzzswkpvdozd\.supabase\.co\/storage\/v1\/object\/(list\/)?visit-reports(\/|$)/, (route) => {
+    const request = route.request();
+    let body = null;
+    try { body = request.postDataJSON(); } catch { body = request.postData(); }
+    const table = `storage ${new URL(request.url()).pathname.replace('/storage/v1/object/', '')}`;
+    space.calls.push({ table, method: request.method(), search: '', body, prefer: '', path: pagePath(request) });
+    return reply(route, 200, table === 'storage list/visit-reports' ? (space.reportFiles ?? []) : []);
   });
 }
 
@@ -4945,8 +4965,17 @@ try {
       };
       expectSame(A, 'menu d\'une visite à venir', await visitMenu(0),
         ['Modifier la visite', 'Reprogrammer', 'Ajouter une note', 'Ajouter à mon calendrier', 'Annuler la visite', 'Supprimer']);
+      // « Ajouter à mon calendrier » : sur le site, le fichier .ics de la visite (événement de l'app : « Visite : <bien> »,
+      // début et fin, adresse), que le calendrier de l'appareil ouvre.
+      const calendarDownload = page.waitForEvent('download', { timeout: 8000 }).catch(() => null);
       await page.locator('.dsc-menu-list').getByRole('menuitem', { name: 'Ajouter à mon calendrier', exact: true }).click();
-      await iphoneOnly(page, A, 'Ajouter à mon calendrier');
+      const calendarFile = await calendarDownload;
+      const calendarLines = calendarFile
+        ? (await readFile(await calendarFile.path(), 'utf8')).split('\r\n').filter((line) => /^(BEGIN|UID|DTSTART|DTEND|SUMMARY|LOCATION|END):/.test(line))
+        : null;
+      expectSame(A, 'fichier du calendrier', [calendarFile?.suggestedFilename() ?? null, calendarLines], ['visite.ics', ['BEGIN:VCALENDAR', 'BEGIN:VEVENT',
+        `UID:${spaceVisitId(1).toLowerCase()}@nidalo.fr`, 'DTSTART:20261106T133000Z', 'DTEND:20261106T141500Z', 'SUMMARY:Visite : Appartement lumineux avec balcon',
+        'LOCATION:Lyon 3e (69003)', 'END:VEVENT', 'END:VCALENDAR']]);
       // Message : la conversation liée à la visite.
       await page.route(new RegExp(`^${base}/messages/`), (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Messages</title>' }));
       await page.locator('.app-visit').nth(0).getByRole('button', { name: 'Message' }).click();
@@ -4991,6 +5020,76 @@ try {
       space.visits[0].visit.contactName = 'Agence du Parc';
       await page.reload({ waitUntil: 'networkidle' });
       await page.waitForSelector('.app-visit');
+
+      // Détail d'une visite (VisitDetailView, étape 3) : toute la carte d'une visite enregistrée l'ouvre (&visite=…), pas
+      // celle d'une demande ; photo, état, titre, ville et prix, informations, puis les actions de l'app. « Partager la
+      // visite » donne le texte de l'app ; Modifier reste dans l'app iPhone ; Annuler réécrit la ligne avec le statut
+      // « cancelled » (VisitStore.cancel) ; Supprimer retire les photos du compte rendu puis la ligne (VisitStore.delete)
+      // et ramène à l'agenda. Une visite absente : « Visite supprimée ».
+      {
+        const D = 'Détail de la visite';
+        const detailPath = (n) => `/compte/?vue=agenda&visite=${spaceVisitId(n)}`;
+        expectSame(D, 'liens des cartes À venir', await page.$$eval('.app-visit', (cards) => cards.map((card) => card.querySelector('a.app-visit-detail')?.getAttribute('href') ?? null)),
+          [detailPath(1), detailPath(2), null]);
+        const detail = () => page.evaluate(() => {
+          const text = (element) => (element ? element.textContent.replace(/\s+/g, ' ').trim() : null);
+          return [text(document.querySelector('.dsc-head h1')), text(document.querySelector('.app-detail-badge')), text(document.querySelector('.app-detail-title')),
+            text(document.querySelector('.app-detail-place')),
+            [...document.querySelectorAll('.app-detail-row')].map((row) => `${text(row.querySelector('.app-detail-row-title'))} : ${text(row.querySelector('.app-detail-row-value'))}`),
+            [...document.querySelectorAll('.app-detail-button')].map(text)];
+        });
+        const dialogTexts = async () => [await dialogTitle(page), await textOf(page, 'dialog.alert-dialog[open] .alert-body p'),
+          await page.$$eval('dialog.alert-dialog[open] button', (buttons) => buttons.map((button) => button.textContent.trim()).filter(Boolean))];
+        await page.locator('.app-visit').nth(0).locator('a.app-visit-detail').click();
+        await page.waitForURL(`${base}${detailPath(1)}`, { timeout: 8000 }).catch(() => problems.push(`${D} : la carte ouvre ${page.url()}`));
+        await page.waitForSelector('.app-detail-title', { timeout: 8000 }).catch(() => problems.push(`${D} : le détail ne s'affiche pas`));
+        expectSame(D, 'visite à venir', await detail(), ['Détail de la visite', 'Visite confirmée', 'Appartement lumineux avec balcon', 'Lyon 3e · 238 000 €',
+          ['Date : Vendredi 6 novembre · 14h30 · 45 min', 'Adresse : Lyon 3e (69003)', 'Contact : Agence du Parc'],
+          ['Itinéraire', 'Contacter', 'Partager la visite', 'Ajouter à mon calendrier', 'Modifier ou reprogrammer', 'Annuler la visite', 'Supprimer']]);
+        await favShot(page, '5-mon-espace-visite-1440.png');
+        await page.evaluate(() => {
+          window.sharedVisits = [];
+          Object.defineProperty(navigator, 'share', { configurable: true, value: async (data) => { window.sharedVisits.push(data); } });
+        });
+        await page.getByRole('button', { name: 'Partager la visite', exact: true }).click();
+        await page.waitForFunction(() => window.sharedVisits.length > 0, null, { timeout: 4000 }).catch(() => undefined);
+        expectSame(D, 'texte partagé', await page.evaluate(() => window.sharedVisits), [{
+          text: 'Visite : Appartement lumineux avec balcon\nVendredi 6 novembre · 14h30 (45 min)\nAdresse : Lyon 3e (69003)\nContact : Agence du Parc' }]);
+        await page.getByRole('button', { name: 'Modifier ou reprogrammer', exact: true }).click();
+        await iphoneOnly(page, D, 'Modifier ou reprogrammer');
+        const cancelMark = space.calls.length;
+        await page.getByRole('button', { name: 'Annuler la visite', exact: true }).click();
+        expectSame(D, 'confirmation de l\'annulation', await dialogTexts(),
+          ['Annuler cette visite ?', 'Vendredi 6 novembre · 14h30 avec Agence du Parc.', ['Annuler la visite', 'Garder la visite']]);
+        await alertButton(page, 'Annuler la visite');
+        const cancelled = await oneSpaceCall(space, 'agenda_visits', 'PATCH', cancelMark, `${D} : annulation`);
+        expectSame(D, 'ligne annulée [filtre, début, statut, demande envoyée, annonce, statut de la visite, sa date]', [cancelled?.search ?? null,
+          cancelled?.body?.start_at ?? null, cancelled?.body?.status ?? null, Boolean(cancelled?.body && 'request_id' in cancelled.body), cancelled?.body?.listing_id ?? null,
+          cancelled?.body?.visit?.status ?? null, cancelled?.body?.visit?.start ?? null],
+        [`?id=eq.${spaceVisitId(1).toLowerCase()}`, '2026-11-06T13:30:00.000', 'cancelled', false, SPACE_L1.listingId, 'cancelled', '2026-11-06T13:30:00.000']);
+        await page.waitForFunction(() => document.querySelector('.app-detail-badge')?.textContent.includes('Annulée'), null, { timeout: 8000 }).catch(() => undefined);
+        expectSame(D, 'après l\'annulation [état, boutons]', (await detail()).filter((_, index) => index === 1 || index === 5),
+          ['Annulée', ['Itinéraire', 'Contacter', 'Partager la visite', 'Ajouter à mon calendrier', 'Reprogrammer', 'Supprimer']]);
+        space.reportFiles = [{ name: 'photo-1.jpg' }];
+        const deleteMark = space.calls.length;
+        await page.getByRole('button', { name: 'Supprimer', exact: true }).click();
+        expectSame(D, 'confirmation de la suppression', await dialogTexts(), ['Supprimer cette visite ?', 'Elle disparaîtra définitivement de votre agenda.', ['Supprimer', 'Garder']]);
+        await alertButton(page, 'Supprimer');
+        const removed = await oneSpaceCall(space, 'agenda_visits', 'DELETE', deleteMark, `${D} : suppression`);
+        const folder = `${USER_ID.toLowerCase()}/${spaceVisitId(1).toLowerCase()}`;
+        expectSame(D, 'suppression [photos du compte rendu, ligne]', [space.calls.slice(deleteMark).filter((call) => call.table.startsWith('storage '))
+          .map((call) => `${call.method} ${call.table} ${JSON.stringify(call.body?.prefix ?? call.body?.prefixes ?? null)}`), removed?.search ?? null],
+        [[`POST storage list/visit-reports "${folder}"`, `DELETE storage visit-reports ["${folder}/photo-1.jpg"]`], `?id=eq.${spaceVisitId(1).toLowerCase()}`]);
+        await page.waitForURL(`${base}/compte/?vue=agenda`, { timeout: 8000 }).catch(() => problems.push(`${D} : après la suppression, ${page.url()} au lieu de Mon agenda`));
+        await page.goto(`${base}/compte/?vue=agenda&visite=D0000000-0000-4000-8000-000000000009`, { waitUntil: 'networkidle' });
+        await page.waitForSelector('.app-detail .app-unavailable', { timeout: 8000 }).catch(() => undefined);
+        expectSame(D, 'visite absente', [await textOf(page, '.app-detail .app-unavailable h2'), await textOf(page, '.app-detail .app-unavailable p')],
+          ['Visite supprimée', 'Cette visite n\'est plus dans votre agenda.']);
+        space.visits = structuredClone(SPACE_VISITS);
+        space.reportFiles = null;
+        await page.goto(`${base}/compte/?vue=agenda`, { waitUntil: 'networkidle' });
+        await page.waitForSelector('.app-visit');
+      }
 
       // Créneaux ouverts (VisitSessionStore.upcoming, n° 13) : les séances ouvertes et pas finies du compte, la plus proche
       // d'abord, en tête des visites à venir (my_visit_sessions sans paramètre, comme l'app) ; leur page reste dans l'app
@@ -5060,7 +5159,7 @@ try {
       expectSame(V, 'rappels par défaut', await page.$$eval('.dsc-toggle', (toggles) => toggles.map((toggle) => [toggle.querySelector('.dsc-toggle-title')?.textContent ?? null,
         toggle.querySelector('input')?.checked ?? null, toggle.querySelector('.dsc-toggle-note')?.textContent ?? null])),
       [['La veille, à 18 h', true, null], ['2 heures avant', true, null], ['Rappel personnalisé', false, null], ['Confirmée par le contact', false, null],
-        ['Ajouter à mon calendrier', null, IPHONE]]);
+        ['Ajouter à mon calendrier', false, null]]);
       await page.click('.dsc-prepare');
       await iphoneOnly(page, V, 'Préparer ma visite');
       // Bien concerné : Mes annonces, Mes favoris, Biens de mes conversations ; le bien de la conversation avec l'agence.
@@ -5100,11 +5199,20 @@ try {
       await page.getByRole('switch', { name: 'Rappel personnalisé' }).check();
       await page.selectOption('.dsc-select select', '60');
       await page.getByRole('switch', { name: 'Confirmée par le contact' }).check();
+      // « Ajouter à mon calendrier » : une fois la visite enregistrée, son fichier .ics (VisitActions.addToCalendar).
+      await page.getByRole('switch', { name: 'Ajouter à mon calendrier' }).check();
       await page.waitForTimeout(200);
       await favShot(page, '5-mon-espace-ajouter-visite-1440.png');
       mark = space.calls.length;
+      const formCalendar = page.waitForEvent('download', { timeout: 8000 }).catch(() => null);
       await page.click('.dsc-head-action .dsc-button-primary');
       const inserted = await oneSpaceCall(space, 'agenda_visits', 'POST', mark, V);
+      const formCalendarFile = await formCalendar;
+      expectSame(V, 'fichier du calendrier', formCalendarFile
+        ? [formCalendarFile.suggestedFilename(), (await readFile(await formCalendarFile.path(), 'utf8')).split('\r\n').filter((line) => /^(UID|DTSTART|DTEND|SUMMARY|LOCATION):/.test(line))]
+        : null,
+      ['visite.ics', [`UID:${String(inserted?.body?.id ?? '').toLowerCase()}@nidalo.fr`, 'DTSTART:20261110T133000Z', 'DTEND:20261110T143000Z',
+        'SUMMARY:Visite : Appartement lumineux avec balcon', 'LOCATION:Lyon 3e (69003)']]);
       if (inserted) {
         const row = inserted.body ?? {};
         const visitId = row.id;
@@ -5426,12 +5534,23 @@ try {
         await phoneFits(page, `${A}, ${tab}`);
       }
       await page.click('.app-agenda-tab >> nth=0');
+      // Détail d'une visite : l'écran de l'app (retour rond, titre centré, « Note »), dans l'écran.
+      await page.locator('.app-visit').nth(0).locator('a.app-visit-detail').click();
+      await page.waitForSelector('.app-detail-title', { timeout: 8000 }).catch(() => problems.push(`${A} : le détail d'une visite ne s'affiche pas`));
+      expectSame(A, 'détail d\'une visite [titre, « Note », boutons]', [await textOf(page, '.app-page-header-title'), await textOf(page, '.app-page-header .app-detail-note'),
+        await textsOf(page, '.app-detail-button')],
+      ['Détail de la visite', 'Note', ['Itinéraire', 'Contacter', 'Partager la visite', 'Ajouter à mon calendrier', 'Modifier ou reprogrammer', 'Annuler la visite', 'Supprimer']]);
+      await phoneFits(page, `${A}, détail d'une visite`);
+      await tallShot(page, `visite-telephone${suffix}.png`);
+      await page.goBack({ waitUntil: 'networkidle' });
+      await page.waitForSelector('.app-agenda .app-visit');
 
       // Ajouter une visite, depuis l'agenda.
       await page.click('.app-agenda-add-link');
       await page.waitForURL(`${base}/compte/?vue=ajouter-visite&depuis=agenda`, { timeout: 8000 }).catch(() => problems.push(`${V} : ouvert à ${page.url()}`));
       await page.waitForSelector('.dsc-form-screen .dsc-choose');
-      expectSame(V, 'formulaire vide', [await textOf(page, '.dsc-head h1'), await page.isDisabled('.dsc-head-action .dsc-button-primary'),
+      // En-tête de l'app sur téléphone (VisitFormView) : retour rond, titre centré, « Enregistrer » en capsule bleue.
+      expectSame(V, 'formulaire vide', [await textOf(page, '.app-page-header-title'), await page.isDisabled('.app-page-header .app-visit-save'),
         await page.$$eval('.dsc-form-screen .dsc-card-title', (titles) => titles.map((title) => title.textContent))],
       ['Nouvelle visite', true, ['Bien concerné', 'Date et heure', 'Rendez-vous', 'Rappels et suivi']]);
       await phoneFits(page, V);
@@ -5456,7 +5575,7 @@ try {
       await page.getByLabel('Date', { exact: true }).fill('2026-11-10');
       await page.getByLabel('Heure de début', { exact: true }).fill('14:30');
       const phoneMark = space.calls.length;
-      await page.click('.dsc-head-action .dsc-button-primary');
+      await page.click('.app-page-header .app-visit-save');
       const inserted = await oneSpaceCall(space, 'agenda_visits', 'POST', phoneMark, V);
       expectSame(V, 'visite insérée [début, annonce, adresse, contact]', [inserted?.body?.start_at ?? null, inserted?.body?.listing_id ?? null,
         inserted?.body?.visit?.address ?? null, inserted?.body?.visit?.contactName ?? null],

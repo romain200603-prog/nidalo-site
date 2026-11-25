@@ -1,109 +1,264 @@
 /* Écrans « Demander une visite » et « Faire une offre » de la fiche, sur téléphone (moins de 1024 px) : dans la page
-   d'une annonce (.listing-screen) et dans une conversation de Messages (.dm-offer-host). Sur ordinateur, ce sont les
-   règles de ordinateur-fiche.css, sous 1024 px celles-ci. */
+   d'une annonce (.listing-screen pour la visite, feuille .offer-sheet pour l'offre) et dans une conversation de
+   Messages (.dm-offer-host). Sur ordinateur, ce sont les règles de ordinateur-fiche.css, sous 1024 px celles-ci.
+   Mesures de l'app : VisitRequestFormView.swift et VisitRequestComponents.swift (visite), OfferComposerSheet dans
+   OfferViews.swift (offre). Les champs de saisie gardent 16 px : en dessous, l'iPhone agrandit la page en les touchant. */
 
 @keyframes dl-screen-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 1023.98px) {
-  /* Page d'une annonce : les jetons de l'ordinateur (--d-…) que ces écrans utilisent, avec les valeurs de l'ordinateur
+  /* Page d'une annonce : les jetons de l'ordinateur (--d-…) que ces écrans utilisent, avec les valeurs de l'app
      (la page Messages a déjà les siens, dont son rouge). */
-  .listing-screen {
+  :is(.listing-screen, .offer-sheet) {
     --d-bg: #FAF9F6;
     --d-text: #242D38;
     --d-grey: #75808B;
     --d-help: #9AA2AA;
     --d-icon: #5B6571;
     --d-card-border: #ECEAE6;
-    --d-field-border: #E3E0DA;
+    --d-field-border: #ECEAE6;
     --d-blue: #3C5CB0;
     --d-blue-light: #EEF2FA;
     --d-green-text: #3F6650;
     --d-red: #C0392B;
   }
-  :is(.dm-offer-host, .listing-screen) { color: var(--d-text); }
-  :is(.dm-offer-host, .listing-screen) .dl-screen { padding-top: 18px; padding-bottom: 24px; }
-  :is(.dm-offer-host, .listing-screen) .dl-screen-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
-  :is(.dm-offer-host, .listing-screen) .dl-screen-titles { min-width: 0; }
-  :is(.dm-offer-host, .listing-screen) .dl-screen-titles h1 { margin: 0; color: var(--d-text); font-size: 24px; font-weight: 700; line-height: 30px; outline: none; }
-  :is(.dm-offer-host, .listing-screen) .dl-screen-titles p { margin: 4px 0 0; color: var(--d-grey); font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
-  :is(.dm-offer-host, .listing-screen) .dl-screen-close { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; border: 1px solid var(--d-card-border); border-radius: 50%; background: #FFFFFF; color: var(--d-text); cursor: pointer; }
-  :is(.dm-offer-host, .listing-screen) .dl-screen-close .icon { width: 18px; height: 18px; }
-  :is(.dm-offer-host, .listing-screen) .dl-form-card { display: flex; flex-direction: column; gap: 18px; padding: 16px; border: 1px solid var(--d-card-border); border-radius: 16px; background: #FFFFFF; }
-  :is(.dm-offer-host, .listing-screen) .dl-form-stack { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
-  :is(.dm-offer-host, .listing-screen) .dl-field { min-width: 0; display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; border: 0; }
-  :is(.dm-offer-host, .listing-screen) .dl-label { padding: 0; color: var(--d-text); font-size: 14px; font-weight: 700; }
-  :is(.dm-offer-host, .listing-screen) .dl-amount { display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 14px; border: 1px solid var(--d-field-border); border-radius: 12px; background: #FFFFFF; }
-  :is(.dm-offer-host, .listing-screen) .dl-amount input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; color: var(--d-text); font: inherit; font-size: 20px; font-weight: 700; outline: none; }
+  :is(.dm-offer-host, .listing-screen, .offer-sheet) { color: var(--d-text); }
+  :is(.dm-offer-host, .listing-screen, .offer-sheet) .dl-spinner {
+    width: 18px; height: 18px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+    animation: dl-screen-spin 0.8s linear infinite;
+  }
+
+  /* ——— Demander une visite ———
+     En-tête de l'app (retour rond de 42, titre de 17 centré : 6 au-dessus, 16 sur les côtés, 10 dessous) ; contenu en
+     colonne, 14 entre les blocs, 8 au-dessus, 28 dessous ; barre blanche collée en bas de l'écran (safeAreaInset) :
+     16 sur les côtés, 10 au-dessus, 6 sous les boutons et la zone sûre, ombre bleu marine à 6 % vers le haut. */
+  :is(.dm-offer-host, .listing-screen) .dl-visit-screen {
+    display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; max-width: none; margin: 0; padding: 6px 16px 0;
+    background: var(--app-page); font-family: var(--app-font);
+  }
+  .dl-visit-screen .visit-body { display: flex; flex-direction: column; gap: 14px; padding: 8px 0 28px; }
+  .dl-visit-screen .dl-form-stack { display: flex; flex-direction: column; gap: 14px; margin: 0; }
+  .dl-visit-screen .visit-bar {
+    position: sticky; z-index: 5; bottom: 0; display: flex; flex-direction: column; gap: 8px; margin: auto -16px 0;
+    padding: 10px 16px calc(6px + env(safe-area-inset-bottom)); background: #FFFFFF; box-shadow: 0 -2px 20px rgba(36, 45, 56, 0.06);
+  }
+  .dl-visit-screen .visit-bar .dl-screen-actions { display: flex; flex-direction: column; gap: 8px; margin: 0; }
+  .dl-visit-screen .visit-bar-error { margin: 0; color: var(--app-red, #C0392B); font: 500 12px/16px var(--app-font); }
+
+  /* Cartes (domiaCard) : blanches, contour de 1, coins 16, sans ombre ; 18 de marge et 14 entre le titre et le contenu
+     (SectionCard), 12 pour la vignette du bien, 14 pour la confirmation. */
+  .dl-visit-screen .dl-form-card {
+    display: flex; flex-direction: column; gap: 14px; padding: 18px; border: 1px solid var(--app-border); border-radius: 16px; background: #FFFFFF;
+  }
+  .dl-visit-screen .dl-form-section h2 { margin: 0; color: var(--app-navy); font: 700 18px/23px var(--app-font); }
+
+  /* Vignette du bien (VisitListingHeader) : photo de 64, coins 12 ; titre de 15 gras sur deux lignes au plus, ville de 13
+     grise, prix de 14 gras ; 12 entre la photo et le texte, 3 entre les lignes. */
+  .dl-visit-screen .dl-form-card.dl-visit-listing { flex-direction: row; align-items: center; gap: 12px; padding: 12px; }
+  .dl-visit-screen .dl-visit-thumb { flex: none; width: 64px; height: 64px; overflow: hidden; border-radius: 12px; background: var(--app-segment); }
+  .dl-visit-screen .dl-visit-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .dl-visit-screen .dl-visit-thumb .photo-empty { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--app-text-muted); }
+  .dl-visit-screen .dl-visit-thumb .photo-empty .icon { width: 22px; height: 22px; }
+  .dl-visit-screen .dl-visit-listing-text { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .dl-visit-screen .dl-visit-listing-title {
+    display: -webkit-box; overflow: hidden; color: var(--app-navy); font: 700 15px/19px var(--app-font); -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2; line-clamp: 2;
+  }
+  .dl-visit-screen .dl-visit-listing-city { overflow: hidden; color: var(--app-text-secondary); font: 400 13px/17px var(--app-font); text-overflow: ellipsis; white-space: nowrap; }
+  .dl-visit-screen .dl-visit-listing-price { color: var(--app-navy); font: 700 14px/18px var(--app-font); font-variant-numeric: tabular-nums; }
+
+  /* Mention (LocalRequestNotice) : fond bleu pâle, coins 14, 12 de marge ; « i » de 16 bleu, texte de 13 medium. */
+  .dl-visit-screen .dl-notice {
+    margin: 0; display: flex; align-items: flex-start; gap: 10px; padding: 12px; border-radius: 14px; background: var(--app-brand-soft);
+    color: var(--app-navy); font: 500 13px/18px var(--app-font);
+  }
+  .dl-visit-screen .dl-notice .icon { flex: none; width: 16px; height: 16px; margin-top: 1px; color: var(--app-brand); }
+  .dl-visit-screen .visit-previous { margin: 0; color: var(--app-text-secondary); font: 400 13px/18px var(--app-font); }
+
+  /* Créneau (SlotPickerRow) : « Premier choix » en 13 demi-gras gris, puis le jour (calendrier compact, gris clair) et,
+     à droite, l'heure dans une capsule bleu pâle de 38 (horloge de 15, flèche). « Ce créneau est déjà passé. » en 12 rouge. */
+  .dl-visit-screen .dl-slot { display: flex; flex-direction: column; gap: 8px; }
+  .dl-visit-screen .dl-label { padding: 0; color: var(--app-text-secondary); font: 600 13px/17px var(--app-font); }
+  .dl-visit-screen .dl-slot-row { display: flex; align-items: center; gap: 10px; }
+  .dl-visit-screen .dl-date {
+    flex: 0 1 auto; min-width: 0; height: 38px; padding: 0 11px; border: 0; border-radius: 8px; -webkit-appearance: none; appearance: none;
+    background: rgba(118, 118, 128, 0.12); color: var(--app-navy); font: 500 16px/38px var(--app-font);
+  }
+  .dl-visit-screen .dl-time {
+    position: relative; flex: none; display: inline-flex; align-items: center; height: 38px; margin-left: auto; border-radius: 19px;
+    background: var(--app-brand-soft); color: var(--app-brand);
+  }
+  .dl-visit-screen .dl-time > .icon:first-child { position: absolute; left: 12px; width: 15px; height: 15px; pointer-events: none; }
+  .dl-visit-screen .dl-time select {
+    height: 100%; padding: 0 29px 0 33px; border: 0; border-radius: 19px; -webkit-appearance: none; appearance: none; background: transparent;
+    color: var(--app-brand); font: 700 16px/1 var(--app-font); font-variant-numeric: tabular-nums;
+  }
+  .dl-visit-screen .dl-time-chevron { position: absolute; top: 50%; right: 12px; width: 11px; height: 11px; margin-top: -5.5px; stroke-width: 3; pointer-events: none; }
+  .dl-visit-screen .dl-slot .dl-error { margin: 0; color: var(--app-red, #C0392B); font: 500 12px/16px var(--app-font); }
+  .dl-visit-screen .dl-link-button {
+    align-self: flex-start; display: inline-flex; align-items: center; gap: 7px; min-height: 30px; padding: 0; border: 0; background: none;
+    color: var(--app-brand); font: 600 13.5px/18px var(--app-font); cursor: pointer;
+  }
+  .dl-visit-screen .dl-link-button.is-strong { font-size: 14px; font-weight: 700; }
+  .dl-visit-screen .dl-link-button .icon { width: 16px; height: 16px; }
+  .dl-visit-screen .dl-help { margin: 0; color: var(--app-text-secondary); font: 400 12.5px/17px var(--app-font); }
+
+  /* « Sur place » / « En visio » (ChoiceChip qui s'étire) : 40 de haut, coins 12, fond des champs et contour fin ; choisi :
+     bleu pâle, contour bleu de 1,5 ; texte de 13,5 demi-gras à gauche. */
+  .dl-visit-screen .dl-options { display: flex; gap: 8px; }
+  .dl-visit-screen .dl-option {
+    flex: 1 1 0; min-width: 0; min-height: 40px; padding: 0 12px; border: 0; border-radius: 12px; background: var(--app-field);
+    box-shadow: inset 0 0 0 1px var(--app-field-border); color: var(--app-navy); font: 600 13.5px/18px var(--app-font); text-align: left;
+    white-space: nowrap; cursor: pointer;
+  }
+  .dl-visit-screen .dl-option[aria-pressed="true"] { background: var(--app-brand-soft); box-shadow: inset 0 0 0 1.5px var(--app-brand); color: var(--app-brand); }
+
+  /* Message : champ blanc, contour fin, coins 12, 12 de marge, de 3 à 6 lignes. */
+  .dl-visit-screen .dl-textarea {
+    width: 100%; min-height: 84px; max-height: 156px; padding: 12px; border: 1px solid var(--app-border); border-radius: 12px; background: #FFFFFF;
+    color: var(--app-navy); font: 400 16px/22px var(--app-font); resize: none; field-sizing: content;
+  }
+  .dl-visit-screen .dl-textarea::placeholder { color: var(--app-text-muted); }
+
+  /* Créneaux ouverts par le vendeur (OpenSlotsSection, NidaloSection) : petit titre en capitales, puis une carte blanche
+     (coins 22, contour fin, ombre très légère, 16 de marge, 14 entre les lignes) ; jour et horaire en 14,5 gras, places en
+     12,5 gris ; « Réserver » en capsule bleue de 36, « Réservé » vert ou « Complet » gris en pastille. */
+  .dl-visit-screen .visit-open-slots { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; }
+  .dl-visit-screen .visit-open-card {
+    display: flex; flex-direction: column; gap: 14px; padding: 16px; border: 1px solid var(--app-border); border-radius: 22px; background: #FFFFFF;
+    box-shadow: 0 2px 16px rgba(36, 45, 56, 0.04);
+  }
+  .dl-visit-screen .visit-open-slot { display: flex; align-items: center; gap: 10px; }
+  .dl-visit-screen .visit-open-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .dl-visit-screen .visit-open-time {
+    overflow: hidden; color: var(--app-navy); font: 700 14.5px/19px var(--app-font); text-overflow: ellipsis; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .dl-visit-screen .visit-open-places, .dl-visit-screen .visit-open-note { margin: 0; color: var(--app-text-secondary); font: 400 12.5px/17px var(--app-font); }
+  .dl-visit-screen .visit-book {
+    flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 86px; height: 36px; padding: 0 14px; border: 0;
+    border-radius: 18px; background: var(--app-brand); color: #FFFFFF; font: 700 13.5px/1 var(--app-font); cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .dl-visit-screen .visit-book:disabled:not([aria-busy="true"]) { opacity: 0.5; }
+  .dl-visit-screen .visit-book .dl-spinner { width: 16px; height: 16px; }
+
+  /* Confirmation (« Demande envoyée », « Visite confirmée ») : carte de 14 de marge, 10 entre les lignes ; icône de 22 grise
+     dans une place de 40 (IconTile), titre de 16 gras, pastille ; texte de 13,5 gris ; créneaux en 14 demi-gras. */
+  .dl-visit-screen .dl-form-card.dl-sent { gap: 10px; margin: 0; padding: 14px; }
+  .dl-visit-screen .dl-sent-head { display: flex; align-items: center; gap: 10px; }
+  .dl-visit-screen .dl-sent-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; color: var(--app-text-dark); }
+  .dl-visit-screen .dl-sent-icon .icon { width: 22px; height: 22px; }
+  .dl-visit-screen .dl-sent-titles { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+  .dl-visit-screen .dl-sent-title { color: var(--app-navy); font: 700 16px/20px var(--app-font); }
+  .dl-visit-screen .dl-sent-text { margin: 0; color: var(--app-text-secondary); font: 400 13.5px/19px var(--app-font); }
+  .dl-visit-screen .dl-sent-slots { margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; list-style: none; }
+  .dl-visit-screen .dl-sent-slots li { display: flex; align-items: center; gap: 7px; color: var(--app-navy); font: 600 14px/18px var(--app-font); font-variant-numeric: tabular-nums; }
+  .dl-visit-screen .dl-sent-slots .icon { flex: none; width: 15px; height: 15px; }
+
+  /* Pastilles : statut d'une demande (11 demi-gras, teinte à 12 %) et pastilles Nidalo (11,5 gras, NidaloPill). */
+  :is(.dm-offer-host, .listing-screen) .dl-status-badge {
+    display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 11px; font: 600 11px/1 var(--app-font); white-space: nowrap;
+  }
+  :is(.dm-offer-host, .listing-screen) .dl-status-badge.is-pending { background: rgba(180, 83, 9, 0.12); color: #B45309; }
+  :is(.dm-offer-host, .listing-screen) .dl-status-badge.is-pill { padding: 0 9px; background: var(--tone-bg); color: var(--tone-ink); font-size: 11.5px; font-weight: 700; }
+
+  /* Boutons de la barre (DomiaPrimaryButtonStyle et DomiaSecondaryButtonStyle) : 52 de haut, coins 12, 15 demi-gras ;
+     bleu plein (pressé 2F4A92), ou bleu pâle au texte bleu. */
+  .dl-visit-screen :is(.dl-submit, .dl-secondary) {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 52px; margin: 0; padding: 0 16px;
+    border: 0; border-radius: 12px; font: 600 15px/1.2 var(--app-font); text-decoration: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .dl-visit-screen .dl-submit { background: var(--app-brand); color: #FFFFFF; }
+  .dl-visit-screen .dl-submit:active { background: var(--app-brand-pressed); }
+  .dl-visit-screen .dl-submit .icon { width: 17px; height: 17px; }
+  .dl-visit-screen .dl-secondary { background: var(--app-brand-soft); color: var(--app-brand); }
+  .dl-visit-screen .dl-secondary:active { opacity: 0.85; }
+
+  /* ——— Faire une offre (OfferComposerSheet) ———
+     Les champs posés sur le fond de page, 20 de marge, 18 entre les blocs ; titre de 20 gras et ligne du bien de 13
+     grise ; croix de 14 dans un rond bleu pâle de 34 (zone d'appui de 44). */
+  :is(.dm-offer-host, .listing-screen, .offer-sheet) .dl-offer-screen {
+    display: flex; flex-direction: column; gap: 18px; max-width: none; margin: 0; padding: 20px; background: var(--app-page); font-family: var(--app-font);
+  }
+  .dl-offer-screen .dl-screen-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin: 0; }
+  .dl-offer-screen .dl-screen-titles { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .dl-offer-screen .dl-screen-titles h1 { margin: 0; color: var(--app-navy); font: 700 20px/25px var(--app-font); outline: none; }
+  .dl-offer-screen .dl-screen-titles p {
+    display: -webkit-box; margin: 0; overflow: hidden; color: var(--app-text-secondary); font: 500 13px/17px var(--app-font);
+    font-variant-numeric: tabular-nums; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere;
+  }
+  .dl-offer-screen .dl-screen-close {
+    flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: -5px -5px 0 0; padding: 0;
+    border: 0; border-radius: 50%; background: radial-gradient(circle, var(--app-brand-soft) 16.5px, transparent 17px); color: var(--app-navy);
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .dl-offer-screen .dl-screen-close .icon { width: 14px; height: 14px; stroke-width: 3; }
+  .dl-offer-screen .dl-form-card { display: flex; flex-direction: column; gap: 18px; padding: 0; border: 0; background: none; }
+  .dl-offer-screen .dl-field { min-width: 0; display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; border: 0; }
+  .dl-offer-screen .dl-label { padding: 0; color: var(--app-navy); font: 700 13px/17px var(--app-font); }
+  /* Montant : champ blanc de 54, coins 14, contour fin ; 22 gras, « € » de 20 gris. Écart au prix en 13 demi-gras. */
+  .dl-offer-screen .dl-amount { display: flex; align-items: center; gap: 8px; height: 54px; padding: 0 14px; border: 1px solid var(--app-border); border-radius: 14px; background: #FFFFFF; }
+  .dl-offer-screen .dl-amount input {
+    flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; color: var(--app-navy); font: 700 22px/1 var(--app-font);
+    font-variant-numeric: tabular-nums; outline: none;
+  }
+  .dl-offer-screen .dl-amount input::placeholder { color: var(--app-placeholder); }
   /* Le contour de focus de la page Messages (.dm … :focus-visible) vient après ce fichier : le champ du montant le
      retire quand même, comme avant. */
-  :is(.dm-offer-host, .listing-screen) .dl-amount input:focus-visible { outline: none; }
-  :is(.dm-offer-host, .listing-screen) .dl-gap { margin: 0; color: var(--d-green-text); font-size: 14px; font-weight: 600; }
-  :is(.dm-offer-host, .listing-screen) .dl-gap.is-below { color: #81622C; }
-  :is(.dm-offer-host, .listing-screen) .dl-yield { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 12px; background: var(--d-bg); }
-  :is(.dm-offer-host, .listing-screen) .dl-yield-title { margin: 0; font-size: 14px; font-weight: 700; }
-  :is(.dm-offer-host, .listing-screen) .dl-yield-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 0; font-size: 14px; }
-  :is(.dm-offer-host, .listing-screen) .dl-yield-label { flex: 1; color: var(--d-grey); }
-  :is(.dm-offer-host, .listing-screen) .dl-yield-value { font-weight: 700; }
-  :is(.dm-offer-host, .listing-screen) .dl-yield-listed { flex-basis: 100%; color: var(--d-help); font-size: 12.5px; }
-  :is(.dm-offer-host, .listing-screen) .dl-textarea { width: 100%; min-height: 84px; padding: 10px 12px; border: 1px solid var(--d-field-border); border-radius: 12px; background: #FFFFFF; color: var(--d-text); font: inherit; font-size: 16px; line-height: 22px; resize: vertical; }
-  :is(.dm-offer-host, .listing-screen) .dl-chip { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--d-blue-light); color: var(--d-blue); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
-  :is(.dm-offer-host, .listing-screen) .dl-chip .icon { width: 14px; height: 14px; }
-  :is(.dm-offer-host, .listing-screen) .dl-options { display: flex; gap: 8px; }
-  :is(.dm-offer-host, .listing-screen) .dl-option { flex: 1 1 0; min-width: 0; height: 44px; padding: 0 6px; border: 1px solid var(--d-field-border); border-radius: 12px; background: #FFFFFF; color: var(--d-text); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
-  :is(.dm-offer-host, .listing-screen) .dl-option[aria-pressed="true"] { border-color: var(--d-blue); background: var(--d-blue); color: #FFFFFF; font-weight: 700; }
-  :is(.dm-offer-host, .listing-screen) .dl-submit { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 52px; padding: 0 20px; border: 0; border-radius: 14px; background: var(--d-blue); color: #FFFFFF; font: inherit; font-size: 16px; font-weight: 700; text-decoration: none; cursor: pointer; }
-  :is(.dm-offer-host, .listing-screen) .dl-submit .icon { width: 18px; height: 18px; }
-  :is(.dm-offer-host, .listing-screen) .dl-secondary { width: 100%; height: 48px; border: 1px solid var(--d-field-border); border-radius: 14px; background: #FFFFFF; color: var(--d-text); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
-  :is(.dm-offer-host, .listing-screen) .dl-error { margin: 0; color: var(--d-red); font-size: 14px; font-weight: 600; }
-  :is(.dm-offer-host, .listing-screen) .dl-form-note, :is(.dm-offer-host, .listing-screen) .dl-help { margin: 0; color: var(--d-grey); font-size: 13px; line-height: 19px; }
-  :is(.dm-offer-host, .listing-screen) .dl-screen-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
-  :is(.dm-offer-host, .listing-screen) .dl-form-card.dl-visit-listing { flex-direction: row; align-items: center; gap: 12px; padding: 12px; }
-  :is(.dm-offer-host, .listing-screen) .dl-visit-thumb { flex: none; width: 56px; height: 56px; overflow: hidden; border-radius: 10px; background: var(--d-blue-light); }
-  :is(.dm-offer-host, .listing-screen) .dl-visit-thumb img { width: 100%; height: 100%; object-fit: cover; }
-  :is(.dm-offer-host, .listing-screen) .dl-visit-listing-text { min-width: 0; display: flex; flex-direction: column; }
-  :is(.dm-offer-host, .listing-screen) .dl-visit-listing-title { overflow: hidden; font-size: 15px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-  :is(.dm-offer-host, .listing-screen) .dl-visit-listing-city { color: var(--d-grey); font-size: 13px; }
-  :is(.dm-offer-host, .listing-screen) .dl-visit-listing-price { font-size: 14px; font-weight: 700; }
-  :is(.dm-offer-host, .listing-screen) .dl-form-section { gap: 14px; }
-  :is(.dm-offer-host, .listing-screen) .dl-form-section h2 { margin: 0; display: flex; align-items: center; gap: 8px; color: var(--d-text); font-size: 16px; font-weight: 700; line-height: 22px; }
-  :is(.dm-offer-host, .listing-screen) .dl-form-section h2 .icon { flex: none; width: 18px; height: 18px; color: var(--d-icon); }
-  :is(.dm-offer-host, .listing-screen) .dl-slot { display: flex; flex-direction: column; gap: 8px; }
-  :is(.dm-offer-host, .listing-screen) .dl-slot-row { display: flex; align-items: center; gap: 8px; }
-  /* Jour et heure d'un créneau, comme sur ordinateur : le champ du jour, puis l'heure dans une pastille bleu clair avec
-     l'horloge et la flèche. 16 px : l'iPhone ne zoome pas en touchant le champ. */
-  :is(.dm-offer-host, .listing-screen) .dl-date { flex: 1; min-width: 0; height: 44px; padding: 0 10px; border: 1px solid var(--d-field-border); border-radius: 12px; background: #FFFFFF; color: var(--d-text); font: inherit; font-size: 16px; font-weight: 600; }
-  :is(.dm-offer-host, .listing-screen) .dl-time { position: relative; flex: none; display: inline-flex; align-items: center; height: 44px; border-radius: 999px; background: var(--d-blue-light); color: var(--d-blue); }
-  :is(.dm-offer-host, .listing-screen) .dl-time > .icon:first-child { position: absolute; left: 12px; width: 16px; height: 16px; pointer-events: none; }
-  :is(.dm-offer-host, .listing-screen) .dl-time select { height: 100%; padding: 0 32px 0 34px; border: 0; border-radius: 999px; -webkit-appearance: none; appearance: none; background: transparent; color: var(--d-blue); font: inherit; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  :is(.dm-offer-host, .listing-screen) .dl-time-chevron { position: absolute; top: 50%; right: 12px; width: 14px; height: 14px; margin-top: -7px; pointer-events: none; }
-  :is(.dm-offer-host, .listing-screen) .dl-link-button { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; padding: 4px 0; border: 0; background: none; color: var(--d-blue); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
-  :is(.dm-offer-host, .listing-screen) .dl-link-button.is-strong { font-size: 15px; font-weight: 700; }
-  :is(.dm-offer-host, .listing-screen) .dl-link-button .icon { width: 18px; height: 18px; }
-  /* Mention du formulaire de visite, comme sur ordinateur : fond bleu clair, icône à gauche. */
-  :is(.dm-offer-host, .listing-screen) .dl-notice { margin: 0; display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--d-blue-light); color: var(--d-text); font-size: 14px; font-weight: 500; line-height: 20px; }
-  :is(.dm-offer-host, .listing-screen) .dl-notice .icon { flex: none; width: 18px; height: 18px; margin-top: 1px; color: var(--d-blue); }
-  :is(.dm-offer-host, .listing-screen) .dl-spinner { width: 18px; height: 18px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: dl-screen-spin 0.8s linear infinite; }
-  :is(.dm-offer-host, .listing-screen) .dl-form-card.dl-sent { gap: 10px; margin-top: 14px; }
-  :is(.dm-offer-host, .listing-screen) .dl-sent-head { display: flex; align-items: center; gap: 10px; }
-  :is(.dm-offer-host, .listing-screen) .dl-sent-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; background: var(--d-blue-light); color: var(--d-blue); }
-  :is(.dm-offer-host, .listing-screen) .dl-sent-icon .icon { width: 18px; height: 18px; }
-  :is(.dm-offer-host, .listing-screen) .dl-sent-titles { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-  :is(.dm-offer-host, .listing-screen) .dl-sent-title { font-size: 16px; font-weight: 700; }
-  :is(.dm-offer-host, .listing-screen) .dl-status-badge { padding: 0 8px; border-radius: 999px; background: var(--d-blue-light); color: var(--d-blue); font-size: 12px; font-weight: 700; line-height: 22px; }
-  :is(.dm-offer-host, .listing-screen) .dl-status-badge.is-pending { background: rgba(180, 83, 9, 0.12); color: #B45309; }
-  :is(.dm-offer-host, .listing-screen) .dl-sent-text { margin: 0; color: var(--d-grey); font-size: 14px; line-height: 20px; }
-  :is(.dm-offer-host, .listing-screen) .dl-sent-slots { margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; list-style: none; }
-  :is(.dm-offer-host, .listing-screen) .dl-sent-slots li { display: flex; align-items: center; gap: 8px; color: var(--d-text); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  :is(.dm-offer-host, .listing-screen) .dl-sent-slots .icon { flex: none; width: 16px; height: 16px; color: var(--d-icon); }
+  .dl-offer-screen .dl-amount input:focus-visible { outline: none; }
+  .dl-offer-screen .dl-amount span { color: var(--app-text-secondary); font: 700 20px/1 var(--app-font); }
+  .dl-offer-screen .dl-gap { margin: 0; color: var(--app-navy); font: 600 13px/17px var(--app-font); font-variant-numeric: tabular-nums; }
+  .dl-offer-screen .dl-gap.is-below { color: var(--app-text-secondary); }
+  /* Rentabilité au montant proposé : encadré blanc de 14 de marge, coins 14 ; titre de 13 gras ; 14 medium gris à gauche,
+     15 gras à droite, « … au prix affiché » de 12 dessous. */
+  .dl-offer-screen .dl-yield { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--app-border); border-radius: 14px; background: #FFFFFF; }
+  .dl-offer-screen .dl-yield-title { margin: 0; color: var(--app-navy); font: 700 13px/17px var(--app-font); font-variant-numeric: tabular-nums; }
+  .dl-offer-screen .dl-yield-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; column-gap: 12px; row-gap: 2px; margin: 0; }
+  .dl-offer-screen .dl-yield-label { color: var(--app-text-secondary); font: 500 14px/18px var(--app-font); }
+  .dl-offer-screen .dl-yield-value { color: var(--app-navy); font: 700 15px/19px var(--app-font); font-variant-numeric: tabular-nums; text-align: right; }
+  .dl-offer-screen .dl-yield-listed { grid-column: 2; color: var(--app-text-secondary); font: 500 12px/16px var(--app-font); text-align: right; }
+  /* Conditions : champ blanc, coins 14, 12 de marge, de 2 à 5 lignes ; suggestion du prêt en capsule bleu pâle de 32. */
+  .dl-offer-screen .dl-textarea {
+    width: 100%; min-height: 68px; max-height: 134px; padding: 12px; border: 1px solid var(--app-border); border-radius: 14px; background: #FFFFFF;
+    color: var(--app-navy); font: 400 16px/22px var(--app-font); resize: none; field-sizing: content;
+  }
+  .dl-offer-screen .dl-textarea::placeholder { color: var(--app-text-muted); }
+  .dl-offer-screen .dl-chip {
+    align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 32px; margin: 6px 0; padding: 0 12px; border: 0;
+    border-radius: 16px; background: var(--app-brand-soft); color: var(--app-brand); font: 600 13px/17px var(--app-font); text-align: left; cursor: pointer;
+  }
+  .dl-offer-screen .dl-chip .icon { flex: none; width: 13px; height: 13px; }
+  /* « Valable » : trois boutons de 44, coins 12 ; choisi bleu plein au texte blanc gras, sinon blancs bordés. */
+  .dl-offer-screen .dl-options { display: flex; gap: 8px; }
+  .dl-offer-screen .dl-option {
+    flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 6px; border: 0; border-radius: 12px; background: #FFFFFF; box-shadow: inset 0 0 0 1px var(--app-border);
+    color: var(--app-navy); font: 600 14px/1 var(--app-font); white-space: nowrap; cursor: pointer; transition: background-color 0.2s ease, color 0.2s ease;
+  }
+  .dl-offer-screen .dl-option[aria-pressed="true"] { background: var(--app-brand); box-shadow: none; color: #FFFFFF; font-weight: 700; }
+  .dl-offer-screen .dl-error { margin: 0; color: var(--app-red, #C0392B); font: 600 13px/17px var(--app-font); }
+  /* « Envoyer l'offre » (PrimaryGradientButton) : 52 de haut, coins 13, 16 gras ; à moitié transparent sans montant. */
+  .dl-offer-screen .dl-submit {
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 52px; padding: 0 20px; border: 0;
+    border-radius: 13px; background: var(--app-brand); color: #FFFFFF; font: 700 16px/1 var(--app-font); cursor: pointer;
+  }
+  .dl-offer-screen .dl-submit.is-dim { opacity: 0.5; }
+  .dl-offer-screen .dl-form-note { margin: 0; color: var(--app-text-secondary); font: 500 12px/16px var(--app-font); }
+  /* Dans la feuille de la fiche : la feuille défile, l'écran n'a plus de marge du bas en plus. */
+  .offer-sheet .sheet-scroll { padding: 0 0 env(safe-area-inset-bottom); }
 
   /* Petit téléphone (moins de 360 px) : la suggestion « Sous réserve d'obtention du prêt » passe sur deux lignes dans sa
-     pastille ; le jour et l'heure d'un créneau se serrent un peu pour que la date reste lisible. */
+     capsule ; le jour et l'heure d'un créneau se serrent un peu pour que la date reste lisible. */
   @media (max-width: 359.98px) {
-    :is(.dm-offer-host, .listing-screen) .dl-chip { height: auto; min-height: 32px; padding: 6px 12px; line-height: 18px; text-align: left; }
-    :is(.dm-offer-host, .listing-screen) .dl-slot-row { gap: 6px; }
-    :is(.dm-offer-host, .listing-screen) .dl-date { padding: 0 8px; }
-    :is(.dm-offer-host, .listing-screen) .dl-time > .icon:first-child { left: 10px; }
-    :is(.dm-offer-host, .listing-screen) .dl-time select { padding: 0 26px 0 30px; }
-    :is(.dm-offer-host, .listing-screen) .dl-time-chevron { right: 10px; }
+    .dl-offer-screen .dl-chip { padding: 6px 12px; }
+    .dl-visit-screen .dl-slot-row { gap: 6px; }
+    .dl-visit-screen .dl-date { padding: 0 8px; }
+    .dl-visit-screen .dl-time > .icon:first-child { left: 10px; }
+    .dl-visit-screen .dl-time select { padding: 0 25px 0 30px; }
+    .dl-visit-screen .dl-time-chevron { right: 10px; }
   }
+}
+
+@media (max-width: 1023.98px) and (prefers-reduced-motion: reduce) {
+  :is(.dm-offer-host, .listing-screen, .offer-sheet) .dl-spinner { animation-duration: 2.4s; }
+  .dl-offer-screen .dl-option { transition: none; }
 }

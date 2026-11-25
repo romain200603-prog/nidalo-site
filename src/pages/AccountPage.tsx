@@ -30,6 +30,7 @@ import { DeleteAccountScreen, LegalScreen, PrivacyScreen, SecurityScreen, SoonSc
 import { Statistics } from './account/Statistics';
 import { InvitationIntro, Team } from './account/Team';
 import { ViewedListings } from './account/ViewedListings';
+import { VisitRequestDetail } from './account/VisitRequestDetail';
 import '../styles/account.css';
 
 // Mon compte (Features/Profile/ProfileView.swift) : la carte de connexion, le choix du profil d'un compte neuf,
@@ -155,7 +156,7 @@ function AccountContent() {
     // Mon projet et Biens consultés : sur ordinateur ; sur téléphone, « bientôt ».
     case 'projet': return desktop ? <ProjectEditor /> : <SoonScreen screen="projet" />;
     case 'consultes': return desktop ? <ViewedListings /> : <SoonScreen screen="consultes" />;
-    case 'demande-visite': return <SoonScreen screen="demande-visite" />;
+    case 'demande-visite': return <VisitRequestDetail requestId={params.get('id')} />;
     case 'bientot': return <SoonScreen screen={params.get('ecran')} />;
     // Profil agence : la page de l'agence et son formulaire, sur téléphone et sur ordinateur.
     case 'agence': return <AgencyProfile account={current} editing={params.get('ecran') === 'modifier'} />;

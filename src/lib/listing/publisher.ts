@@ -1,5 +1,6 @@
+import { normalizedPhone } from '../account/profile';
 import { SUPABASE_URL } from '../config';
-import { PUBLIC_STATUSES } from '../listings';
+import { LISTING_COLUMNS, PUBLIC_STATUSES, type ListingRow } from '../listings';
 import { supabase } from '../supabase';
 
 // « Votre interlocuteur » : profil public du vendeur (fonction `public_profiles` du serveur), comme l'app
@@ -18,6 +19,32 @@ export type PublicProfileRow = {
   agency_postal_code: string | null;
   agency_city: string | null;
   agency_phone: string | null;
+  // Fiche publique de l'agence (profil « Agence » de l'app), envoyée par la même fonction du serveur.
+  agency_is_verified?: boolean | null;
+  agency_email?: string | null;
+  agency_website?: string | null;
+  agency_about?: string | null;
+  agency_siren?: string | null;
+  agency_professional_card_number?: string | null;
+  agency_professional_card_cci?: string | null;
+  agency_financial_guarantee?: string | null;
+  agency_rcp_insurer?: string | null;
+  agency_rcp_policy_number?: string | null;
+};
+
+/** Fiche publique d'une agence (AgencyProfileView de l'app) : seulement ce que l'agence a renseigné. */
+export type AgencyDetails = {
+  isVerified: boolean;
+  /** « Lyon (69002) ». */
+  cityLine: string | null;
+  about: string | null;
+  /** « Votre interlocuteur » : le nom complet de l'agent qui publie. */
+  contactName: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  /** SIREN, carte professionnelle, garantie, assurance : libellé et valeur. */
+  professionalRows: [string, string][];
 };
 
 export type Publisher = {
@@ -31,7 +58,43 @@ export type Publisher = {
   phone: string | null;
   /** Agence : lien vers son barème d'honoraires, obligatoire depuis chaque annonce (fonction `agency_fee_schedule_url`). */
   feeScheduleUrl: string | null;
+  /** Compte qui publie (ses annonces : profil d'un particulier). */
+  userId: string | null;
+  /** « Sur Nidalo depuis mars 2025 » (profil d'un particulier). */
+  memberSince: string | null;
+  /** Fiche de l'agence (profil « Agence ») ; `null` pour un particulier. */
+  agency: AgencyDetails | null;
 };
+
+const filled = (value: string | null | undefined): string | null => {
+  const text = value?.trim();
+  return text ? text : null;
+};
+
+function agencyDetails(profile: PublicProfileRow, contactName: string): AgencyDetails {
+  const postal = (profile.agency_postal_code ?? '').trim();
+  const city = filled(profile.agency_city);
+  const website = filled(profile.agency_website);
+  const rows: [string, string | null][] = [
+    ['SIREN', filled(profile.agency_siren)],
+    ['Carte professionnelle', filled(profile.agency_professional_card_number)],
+    ['CCI de délivrance', filled(profile.agency_professional_card_cci)],
+    ['Garantie financière', filled(profile.agency_financial_guarantee)],
+    ['Assurance RCP', filled(profile.agency_rcp_insurer)],
+    ['Contrat RCP', filled(profile.agency_rcp_policy_number)],
+  ];
+  const phone = filled(profile.agency_phone);
+  return {
+    isVerified: profile.agency_is_verified === true,
+    cityLine: city ? (postal ? `${city} (${postal})` : city) : null,
+    about: filled(profile.agency_about),
+    contactName,
+    phone: phone ? (normalizedPhone(phone) ?? phone) : null,
+    email: filled(profile.agency_email),
+    website: website && /^https?:\/\//i.test(website) ? website : null,
+    professionalRows: rows.filter((row): row is [string, string] => row[1] !== null),
+  };
+}
 
 const monthYear = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
@@ -78,6 +141,7 @@ export function publisherFrom(profile: PublicProfileRow | null, listingCreatedAt
       isProfessional: true, name: profile.agency_name ?? 'Agence', lines,
       avatarUrl: avatarUrl(profile.agency_logo_path), phone: profile.agency_phone ?? null,
       feeScheduleUrl: feeScheduleUrl !== null && /^https?:\/\//i.test(feeScheduleUrl) ? feeScheduleUrl : null,
+      userId: profile.user_id, memberSince: null, agency: agencyDetails(profile, publicName(displayName, true)),
     };
   }
   const since = memberSince(profile?.member_since ?? listingCreatedAt);
@@ -86,6 +150,7 @@ export function publisherFrom(profile: PublicProfileRow | null, listingCreatedAt
   return {
     isProfessional: false, name: displayName.trim() || publicName(displayName), lines: since ? [since] : [],
     avatarUrl: avatarUrl(profile?.avatar_path ?? null), phone: null, feeScheduleUrl: null,
+    userId: profile?.user_id ?? null, memberSince: since, agency: null,
   };
 }
 
@@ -111,3 +176,14 @@ export async function fetchActiveCount(ownerId: string): Promise<number> {
 }
 
 export const activeCountLine = (count: number): string => (count === 1 ? '1 annonce en ligne' : `${count} annonces en ligne`);
+
+/**
+ * Annonces en ligne d'un particulier, les plus récentes d'abord (publicListings de l'app : la même requête). Le
+ * profil d'une agence ne les lit pas : l'app demande ses biens sans agent (`agentUserId: nil`) et n'en reçoit aucun.
+ */
+export async function fetchPublicListings(ownerId: string): Promise<ListingRow[]> {
+  const { data, error } = await supabase.from('listings').select(LISTING_COLUMNS).eq('owner_id', ownerId)
+    .in('status', [...PUBLIC_STATUSES]).order('published_at', { ascending: false });
+  if (error) throw error;
+  return (data as unknown as ListingRow[] | null) ?? [];
+}

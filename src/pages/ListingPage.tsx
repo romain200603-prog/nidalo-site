@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { showToast } from '../components/AppToast';
+import { ContentUnavailable } from '../components/ContentUnavailable';
 import { Icon } from '../components/Icon';
 import { Page } from '../components/Layout';
+import { OfflineState } from '../components/OfflineState';
+import { requireAccount } from '../lib/account/gate';
 import { cardKind } from '../lib/cardContent';
 import { useDesktop } from '../lib/desktop';
 import { formatArea, formatPrice } from '../lib/format';
@@ -18,17 +22,21 @@ import { shareListing } from '../lib/listing/share';
 import { nextVisit, openRequest } from '../lib/listing/visits';
 import { countListingView } from '../lib/listing/views';
 import { telHref } from '../lib/messages/format';
-import { conversationPath, listingModeFromParams, PATHS } from '../lib/paths';
+import { conversationPath, listingModeFromParams, PATHS, publishPath } from '../lib/paths';
+import { isOfflineFailure } from '../lib/loadFailure';
 import { recordView } from '../lib/recentlyViewed';
 import type { SearchMode } from '../lib/labels';
+import { Spinner } from './account/parts';
 import { ActionBar } from './listing/ActionBar';
 import { HotelSection, ProfitabilityCard, RentalCostCard } from './listing/CategoryCards';
-import { backTarget, coordinateOf, hotelPerformanceOf, rentalCostOf } from './listing/data';
+import { backTarget, coordinateOf, hotelPerformanceOf, rentalCostOf, toggleListingCompare } from './listing/data';
 import { DesktopListing } from './listing/DesktopListing';
 import { AlertDialog, NoPhoneDialog } from './listing/Dialogs';
 import { Gallery } from './listing/Gallery';
 import { LocationSection } from './listing/Location';
-import { Description, Energy, Features, Footnote, HotelActivity, PracticalInfo, PublisherCard, RiskNote } from './listing/Sections';
+import { ReportListingSheet } from './listing/ReportSheet';
+import { ListingSheet } from './listing/Sheet';
+import { Description, Energy, Features, Footnote, HotelActivity, PracticalInfo, PublisherCard, ReportRow } from './listing/Sections';
 import { HeaderCard, VisitCard } from './listing/TopCards';
 import { useListingScreens } from './listing/useListingScreens';
 
@@ -37,19 +45,23 @@ import { useListingScreens } from './listing/useListingScreens';
 // adresse (&vue=visite, &vue=offre) ; en bas, la barre de contact « Duo » (ou la barre blanche de sa propre annonce),
 // et la visite se demande sur la carte « Aucune visite prévue ». Ordinateur (≥ 1024 px) : DesktopListing.
 
-type State = { status: 'loading' } | { status: 'notFound' } | { status: 'error' } | { status: 'ready'; row: ListingRow };
+type State = { status: 'loading' } | { status: 'notFound' } | { status: 'error' } | { status: 'offline' } | { status: 'ready'; row: ListingRow };
 
-type Notice = 'noPhone' | 'requests' | 'manage' | null;
+type Notice = 'noPhone' | null;
 
 function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }) {
   // Écrire, visiter, faire une offre : communs avec l'ordinateur (useListingScreens).
-  const { session, me, isOwn, account, opening, renderScreen, requestVisit, makeOffer, contactSeller, conversationAlert } = useListingScreens(row, mode);
+  const {
+    session, me, isOwn, account, opening, shown, renderScreen, closeScreen, requestVisit, makeOffer, contactSeller, openProfile, openRequests,
+    conversationAlert,
+  } = useListingScreens(row, mode);
   const [notice, setNotice] = useState<Notice>(null);
   const [publisher, setPublisher] = useState<Publisher | null>(null);
   const [activeCount, setActiveCount] = useState<number | null>(null);
   const [choice, setChoice] = useState(STANDARD_CHOICE);
-  const [toast, setToast] = useState<string | null>(null);
   const [copyLink, setCopyLink] = useState<string | null>(null);
+  const [reporting, setReporting] = useState(false);
+  const [reportNotice, setReportNotice] = useState<string | null>(null);
   const back = useMemo(backTarget, []);
   /** L'arrivée de la barre Duo est jouée : une fois par ouverture de la fiche, pas au retour d'un de ses écrans. */
   const arrived = useRef(false);
@@ -93,16 +105,10 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
     return () => { cancelled = true; };
   }, [row.owner_id]);
 
-  useEffect(() => {
-    if (!toast) return;
-    const timer = window.setTimeout(() => setToast(null), 2600);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
-
   /** Partage du navigateur (texte de l'app et lien de la page) ; sinon le lien est copié. */
   const share = useCallback(async () => {
     const outcome = await shareListing(row, mode);
-    if (outcome === 'copied') setToast('Lien de l’annonce copié');
+    if (outcome === 'copied') showToast({ icon: 'check', text: 'Lien de l’annonce copié' });
     else if (typeof outcome === 'object') setCopyLink(outcome.link);
   }, [row, mode]);
 
@@ -126,8 +132,9 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
   const request = isOwn || upcoming ? null : openRequest(account.requests, row.id, me, now);
 
   // « Demander une visite » ou « Faire une offre » ouvert : l'écran seul, à la place de la fiche.
-  const opened = renderScreen({ photo: photos[0], recipientName: publisher?.name ?? (isRental ? 'Le propriétaire' : 'Le vendeur'), profitability });
-  if (opened) return <div className="listing listing-screen">{opened}</div>;
+  const opened = renderScreen({ photo: photos[0], recipientName: publisher?.name ?? (isRental ? 'Le propriétaire' : 'Le vendeur'), profitability, publisher });
+  // « Faire une offre » monte en feuille sur la fiche (domiaSheet de l'app) ; les autres écrans la remplacent.
+  if (opened && shown !== 'offre') return <div className="listing listing-screen">{opened}</div>;
 
   return (
     <div className="listing">
@@ -138,7 +145,8 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
         </a>
       </div>
       <div className="listing-gallery-wrap">
-        <Gallery photos={photos} onShare={share} listingId={row.id} back={{ href: back.href, label: back.label, onClick: onBack }} />
+        <Gallery photos={photos} propertyType={row.property_type} onShare={share} onCompare={() => toggleListingCompare(row.id, mode)}
+          listingId={row.id} back={{ href: back.href, label: back.label, onClick: onBack }} />
       </div>
       <div className="wrap listing-body">
         <div className="listing-aside">
@@ -164,7 +172,7 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
               isRental={isRental}
               playsArrival={!arrived.current}
               onArrived={() => { arrived.current = true; }}
-              owner={isOwn ? { onRequests: () => setNotice('requests'), onManage: () => setNotice('manage') } : null}
+              owner={isOwn ? { onRequests: openRequests, onManage: () => window.location.assign(publishPath(row.id)) } : null}
             />
             {!isOwn && <VisitCard upcoming={upcoming} request={request} now={now} isRental={isRental} onRequest={requestVisit} />}
           </div>
@@ -181,7 +189,10 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
           {activity && <HotelActivity rows={activity.rows} showsNote={activity.showsNote} />}
           {row.description?.trim() && <Description text={row.description.trim()} />}
           <Features rows={featureRows(row)} />
-          {publisher && <PublisherCard publisher={publisher} fees={fees} activeCount={activeCount} onContact={isOwn ? undefined : contactSeller} isRental={isRental} />}
+          {publisher && (
+            <PublisherCard publisher={publisher} fees={fees} activeCount={activeCount} onOpenProfile={openProfile}
+              onContact={isOwn ? undefined : contactSeller} isRental={isRental} />
+          )}
           <Energy energyClass={energyLetter(row.energy_class)} climateClass={energyLetter(row.climate_class)} lines={energyLines(row)} />
           <LocationSection
             coordinate={coordinateOf(row)}
@@ -195,20 +206,26 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
             }}
             isRental={isRental}
           />
-          <RiskNote />
           <Footnote text={footnote(row)} />
+          {/* Ni sur sa propre annonce (ListingReportPolicy) ; sans compte, la connexion d'abord. */}
+          {!isOwn && <ReportRow onClick={() => void requireAccount(() => setReporting(true))} />}
         </div>
       </div>
 
       <NoPhoneDialog open={notice === 'noPhone'} onClose={() => setNotice(null)} onMessage={() => { setNotice(null); contactSeller(); }} isRental={isRental} />
       {conversationAlert}
+      <ListingSheet open={shown === 'offre' && opened !== null} onClose={closeScreen} title="Faire une offre" cancelLabel={null} className="offer-sheet"
+        head={null}>
+        {shown === 'offre' ? opened : null}
+      </ListingSheet>
+      <ReportListingSheet open={reporting} listingId={row.id} onClose={() => setReporting(false)}
+        onSent={(text) => { setReporting(false); setReportNotice(text); }} />
       <AlertDialog
-        open={notice === 'requests' || notice === 'manage'}
-        onClose={() => setNotice(null)}
+        open={reportNotice !== null}
+        onClose={() => setReportNotice(null)}
         dismissible={false}
-        title={notice === 'manage' ? 'Gérer l\'annonce' : 'Voir les demandes'}
-        message="Dans l’app iPhone pour l’instant."
-        actions={[{ label: 'Fermer', onClick: () => setNotice(null), role: 'cancel' }]}
+        title={reportNotice ?? ''}
+        actions={[{ label: 'OK', onClick: () => setReportNotice(null), role: 'cancel' }]}
       />
       <AlertDialog
         open={copyLink !== null}
@@ -220,33 +237,28 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
       >
         <input className="copy-link" type="url" readOnly value={copyLink ?? ''} aria-label="Lien de l’annonce" onFocus={(event) => event.currentTarget.select()} autoFocus />
       </AlertDialog>
-      <p className={`listing-toast${toast ? ' is-shown' : ''}`} role="status" aria-live="polite">
-        {toast && <><Icon name="check" />{toast}</>}
-      </p>
     </div>
   );
 }
 
+/**
+ * Chargement : la place de la photo (teinte neutre) avec son retour, et la roue de l'iPhone en dessous, comme la fiche
+ * de l'app avant la lecture de l'annonce (ProgressView sous l'en-tête, ListingDetailView.swift 144–147).
+ */
 function Loading() {
+  const back = useMemo(backTarget, []);
   return (
     <div className="listing listing-loading" aria-busy="true">
       <div className="listing-gallery-wrap">
-        <div className="gallery gallery-skeleton skeleton" />
-      </div>
-      <div className="wrap listing-body">
-        <div className="listing-aside">
-          <div className="listing-aside-inner">
-            <div className="top-card header-card skeleton-card-block">
-              <span className="skeleton line short" />
-              <span className="skeleton line wide" />
-              <span className="skeleton line" />
-              <span className="skeleton line short" />
-            </div>
+        <div className="gallery gallery-loading">
+          <div className="gallery-bar">
+            <a className="gallery-back" href={back.href} aria-label="Retour" title={back.label}>
+              <Icon name="chevronLeft" />
+            </a>
           </div>
         </div>
-        <div className="listing-main" />
       </div>
-      <p className="visually-hidden" role="status">Chargement de l’annonce…</p>
+      <Spinner label="Chargement de l’annonce…" />
     </div>
   );
 }
@@ -265,13 +277,17 @@ export function ListingPage() {
     setState({ status: 'loading' });
     fetchListing(id)
       .then((row) => { if (!cancelled) setState({ status: 'ready', row }); })
-      .catch((error) => { if (!cancelled) setState({ status: error instanceof ListingNotFound ? 'notFound' : 'error' }); });
+      .catch((error) => {
+        if (cancelled) return;
+        setState({ status: error instanceof ListingNotFound ? 'notFound' : isOfflineFailure(error) ? 'offline' : 'error' });
+      });
     return () => { cancelled = true; };
   }, [id, attempt]);
 
   useEffect(() => {
     if (state.status === 'notFound') document.title = 'Annonce introuvable · Nidalo';
     if (state.status === 'error') document.title = 'Annonce indisponible · Nidalo';
+    if (state.status === 'offline') document.title = 'Pas de connexion Internet · Nidalo';
   }, [state.status]);
 
   // Fiche ouverte (ou un de ses écrans) : la barre du bas de l'app est masquée (hidesTabBar), place à la barre d'actions.
@@ -280,30 +296,32 @@ export function ListingPage() {
     document.body.classList.toggle('page-listing-ready', ready);
   }, [ready]);
 
-  // Annonce introuvable ou indisponible, sur téléphone : retour et titre en haut, comme un écran poussé.
-  const stateTitle = state.status === 'notFound' ? 'Annonce introuvable' : state.status === 'error' ? 'Annonce indisponible' : null;
+  // Annonce introuvable, indisponible ou hors connexion, sur téléphone : retour et titre en haut, comme un écran poussé.
+  const stateTitle = state.status === 'notFound' ? 'Annonce introuvable' : state.status === 'error' ? 'Annonce indisponible'
+    : state.status === 'offline' ? 'Annonce' : null;
   return (
     <Page section="search" phoneHeader={stateTitle ? { title: stateTitle, back: PATHS.search } : undefined}>
       {state.status === 'ready' && (desktop ? <DesktopListing row={state.row} mode={mode} /> : <ListingView row={state.row} mode={mode} />)}
       {state.status === 'loading' && <Loading />}
       {state.status === 'notFound' && (
         <div className="wrap">
-          <div className="card state listing-state">
-            <Icon name="search" />
-            <h1>Annonce introuvable</h1>
-            <p>Cette annonce n’existe pas ou n’est plus en ligne.</p>
-            <a className="btn btn-primary" href={PATHS.search}>Chercher un bien</a>
-          </div>
+          <ContentUnavailable icon="search" heading="h1" className="listing-state" title="Annonce introuvable" text="Cette annonce n’existe pas ou n’est plus en ligne.">
+            <a className="btn btn-light" href={PATHS.search}>Chercher un bien</a>
+          </ContentUnavailable>
         </div>
       )}
       {state.status === 'error' && (
+        // « Annonce indisponible » de l'app (DomiaEmptyState, triangle d'alerte) ; le site garde « Réessayer ».
         <div className="wrap">
-          <div className="card state listing-state">
-            <Icon name="triangleAlert" />
-            <h1>Annonce indisponible</h1>
-            <p>Impossible de charger cette annonce. Réessayez dans un instant.</p>
-            <button type="button" className="btn btn-primary" onClick={() => setAttempt((n) => n + 1)}>Réessayer</button>
-          </div>
+          <ContentUnavailable icon="triangleAlert" heading="h1" className="listing-state" title="Annonce indisponible"
+            text="Impossible de charger cette annonce. Réessayez dans un instant.">
+            <button type="button" className="btn btn-light" onClick={() => setAttempt((n) => n + 1)}>Réessayer</button>
+          </ContentUnavailable>
+        </div>
+      )}
+      {state.status === 'offline' && (
+        <div className="wrap">
+          <OfflineState className="listing-state" onRetry={() => setAttempt((n) => n + 1)} />
         </div>
       )}
     </Page>

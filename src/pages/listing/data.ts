@@ -1,7 +1,10 @@
+import { showToast } from '../../components/AppToast';
+import { compareState, compareToast, toggleCompare } from '../../lib/compare';
 import type { ListingRow } from '../../lib/listings';
 import { HotelPerformance, RentalCost } from '../../lib/investment';
+import type { SearchMode } from '../../lib/labels';
 import { hotelOf, num, rentalDetails } from '../../lib/listing/fields';
-import { PATHS } from '../../lib/paths';
+import { comparePath, PATHS } from '../../lib/paths';
 
 // Données de la fiche partagées par le téléphone et l'ordinateur (sorties de ListingPage.tsx telles quelles).
 
@@ -49,4 +52,34 @@ export function coordinateOf(row: ListingRow) {
   const latitude = num(row.public_latitude);
   const longitude = num(row.public_longitude);
   return latitude === null || longitude === null ? null : { latitude, longitude };
+}
+
+/**
+ * Fond d'une annonce sans photo (ListingPhoto.placeholder de l'app) : une teinte selon le type de bien, l'icône photo
+ * par-dessus. Une page sur deux d'une galerie est un peu plus claire (`variant`).
+ */
+export function photoTint(propertyType: string | null | undefined): string {
+  switch (propertyType) {
+    case 'apartment': return '#DDE6F0';
+    case 'house': return '#DDEADF';
+    case 'building': case 'commercial': case 'office': case 'hotel': return '#EFE6DA';
+    default: return '#EADFE8';
+  }
+}
+
+/**
+ * « Comparer » de la fiche (CompareButton de l'app) : ajoute ou retire le bien, puis le message du bas (4 s) ; « Voir »
+ * ou « Gérer » ouvre la comparaison, comme toucher le message.
+ */
+export function toggleListingCompare(listingId: string, mode: SearchMode | null) {
+  const message = compareToast(toggleCompare(listingId), compareState().ids.length);
+  if (!message) return;
+  showToast({
+    icon: 'columns',
+    text: message.text,
+    action: message.action
+      ? { label: message.action, accessibilityLabel: message.action, run: () => window.location.assign(comparePath(mode)) }
+      : undefined,
+    wholeToast: true,
+  });
 }

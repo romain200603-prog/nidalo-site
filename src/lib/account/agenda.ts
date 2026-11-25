@@ -4,7 +4,7 @@ import { requestDisplayStatus, type AgendaRow, type VisitRequestRow, type VisitS
 import { photoUrl } from '../listings';
 import { isOfflineFailure } from '../loadFailure';
 import { fetchProfiles } from '../messages/api';
-import { normalizedPhoneNumber } from '../messages/format';
+import { formattedPhoneNumber, normalizedPhoneNumber } from '../messages/format';
 import { sameId, type ProfileRow } from '../messages/inbox';
 import type { PlaceSuggestion } from '../places';
 import { supabase } from '../supabase';
@@ -37,7 +37,12 @@ export type AgendaItem = {
   status: VisitStatus;
   /** Avis et décision du compte rendu (VisitReport.summary). */
   reportSummary: string | null;
+  /** Ligne telle que le serveur la garde (visite enregistrée) : la réécrire garde tout ce que l'app y a mis. */
+  stored?: StoredVisit;
 };
+
+/** Visite enregistrée dans agenda_visits : la visite entière en JSON (Visit encodé par l'app) et ses colonnes. */
+export type StoredVisit = { visit: Record<string, unknown>; startAt: string; requestId: string | null; listingId: string | null };
 
 /** Demande de visite telle que my_visit_requests la rend (Row de SupabaseVisitRequestRepository.swift). */
 export type AgendaRequestRow = VisitRequestRow & {
@@ -99,6 +104,7 @@ export function visitFromRow(row: AgendaRow): AgendaItem | null {
     address: text(visit.address),
     status,
     reportSummary: summary || null,
+    stored: { visit, startAt: row.start_at, requestId: row.request_id ?? null, listingId: row.listing_id ?? null },
   };
 }
 
@@ -797,4 +803,170 @@ export function visitPhoneFor(profile: { account_type: string | null; agency_id:
   const isPro = profile?.account_type === 'professional' && !!profile.agency_id;
   const phone = isPro ? profile?.agency_phone?.trim() : null;
   return phone ? normalizedPhoneNumber(phone) : null;
+}
+
+// MARK: - Annuler, supprimer, ajouter au calendrier (VisitStore, SupabaseAgendaRepository, VisitActions)
+
+const VISIT_GONE = 'Cette visite n\'existe plus.';
+const CONVERSATION_VISIT = 'Cette visite a été organisée dans une conversation : elle peut être annulée, pas supprimée.';
+
+/**
+ * Colonnes réécrites, comme SupabaseAgendaRepository.write : début et statut de la visite, sa demande et son annonce
+ * (absentes, elles ne sont pas envoyées, comme une valeur absente de Swift), et la visite entière en JSON.
+ */
+export function visitChanges(stored: StoredVisit, visit: Record<string, unknown>): Record<string, unknown> {
+  const changes: Record<string, unknown> = { start_at: text(visit.start) ?? stored.startAt, status: text(visit.status) ?? 'confirmed' };
+  const requestId = text(visit.requestId) ?? stored.requestId;
+  if (requestId) changes.request_id = requestId;
+  const listingId = text(object(visit.listing).listingId) ?? stored.listingId;
+  if (listingId) changes.listing_id = listingId;
+  changes.visit = visit;
+  return changes;
+}
+
+/** Visite relue après une modification, à sa place dans l'agenda. */
+function replaceVisit(id: string, row: AgendaRow | null) {
+  const current = agendaStore.get();
+  const next = row ? visitFromRow(row) : null;
+  agendaStore.set({
+    ...current,
+    visits: next ? current.visits.map((item) => (sameId(item.id, id) ? next : item)) : current.visits.filter((item) => !sameId(item.id, id)),
+  });
+}
+
+/** « Annuler la visite » (VisitStore.cancel) : la ligne réécrite avec le statut « cancelled » ; message d'erreur ou null. */
+export async function cancelVisit(item: AgendaItem): Promise<string | null> {
+  if (!item.stored) return VISIT_GONE;
+  const visit = { ...item.stored.visit, status: 'cancelled' };
+  const changes = visitChanges(item.stored, visit);
+  const { error } = await supabase.from('agenda_visits').update(changes).eq('id', item.id.toLowerCase());
+  if (error) return agendaErrorMessage(error);
+  replaceVisit(item.id, { id: item.id, start_at: String(changes.start_at), status: 'cancelled', request_id: item.stored.requestId,
+    listing_id: item.stored.listingId, visit: visit as AgendaRow['visit'] });
+  return null;
+}
+
+/** Dossier des photos du compte rendu d'une visite (AgendaSync.folder) : « <compte>/<visite> », en minuscules. */
+export const reportFolder = (owner: string, visitId: string): string => `${owner.toLowerCase()}/${visitId.toLowerCase()}`;
+
+/**
+ * « Supprimer » (VisitStore.delete) : seulement une visite ajoutée à la main ; ses photos du compte rendu d'abord
+ * (visit-reports), puis la ligne. Message d'erreur ou null.
+ */
+export async function deleteVisit(item: AgendaItem, owner: string): Promise<string | null> {
+  if (!item.stored) return VISIT_GONE;
+  if (item.conversationId !== null) return CONVERSATION_VISIT;
+  const bucket = supabase.storage.from('visit-reports');
+  const folder = reportFolder(owner, item.id);
+  const listed = await bucket.list(folder);
+  if (listed.error) return agendaErrorMessage(listed.error);
+  const paths = (listed.data ?? []).map((file) => `${folder}/${file.name}`);
+  if (paths.length) {
+    const removed = await bucket.remove(paths);
+    if (removed.error) return agendaErrorMessage(removed.error);
+  }
+  const { error } = await supabase.from('agenda_visits').delete().eq('id', item.id.toLowerCase());
+  if (error) return agendaErrorMessage(error);
+  replaceVisit(item.id, null);
+  return null;
+}
+
+/** Texte d'une ligne de fichier .ics : barres obliques, virgules, points-virgules et retours échappés. */
+const icsText = (value: string): string => value.replace(/\\/g, '\\\\').replace(/[,;]/g, (char) => `\\${char}`).replace(/\r?\n/g, '\\n');
+const icsDate = (date: Date): string => date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+
+/**
+ * « Ajouter à mon calendrier » (VisitActions.addToCalendar) : sur le site, un fichier .ics avec le même événement
+ * (« Visite : <bien> », l'adresse, le début et la fin, les notes), que le calendrier de l'appareil ouvre.
+ */
+export function visitCalendarFile(item: AgendaItem, now: Date = new Date()): string {
+  const notes = text(item.stored?.visit.notes);
+  const lines = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Nidalo//Agenda des visites//FR', 'CALSCALE:GREGORIAN', 'BEGIN:VEVENT',
+    `UID:${item.id.toLowerCase()}@nidalo.fr`, `DTSTAMP:${icsDate(now)}`, `DTSTART:${icsDate(item.start)}`, `DTEND:${icsDate(new Date(visitEnd(item)))}`,
+    `SUMMARY:${icsText(`Visite : ${item.listing?.title ?? 'bien immobilier'}`)}`,
+  ];
+  const address = routableAddress(item);
+  if (address) lines.push(`LOCATION:${icsText(address)}`);
+  if (notes) lines.push(`DESCRIPTION:${icsText(notes)}`);
+  lines.push('END:VEVENT', 'END:VCALENDAR');
+  return `${lines.join('\r\n')}\r\n`;
+}
+
+/** Le fichier .ics d'une visite, téléchargé (« visite.ics »). */
+export function downloadVisitCalendar(item: AgendaItem) {
+  const url = URL.createObjectURL(new Blob([visitCalendarFile(item)], { type: 'text/calendar;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'visite.ics';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Texte partagé d'une visite (VisitDetailView.shareText) : bien, date et durée, adresse et contact. */
+export function visitShareText(item: AgendaItem, longDate: (date: Date) => string): string {
+  const lines = [`Visite : ${item.listing?.title ?? 'bien immobilier'}`, longDate(item.start) + (item.durationMinutes ? ` (${item.durationMinutes} min)` : '')];
+  const address = routableAddress(item);
+  if (address) lines.push(`Adresse : ${address}`);
+  const phone = visitDetails(item).contactPhone;
+  if (item.contactName) lines.push(`Contact : ${item.contactName}${phone ? ` · ${formattedPhoneNumber(phone)}` : ''}`);
+  return lines.join('\n');
+}
+
+/** Sections de « Préparer ma visite », dans l'ordre de l'app (VisitChecklistSection). */
+const CHECKLIST_SECTIONS: [string, string][] = [
+  ['questions', 'Questions à poser'], ['checks', 'Points à vérifier'], ['works', 'Travaux à prévoir'], ['info', 'Informations importantes'],
+];
+const CONDITION_LABELS: Record<string, string> = { veryGood: 'Très bon état', good: 'Bon état', refresh: 'À rafraîchir', renovate: 'Gros travaux' };
+
+/** Ce que l'écran « Détail de la visite » lit de la visite enregistrée (VisitDetailView). */
+export type VisitDetails = {
+  contactPhone: string | null;
+  participants: string[];
+  /** « La veille et 2 h avant » ; `null` sans rappel (ou visite annulée). */
+  reminders: string | null;
+  notes: string | null;
+  report: { summary: string | null; positives: string | null; negatives: string | null; personalNote: string | null; worksEstimate: number | null; photos: number } | null;
+  /** « Ma préparation » : lignes retenues par section, puis l'état général ; `null` si rien n'est retenu. */
+  preparation: { sections: { title: string; items: string[] }[]; condition: string | null } | null;
+};
+
+/** Préparation montrée par le détail (preparationCard) : seulement avec une ligne cochée, un état ou une note d'état. */
+function preparationOf(raw: unknown): VisitDetails['preparation'] {
+  if (!raw || typeof raw !== 'object') return null;
+  const preparation = object(raw);
+  const items = Array.isArray(preparation.items) ? preparation.items.map(object) : [];
+  const sections = CHECKLIST_SECTIONS.map(([key, title]) => ({
+    title, items: items.filter((entry) => entry.section === key && entry.isChecked === true).map((entry) => text(entry.text)).filter((line): line is string => !!line),
+  })).filter((section) => section.items.length > 0);
+  const condition = typeof preparation.condition === 'string' ? CONDITION_LABELS[preparation.condition] ?? null : null;
+  const note = text(preparation.conditionNote);
+  if (!sections.length && !condition && !note) return null;
+  return { sections, condition: condition || note ? [condition, note].filter(Boolean).join(' · ') : null };
+}
+
+export function visitDetails(item: AgendaItem): VisitDetails {
+  const visit = item.stored?.visit ?? {};
+  const participants = Array.isArray(visit.participants) ? visit.participants.map((entry) => text(object(entry).name)).filter((name): name is string => !!name) : [];
+  const rawReminders = object(visit.reminders);
+  const summary = visit.reminders && item.status !== 'cancelled' ? remindersSummary({
+    eveningBefore: rawReminders.eveningBefore === true, twoHoursBefore: rawReminders.twoHoursBefore === true,
+    customMinutesBefore: typeof rawReminders.customMinutesBefore === 'number' ? rawReminders.customMinutesBefore : null,
+  }) : null;
+  const reminders = summary ? summary.replace('rappels ', '').replace('rappel ', '') : null;
+  const report = visit.report ? object(visit.report) : null;
+  const phone = text(visit.contactPhone);
+  return {
+    contactPhone: phone ? normalizedPhoneNumber(phone) ?? phone : null,
+    participants,
+    reminders: reminders ? reminders.charAt(0).toLocaleUpperCase('fr-FR') + reminders.slice(1) : null,
+    notes: text(visit.notes),
+    report: report ? {
+      summary: item.reportSummary, positives: text(report.positives), negatives: text(report.negatives), personalNote: text(report.personalNote),
+      worksEstimate: typeof report.worksEstimate === 'number' ? report.worksEstimate : null, photos: Array.isArray(report.photos) ? report.photos.length : 0,
+    } : null,
+    preparation: preparationOf(visit.preparation),
+  };
 }

@@ -1,17 +1,19 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { Icon } from '../../components/Icon';
 import type { IconName } from '../../components/iconPaths';
+import { PageHeader } from '../../components/PageHeader';
 import { InfoLine } from '../../components/FilterControls';
 import { PlaceField } from '../../components/PlaceField';
 import {
-  agendaStore, createVisit, CUSTOM_REMINDER_CHOICES, defaultVisitStart, DEFAULT_REMINDERS, directionsUrl, durationLabel, fullLabel,
-  googleMapsUrl, loadAgenda, reminderLabel, remindersSummary, upcomingVisitForListing, VISIT_DURATIONS, visitAddressFor,
+  agendaStore, createVisit, CUSTOM_REMINDER_CHOICES, defaultVisitStart, DEFAULT_REMINDERS, directionsUrl, downloadVisitCalendar, durationLabel, fullLabel,
+  googleMapsUrl, itemFromNewVisit, loadAgenda, reminderLabel, remindersSummary, upcomingVisitForListing, VISIT_DURATIONS, visitAddressFor,
   visitContactFor, visitPhoneFor, type VisitListing, type VisitParticipant, type VisitReminders,
 } from '../../lib/account/agenda';
 import { favoritesStore, loadFavorites } from '../../lib/account/favorites';
 import { loadMyListings, myListingsStore } from '../../lib/account/myListings';
 import { newUUID } from '../../lib/account/projectEditor';
 import { currentUserId, useStore } from '../../lib/account/session';
+import { useDesktop } from '../../lib/desktop';
 import { dayString, visitDateLong } from '../../lib/listing/visits';
 import { LISTING_COLUMNS, photoUrl, sortedPhotos, UUID_PATTERN, type ListingRow } from '../../lib/listings';
 import { fetchInboxRows, fetchProfiles } from '../../lib/messages/api';
@@ -23,13 +25,14 @@ import { supabase } from '../../lib/supabase';
 import { Modal } from '../listing/Dialogs';
 import { ActionMenu, ChoiceDialog, IPHONE_ONLY, IphoneOnlyDialog, ScreenHead, Thumb } from './DesktopParts';
 import { Spinner } from './parts';
+import '../../styles/agenda-app.css';
 
 // « Ajouter une visite » sur ordinateur, dans la colonne de 640 px, et sur téléphone (Features/Visits/VisitFormView.swift, création) :
 // bien concerné (une de mes annonces, un favori ou le bien d'une conversation, VisitListingPicker.swift), date et
 // heure, rendez-vous, participants, rappels et suivi. « Enregistrer » écrit dans agenda_visits la même ligne que
-// l'app (lib/account/agenda, newVisitRow). « Préparer ma visite » et « Ajouter à mon calendrier » restent dans l'app
-// iPhone ; les rappels choisis sont enregistrés avec la visite et envoyés par l'app iPhone, comme pour une visite
-// créée sur l'iPhone.
+// l'app (lib/account/agenda, newVisitRow) ; « Ajouter à mon calendrier » donne ensuite le fichier .ics de la visite.
+// « Préparer ma visite » reste dans l'app iPhone ; les rappels choisis sont enregistrés avec la visite et envoyés par
+// l'app iPhone, comme pour une visite créée sur l'iPhone.
 
 /** Bien proposé pour une visite (VisitListingChoice). */
 type Choice = {
@@ -225,6 +228,7 @@ function TextField({ label, value, onChange, error, type = 'text', autoComplete,
 const visitAddressFetcher = (raw: string, _limit?: number, signal?: AbortSignal) => addressSuggestions(raw, 5, signal);
 
 export function AddVisit({ fromAgenda }: { fromAgenda: boolean }) {
+  const desktop = useDesktop();
   const agenda = useStore(agendaStore);
   const back = fromAgenda ? accountPath('agenda') : accountPath();
   const [initialStart] = useState(() => defaultVisitStart(new Date()));
@@ -243,6 +247,7 @@ export function AddVisit({ fromAgenda }: { fromAgenda: boolean }) {
   const [participantPhone, setParticipantPhone] = useState('');
   const [reminders, setReminders] = useState<VisitReminders>(DEFAULT_REMINDERS);
   const [isConfirmed, setIsConfirmed] = useState(false);
+  const [addsToCalendar, setAddsToCalendar] = useState(false);
   const [acceptsDuplicate, setAcceptsDuplicate] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -337,16 +342,19 @@ export function AddVisit({ fromAgenda }: { fromAgenda: boolean }) {
     if (!canSave) return;
     setError(null);
     setSaving(true);
-    const failure = await createVisit({
+    const visit = {
       id: newUUID(), listing, linkedConversationId, start, durationMinutes, contactName, phone, address, participants, reminders,
       isConfirmed, createdAt: new Date(),
-    });
+    };
+    const failure = await createVisit(visit);
     setSaving(false);
     if (failure) {
       // Le formulaire reste ouvert, avec la saisie.
       setError(failure);
       return;
     }
+    // Visite enregistrée : son événement pour le calendrier de l'appareil (un fichier .ics sur le site).
+    if (addsToCalendar) downloadVisitCalendar(itemFromNewVisit(visit));
     setSaved(['Visite enregistrée', remindersSummary(reminders)].filter(Boolean).join(' · '));
     window.setTimeout(() => window.location.assign(back), 1300);
   }
@@ -358,18 +366,23 @@ export function AddVisit({ fromAgenda }: { fromAgenda: boolean }) {
 
   const existingDate = existing ? visitDateLong(existing.start) : '';
 
+  // « Enregistrer » : sur téléphone, la capsule bleue de 36 à droite de l'en-tête de l'app (VisitFormView) ; sur
+  // ordinateur, le bouton du site en haut à droite.
+  const saveButton = (
+    <button type="button" className={desktop ? 'dsc-button dsc-button-primary' : 'app-visit-save'} onClick={() => void save()} disabled={!canSave}
+      aria-describedby={!canSave && !saving ? `${addressId}-aide` : undefined}>
+      {saving ? <span className="spinner dsc-button-spinner" role="status" aria-label="Enregistrement" /> : 'Enregistrer'}
+    </button>
+  );
+
   return (
-    <div className="dsc dsc-form-screen">
-      <ScreenHead
-        title="Nouvelle visite"
-        onBack={leave}
-        action={(
-          <button type="button" className="dsc-button dsc-button-primary" onClick={() => void save()} disabled={!canSave}
-            aria-describedby={!canSave && !saving ? `${addressId}-aide` : undefined}>
-            {saving ? <span className="spinner dsc-button-spinner" role="status" aria-label="Enregistrement" /> : 'Enregistrer'}
-          </button>
-        )}
-      />
+    <div className={desktop ? 'dsc dsc-form-screen' : 'dsc dsc-form-screen app-visit-form'}>
+      {desktop ? (
+        <ScreenHead title="Nouvelle visite" onBack={leave} action={saveButton} />
+      ) : (
+        // En-tête de l'app : retour rond, titre de 17 centré, « Enregistrer » à droite.
+        <PageHeader title="Nouvelle visite" onBack={leave} trailing={saveButton} />
+      )}
       <p id={`${addressId}-aide`} className="visually-hidden">Choisissez un bien ou indiquez une adresse</p>
       {saved && <div className="dsc-saved" role="status"><Icon name="check" />{saved}</div>}
 
@@ -544,11 +557,7 @@ export function AddVisit({ fromAgenda }: { fromAgenda: boolean }) {
             ? 'La visite apparaît « Confirmée » dans votre agenda.'
             : 'La visite apparaît « En attente » jusqu\'à ce que vous l\'indiquiez confirmée.'}
         </InfoLine>
-        <div className="dsc-toggle is-iphone">
-          <Icon name="calendarPlus" />
-          <span className="dsc-toggle-title">Ajouter à mon calendrier</span>
-          <span className="dsc-toggle-note">{IPHONE_ONLY}</span>
-        </div>
+        <Toggle icon="calendarPlus" title="Ajouter à mon calendrier" checked={addsToCalendar} onChange={setAddsToCalendar} />
       </section>
 
       {error && <p className="field-error dsc-form-error" role="alert">{error}</p>}
