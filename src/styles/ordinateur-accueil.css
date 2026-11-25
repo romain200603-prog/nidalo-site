@@ -57,7 +57,7 @@
   /* ——— Sections ——— */
   .dhome-sections { padding-bottom: 16px; }
   .dhome .dhome-section { display: block; padding-top: 56px; }
-  .dhome .dhome-opportunities { margin-top: 56px; padding: 48px 0 52px; background: #E9EEF8; }
+  .dhome .dhome-opportunities { margin-top: 56px; padding: 48px 0 52px; background: var(--app-brand-soft); }
   .dhome-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
   .dhome-head-text { min-width: 0; }
   .dhome-head h2 { margin: 0; color: var(--d-text); font-size: 24px; font-weight: 700; line-height: 30px; }
@@ -70,15 +70,14 @@
   .dhome-see-all:hover { color: var(--d-blue-hover); text-decoration: underline; }
   .dhome-see-all:focus-visible { border-radius: 6px; outline: 2px solid var(--d-blue); outline-offset: 3px; }
   .dhome-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
-  .dhome-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
-  /* Une seule ligne par section, comme la maquette : 4 grandes cartes (3 sous 1280 px) ou 3 petites. Les lectures
-     restent celles de l'app (8 ou 10 biens) ; « Voir tout » ouvre la liste complète. */
-  .dhome .dhome-grid > :nth-child(n+5), .dhome .dhome-list > :nth-child(n+4) { display: none; }
+  /* Une seule ligne par section, comme la maquette : 4 cartes (3 sous 1280 px). Les lectures restent celles de l'app
+     (8 ou 10 biens) ; « Voir tout » ouvre la liste complète. */
+  .dhome .dhome-grid > :nth-child(n+5) { display: none; }
 
-  /* Cartes d'annonce : celles de l'accueil de l'app (HomeListingCard, CompactListingCard, accueil-app.css), sur toute
-     la colonne. */
+  /* Cartes d'annonce : celle de l'accueil de l'app (HomeListingCard, accueil-app.css), dans toutes les sections, sur
+     toute la colonne. */
   .dhome .stretched:focus-visible { outline: none; }
-  .dhome .home-listing-card:has(.stretched:focus-visible), .dhome .compact-card:has(.stretched:focus-visible) { outline: 2px solid var(--d-blue); outline-offset: 2px; }
+  .dhome .home-listing-card:has(.stretched:focus-visible) { outline: 2px solid var(--d-blue); outline-offset: 2px; }
   .dhome .heart-button:focus-visible { outline: 2px solid var(--d-blue); outline-offset: 2px; }
   .dhome .hlc-heart:hover { color: var(--d-blue); }
 }
