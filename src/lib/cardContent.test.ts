@@ -74,6 +74,14 @@ describe('fiches', () => {
     expect(formatFact({ kind: 'workstations', value: 24 }, now).text).toBe('24 postes');
   });
 
+  it('loyer encaissé : au pluriel dès que plusieurs lots sont loués (collectedRentLabel)', () => {
+    expect(formatFacts([{ kind: 'currentRent', value: 850 }], now).map((fact) => fact.text.replace(/\s/g, ' '))).toEqual(['Loyer encaissé : 850 €/mois']);
+    expect(formatFacts([{ kind: 'units', residential: 4, commercial: 1 }, { kind: 'vacantUnits', value: 1 }, { kind: 'annualRent', value: 36000 }], now)
+      .map((fact) => fact.text.replace(/\s/g, ' ')).at(-1)).toBe('Loyers encaissés : 36 000 €/an');
+    expect(formatFacts([{ kind: 'units', residential: 1, commercial: null }, { kind: 'annualRent', value: 9600 }], now)
+      .map((fact) => fact.text.replace(/\s/g, ' ')).at(-1)).toBe('Loyer encaissé : 9 600 €/an');
+  });
+
   it('terrain à louer : la surface du terrain, pas « 0 m² » (n° 144)', () => {
     const land = row({ transaction: 'rent', property_type: 'land', publish_category: 'rental', price: 300, living_area: 0, land_area: 1200, rooms: null, energy_class: null });
     const c = card(land, 'rent');

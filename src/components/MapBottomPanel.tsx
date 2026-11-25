@@ -5,7 +5,7 @@ import { Icon } from './Icon';
 import { OfflineState } from './OfflineState';
 import { ListingPhoto } from './PhotoPager';
 import { HeartButton } from './account/HeartButton';
-import { badgeText, cardContent, cardLocation, formatCardPrice, formatFact, type FormattedFact } from '../lib/cardContent';
+import { badgeText, cardContent, cardLocation, formatCardPrice, formatFact, leasedLotsOf, type FormattedFact } from '../lib/cardContent';
 import type { SearchMode } from '../lib/labels';
 import { sortedPhotos } from '../lib/listings';
 import {
@@ -73,7 +73,7 @@ export function MapResultCard({ result, mode, selected, wide = false }: { result
           {price.suffix && <span>{price.suffix}</span>}
         </p>
         <div className="map-card-facts">
-          {content.facts.slice(0, wide ? 4 : 3).map((fact, index) => <FactLine key={index} fact={formatFact(fact)} />)}
+          {content.facts.slice(0, wide ? 4 : 3).map((fact, index) => <FactLine key={index} fact={formatFact(fact, undefined, leasedLotsOf(content.facts))} />)}
         </div>
       </div>
     </article>

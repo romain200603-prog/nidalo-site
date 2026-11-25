@@ -310,8 +310,25 @@ export function availability(date: Date, now = new Date()): string {
   return date > now ? `Disponible le ${dayMonth.format(date)}` : 'Disponible de suite';
 }
 
+/**
+ * Lots loués d'une carte : un, sauf un immeuble (logements + commerces − lots vacants), faute du détail des lots que lit
+ * l'app (ListingCardContent.leasedLots).
+ */
+export function leasedLotsOf(facts: KeyFact[]): number {
+  const units = facts.find((fact) => fact.kind === 'units');
+  const vacant = facts.find((fact) => fact.kind === 'vacantUnits');
+  return units?.kind === 'units'
+    ? Math.max(1, (units.residential ?? 0) + (units.commercial ?? 0) - (vacant?.kind === 'vacantUnits' ? vacant.value : 0))
+    : 1;
+}
 
-export function formatFact(fact: KeyFact, now = new Date()): FormattedFact {
+/** « Loyer encaissé », ou « Loyers encaissés » dès que plusieurs lots sont loués (collectedRentLabel de l'app). */
+function collectedRentLabel(leasedLots: number): string {
+  return leasedLots > 1 ? 'Loyers encaissés' : 'Loyer encaissé';
+}
+
+/** `leasedLots` : lots loués de l'annonce, pour le singulier ou le pluriel de « Loyer encaissé ». */
+export function formatFact(fact: KeyFact, now = new Date(), leasedLots = 1): FormattedFact {
   const f = (icon: IconName, text: string, tone: Tone = 'neutral', isEstimate = false): FormattedFact => ({ icon, text, tone, isEstimate });
   switch (fact.kind) {
     case 'rooms': return f('layers', fact.value > 1 ? `${fact.value} pièces` : '1 pièce');
@@ -326,7 +343,7 @@ export function formatFact(fact: KeyFact, now = new Date()): FormattedFact {
     case 'leaseEnd': return f('fileText', `Bail en cours : jusqu’en ${monthYear.format(fact.value)}`);
     case 'occupancyRate':
       return f('percent', `Taux d’occupation : ${formatFraction(fact.value.value, 0)}`, 'neutral', fact.value.origin === 'estimated');
-    case 'currentRent': return f('home', `Loyer actuel : ${formatPrice(fact.value)}/mois`);
+    case 'currentRent': return f('home', `${collectedRentLabel(leasedLots)} : ${formatPrice(fact.value)}/mois`);
     case 'potentialRent': return f('home', `Loyer potentiel : ${formatPrice(fact.value)}/mois`, 'muted', true);
     case 'estimatedCashFlow': {
       const amount = fact.text ?? formatSignedAmount(Math.round(fact.value));
@@ -355,15 +372,16 @@ export function formatFact(fact: KeyFact, now = new Date()): FormattedFact {
       return f('building2', parts.length ? parts.join(' + ') : 'Lots non détaillés');
     }
     case 'vacantUnits': return f('door', `${fact.value} lot${s(fact.value)} vacant${s(fact.value)}`, 'muted');
-    case 'annualRent': return f('euro', `Loyers actuels : ${formatPrice(fact.value)}/an`);
+    case 'annualRent': return f('euro', `${collectedRentLabel(leasedLots)} : ${formatPrice(fact.value)}/an`);
   }
 }
 
 /** Faits d'une fiche mis en forme : le rendement net prend la couleur décidée par le rendement brut. */
 export function formatFacts(facts: KeyFact[], now = new Date()): FormattedFact[] {
   const gross = facts.find((fact) => fact.kind === 'grossYield') as { kind: 'grossYield'; value: number } | undefined;
+  const leasedLots = leasedLotsOf(facts);
   return facts.map((fact) => {
-    const formatted = formatFact(fact, now);
+    const formatted = formatFact(fact, now, leasedLots);
     if (fact.kind === 'netYield' && gross) formatted.tone = yieldTone(gross.value);
     return formatted;
   });
@@ -394,12 +412,8 @@ export type ShortFact =
   | { kind: 'serviced'; value: boolean };
 
 export function shortFacts(content: Pick<CardContent, 'facts'>): ShortFact[] {
-  const units = content.facts.find((fact) => fact.kind === 'units');
-  const vacant = content.facts.find((fact) => fact.kind === 'vacantUnits');
   // Immeuble : lots loués = logements + commerces − lots vacants (« Loyers encaissés » dès deux lots).
-  const leasedLots = units?.kind === 'units'
-    ? Math.max(1, (units.residential ?? 0) + (units.commercial ?? 0) - (vacant?.kind === 'vacantUnits' ? vacant.value : 0))
-    : 1;
+  const leasedLots = leasedLotsOf(content.facts);
   return content.facts.flatMap((fact): ShortFact[] => {
     switch (fact.kind) {
       case 'pricePerSquareMeter': case 'energyClass': case 'furnished': case 'availableFrom': case 'potentialRent': case 'vacant':
