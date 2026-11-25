@@ -226,13 +226,13 @@
   .dl-option:hover { background: var(--d-hover); }
   .dl-option[aria-pressed="true"] { border-color: var(--d-blue); background: var(--d-blue); color: #FFFFFF; font-weight: 700; }
   .dl-error { margin: 0; color: var(--d-red); font-size: 14px; font-weight: 600; }
-  .dl-submit { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 52px; padding: 0 20px; border: 0; border-radius: 14px; background: var(--d-blue); color: #FFFFFF; font: inherit; font-size: 16px; font-weight: 700; text-decoration: none; cursor: pointer; }
+  .dl-submit { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 52px; padding: 0 20px; border: 0; border-radius: 12px; background: var(--d-blue); color: #FFFFFF; font: inherit; font-size: 16px; font-weight: 700; text-decoration: none; cursor: pointer; }
   .dl-submit:hover { background: var(--d-blue-hover); }
   .dl-submit.is-dim { opacity: 0.5; }
   .dl-submit:disabled { cursor: default; }
   .dl-submit .icon { width: 18px; height: 18px; }
-  .dl-secondary { width: 100%; height: 52px; border: 1px solid var(--d-field-border); border-radius: 14px; background: #FFFFFF; color: var(--d-text); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
-  .dl-secondary:hover { background: var(--d-hover); }
+  .dl-secondary { width: 100%; height: 52px; border: 0; border-radius: 12px; background: var(--d-blue-light); color: var(--d-blue); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+  .dl-secondary:hover { background: #E2E8F6; }
   .dl-form-note { margin: 0; color: var(--d-grey); font-size: 13px; line-height: 19px; }
   .dl-screen-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
   .dl-spinner { width: 18px; height: 18px; border: 2px solid rgba(255, 255, 255, 0.45); border-top-color: #FFFFFF; border-radius: 50%; animation: dl-spin 0.8s linear infinite; }
@@ -249,7 +249,7 @@
   .dl-notice { margin: 0; display: flex; align-items: flex-start; gap: 10px; padding: 14px 16px; border-radius: 14px; background: var(--d-blue-light); color: var(--d-text); font-size: 14px; font-weight: 500; line-height: 20px; }
   .dl-notice .icon { flex: none; width: 18px; height: 18px; margin-top: 1px; color: var(--d-blue); }
   .dl-form-section { gap: 16px; }
-  .dl-form-section h2 { margin: 0; display: flex; align-items: center; gap: 10px; color: var(--d-text); font-size: 17px; font-weight: 700; line-height: 22px; }
+  .dl-form-section h2 { margin: 0; display: flex; align-items: center; gap: 10px; color: var(--d-text); font-size: 18px; font-weight: 700; line-height: 23px; }
   .dl-form-section h2 .icon { flex: none; width: 18px; height: 18px; color: var(--d-icon); }
   .dl-slot { display: flex; flex-direction: column; gap: 8px; }
   .dl-slot-row { display: flex; align-items: center; gap: 10px; }
@@ -270,12 +270,35 @@
   /* Confirmation « Demande envoyée ». */
   .dl-form-card.dl-sent { gap: 12px; margin-top: 16px; }
   .dl-sent-head { display: flex; align-items: center; gap: 12px; }
-  .dl-sent-icon { flex: none; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: 12px; background: var(--d-blue-light); color: var(--d-blue); }
-  .dl-sent-icon .icon { width: 20px; height: 20px; }
+  .dl-sent-icon { flex: none; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; color: var(--d-icon); }
+  .dl-sent-icon .icon { width: 22px; height: 22px; }
   .dl-sent-titles { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
   .dl-sent-title { color: var(--d-text); font-size: 17px; font-weight: 700; line-height: 22px; }
   .dl-status-badge { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
   .dl-status-badge.is-pending { background: rgba(180, 83, 9, 0.12); color: #B45309; }
+  .dl-status-badge.is-pill { padding: 0 9px; background: var(--tone-bg); color: var(--tone-ink); font-size: 11.5px; font-weight: 700; }
+
+  /* « Demander une visite » : blocs l'un sous l'autre et boutons à la fin de la colonne ; créneaux ouverts par le
+     vendeur dans la carte de l'app (coins 22, ombre légère), « Réserver » en capsule bleue ; « Sur place » et « En
+     visio » en puces de l'app (bleu pâle et contour bleu quand elles sont choisies). */
+  .visit-body { display: flex; flex-direction: column; gap: 16px; }
+  .visit-body > :is(.dl-form-stack, .dl-sent) { margin-top: 0; }
+  .visit-bar { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+  .visit-bar .dl-screen-actions { margin-top: 0; }
+  .visit-previous { margin: 0; color: var(--d-grey); font-size: 14px; line-height: 20px; }
+  .visit-open-slots { display: flex; flex-direction: column; gap: 8px; }
+  .visit-open-card { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; border: 1px solid var(--d-card-border); border-radius: 22px; background: #FFFFFF; box-shadow: 0 2px 16px rgba(36, 45, 56, 0.04); }
+  .visit-open-slot { display: flex; align-items: center; gap: 10px; }
+  .visit-open-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .visit-open-time { overflow: hidden; color: var(--d-text); font-size: 15px; font-weight: 700; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .visit-open-places, .visit-open-note { margin: 0; color: var(--d-grey); font-size: 13px; line-height: 18px; }
+  .visit-book { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 96px; height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: var(--d-blue); color: #FFFFFF; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .visit-book:hover:not(:disabled) { background: var(--d-blue-hover); }
+  .visit-book:disabled { cursor: default; }
+  .visit-book:disabled:not([aria-busy="true"]) { opacity: 0.5; }
+  .visit-book:focus-visible { outline: 3px solid var(--d-blue); outline-offset: 2px; }
+  .dl-visit-screen .dl-option { box-shadow: none; text-align: left; padding: 0 14px; }
+  .dl-visit-screen .dl-option[aria-pressed="true"] { border-color: var(--d-blue); background: var(--d-blue-light); color: var(--d-blue); font-weight: 600; box-shadow: inset 0 0 0 0.5px var(--d-blue); }
   .dl-sent-text { margin: 0; color: var(--d-grey); font-size: 14px; line-height: 21px; }
   .dl-sent-slots { margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; list-style: none; }
   .dl-sent-slots li { display: flex; align-items: center; gap: 8px; color: var(--d-text); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }

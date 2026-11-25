@@ -35,6 +35,7 @@ import { AlertDialog, NoPhoneDialog } from './listing/Dialogs';
 import { Gallery } from './listing/Gallery';
 import { LocationSection } from './listing/Location';
 import { ReportListingSheet } from './listing/ReportSheet';
+import { ListingSheet } from './listing/Sheet';
 import { Description, Energy, Features, Footnote, HotelActivity, PracticalInfo, PublisherCard, ReportRow } from './listing/Sections';
 import { HeaderCard, VisitCard } from './listing/TopCards';
 import { useListingScreens } from './listing/useListingScreens';
@@ -50,7 +51,9 @@ type Notice = 'noPhone' | 'requests' | null;
 
 function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }) {
   // Écrire, visiter, faire une offre : communs avec l'ordinateur (useListingScreens).
-  const { session, me, isOwn, account, opening, renderScreen, requestVisit, makeOffer, contactSeller, openProfile, conversationAlert } = useListingScreens(row, mode);
+  const {
+    session, me, isOwn, account, opening, shown, renderScreen, closeScreen, requestVisit, makeOffer, contactSeller, openProfile, conversationAlert,
+  } = useListingScreens(row, mode);
   const [notice, setNotice] = useState<Notice>(null);
   const [publisher, setPublisher] = useState<Publisher | null>(null);
   const [activeCount, setActiveCount] = useState<number | null>(null);
@@ -129,7 +132,8 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
 
   // « Demander une visite » ou « Faire une offre » ouvert : l'écran seul, à la place de la fiche.
   const opened = renderScreen({ photo: photos[0], recipientName: publisher?.name ?? (isRental ? 'Le propriétaire' : 'Le vendeur'), profitability, publisher });
-  if (opened) return <div className="listing listing-screen">{opened}</div>;
+  // « Faire une offre » monte en feuille sur la fiche (domiaSheet de l'app) ; les autres écrans la remplacent.
+  if (opened && shown !== 'offre') return <div className="listing listing-screen">{opened}</div>;
 
   return (
     <div className="listing">
@@ -209,6 +213,10 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
 
       <NoPhoneDialog open={notice === 'noPhone'} onClose={() => setNotice(null)} onMessage={() => { setNotice(null); contactSeller(); }} isRental={isRental} />
       {conversationAlert}
+      <ListingSheet open={shown === 'offre' && opened !== null} onClose={closeScreen} title="Faire une offre" cancelLabel={null} className="offer-sheet"
+        head={null}>
+        {shown === 'offre' ? opened : null}
+      </ListingSheet>
       <AlertDialog
         open={notice === 'requests'}
         onClose={() => setNotice(null)}

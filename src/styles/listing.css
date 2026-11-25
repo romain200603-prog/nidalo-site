@@ -543,6 +543,8 @@ a.visit-card { color: inherit; text-decoration: none; }
 .sheet-cancel { position: absolute; top: 6px; left: 8px; height: 44px; padding: 0 10px; border: 0; background: none; color: var(--app-brand); font: 400 17px/22px var(--app-font); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .sheet-cancel:active { opacity: 0.6; }
 .sheet-custom-head { position: relative; flex: none; }
+/* Feuille sans barre (« Faire une offre ») : seulement la poignée, l'en-tête de l'écran sert à tirer la feuille. */
+.sheet-grab-bar { position: relative; z-index: 1; flex: none; height: 0; }
 .sheet-grabber { display: none; }
 .sheet-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 16px 16px; }
 .sheet-form { display: flex; flex-direction: column; gap: 16px; padding-top: 4px; }
@@ -566,7 +568,7 @@ a.visit-card { color: inherit; text-decoration: none; }
   .listing-sheet { width: 100%; max-width: 600px; height: calc(100dvh - 10px - env(safe-area-inset-top)); max-height: none; margin: auto auto 0; border-radius: 32px 32px 0 0; box-shadow: none; }
   .listing-sheet[open] { animation: alert-sheet-up 0.45s cubic-bezier(0.32, 0.72, 0, 1); }
   .listing-sheet[open]::backdrop { animation: alert-fade-in 0.3s ease-out; }
-  .sheet-head, .sheet-custom-head { touch-action: none; }
+  .sheet-head, .sheet-custom-head, .sheet-grab-bar, .offer-sheet .dl-screen-head { touch-action: none; }
   .sheet-grabber { display: block; position: absolute; top: 5px; left: 50%; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px; background: rgba(60, 60, 67, 0.3); }
   .sheet-scroll { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
 }

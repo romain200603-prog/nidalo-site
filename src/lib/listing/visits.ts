@@ -27,6 +27,9 @@ export type VisitRequestRow = {
   accepted_slot: VisitSlot | null;
   proposed_slots: VisitSlot[] | null;
   created_at: string;
+  /** Message du demandeur et motif d'un refus (repris par « Proposer une autre date »). */
+  message?: string | null;
+  decline_reason?: string | null;
 };
 
 /** Ligne de agenda_visits (« id, start_at, status, request_id, listing_id, visit »), la visite entière en JSON. */
@@ -238,6 +241,8 @@ export type CreateVisitRequestParams = {
   p_slots: VisitSlot[];
   p_message?: string;
   p_mode: VisitMode;
+  /** Demande refusée dont celle-ci propose une autre date (VisitRequest.previousRequestId). */
+  p_previous_request_id?: string;
 };
 
 /** Message nettoyé (espaces retirés, 1 000 caractères au plus), `null` s'il est vide (VisitRequest.init). */
@@ -246,12 +251,13 @@ export function visitMessage(text: string): string | null {
   return trimmed ? trimmed.slice(0, VISIT_MESSAGE_MAX) : null;
 }
 
-export function createVisitRequestParams({ id, listingId, slots, message, mode }: {
+export function createVisitRequestParams({ id, listingId, slots, message, mode, previousRequestId = null }: {
   id: string;
   listingId: string;
   slots: { id: string; start: Date }[];
   message: string;
   mode: VisitMode;
+  previousRequestId?: string | null;
 }): CreateVisitRequestParams {
   const params: CreateVisitRequestParams = {
     p_id: id,
@@ -261,7 +267,14 @@ export function createVisitRequestParams({ id, listingId, slots, message, mode }
   };
   const text = visitMessage(message);
   if (text !== null) params.p_message = text;
+  if (previousRequestId) params.p_previous_request_id = previousRequestId;
   return params;
+}
+
+/** « Votre demande précédente a été refusée (motif). … » en tête de « Proposer une autre date ». */
+export function previousRequestNotice(previous: Pick<VisitRequestRow, 'decline_reason'>): string {
+  const reason = previous.decline_reason?.trim();
+  return `Votre demande précédente a été refusée${reason ? ` (${reason})` : ''}. Proposez d'autres créneaux : une nouvelle demande sera envoyée.`;
 }
 
 /** Refus du serveur : son message (P0001) ; sinon le message de l'app (VisitRequestStore.send). */
@@ -299,4 +312,102 @@ export async function sendVisitRequest(params: CreateVisitRequestParams): Promis
   const row = (read.data as VisitRequestRow[] | null)?.[0];
   if (!row) throw new Error('my_visit_requests: demande introuvable');
   return row;
+}
+
+// MARK: - Créneaux ouverts par le vendeur (visites groupées, VisitSessionStore.openSlots et book)
+
+/** Créneau à venir d'une séance ouverte sur l'annonce (OpenVisitSlot). */
+export type OpenVisitSlot = {
+  id: string;
+  sessionId: string;
+  start: Date;
+  end: Date;
+  durationMinutes: number;
+  placesLeft: number;
+  bookedByMe: boolean;
+  bookable: boolean;
+};
+
+/** Ligne de list_open_slots (OpenSlotRow). */
+export type OpenSlotRow = {
+  session_id: string;
+  slot_start: string;
+  slot_end: string;
+  duration_minutes: number;
+  places_left: number;
+  booked_by_me: boolean;
+  bookable: boolean;
+};
+
+/** Date du serveur, ISO ou brute (« 2026-11-20 13:00:00+00 »), lue comme le décodeur de VisitSessionStore. */
+function sessionDate(value: unknown): Date | null {
+  if (typeof value !== 'string') return null;
+  const iso = value.trim().replace(' ', 'T').replace(/(\.\d{3})\d+/, '$1').replace(/([+-]\d{2})$/, '$1:00');
+  return appDate(iso);
+}
+
+/** Créneaux lisibles, du plus proche au plus lointain ; une ligne illisible est écartée (comme un décodage raté). */
+export function openSlotsFromRows(rows: OpenSlotRow[]): OpenVisitSlot[] {
+  const slots: OpenVisitSlot[] = [];
+  for (const row of rows) {
+    const start = sessionDate(row.slot_start);
+    const end = sessionDate(row.slot_end);
+    if (!row.session_id || !start || !end) continue;
+    slots.push({
+      id: `${row.session_id}-${start.getTime()}`, sessionId: row.session_id, start, end, durationMinutes: Number(row.duration_minutes) || 0,
+      placesLeft: Number(row.places_left) || 0, bookedByMe: row.booked_by_me === true, bookable: row.bookable === true,
+    });
+  }
+  return slots.sort((a, b) => a.start.getTime() - b.start.getTime());
+}
+
+/** Créneaux ouverts de l'annonce (list_open_slots, p_listing_id) ; vide en cas d'erreur, comme l'app. */
+export async function fetchOpenSlots(listingId: string): Promise<OpenVisitSlot[]> {
+  try {
+    const { data, error } = await supabase.rpc('list_open_slots', { p_listing_id: listingId });
+    if (error || !Array.isArray(data)) return [];
+    return openSlotsFromRows(data as OpenSlotRow[]);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Arguments de book_visit_slot, comme l'app : début en ISO à la seconde, message nettoyé ; sans message, la clé
+ * n'est pas envoyée (Swift n'encode pas une valeur absente).
+ */
+export function bookSlotParams(id: string, slot: Pick<OpenVisitSlot, 'sessionId' | 'start'>, message: string) {
+  const text = message.trim();
+  return { p_id: id, p_session_id: slot.sessionId, p_slot_start: isoSeconds(slot.start), ...(text ? { p_message: text } : {}) };
+}
+
+/** Refus des visites groupées : le message du serveur (P0001), sinon la connexion, sinon le message de l'app. */
+export function visitSessionErrorMessage(error: unknown, offline: boolean): string {
+  const { code, message } = (error ?? {}) as { code?: string; message?: string };
+  if (code === 'P0001' && message) return message;
+  if (offline) return 'Connexion impossible. Vérifiez votre accès à Internet, puis réessayez.';
+  return 'Cette action n\'a pas abouti. Réessayez dans un instant.';
+}
+
+/**
+ * Réserve un créneau (book_visit_slot) : la visite est confirmée tout de suite ; puis la demande est relue
+ * (my_visit_requests avec p_request_id), comme l'app relit ses demandes.
+ */
+export async function bookOpenSlot(slot: OpenVisitSlot, message: string): Promise<VisitRequestRow | null> {
+  const { data, error } = await supabase.rpc('book_visit_slot', bookSlotParams(crypto.randomUUID(), slot, message));
+  if (error) throw error;
+  if (typeof data !== 'string') return null;
+  const read = await supabase.rpc('my_visit_requests', { p_request_id: data });
+  return read.error ? null : ((read.data as VisitRequestRow[] | null)?.[0] ?? null);
+}
+
+/** « 10 h 30 » (VisitSessionFormat.hour). */
+export const sessionHour = (date: Date): string => slotHourLabel(minutesOf(date));
+
+/** « 10 h 00 – 10 h 30 » (VisitSessionFormat.range). */
+export const sessionRange = (start: Date, end: Date): string => `${sessionHour(start)} – ${sessionHour(end)}`;
+
+/** « Mardi 18 novembre » ou « Mar. 18 nov. » (VisitSessionFormat.day). */
+export function sessionDay(date: Date, wide = true): string {
+  return capitalized((wide ? wideDay : shortDay).format(date));
 }

@@ -155,7 +155,7 @@ const MESSAGING_TABLES = [
 const ACCOUNT_TABLES = [
   'profiles', 'profile_details', 'favorites', 'notifications', 'rpc/mark_notifications_read', 'rpc/my_conversations',
   'rpc/start_listing_conversation', 'rpc/my_offers', 'rpc/make_offer', 'rpc/my_visit_requests', 'rpc/create_visit_request',
-  'agenda_visits', 'saved_searches', 'real_estate_projects', 'professional_profiles', 'professional_profile_details', 'reports',
+  'rpc/list_open_slots', 'rpc/book_visit_slot', 'agenda_visits', 'saved_searches', 'real_estate_projects', 'professional_profiles', 'professional_profile_details', 'reports',
   ...MESSAGING_TABLES,
 ];
 /**
@@ -214,9 +214,12 @@ function parisTime(days, hours) {
 const isoSeconds = (date) => date.toISOString().replace(/\.\d{3}Z$/, 'Z');
 const listingById = (listingId) => listings.find((row) => row.id === listingId);
 
-/** Ce que le serveur sait du compte : conversations, offres, agenda, demandes de visite et favoris. */
+/**
+ * Ce que le serveur sait du compte : conversations, offres, agenda, demandes de visite, favoris, et les créneaux ouverts
+ * par les vendeurs (visites groupées, avec l'annonce de leur séance).
+ */
 function accountState() {
-  return { conversations: [], offers: [], messages: [], agenda: [], requests: [], favorites: [] };
+  return { conversations: [], offers: [], messages: [], agenda: [], requests: [], favorites: [], openSlots: [] };
 }
 
 /** Le compte comme sur la maquette : une conversation sur FICHE, une offre en attente et une visite confirmée. */
@@ -349,6 +352,32 @@ function respond(route, state, table, request, url, body) {
         slots: body.p_slots, mode: body.p_mode, message: body.p_message ?? null, status: 'pending', accepted_slot: null, proposed_slots: null,
         created_at: isoSeconds(new Date()),
       });
+      return json(route, body.p_id);
+    }
+    case 'rpc/list_open_slots':
+      // Créneaux à venir des séances ouvertes de l'annonce (OpenSlotRow), sans les colonnes du serveur simulé.
+      return json(route, state.openSlots.filter((slot) => slot.listing_id === body?.p_listing_id).map(({ listing_id: _, race: __, ...row }) => row));
+    case 'rpc/book_visit_slot': {
+      // Comme la fonction du serveur : le créneau est réservé et la demande, créée acceptée sur ce créneau ; elle rend
+      // l'identifiant de la demande (p_id).
+      const slot = state.openSlots.find((row) => row.session_id === body?.p_session_id && Date.parse(row.slot_start) === Date.parse(body?.p_slot_start ?? ''));
+      if (!slot) return refuse('Ce créneau n\'est plus proposé.');
+      // `race` : la dernière place est prise par quelqu'un d'autre juste avant.
+      if (slot.race) Object.assign(slot, { places_left: 0, bookable: false, race: false });
+      if (!slot.bookable) return refuse('Ce créneau est complet.');
+      const listing = listingById(slot.listing_id);
+      const owner = profiles.find((profile) => profile.user_id === listing.owner_id);
+      const accepted = { id: crypto.randomUUID(), start: slot.slot_start, durationMinutes: slot.duration_minutes };
+      state.requests.push({
+        id: body.p_id, listing_id: listing.id, listing_snapshot: { listingId: listing.id, title: listing.title, price: listing.price, city: listing.city },
+        requester: { userId: USER_ID, name: 'Claire M.', kind: 'individual' },
+        recipient: owner?.account_type === 'professional' && owner.agency_id
+          ? { userId: listing.owner_id, name: owner.agency_name, kind: 'agency', agencyId: owner.agency_id }
+          : { userId: listing.owner_id, name: owner?.public_name ?? 'Particulier', kind: 'individual' },
+        slots: [accepted], mode: 'onSite', message: body.p_message ?? null, status: 'accepted', accepted_slot: accepted, proposed_slots: null,
+        created_at: isoSeconds(new Date()),
+      });
+      Object.assign(slot, { places_left: slot.places_left - 1, booked_by_me: true, bookable: false });
       return json(route, body.p_id);
     }
     case 'reports':
@@ -1246,14 +1275,17 @@ async function fullShot(page, file) {
 }
 
 /** Rien de l'adresse masquée (la rue) dans la page, ni dans le texte ni dans le code. */
-/** Écran « Demander une visite » ou « Faire une offre » sur téléphone : rien ne déborde, pas de texte vide ou faux. */
+/**
+ * Écran « Demander une visite » (page de la fiche) ou « Faire une offre » (feuille au-dessus de la fiche) sur téléphone :
+ * rien ne déborde, pas de texte vide ou faux.
+ */
 async function checkPhoneScreen(page, name) {
   const issues = await page.evaluate(() => {
     const found = [];
     const text = document.body.innerText;
     for (const bad of ['NaN', 'undefined', 'null', 'Infinity', '[object']) if (text.includes(bad)) found.push(`le texte « ${bad} » est affiché`);
     if (document.documentElement.scrollWidth > window.innerWidth + 1) found.push(`la page déborde en largeur (${document.documentElement.scrollWidth} px pour ${window.innerWidth} px)`);
-    const screen = document.querySelector('.listing-screen .dl-screen');
+    const screen = document.querySelector('.listing-screen .dl-screen, dialog.offer-sheet[open] .dl-screen');
     if (!screen) return ['pas d’écran'];
     const box = screen.getBoundingClientRect();
     if (box.left < 0 || box.right > window.innerWidth + 0.5) found.push(`l’écran dépasse (${Math.round(box.left)} à ${Math.round(box.right)} px)`);
@@ -1896,7 +1928,9 @@ try {
   phoneMark = calls.length;
   await page.tap('.header-card .hc-offer');
   await waitForAddress(page, `${base}/annonce/?id=${FICHE}&vue=offre`);
-  await page.waitForSelector('.listing-screen .dl-offer-screen h1');
+  await page.waitForSelector('dialog.offer-sheet[open] .dl-offer-screen h1');
+  // Feuille de l'app (OfferComposerSheet) : la fiche reste dessous.
+  if (!(await page.$('.header-card .hc-price-value'))) problems.push('offre-telephone: la fiche n’est plus sous la feuille de l’offre');
   const phoneStarted = once('offre-telephone', phoneMark, 'rpc/start_listing_conversation');
   if (phoneStarted) expectJSON('offre-telephone', 'arguments de start_listing_conversation', phoneStarted.body, { p_listing_id: FICHE });
   if (since(phoneMark, 'rpc/make_offer').length) problems.push('offre-telephone: make_offer appelé avant l\'envoi');
@@ -1909,7 +1943,7 @@ try {
   await page.tap('.dl-offer-screen .dl-chip');
   expect('offre-telephone', 'condition du prêt', await page.inputValue('#offre-conditions'), 'Sous réserve d\'obtention du prêt');
   await checkPhoneScreen(page, 'offre-telephone');
-  await fullShot(page, 'telephone-offre.png');
+  await page.screenshot({ path: join(out, 'telephone-offre.png') });
   phoneMark = calls.length;
   await page.tap('.dl-offer-screen .dl-submit');
   await waitForAddress(page, `${base}/messages/?c=${conversationId(1)}`);
@@ -1987,7 +2021,7 @@ try {
   // Adresses ouvertes directement : l'offre (aucune en attente) à son adresse, « Fermer » revient à la fiche ; pas
   // d'offre sur une location.
   page = await open(phoneFresh, `/annonce/?id=${SALE}&vue=offre`, 'adresse-offre-telephone');
-  await page.waitForSelector('.listing-screen .dl-offer-screen h1');
+  await page.waitForSelector('dialog.offer-sheet[open] .dl-offer-screen h1');
   expect('adresse-offre-telephone', 'adresse', page.url(), `${base}/annonce/?id=${SALE}&vue=offre`);
   expect('adresse-offre-telephone', 'bien et prix', await page.textContent('.dl-offer-screen .dl-screen-head p'), 'Appartement lumineux avec balcon · prix affiché 238 000 €');
   await page.tap('.dl-screen-close');
@@ -2056,12 +2090,84 @@ try {
   await fullShot(page, 'telephone-petit-visite-formulaire.png');
   await page.close();
   page = await open(smallMember, `/annonce/?id=${FICHE}&vue=offre`, 'offre-petit-telephone');
-  await page.waitForSelector('.listing-screen .dl-offer-screen h1');
+  await page.waitForSelector('dialog.offer-sheet[open] .dl-offer-screen h1');
   await page.locator('#offre-montant').pressSequentially('1250000');
   await checkPhoneScreen(page, 'offre-petit-telephone');
-  await fullShot(page, 'telephone-petit-offre.png');
+  await page.screenshot({ path: join(out, 'telephone-petit-offre.png') });
   await page.close();
   await smallMember.close();
+
+  // Créneaux ouverts par le vendeur (visites groupées, OpenSlotsSection de l'app) : list_open_slots à l'ouverture du
+  // formulaire, chaque créneau avec ses places et « Réserver » (ou « Complet ») ; un créneau pris entre-temps montre le
+  // refus du serveur et les créneaux relus ; « Réserver » envoie book_visit_slot comme l'app, et la visite est confirmée.
+  const phoneSlots = await frenchBrowser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR', timezoneId: 'Europe/Paris' });
+  await mock(phoneSlots);
+  const slotsState = accountState();
+  const SESSION = 'c3000000-0000-4000-8000-000000000001';
+  const slotStart = parisTime(6, 10);
+  const slotRow = (start, fields) => ({
+    listing_id: FICHE, session_id: SESSION, slot_start: isoSeconds(start), slot_end: isoSeconds(new Date(start.getTime() + 30 * 60_000)),
+    duration_minutes: 30, booked_by_me: false, ...fields,
+  });
+  slotsState.openSlots.push(
+    slotRow(new Date(slotStart.getTime() + 30 * 60_000), { places_left: 1, bookable: true, race: true }),
+    slotRow(slotStart, { places_left: 3, bookable: true }),
+    slotRow(new Date(slotStart.getTime() + 60 * 60_000), { places_left: 0, bookable: false }),
+  );
+  await signIn(phoneSlots, slotsState);
+  phoneMark = calls.length;
+  // Le refus du créneau pris (400) est voulu : Chrome le signale dans la console.
+  page = await open(phoneSlots, `/annonce/?id=${FICHE}&vue=visite`, 'creneaux-telephone', { expectedStatus: 400 });
+  await page.waitForSelector('.listing-screen .dl-visit-screen .visit-open-slot');
+  const slotsRead = once('creneaux-telephone', phoneMark, 'rpc/list_open_slots');
+  if (slotsRead) expectJSON('creneaux-telephone', 'arguments de list_open_slots', slotsRead.body, { p_listing_id: FICHE });
+  expect('creneaux-telephone', 'titre de la section', await page.textContent('.visit-open-slots .app-section-label'), 'Créneaux ouverts par le vendeur');
+  const slotTexts = () => page.$$eval('.visit-open-slot', (els) => els.map((el) => [...el.children].map((child) => child.innerText.replace(/\n/g, ' / ')).join(' / ')));
+  const openTexts = await slotTexts();
+  const DAY = '[A-ZÉ][a-zéû]+\\. \\d{1,2} [a-zéû]+\\.?';
+  expect('creneaux-telephone', 'créneaux', openTexts.join(' | '), new RegExp(`^${DAY} · 10 h 00 – 10 h 30 / 3 places / Réserver \\| ${DAY} · 10 h 30 – 11 h 00 / 1 place / Réserver \\| ${DAY} · 11 h 00 – 11 h 30 / Complet / Complet$`));
+  expect('creneaux-telephone', 'nom du bouton', await page.getAttribute('.visit-open-slot >> nth=0 >> .visit-book', 'aria-label'), /^Réserver le créneau [A-ZÉ][a-zéû]+ \d{1,2} [a-zéû]+ à 10 h 00$/);
+  expect('creneaux-telephone', 'sections', await page.$$eval('.dl-visit-screen .dl-form-section h2', (els) => els.map((el) => el.textContent).join(' | ')), 'Créneau souhaité | Type de visite | Message (facultatif)');
+  await checkPhoneScreen(page, 'creneaux-telephone');
+  await page.fill('.dl-visit-screen textarea', '  Bonjour, à bientôt.  ');
+  await fullShot(page, 'telephone-visite-creneaux.png');
+  // Le créneau de 10 h 30 a été pris entre-temps : le refus du serveur, puis les créneaux relus.
+  phoneMark = calls.length;
+  await page.tap('.visit-open-slot >> nth=1 >> .visit-book');
+  await page.waitForSelector('.visit-bar-error');
+  expect('creneaux-telephone', 'refus', await page.textContent('.visit-bar-error'), 'Ce créneau est complet.');
+  await page.waitForFunction(() => document.querySelectorAll('.visit-book').length === 1);
+  if (since(phoneMark, 'rpc/list_open_slots').length !== 1) problems.push('creneaux-telephone: les créneaux ne sont pas relus après le refus');
+  expect('creneaux-telephone', 'créneau pris', (await slotTexts())[1], /\/ Complet \/ Complet$/);
+  phoneMark = calls.length;
+  await page.tap('.visit-open-slot >> nth=0 >> .visit-book');
+  await page.waitForSelector('.dl-visit-screen .dl-sent');
+  const booking = once('creneaux-telephone', phoneMark, 'rpc/book_visit_slot');
+  if (booking) {
+    const body = booking.body ?? {};
+    if (!UUID.test(body.p_id ?? '') || !ISO_SECONDS.test(body.p_slot_start ?? '')) problems.push(`creneaux-telephone: identifiant ou heure ${JSON.stringify(body)}`);
+    expectJSON('creneaux-telephone', 'arguments de book_visit_slot', body, {
+      p_id: body.p_id, p_session_id: SESSION, p_slot_start: isoSeconds(slotStart), p_message: 'Bonjour, à bientôt.',
+    });
+    const reread = once('creneaux-telephone', phoneMark, 'rpc/my_visit_requests', (call) => call.body?.p_request_id);
+    if (reread) expectJSON('creneaux-telephone', 'relecture de la demande', reread.body, { p_request_id: body.p_id });
+  }
+  if (since(phoneMark, 'rpc/create_visit_request').length) problems.push('creneaux-telephone: create_visit_request envoyé pour un créneau ouvert');
+  expect('creneaux-telephone', 'titre de la confirmation', await page.textContent('.dl-visit-screen h1'), 'Visite confirmée');
+  expect('creneaux-telephone', 'statut', await page.textContent('.dl-sent .dl-status-badge'), 'Confirmée');
+  expect('creneaux-telephone', 'créneau réservé', await page.textContent('.dl-sent-slots li'), /^[A-ZÉ][a-zéû]+ \d{1,2} [a-zéû]+ · 10 h 00 – 10 h 30$/);
+  expect('creneaux-telephone', 'texte de la confirmation', await page.textContent('.dl-sent-text'), 'Vous la retrouvez dans votre agenda (Mon compte), avec ses rappels.');
+  expect('creneaux-telephone', 'boutons de la confirmation', await page.$$eval('.dl-screen-actions > *', (els) => els.map((el) => `${el.tagName} ${el.textContent} ${el.getAttribute('href')}`).join(' | ')),
+    'A Voir mon agenda /compte/?vue=agenda | BUTTON Fermer null');
+  if (await page.$('.visit-bar-error')) problems.push('creneaux-telephone: le refus reste affiché après la réservation');
+  await checkPhoneScreen(page, 'creneaux-telephone-reserve');
+  await fullShot(page, 'telephone-visite-reservee.png');
+  await page.tap('.dl-screen-actions .dl-secondary');
+  await waitForAddress(page, `${base}/annonce/?id=${FICHE}`);
+  await page.waitForSelector('.header-card .hc-price-value');
+  expect('creneaux-telephone', 'carte des visites après la réservation', await page.textContent('.visit-card .visit-text'), 'Demande de visite envoyéeConfirmée · Agence Démo Centre');
+  await page.close();
+  await phoneSlots.close();
 
   // ——— Ordinateur avec le compte de test : chaque action envoie au serveur simulé ce qu'envoie l'app ———
   // Après le téléphone, dont les étapes restent dans l'ordre et les conditions d'avant (navigateur réglé en français).

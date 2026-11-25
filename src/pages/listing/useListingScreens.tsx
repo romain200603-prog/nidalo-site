@@ -9,6 +9,7 @@ import { canMakeOffer } from '../../lib/listing/offers';
 import type { Profitability } from '../../lib/listing/profitability';
 import type { Publisher } from '../../lib/listing/publisher';
 import type { ListingRow, PhotoRow } from '../../lib/listings';
+import { isDesktop } from '../../lib/desktop';
 import { conversationPath, listingPath, listingScreenFromParams, wantsVideoVisit, type ListingScreen } from '../../lib/paths';
 import { AlertDialog } from './Dialogs';
 import { OfferScreen } from './OfferScreen';
@@ -204,10 +205,15 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
       firstLayout.current = false;
       return;
     }
-    window.scrollTo(0, shown ? 0 : listingScroll.current);
-    // L'écran ouvert reçoit le focus sur son titre, sauf si un de ses champs l'a déjà (le montant de l'offre).
+    // « Faire une offre » sur téléphone : une feuille sur la fiche, qui reste où elle était.
+    const sheet = shown === 'offre' && !isDesktop();
+    if (!sheet) window.scrollTo(0, shown ? 0 : listingScroll.current);
+    // L'écran ouvert reçoit le focus sur son titre (ou, sur téléphone, sur son retour rond, le premier élément de
+    // l'écran poussé), sauf si un de ses champs l'a déjà (le montant de l'offre).
     const opened = shown ? document.querySelector<HTMLElement>('.dl-screen, .listing-profile') : null;
-    if (opened && !opened.contains(document.activeElement)) opened.querySelector<HTMLElement>('h1')?.focus({ preventScroll: true });
+    if (opened && !opened.contains(document.activeElement)) {
+      opened.querySelector<HTMLElement>('h1[tabindex], .app-page-header .app-round')?.focus({ preventScroll: true });
+    }
   }, [shown]);
 
   useEffect(() => {
@@ -224,12 +230,18 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
       return publisher ? <ProfileScreen publisher={publisher} onClose={close} onContact={isOwn ? undefined : contactSeller} /> : null;
     }
     if (shown === 'visite') {
+      const params = new URLSearchParams(window.location.search);
+      // « Proposer une autre date » (écran « Demande de visite ») : la demande refusée, parmi celles du compte.
+      const previousId = params.get('precedente');
+      const previous = previousId ? account.requests.find((request) => sameId(request.id, previousId) && request.status === 'declined'
+        && sameId(request.requester?.userId, me)) ?? null : null;
       return (
         <VisitRequestScreen
           row={row}
           photo={photo}
           recipientName={recipientName}
-          initialMode={wantsVideoVisit(new URLSearchParams(window.location.search)) ? 'video' : 'onSite'}
+          initialMode={wantsVideoVisit(params) ? 'video' : 'onSite'}
+          previous={previous}
           onClose={close}
           onSent={addRequest}
         />
@@ -267,5 +279,5 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
     />
   );
 
-  return { session, me, isOwn, account, opening, shown, renderScreen, requestVisit, makeOffer, contactSeller, openProfile, conversationAlert };
+  return { session, me, isOwn, account, opening, shown, renderScreen, closeScreen: close, requestVisit, makeOffer, contactSeller, openProfile, conversationAlert };
 }
