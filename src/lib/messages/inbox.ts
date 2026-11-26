@@ -65,12 +65,20 @@ export type ProfileRow = {
   agency_phone: string | null;
 };
 
-/** Ligne de my_communities (CommunityServerRow). */
+/** Ligne de my_communities (CommunityServerRow) : membres dans l'ordre du serveur (créateur, administrateurs, membres). */
 export type CommunityRow = {
   id: string;
   main_conversation_id: string;
   name: string;
+  details?: string | null;
+  category?: string | null;
+  area?: string | null;
+  visibility?: string | null;
+  cover?: string | null;
   image_path?: string | null;
+  created_by?: string | null;
+  created_at?: string | null;
+  my_role?: string | null;
   members: { user_id: string; role: string; joined_at?: string | null }[];
 };
 
@@ -98,6 +106,33 @@ export type ListingSnapshot = {
 };
 
 export type Member = { userId: string; name: string; kind: 'individual' | 'agency'; role: string };
+
+/** Infos d'un groupe (ConversationGroup de l'app) : description, type, créateur et messages éphémères. */
+export type GroupInfo = {
+  details: string | null;
+  /** Type de groupe (GroupPurpose), seulement descriptif. */
+  purpose: string | null;
+  /** Créateur : le membre « owner » encore là, sinon created_by (conversation(from:)). */
+  createdBy: string | null;
+  /** Durée des messages éphémères en secondes (ephemeral_seconds), `null` s'ils sont désactivés. */
+  ephemeralSeconds: number | null;
+};
+
+/** Communauté dont la conversation est la discussion principale (Community de l'app). */
+export type CommunityInfo = {
+  id: string;
+  mainConversationId: string;
+  name: string;
+  details: string;
+  category: string;
+  area: string | null;
+  cover: string | null;
+  imagePath: string | null;
+  createdBy: string | null;
+  createdAt: Date;
+  /** Membres dans l'ordre du serveur : créateur, administrateurs, membres. */
+  members: Member[];
+};
 
 export type LastMessage = {
   id: string;
@@ -132,6 +167,10 @@ export type Conversation = {
   sellerId: string | null;
   /** Dernière lecture de l'autre personne (conversation à deux) : « Vu il y a … » dans l'en-tête du site. */
   otherLastReadAt: Date | null;
+  /** Infos du groupe (`null` pour une conversation à deux). */
+  group: GroupInfo | null;
+  /** Communauté dont c'est la discussion principale. */
+  community: CommunityInfo | null;
 };
 
 export const sameId = (a: string | null | undefined, b: string | null | undefined): boolean =>
@@ -190,22 +229,32 @@ export function conversationFrom(row: ServerInboxRow, {
   let counterpart: Counterpart;
   let members: Member[] = [];
   let communityId: string | null = null;
+  let group: GroupInfo | null = null;
+  let community: CommunityInfo | null = null;
+  const memberOf = (userId: string, role: string): Member => {
+    const profile = profileOf(userId);
+    return { userId, name: memberName(userId, me, profile), kind: isProfessional(profile) ? 'agency' : 'individual', role };
+  };
   if (isGroup) {
     counterpart = {
       name: row.group_name ?? 'Groupe', subtitle: membersLabel(row.member_count ?? 0), kind: 'group', phone: null,
       imagePath: row.group_image_path ?? null,
     };
-    members = participants
-      .filter((member) => sameId(member.conversation_id, row.conversation_id) && member.left_at === null)
-      .map((member) => {
-        const profile = profileOf(member.user_id);
-        return { userId: member.user_id, name: memberName(member.user_id, me, profile), kind: isProfessional(profile) ? 'agency' : 'individual', role: member.role };
-      });
-    const community = communities.find((item) => sameId(item.main_conversation_id, row.conversation_id));
-    if (community) {
-      communityId = community.id;
-      const count = community.members.length;
+    const rows = participants.filter((member) => sameId(member.conversation_id, row.conversation_id));
+    members = rows.filter((member) => member.left_at === null).map((member) => memberOf(member.user_id, member.role));
+    const owner = rows.find((member) => member.role === 'owner' && member.left_at === null)?.user_id ?? row.created_by ?? null;
+    group = { details: row.group_details ?? null, purpose: row.group_purpose ?? null, createdBy: owner, ephemeralSeconds: row.ephemeral_seconds ?? null };
+    const found = communities.find((item) => sameId(item.main_conversation_id, row.conversation_id));
+    if (found) {
+      communityId = found.id;
+      const count = found.members.length;
       counterpart = { ...counterpart, kind: 'community', subtitle: `Communauté · ${count} membre${count > 1 ? 's' : ''}` };
+      community = {
+        id: found.id, mainConversationId: found.main_conversation_id, name: found.name, details: found.details ?? '',
+        category: found.category ?? 'general', area: found.area ?? null, cover: found.cover ?? null, imagePath: found.image_path ?? null,
+        createdBy: found.created_by ?? null, createdAt: date(found.created_at) ?? date(row.created_at) ?? new Date(0),
+        members: found.members.map((member) => memberOf(member.user_id, member.role)),
+      };
     }
   } else if (row.other_user_id) {
     const profile = profileOf(row.other_user_id);
@@ -256,6 +305,8 @@ export function conversationFrom(row: ServerInboxRow, {
     buyerId: row.buyer_id,
     sellerId: row.seller_id,
     otherLastReadAt: isGroup ? null : date(row.other_last_read_at),
+    group,
+    community,
   };
 }
 
