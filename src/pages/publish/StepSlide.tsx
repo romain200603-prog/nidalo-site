@@ -3,7 +3,7 @@ import { Component, createRef, type AnimationEvent, type ReactNode } from 'react
 // Passage d'une étape de Publier à l'autre, comme l'app (PublishFlowView.stepTransition) : en avançant, l'étape quittée
 // part vers la gauche en s'estompant pendant que la suivante arrive par la droite ; en revenant, l'inverse. Avec
 // « Réduire les animations », un fondu seul. L'en-tête et la barre d'actions ne bougent pas ; les mouvements sont dans
-// ordinateur-publier.css (le ressort de l'app, --app-ease).
+// publier-telephone.css (le ressort de l'app, --app-ease).
 //
 // L'étape quittée n'existe plus dans React : juste avant le changement, une copie inerte de son contenu est prise, puis
 // gardée à la même place à l'écran (calque fixe, entre le haut de l'étape et la barre d'actions) pendant que la page

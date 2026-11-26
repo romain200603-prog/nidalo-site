@@ -2,9 +2,9 @@ import type { ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import { useFitTexts } from '../listing/fitText';
 
-// Publier sur téléphone (moins de 1024 px), comme l'assistant plein écran de l'app (PublishFlowView.header) : l'en-tête
-// fixe en haut, avec ses deux ronds gris de 36, son titre et la barre d'étapes touchable. Le reste de l'écran (étapes,
-// barre du bas, confirmation) garde les éléments de l'ordinateur, aux mesures de l'app (publier-telephone.css).
+// Publier sur toutes les largeurs, comme l'assistant plein écran de l'app (PublishFlowView.header) : l'en-tête fixe en
+// haut, avec ses deux ronds gris de 36, son titre et la barre d'étapes touchable. Le reste de l'écran (étapes, barre du
+// bas, confirmation) reprend les éléments des écrans de Mon compte (.dsc), aux mesures de l'app (publier-telephone.css).
 
 /** Coche pleine dans un rond (checkmark.circle.fill) : « Brouillon enregistré » et la confirmation. */
 export function CheckCircleFill({ className }: { className?: string }) {
