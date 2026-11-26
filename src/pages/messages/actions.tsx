@@ -6,7 +6,8 @@ import { DISTANT_FUTURE, telHref } from '../../lib/messages/format';
 import { isDeletedAccount, isMuted, type Conversation } from '../../lib/messages/inbox';
 import { REPORT_SAVE_FAILED, saveReport } from '../../lib/messages/reportQueue';
 import { block, setArchived, unblock, updateSettings } from '../../lib/messages/store';
-import { ConfirmDialog, Sheet, showIphoneOnly, showNotice, type MenuItem } from './parts';
+import { ConfirmDialog, Sheet, showNotice, type MenuItem } from './parts';
+import { navigate } from './route';
 
 // Actions d'une conversation partagées par son en-tête et par « Détails », comme l'app : le menu ⋮
 // (DirectConversationMenuItems, ConversationView.swift:1080-1116, et celui du groupe, :280-306), l'appel
@@ -77,15 +78,15 @@ export function directMenuItems({ conversation, isBlocked, onBlock, onReport }: 
 }
 
 /**
- * Menu ⋮ d'un groupe : infos (dans l'app iPhone), favori, sourdine « toujours », archiver, signaler le groupe ; pour
- * une communauté, « Communauté ajoutée aux favoris. » et « Signaler la communauté » (n° 212).
+ * Menu ⋮ d'un groupe : « Infos du groupe » (ou la page « Communauté »), favori, sourdine « toujours », archiver,
+ * signaler le groupe ; pour une communauté, « Communauté ajoutée aux favoris. » et « Signaler la communauté » (n° 212).
  */
 export function groupMenuItems({ conversation, onReport }: { conversation: Conversation; onReport: () => void }): MenuItem[] {
   const muted = isMuted(conversation);
   const community = conversation.communityId !== null;
   const info = community ? 'Communauté' : 'Infos du groupe';
   return [
-    { label: info, icon: 'info', onSelect: () => showIphoneOnly(info) },
+    { label: info, icon: 'info', onSelect: () => navigate({ conversationId: conversation.id, view: community ? 'communaute' : 'groupe' }) },
     {
       label: conversation.isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris', icon: 'heart',
       onSelect: () => void (community
@@ -140,17 +141,22 @@ export function BlockDialog({ open, userId, onClose }: { open: boolean; userId: 
  * Il part tout de suite dans la table reports, comme l'app avec un compte connecté (n° 2) ; le site n'a pas la file
  * de l'iPhone qui le garde sans réseau : un échec le dit, et le bouton reste là pour réessayer.
  */
-export function ReportSheet({ open, title, conversationId, messageId = null, onClose }: {
+export function ReportSheet({ open, title, conversationId, messageId = null, offersLeave = false, onClose, onSaved }: {
   open: boolean;
   title: string;
   conversationId: string;
   /** « Signaler le message » (appui long sur un message reçu) : le message plutôt que la conversation. */
   messageId?: string | null;
+  /** Infos du groupe : « Quitter aussi le groupe ». */
+  offersLeave?: boolean;
   onClose: () => void;
+  /** Enregistré : l'écran montre l'avis lui-même (bandeau des infos du groupe), et quitte le groupe si demandé. */
+  onSaved?: (notice: string, leaves: boolean) => void;
 }) {
   return (
     <Sheet open={open} title={title} onClose={onClose} className="dm-report" closeLabel="Annuler">
-      <ReportForm target={messageId ? { type: 'message', id: messageId } : { type: 'conversation', id: conversationId }} onClose={onClose} />
+      <ReportForm target={messageId ? { type: 'message', id: messageId } : { type: 'conversation', id: conversationId }}
+        offersLeave={offersLeave} onClose={onClose} onSaved={onSaved} />
     </Sheet>
   );
 }
@@ -159,9 +165,15 @@ export function ReportSheet({ open, title, conversationId, messageId = null, onC
  * Enregistre le signalement puis le transmet (ReportSheet.save de l'app) : « Signalement envoyé à l'équipe Nidalo. »,
  * ou, sans réseau, « Signalement enregistré. Il partira dès le retour de la connexion. ».
  */
-function ReportForm({ target, onClose }: { target: { type: ReportTargetType; id: string }; onClose: () => void }) {
+function ReportForm({ target, offersLeave, onClose, onSaved }: {
+  target: { type: ReportTargetType; id: string };
+  offersLeave: boolean;
+  onClose: () => void;
+  onSaved?: (notice: string, leaves: boolean) => void;
+}) {
   const [reason, setReason] = useState<ReportReason | null>(null);
   const [details, setDetails] = useState('');
+  const [alsoLeave, setAlsoLeave] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const count = [...details].length;
@@ -180,7 +192,8 @@ function ReportForm({ target, onClose }: { target: { type: ReportTargetType; id:
       return;
     }
     onClose();
-    showNotice(result.notice);
+    if (onSaved) onSaved(result.notice, offersLeave && alsoLeave);
+    else showNotice(result.notice);
   };
 
   return (
@@ -208,6 +221,12 @@ function ReportForm({ target, onClose }: { target: { type: ReportTargetType; id:
           rows={4}
         />
       </div>
+      {offersLeave && (
+        <label className="dm-card dm-report-leave">
+          <span>Quitter aussi le groupe</span>
+          <input type="checkbox" role="switch" className="switch" checked={alsoLeave} onChange={(event) => setAlsoLeave(event.currentTarget.checked)} />
+        </label>
+      )}
       <p className="dm-sheet-note">Il est transmis à l'équipe Nidalo. Les autres membres ne le voient pas.</p>
       {error && <p className="dm-error" role="alert"><Icon name="triangleAlert" />{error}</p>}
       <button type="submit" className="btn btn-primary dm-wide-button" disabled={!reason} aria-busy={saving}>Enregistrer le signalement</button>

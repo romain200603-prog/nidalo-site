@@ -250,6 +250,16 @@ async function put(path: string, data: Blob, contentType: string): Promise<void>
 }
 
 /**
+ * Photo d'un groupe ou d'une communauté (groupImagePath de l'app) : le JPEG déjà préparé (512 px au plus, sans
+ * métadonnées) part dans « <conversation en minuscules>/group/<UUID en minuscules>.jpg » ; rend ce chemin.
+ */
+export async function uploadGroupPhoto(conversationId: string, jpeg: Blob): Promise<string> {
+  const path = `${conversationId.toLowerCase()}/group/${crypto.randomUUID().toLowerCase()}.jpg`;
+  await put(path, jpeg, 'image/jpeg');
+  return path;
+}
+
+/**
  * Prépare et envoie un élément, puis rend sa pièce jointe telle que l'app l'écrit (LocalAttachmentStorage.store, puis
  * MessageAttachmentFiles.upload) : photo en JPEG, vidéo sans métadonnées et sa vignette, document en image réencodé en
  * JPEG comme une photo (sans lieu ni EXIF), autre document tel quel.

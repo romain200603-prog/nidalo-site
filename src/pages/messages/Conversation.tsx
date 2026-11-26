@@ -30,7 +30,8 @@ import { BlockDialog, CallDialog, directMenuItems, groupMenuItems, ReportSheet }
 import { Composer, type Suggestion } from './Composer';
 import { ForwardSheet } from './MessageInteractions';
 import { listingStore, loadListingRow, loadLots, lotsStore } from './listingRow';
-import { ActionMenu, ConfirmDialog, ConversationAvatar, PlainSheet, PublisherBadge, Sheet, showIphoneOnly, showNotice } from './parts';
+import { AddGroupMembersSheet } from './GroupInfo';
+import { ActionMenu, ConfirmDialog, ConversationAvatar, PlainSheet, PublisherBadge, Sheet, showNotice } from './parts';
 import { navigate, openOnClick, routePath } from './route';
 import { Thread, ThreadLoading } from './Thread';
 
@@ -333,16 +334,29 @@ function DirectHeader({ conversation, online, isBlocked, onVisit, onCall, onBloc
   );
 }
 
-/** En-tête d'un groupe : photo ou avatar, nom et membres ; pas de téléphone. Ses infos sont dans l'app iPhone. */
+/**
+ * En-tête d'un groupe (groupHeader) : retour, photo ou avatar de 36, nom et membres ; pas de téléphone. Un clic ouvre
+ * « Infos du groupe », ou la page de la communauté pour sa discussion principale ; « Ajouter des membres » (créateur
+ * et administrateurs) ouvre sa feuille, ou la page de la communauté ; puis ⋮.
+ */
 function GroupHeader({ conversation, me, onReport }: { conversation: Conversation; me: string | null; onReport: () => void }) {
+  const [adding, setAdding] = useState(false);
   const info = conversation.communityId ? 'Communauté' : 'Infos du groupe';
   const role = conversation.members.find((member) => sameId(member.userId, me))?.role ?? null;
   const manages = !conversation.hasLeft && role !== null && role !== 'member';
+  const openInfo = () => navigate({ conversationId: conversation.id, view: conversation.communityId ? 'communaute' : 'groupe' });
+  const count = conversation.members.length;
   return (
-    <header className="dm-head">
+    <header className="dm-head is-group">
       <BackToList />
-      <button type="button" className="dm-head-who" onClick={() => showIphoneOnly(info)} aria-label={info}>
-        <ConversationAvatar conversation={conversation} size={38} fontSize={13} />
+      <button
+        type="button"
+        className="dm-head-who"
+        onClick={openInfo}
+        aria-label={info}
+        aria-description={`${conversation.counterpart.name}, ${count} ${count > 1 ? 'membres' : 'membre'}`}
+      >
+        <ConversationAvatar conversation={conversation} size={36} fontSize={12.5} />
         <span className="dm-head-text">
           <span className="dm-head-name"><span className="dm-head-title">{conversation.counterpart.name}</span></span>
           <span className="dm-head-sub"><span>{conversation.hasLeft ? 'Vous avez quitté le groupe' : groupSummary(conversation.members)}</span></span>
@@ -350,14 +364,21 @@ function GroupHeader({ conversation, me, onReport }: { conversation: Conversatio
       </button>
       <div className="dm-head-tools">
         {manages && (
-          <button type="button" className="dm-round" onClick={() => showIphoneOnly(conversation.communityId ? info : 'Ajouter des membres')} aria-label="Ajouter des membres" title="Ajouter des membres">
+          <button
+            type="button"
+            className="dm-round dm-head-add"
+            onClick={() => (conversation.communityId ? openInfo() : setAdding(true))}
+            aria-label="Ajouter des membres"
+            title="Ajouter des membres"
+          >
             <Icon name="userPlus" />
           </button>
         )}
-        <ActionMenu label="Plus d'options" className="dm-round" items={groupMenuItems({ conversation, onReport })}>
-          <Icon name="ellipsis" />
+        <ActionMenu label="Plus d'options" className="dm-round dm-head-more" items={groupMenuItems({ conversation, onReport })}>
+          <Icon name="ellipsisVertical" />
         </ActionMenu>
       </div>
+      {!conversation.communityId && <AddGroupMembersSheet open={adding} conversation={conversation} onClose={() => setAdding(false)} />}
     </header>
   );
 }

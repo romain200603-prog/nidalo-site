@@ -2,13 +2,17 @@ import { useSyncExternalStore, type MouseEvent } from 'react';
 import { PATHS } from '../../lib/paths';
 
 // Adresse de la page Messages sur ordinateur : la conversation ouverte (?c=…), puis l'écran poussé par-dessus,
-// comme la pile de navigation de l'app : « Détails » (&vue=details) et « Médias » (&vue=medias&onglet=…).
-// Rien n'est ouvert sans ?c= : la page n'ouvre jamais une conversation d'elle-même.
+// comme la pile de navigation de l'app : « Détails » (&vue=details) et « Médias » (&vue=medias&onglet=…) ; pour un
+// groupe, « Infos du groupe » (&vue=groupe), « Ajouter des membres » (&vue=ajout) et « Messages éphémères »
+// (&vue=ephemeres) ; pour la discussion principale d'une communauté, « Communauté » (&vue=communaute) et ses
+// « Demandes » (&vue=demandes). Rien n'est ouvert sans ?c= : la page n'ouvre jamais une conversation d'elle-même.
 
 export type MediaTab = 'photos' | 'documents' | 'liens';
-export type MessagesRoute = { conversationId: string | null; view: 'thread' | 'details' | 'medias'; tab: MediaTab };
+export type MessagesView = 'thread' | 'details' | 'medias' | 'groupe' | 'communaute' | 'ajout' | 'ephemeres' | 'demandes';
+export type MessagesRoute = { conversationId: string | null; view: MessagesView; tab: MediaTab };
 
 const TABS: readonly MediaTab[] = ['photos', 'documents', 'liens'];
+const VIEWS: readonly string[] = ['details', 'medias', 'groupe', 'communaute', 'ajout', 'ephemeres', 'demandes'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function readRoute(search: string): MessagesRoute {
@@ -16,7 +20,7 @@ export function readRoute(search: string): MessagesRoute {
   const id = params.get('c');
   const conversationId = id && UUID.test(id) ? id : null;
   const vue = params.get('vue');
-  const view = conversationId && (vue === 'details' || vue === 'medias') ? vue : 'thread';
+  const view = conversationId && vue && VIEWS.includes(vue) ? vue as MessagesView : 'thread';
   const onglet = params.get('onglet') as MediaTab | null;
   return { conversationId, view, tab: onglet && TABS.includes(onglet) ? onglet : 'photos' };
 }

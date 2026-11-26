@@ -719,6 +719,11 @@ const CHAT_TABLES = [
   'rpc/start_phone_conversation', 'rpc/start_direct_conversation', 'rpc/my_offers', 'rpc/make_offer', 'rpc/accept_offer', 'rpc/decline_offer',
   'rpc/withdraw_offer', 'rpc/counter_offer', 'agenda_visits', 'rpc/my_visit_requests', 'rpc/start_listing_conversation',
   'rpc/accept_visit_request', 'rpc/propose_visit_slots', 'listing_lots',
+  // Groupes et communautés (étape 4b) : les fonctions que l'app appelle, avec ses paramètres.
+  'rpc/create_group', 'rpc/update_group_info', 'rpc/add_group_members', 'rpc/remove_group_member', 'rpc/set_group_role',
+  'rpc/transfer_group_ownership', 'rpc/leave_conversation', 'rpc/set_ephemeral', 'rpc/create_community', 'rpc/add_community_members',
+  'rpc/remove_community_member', 'rpc/set_community_role', 'rpc/update_community_info', 'rpc/leave_community', 'rpc/my_community_invites',
+  'rpc/create_community_invite', 'rpc/revoke_community_invite', 'rpc/pending_community_join_requests', 'rpc/decide_community_join_request',
 ];
 const chatProfile = (userId, publicName, fields = {}) => ({
   user_id: userId, public_name: publicName, avatar_path: null, account_type: 'individual', member_since: '2026-01-15', agency_id: null,
@@ -844,6 +849,10 @@ function chatState() {
     preferences: { [chatId(2)]: { is_favorite: true }, [chatId(3)]: { is_archived: true }, [chatId(4)]: { muted_until: '4001-01-01T00:00:00+00:00' } },
     blocks: [],
     reports: [],
+    /** Communautés du compte (my_communities), liens d'invitation et demandes pour entrer (étape 4b). */
+    communities: [],
+    invites: [],
+    joinRequests: [],
     files: new Map([[AGENT_PHOTOS[0], { type: 'image/jpeg', body: photos['photo1.jpg'] }], [AGENT_PHOTOS[1], { type: 'image/jpeg', body: photos['photo2.jpg'] }],
       [LOAN_PDF, { type: 'application/pdf', body: PDF_BYTES }]]),
     /** Demandes reçues (tables et fonctions), URL signées demandées et fichiers envoyés. */
@@ -854,6 +863,38 @@ function chatState() {
     removed: [],
     tick: 0,
   };
+}
+
+/** Discussion principale d'une communauté : son identifiant, dernier octet inversé avec 0x5A (Community.mainConversationId). */
+function chatMainConversationId(communityId) {
+  const hex = communityId.replace(/-/g, '').toLowerCase();
+  const bytes = `${hex.slice(0, 30)}${(parseInt(hex.slice(30), 16) ^ 0x5a).toString(16).padStart(2, '0')}`;
+  return `${bytes.slice(0, 8)}-${bytes.slice(8, 12)}-${bytes.slice(12, 16)}-${bytes.slice(16, 20)}-${bytes.slice(20)}`;
+}
+const COMMUNITY_ID = 'c4000000-0000-4000-8000-000000000001';
+const COMMUNITY_CHAT = chatMainConversationId(COMMUNITY_ID);
+
+/**
+ * Étape 4b : une communauté de quartier créée par Camille, dont le compte est administrateur (my_communities), sa
+ * discussion principale et une demande pour entrer (Nina L.) ; le groupe D reçoit une description et un type.
+ */
+function addChatCommunity(chat) {
+  const created = '2026-10-12T09:00:00Z';
+  chat.conversations.push({ id: COMMUNITY_CHAT, kind: 'group', listing: null, buyer: null, seller: null, other: null, name: 'Voisins de la Croix-Rousse', unread: 0, created_at: created, createdBy: CAMILLE_ID });
+  const members = [[CAMILLE_ID, 'owner'], [USER_ID, 'admin'], [MARC_ID, 'member'], [LUCAS_ID, 'member']];
+  for (const [userId, role] of members) chat.participants.push({ conversation_id: COMMUNITY_CHAT, user_id: userId, role, left_at: null, last_read_at: '2026-11-04T18:00:00Z' });
+  chat.messages.push(
+    { id: messageId(61), conversation_id: COMMUNITY_CHAT, sender_id: null, kind: 'system', client_id: messageId(61), content: { system: { _0: 'Camille R. a créé la communauté « Voisins de la Croix-Rousse »' } }, created_at: created, expires_at: null, message_reactions: [], preview: 'Camille R. a créé la communauté « Voisins de la Croix-Rousse »' },
+    { id: messageId(62), conversation_id: COMMUNITY_CHAT, sender_id: CAMILLE_ID, kind: 'text', client_id: messageId(62), content: chatText('Bienvenue à tous ! Présentez-vous en quelques mots.'), created_at: '2026-11-04T17:40:00Z', expires_at: null, message_reactions: [], preview: 'Bienvenue à tous ! Présentez-vous en quelques mots.' },
+  );
+  chat.communities.push({
+    id: COMMUNITY_ID, main_conversation_id: COMMUNITY_CHAT, name: 'Voisins de la Croix-Rousse',
+    details: 'Entraide entre propriétaires et locataires du quartier : travaux, copropriété et bonnes adresses.', category: 'residential', area: 'Lyon 4e',
+    visibility: 'private', cover: 'sky', image_path: null, created_by: CAMILLE_ID, created_at: created,
+    members: members.map(([user_id, role]) => ({ user_id, role, joined_at: created })),
+  });
+  chat.joinRequests.push({ id: 'e5000000-0000-4000-8000-000000000001', community_id: COMMUNITY_ID, user_id: NINA_ID, status: 'pending', created_at: '2026-11-05T20:00:00Z' });
+  Object.assign(chat.conversations.find((item) => item.id === chatId(4)), { details: 'Visite de l\'appartement 3 pièces samedi à 10 h, puis point sur nos dossiers.', purpose: 'project' });
 }
 
 const visitRequestId = (n) => `e2000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -908,7 +949,8 @@ function chatRows(chat) {
     const messages = chat.messages.filter((item) => sameChatId(item.conversation_id, conversation.id)).sort((a, b) => a.created_at.localeCompare(b.created_at));
     const last = messages.at(-1) ?? null;
     const members = chat.participants.filter((item) => sameChatId(item.conversation_id, conversation.id) && item.left_at === null);
-    const mine = members.find((item) => sameChatId(item.user_id, USER_ID));
+    // Ma ligne, même une fois le groupe quitté (left_at : « Vous avez quitté le groupe »).
+    const mine = chat.participants.find((item) => sameChatId(item.conversation_id, conversation.id) && sameChatId(item.user_id, USER_ID));
     const other = conversation.other ? members.find((item) => sameChatId(item.user_id, conversation.other)) : null;
     // Annonces de l'accueil, ou des annonces de test (une location, pour « Discussions liées aux annonces »).
     const listing = [...HOME_LISTINGS, ...listings].find((row) => row.id === conversation.listing) ?? null;
@@ -918,15 +960,18 @@ function chatRows(chat) {
         listingId: listing.id, title: listing.title, price: listing.price, transaction: listing.transaction, city: listing.city,
         coverPath: listing.listing_photos[0]?.storage_path ?? null,
       } : null,
-      buyer_id: conversation.buyer, seller_id: conversation.seller, group_name: conversation.name, group_details: null, group_image_path: null,
-      group_purpose: null, ephemeral_seconds: null, created_by: USER_ID, created_at: conversation.created_at, my_role: mine?.role ?? 'member',
-      joined_at: conversation.created_at, left_at: null, last_read_at: mine?.last_read_at ?? null, ...settings, other_user_id: conversation.other,
+      buyer_id: conversation.buyer, seller_id: conversation.seller, group_name: conversation.name, group_details: conversation.details ?? null,
+      group_image_path: conversation.image ?? null, group_purpose: conversation.purpose ?? null, ephemeral_seconds: conversation.ephemeral ?? null,
+      created_by: conversation.createdBy ?? USER_ID, created_at: conversation.created_at, my_role: mine?.role ?? 'member',
+      joined_at: conversation.created_at, left_at: mine?.left_at ?? null, last_read_at: mine?.last_read_at ?? null, ...settings, other_user_id: conversation.other,
       other_last_read_at: other?.last_read_at ?? null, member_count: members.length, unread_count: conversation.unread,
       last_message_id: last?.id ?? null, last_message_sender_id: last?.sender_id ?? null, last_message_kind: last?.kind ?? null,
       last_message_content: last?.content ?? null, last_message_preview: last?.preview ?? null, last_message_at: last?.created_at ?? null,
     };
   });
-  return rows.sort((a, b) => (b.last_message_at ?? b.created_at).localeCompare(a.last_message_at ?? a.created_at));
+  // Masquée (hidden_at, « Supprimer le groupe ») : absente de la liste jusqu'à un nouveau message.
+  return rows.filter((row) => !row.hidden_at || (row.last_message_at ?? '') > row.hidden_at)
+    .sort((a, b) => (b.last_message_at ?? b.created_at).localeCompare(a.last_message_at ?? a.created_at));
 }
 
 /** Offre telle que my_offers la rend (OfferServerRow) : rôle, auteur et actions permises selon le compte. */
@@ -999,6 +1044,18 @@ function chatRespond(chat, reply, { table, method, params, body, single }) {
     Object.assign(offer, { responded_at: chatClock(chat), ...change });
     return reply(200, [chatOffer(offer)]);
   };
+  const participantOf = (conversationId, userId) => chat.participants.find((item) => sameChatId(item.conversation_id, conversationId) && sameChatId(item.user_id, userId));
+  /** Membre ajouté, ou de retour (left_at effacé). */
+  const join = (conversationId, userId, role) => {
+    const found = participantOf(conversationId, userId);
+    if (found) Object.assign(found, { role, left_at: null });
+    else chat.participants.push({ conversation_id: String(conversationId).toLowerCase(), user_id: String(userId).toLowerCase(), role, left_at: null, last_read_at: null });
+  };
+  /** Créateur et administrateurs encore membres. */
+  const manages = (conversationId) => {
+    const mine = participantOf(conversationId, USER_ID);
+    return !!mine && mine.left_at === null && ['owner', 'admin'].includes(mine.role);
+  };
   const direct = (otherId, n) => {
     let conversation = chat.conversations.find((item) => item.kind === 'direct' && sameChatId(item.other, otherId));
     if (!conversation) {
@@ -1019,8 +1076,6 @@ function chatRespond(chat, reply, { table, method, params, body, single }) {
       const ids = (body?.user_ids ?? []).map((id) => String(id).toLowerCase());
       return reply(200, CHAT_PROFILES.filter((row) => ids.includes(row.user_id)));
     }
-    case 'rpc/my_communities':
-      return reply(200, []);
     case 'rpc/professional_contacts':
       return reply(200, PRO_CONTACTS);
     case 'user_blocks':
@@ -1172,6 +1227,149 @@ function chatRespond(chat, reply, { table, method, params, body, single }) {
     case 'rpc/start_listing_conversation': {
       const conversation = chat.conversations.find((item) => item.listing === body?.p_listing_id);
       return conversation ? reply(200, conversation.id) : refuse('Annonce introuvable.');
+    }
+    // Groupes (étape 4b) : comme les fonctions du serveur, sans réponse (204) ; les droits du créateur et des
+    // administrateurs sont vérifiés.
+    case 'rpc/create_group': {
+      const id = String(body?.p_id).toLowerCase();
+      if (!findConversation(id)) {
+        chat.conversations.push({ id, kind: 'group', listing: null, buyer: null, seller: null, other: null, name: body.p_name, details: body.p_details ?? null, purpose: body.p_purpose ?? null, unread: 0, created_at: chatClock(chat), createdBy: USER_ID });
+        join(id, USER_ID, 'owner');
+        for (const userId of body.p_member_ids ?? []) join(id, userId, 'member');
+        addMessage(id, null, { system: { _0: `Claire M. a créé le groupe « ${body.p_name} »` } }, `Claire M. a créé le groupe « ${body.p_name} »`);
+      }
+      return reply(204);
+    }
+    case 'rpc/update_group_info': {
+      const conversation = findConversation(body?.p_conversation_id);
+      if (!conversation || !manages(conversation.id)) return refuse('Seuls le créateur et les administrateurs peuvent modifier le groupe.');
+      Object.assign(conversation, { name: body.p_name, details: body.p_details ?? null, image: body.p_image_path ?? null });
+      const community = chat.communities.find((item) => sameChatId(item.main_conversation_id, conversation.id));
+      if (community) Object.assign(community, { name: body.p_name, image_path: body.p_image_path ?? null });
+      return reply(204);
+    }
+    case 'rpc/add_group_members':
+      if (!manages(body?.p_conversation_id)) return refuse('Seuls le créateur et les administrateurs peuvent ajouter des membres.');
+      for (const userId of body.p_member_ids ?? []) join(String(body.p_conversation_id).toLowerCase(), userId, 'member');
+      return reply(204);
+    case 'rpc/remove_group_member': {
+      const member = participantOf(body?.p_conversation_id, body?.p_member_id);
+      if (!member || !manages(body.p_conversation_id) || member.role === 'owner') return refuse('Ce membre ne peut pas être retiré.');
+      member.left_at = chatClock(chat);
+      return reply(204);
+    }
+    case 'rpc/set_group_role': {
+      const member = participantOf(body?.p_conversation_id, body?.p_member_id);
+      if (!member || participantOf(body.p_conversation_id, USER_ID)?.role !== 'owner') return refuse('Seul le créateur peut nommer les administrateurs.');
+      member.role = body.p_role;
+      return reply(204);
+    }
+    case 'rpc/transfer_group_ownership': {
+      const member = participantOf(body?.p_conversation_id, body?.p_member_id);
+      const mine = participantOf(body?.p_conversation_id, USER_ID);
+      if (!member || mine?.role !== 'owner') return refuse('Seul le créateur peut transférer la propriété.');
+      member.role = 'owner';
+      mine.role = 'admin';
+      return reply(204);
+    }
+    case 'rpc/leave_conversation': {
+      const mine = participantOf(body?.p_conversation_id, USER_ID);
+      if (mine) mine.left_at = chatClock(chat);
+      return reply(204);
+    }
+    case 'rpc/set_ephemeral': {
+      const conversation = findConversation(body?.p_conversation_id);
+      if (!conversation || !manages(conversation.id)) return refuse('Seuls le créateur et les administrateurs peuvent changer ce réglage.');
+      conversation.ephemeral = Number(body.p_seconds) || null;
+      return reply(204);
+    }
+    // Communautés : la communauté à jour revient (une ligne de my_communities).
+    case 'rpc/my_communities':
+      return reply(200, chat.communities.filter((item) => item.members.some((member) => sameChatId(member.user_id, USER_ID))));
+    case 'rpc/create_community': {
+      const id = String(body?.p_id).toLowerCase();
+      let community = chat.communities.find((item) => sameChatId(item.id, id));
+      if (!community) {
+        const created = chatClock(chat);
+        const main = String(body.p_conversation_id).toLowerCase();
+        const members = [[USER_ID, 'owner'], ...(body.p_member_ids ?? []).map((userId) => [String(userId).toLowerCase(), 'member'])];
+        community = {
+          id, main_conversation_id: main, name: body.p_name, details: body.p_details, category: body.p_category, area: body.p_area ?? null,
+          visibility: 'private', cover: body.p_cover ?? null, image_path: null, created_by: USER_ID, created_at: created,
+          members: members.map(([user_id, role]) => ({ user_id, role, joined_at: created })),
+        };
+        chat.communities.push(community);
+        chat.conversations.push({ id: main, kind: 'group', listing: null, buyer: null, seller: null, other: null, name: body.p_name, unread: 0, created_at: created, createdBy: USER_ID });
+        for (const [userId, role] of members) join(main, userId, role);
+      }
+      return reply(200, [community]);
+    }
+    case 'rpc/add_community_members':
+    case 'rpc/remove_community_member':
+    case 'rpc/set_community_role':
+    case 'rpc/update_community_info': {
+      const community = chat.communities.find((item) => sameChatId(item.id, body?.p_community_id));
+      const mine = community?.members.find((member) => sameChatId(member.user_id, USER_ID));
+      if (!community || !['owner', 'admin'].includes(mine?.role)) return refuse('Seuls le créateur et les administrateurs gèrent la communauté.');
+      const target = community.members.find((member) => sameChatId(member.user_id, body.p_member_id));
+      if (table === 'rpc/add_community_members') {
+        for (const userId of body.p_member_ids ?? []) {
+          if (!community.members.some((member) => sameChatId(member.user_id, userId))) community.members.push({ user_id: String(userId).toLowerCase(), role: 'member', joined_at: chatClock(chat) });
+          join(community.main_conversation_id, userId, 'member');
+        }
+      } else if (table === 'rpc/remove_community_member') {
+        if (!target || target.role === 'owner') return refuse('Ce membre ne peut pas être retiré.');
+        community.members = community.members.filter((member) => member !== target);
+        const participant = participantOf(community.main_conversation_id, target.user_id);
+        if (participant) participant.left_at = chatClock(chat);
+      } else if (table === 'rpc/set_community_role') {
+        if (!target || mine.role !== 'owner') return refuse('Seul le créateur nomme les administrateurs.');
+        target.role = body.p_role;
+      } else {
+        Object.assign(community, { name: body.p_name, image_path: body.p_image_path });
+        Object.assign(findConversation(community.main_conversation_id) ?? {}, { name: body.p_name, image: body.p_image_path });
+      }
+      return reply(200, [community]);
+    }
+    case 'rpc/leave_community': {
+      const community = chat.communities.find((item) => sameChatId(item.id, body?.p_community_id));
+      if (community) {
+        community.members = community.members.filter((member) => !sameChatId(member.user_id, USER_ID));
+        const mine = participantOf(community.main_conversation_id, USER_ID);
+        if (mine) mine.left_at = chatClock(chat);
+      }
+      return reply(204);
+    }
+    // Invitations : lien actif (plus récent d'abord), nouveau lien, lien annulé ; demandes pour entrer.
+    case 'rpc/my_community_invites':
+      return reply(200, chat.invites.filter((item) => sameChatId(item.community_id, body?.p_community_id) && !item.revoked).sort((a, b) => b.created_at.localeCompare(a.created_at)));
+    case 'rpc/create_community_invite': {
+      const created = chatClock(chat);
+      const invite = {
+        id: crypto.randomUUID(), community_id: String(body?.p_community_id).toLowerCase(), token: `jeton-invitation-${chat.invites.length + 1}`,
+        requires_approval: body?.p_requires_approval ?? true, created_at: created, expires_at: new Date(Date.parse(created) + (body?.p_days ?? 7) * 86_400_000).toISOString(),
+      };
+      chat.invites.push(invite);
+      return reply(200, [invite]);
+    }
+    case 'rpc/revoke_community_invite': {
+      const invite = chat.invites.find((item) => sameChatId(item.id, body?.p_invite_id));
+      if (invite) invite.revoked = true;
+      return reply(204);
+    }
+    case 'rpc/pending_community_join_requests':
+      return reply(200, chat.joinRequests.filter((item) => sameChatId(item.community_id, body?.p_community_id) && item.status === 'pending')
+        .map(({ id, user_id, created_at }) => ({ id, user_id, created_at })));
+    case 'rpc/decide_community_join_request': {
+      const request = chat.joinRequests.find((item) => sameChatId(item.id, body?.p_request_id));
+      if (!request || request.status !== 'pending') return refuse('Cette demande a déjà été traitée.');
+      request.status = body.p_accept ? 'accepted' : 'declined';
+      const community = chat.communities.find((item) => sameChatId(item.id, request.community_id));
+      if (body.p_accept && community) {
+        community.members.push({ user_id: request.user_id, role: 'member', joined_at: chatClock(chat) });
+        join(community.main_conversation_id, request.user_id, 'member');
+      }
+      return reply(204);
     }
     default:
       return reply(200, []);
@@ -3403,7 +3601,8 @@ try {
       }, null, { timeout: 8000 }).catch(async () => problems.push(`${M} : cartes après la contre-offre ${JSON.stringify(await page.$$eval('.dm-offer', (els) => els.map((el) => el.textContent)))}`));
     }
 
-    // D : groupe en sourdine, marqué lu à l'ouverture ; ses infos et l'ajout de membres restent dans l'app iPhone.
+    // D : groupe en sourdine, marqué lu à l'ouverture ; l'en-tête ouvre « Infos du groupe » (&vue=groupe), le + la feuille
+    // « Ajouter des membres » (étape 4b : vérifiés en détail plus bas, « messages groupes »).
     mark = chat.calls.length;
     await page.click(rowLink(4));
     await page.waitForURL(`${base}/messages/?c=${chatId(4)}`);
@@ -3418,9 +3617,20 @@ try {
     await chatShot(page, `3-messages-groupe-${width}.png`);
     if (width === 1440) {
       await page.click('.dm-head-who');
-      await iphoneOnly(page, `${M} : groupe`, 'Infos du groupe');
+      await page.waitForURL(`${base}/messages/?c=${chatId(4)}&vue=groupe`);
+      await page.waitForSelector('.dmg-hero');
+      expectSame(M, 'infos du groupe', [await textOf(page, '.dmg-bar h2'), await textOf(page, '.dmg-hero-name'), await textOf(page, '.dmg-hero-sub')],
+        ['Infos du groupe', 'Visite groupée Lyon 2e', 'Groupe · 3 membres']);
+      await page.click('.dmg-bar button[aria-label="Retour"]');
+      await page.waitForURL(`${base}/messages/?c=${chatId(4)}`);
+      await page.waitForSelector('.dm-thread-inner .dm-day');
       await page.click('.dm-head button[aria-label="Ajouter des membres"]');
-      await iphoneOnly(page, `${M} : groupe`, 'Ajouter des membres');
+      // Les contacts qui ne sont pas déjà membres, par ordre alphabétique (pas le compte supprimé : aucun compte).
+      await page.waitForSelector('dialog[open] .dmg-picker-row');
+      expectSame(M, 'ajouter des membres', [await dialogTitle(page, 'sheet'), await texts(page, 'dialog[open] .dmg-picker-name'), await textOf(page, 'dialog[open] .dmg-step-button')],
+        ['Ajouter des membres', ['Immo Démo Croix-Rousse', 'Julien M.', 'Lucas G.', 'Marc P.'], 'Ajouter au groupe']);
+      await page.click('dialog[open] .dm-sheet-close');
+      await page.waitForSelector('dialog.dm-sheet[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${M} : « Ajouter des membres » reste ouverte`));
       expectSame(M, 'menu « … » du groupe', await headerMenu(page), ['Infos du groupe', 'Ajouter aux favoris', 'Réactiver les notifications', 'Archiver', 'Signaler le groupe']);
       mark = chat.calls.length;
       await headerMenu(page, 'Réactiver les notifications');
@@ -3457,7 +3667,8 @@ try {
       await extra.close();
     }
 
-    // « Nouvelle discussion » : actions rapides, contacts ; groupes, communautés et diffusions dans l'app iPhone.
+    // « Nouvelle discussion » : actions rapides, contacts ; « Nouveau groupe », « Nouvelle communauté » et « Nouvelle
+    // diffusion » poussent leur écran dans la feuille (étape 4b), « Retour » revient.
     await page.click('.dm-compose');
     expectSame(M, 'nouvelle discussion', [await dialogTitle(page, 'sheet'), await page.$$eval('dialog[open] .dm-quick-actions .dm-action-text', (els) => els.map((el) => el.textContent)),
       await page.$$eval('dialog[open] .dm-results-title', (els) => els.map((el) => el.textContent))],
@@ -3467,7 +3678,12 @@ try {
     if (width === 1440) {
       for (const title of ['Nouveau groupe', 'Nouvelle communauté', 'Nouvelle diffusion']) {
         await page.click(`dialog[open] .dm-quick-actions .dm-action-row:has-text("${title}")`);
-        await iphoneOnly(page, `${M} : nouvelle discussion`, title);
+        await page.waitForFunction((wanted) => document.querySelector('dialog.dm-sheet[open] h2')?.textContent === wanted, title, { timeout: 8000 })
+          .catch(() => problems.push(`${M} : « ${title} » ne s'ouvre pas`));
+        expectSame(M, `écran « ${title} »`, [await page.locator('dialog.alert-dialog[open]').count(), await page.locator('dialog[open] .dm-sheet-back').count(),
+          await page.locator('dialog[open] .dm-sheet-close').count(), await page.locator('dialog[open] .dmg-step-button').count()], [0, 1, 0, 1]);
+        await page.click('dialog[open] .dm-sheet-back');
+        await page.waitForSelector('dialog[open] .dm-quick-actions');
       }
       // « Nouveau contact » : le compte Nidalo d'un numéro (find_account_by_phone), puis « Écrire » (start_phone_conversation).
       await page.click('dialog[open] .dm-quick-actions .dm-action-row:has-text("Nouveau contact")');
@@ -4525,6 +4741,386 @@ try {
     await page.waitForURL(`${base}/messages/`);
     await page.waitForSelector('.dm-list .dm-row');
     expectSame(M, 'retour à la liste', [(await phoneShape()).tabbar, (await phoneShape()).pane], [true, false]);
+    await page.close();
+    await chatPhone.close();
+  }
+  // Groupes et communautés (étape 4b), comme l'app (GroupInfoView, NewGroupView, CommunityViews, CommunityInviteViews,
+  // BroadcastView) : chaque action envoie au serveur simulé la fonction et les paramètres de l'app ; une communauté de
+  // quartier (le compte en est administrateur, une demande pour entrer) s'ajoute aux conversations de test.
+  {
+    const M = 'messages groupes';
+    const { context: chatDesk, chat } = await chatContext({ width: 1440, height: 960 });
+    addChatCommunity(chat);
+    await chatDesk.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base });
+    page = await open(chatDesk, `/messages/?c=${chatId(4)}`, M);
+    await page.waitForSelector('.dm-thread-inner .dm-day');
+    const D = chatId(4).toUpperCase();
+    /** Bandeau bleu du bas (2 s). */
+    const toast = async (wanted, what) => {
+      await page.waitForFunction((text) => [...document.querySelectorAll('.dmg-toast')].some((el) => el.textContent === text), wanted, { timeout: 8000 })
+        .catch(async () => problems.push(`${M} : ${what} : bandeau ${JSON.stringify(await texts(page, '.dmg-toast'))} au lieu de « ${wanted} »`));
+    };
+    const members = () => page.$$eval('.dmg-members > li', (els) => els.map((el) => [el.querySelector('.dmg-member-name')?.textContent ?? null, el.querySelector('.dmg-role')?.textContent ?? null]));
+    const waitForMembers = async (wanted, what) => {
+      await page.waitForFunction((list) => JSON.stringify([...document.querySelectorAll('.dmg-members > li')]
+        .map((el) => [el.querySelector('.dmg-member-name')?.textContent ?? null, el.querySelector('.dmg-role')?.textContent ?? null])) === JSON.stringify(list), wanted, { timeout: 8000 })
+        .catch(async () => problems.push(`${M} : ${what} : membres ${JSON.stringify(await members())} au lieu de ${JSON.stringify(wanted)}`));
+    };
+    /** Menu d'un membre : ses actions, ou l'action choisie. */
+    const memberMenu = async (name, choose = null) => {
+      await page.click(`.dmg-members button.dmg-member-line[aria-label="${name}"]`);
+      await page.waitForSelector('.dmg-members .dm-menu-list');
+      const items = await texts(page, '.dmg-members .dm-menu-list [role="menuitem"]');
+      if (choose) await page.locator('.dmg-members .dm-menu-list').getByRole('menuitem', { name: choose, exact: true }).click();
+      else await page.keyboard.press('Escape');
+      return items;
+    };
+    const sheetTitle = (wanted) => page.waitForFunction((text) => document.querySelector('dialog.dm-sheet[open] h2')?.textContent === text, wanted, { timeout: 8000 })
+      .catch(async () => problems.push(`${M} : feuille « ${await dialogTitle(page, 'sheet')} » au lieu de « ${wanted} »`));
+
+    // « Infos du groupe » : en-tête, À propos, Médias, réglages, actions, membres et date de création.
+    await page.click('.dm-head-who');
+    await page.waitForURL(`${base}/messages/?c=${chatId(4)}&vue=groupe`);
+    await page.waitForSelector('.dmg-hero');
+    expectSame(M, 'infos du groupe', {
+      bar: [await textOf(page, '.dmg-bar h2'), await textOf(page, '.dmg-bar-action')],
+      hero: [await textOf(page, '.dmg-hero-name'), await textOf(page, '.dmg-hero-sub'), await page.textContent('.dmg-tag')],
+      tiles: await texts(page, '.dmg-tile'), sections: await texts(page, '.dmg-section-title'),
+      about: [await textOf(page, '.dmg-about'), await textOf(page, '.dmg-about-by')], media: await textOf(page, '.dmg-media-empty'),
+      settings: await page.$$eval('.dmg-section-card .dm-action-row', (els) => els.map((el) => el.innerText.replace(/\s+/g, ' ').trim())),
+      foot: await textOf(page, '.dmg-foot'), leave: await textOf(page, '.dmg-destructive:has-text("Quitter")'),
+    }, {
+      bar: ['Infos du groupe', 'Modifier'], hero: ['Visite groupée Lyon 2e', 'Groupe · 3 membres', 'Projet immobilier'], tiles: ['Ajouter', 'Rechercher'],
+      sections: ['À propos', 'Médias', 'Paramètres de la conversation', 'Actions du groupe', '3 membres'],
+      about: ['Visite de l\'appartement 3 pièces samedi à 10 h, puis point sur nos dossiers.', 'Créé par vous · hier'],
+      media: 'Les photos et documents partagés dans ce groupe apparaîtront ici.',
+      settings: ['Notifications En sourdine', 'Messages éphémères Désactivés', 'Ajouter aux favoris Retrouvez ce groupe avec le filtre Favoris de Messages',
+        'Exporter la discussion', 'Effacer la discussion Seulement pour vous'],
+      foot: 'Groupe créé le 5 novembre 2026', leave: 'Quitter le groupe',
+    });
+    await waitForMembers([['Vous', 'Créateur'], ['Camille R.', null], ['Agence Démo Lyon', 'Administrateur']], 'liste');
+    expectSame(M, 'boutons et champs sans nom (infos)', await unnamedControls(page), []);
+    await chatShot(page, '3-messages-infos-groupe-1440.png');
+
+    // Favori : tous les réglages relus puis enregistrés (conversation_preferences), et le bandeau.
+    let mark = chat.calls.length;
+    await page.click('.dm-action-row:has-text("Ajouter aux favoris")');
+    const favorite = await oneCall(chat, 'conversation_preferences', mark, `${M} : favori`, (call) => call.method === 'POST');
+    if (favorite) expectSame(M, 'favori', [favorite.body.conversation_id, favorite.body.is_favorite, favorite.body.is_archived, 'hidden_at' in favorite.body], [D, true, false, false]);
+    await toast('Ajouté aux favoris', 'favori');
+
+    // Messages éphémères : 24 heures, après confirmation (set_ephemeral, la durée en texte).
+    await page.click('.dm-action-row:has-text("Messages éphémères")');
+    await page.waitForURL(`${base}/messages/?c=${chatId(4)}&vue=ephemeres`);
+    await page.click('.dmg-radio-row:has-text("24 heures")');
+    expectSame(M, 'confirmation des messages éphémères', [await dialogTitle(page), await textOf(page, 'dialog.alert-dialog[open] .alert-body p')],
+      ['Activer les messages éphémères ?', 'Les nouveaux messages de ce groupe disparaîtront de la conversation, pour tous les membres, 24 heures après leur envoi.']);
+    mark = chat.calls.length;
+    await alertButton(page, 'Activer : 24 heures');
+    const ephemeral = await oneCall(chat, 'rpc/set_ephemeral', mark, `${M} : messages éphémères`);
+    if (ephemeral) expectSame(M, 'messages éphémères envoyés', ephemeral.body, { p_conversation_id: D, p_seconds: '86400' });
+    await page.waitForSelector('.dmg-radio-row[aria-checked="true"]:has-text("24 heures")', { timeout: 8000 }).catch(() => problems.push(`${M} : « 24 heures » n'est pas cochée`));
+    await page.click('.dmg-bar button[aria-label="Retour"]');
+    await page.waitForURL(`${base}/messages/?c=${chatId(4)}&vue=groupe`);
+    expectSame(M, 'durée affichée', await textOf(page, '.dm-action-row:has-text("Messages éphémères") .dmg-value'), '24 heures');
+
+    // Membres : le créateur nomme un administrateur (set_group_role), retire un membre après confirmation (remove_group_member).
+    expectSame(M, 'actions sur un membre', await memberMenu('Camille R.'), ['Envoyer un message', 'Nommer administrateur', 'Transférer la propriété', 'Retirer du groupe']);
+    mark = chat.calls.length;
+    await memberMenu('Camille R.', 'Nommer administrateur');
+    const promoted = await oneCall(chat, 'rpc/set_group_role', mark, `${M} : administrateur`);
+    if (promoted) expectSame(M, 'administrateur nommé', promoted.body, { p_conversation_id: D, p_member_id: CAMILLE_ID.toUpperCase(), p_role: 'admin' });
+    await toast('Camille R. est administrateur', 'administrateur');
+    await waitForMembers([['Vous', 'Créateur'], ['Camille R.', 'Administrateur'], ['Agence Démo Lyon', 'Administrateur']], 'administrateur');
+    await memberMenu('Agence Démo Lyon', 'Retirer du groupe');
+    expectSame(M, 'confirmation du retrait', await dialogTitle(page), 'Retirer Agence Démo Lyon ?');
+    mark = chat.calls.length;
+    await alertButton(page, 'Retirer du groupe');
+    const removed = await oneCall(chat, 'rpc/remove_group_member', mark, `${M} : retrait`);
+    if (removed) expectSame(M, 'membre retiré', removed.body, { p_conversation_id: D, p_member_id: AGENT_ID.toUpperCase() });
+    await toast('Agence Démo Lyon retiré du groupe', 'retrait');
+    await waitForMembers([['Vous', 'Créateur'], ['Camille R.', 'Administrateur']], 'retrait');
+
+    // « Modifier le groupe » : le nom et la description tels que saisis, sans photo (la clé ne part pas).
+    await page.click('.dmg-bar-action');
+    await sheetTitle('Modifier le groupe');
+    await page.fill('dialog[open] input.dmg-input', 'Visite groupée Lyon 2e et 3e');
+    mark = chat.calls.length;
+    await page.click('dialog[open] .dmg-step-button');
+    const edited = await oneCall(chat, 'rpc/update_group_info', mark, `${M} : modifier`);
+    if (edited) {
+      expectSame(M, 'infos modifiées', edited.body, {
+        p_conversation_id: D, p_name: 'Visite groupée Lyon 2e et 3e', p_details: 'Visite de l\'appartement 3 pièces samedi à 10 h, puis point sur nos dossiers.',
+      });
+    }
+    await toast('Infos du groupe mises à jour', 'modifier');
+    await page.waitForFunction(() => document.querySelector('.dmg-hero-name')?.textContent === 'Visite groupée Lyon 2e et 3e', null, { timeout: 8000 })
+      .catch(() => problems.push(`${M} : le nouveau nom n'est pas affiché`));
+
+    // « Exporter la discussion » : un fichier texte de ce que l'on voit, une ligne par message.
+    await page.click('.dm-action-row:has-text("Exporter la discussion")');
+    await sheetTitle('Exporter la discussion');
+    expectSame(M, 'export', [await textOf(page, 'dialog[open] .dmg-export-count'), await texts(page, 'dialog[open] .choice-chip')],
+      ['4 messages · fichier texte (.txt)', ['Toute la discussion', '30 derniers jours', '7 derniers jours']]);
+    // Le nom que le site donne au fichier (sans langue UTF-8 dans l'environnement, Chromium sous Linux le remplace par
+    // « download » dès qu'il a un accent).
+    await page.evaluate(() => {
+      const click = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = function () { if (this.download) window.savedFileName = this.download; return click.call(this); };
+    });
+    const [download] = await Promise.all([page.waitForEvent('download', { timeout: 8000 }), page.click('dialog[open] button:has-text("Exporter")')]);
+    const exported = (await readFile(await download.path(), 'utf8')).split('\n');
+    expectSame(M, 'fichier exporté', [await page.evaluate(() => window.savedFileName), exported.slice(0, 3), exported.at(-1), exported.length],
+      ['Discussion-Visite-groupée-Lyon-2e-et-3e.txt', ['Discussion « Visite groupée Lyon 2e et 3e » exportée depuis Nidalo', '', '05/11/2026 17:30 · Claire M. a créé le groupe « Visite groupée Lyon 2e »'],
+        '06/11/2026 09:12 · Camille R. : Merci, à samedi !', 6]);
+    await page.click('dialog[open] .dm-sheet-close');
+
+    // « Signaler le groupe » (reports), « Quitter aussi le groupe » laissé désactivé : l'avis dans le bandeau.
+    mark = chat.calls.length;
+    await page.click('.dmg-destructive:has-text("Signaler le groupe")');
+    await sheetTitle('Signaler le groupe');
+    expectSame(M, 'quitter aussi le groupe', [await textOf(page, 'dialog[open] .dm-report-leave'), await page.isChecked('dialog[open] .dm-report-leave input')], ['Quitter aussi le groupe', false]);
+    await page.click('dialog[open] .dm-choice:has-text("Spam")');
+    await page.click('dialog[open] button:text-is("Enregistrer le signalement")');
+    await toast('Signalement envoyé à l\'équipe Nidalo.', 'signalement');
+    const groupReport = await oneCall(chat, 'reports', mark, `${M} : signaler le groupe`);
+    if (groupReport) expectSame(M, 'signalement du groupe', [groupReport.method, groupReport.body?.target_type, groupReport.body?.target_id, groupReport.body?.reason], ['POST', 'conversation', D, 'spam']);
+    if (chatCalls(chat, 'rpc/leave_conversation', mark).length) problems.push(`${M} : le signalement seul quitte le groupe`);
+
+    // « Quitter le groupe » (leave_conversation), puis « Supprimer le groupe » : il quitte la liste (hidden_at).
+    await page.click('.dmg-destructive:has-text("Quitter le groupe")');
+    expectSame(M, 'confirmation du départ', await dialogTitle(page), 'Quitter le groupe ?');
+    mark = chat.calls.length;
+    await alertButton(page, 'Quitter le groupe');
+    const left = await oneCall(chat, 'rpc/leave_conversation', mark, `${M} : quitter`);
+    if (left) expectSame(M, 'groupe quitté', left.body, { p_conversation_id: D });
+    await page.waitForURL(`${base}/messages/`);
+    await page.goto(`${base}/messages/?c=${chatId(4)}&vue=groupe`);
+    await page.waitForSelector('.dmg-destructive:has-text("Supprimer le groupe")');
+    expectSame(M, 'après le départ', [await page.locator('.dmg-bar-action').count(), await page.locator('.dmg-tile:has-text("Ajouter")').isDisabled()], [0, true]);
+    await page.click('.dmg-destructive:has-text("Supprimer le groupe")');
+    expectSame(M, 'confirmation de la suppression', await dialogTitle(page), 'Supprimer le groupe ?');
+    mark = chat.calls.length;
+    await alertButton(page, 'Supprimer le groupe');
+    const hidden = await oneCall(chat, 'conversation_preferences', mark, `${M} : supprimer`, (call) => call.method === 'POST');
+    if (hidden) expectSame(M, 'groupe masqué', [hidden.body.conversation_id, typeof hidden.body.hidden_at, hidden.body.is_favorite], [D, 'string', true]);
+    await page.waitForURL(`${base}/messages/`);
+    await page.waitForFunction((id) => !document.querySelector(`.dm-list .dm-row[href="/messages/?c=${id}"]`), chatId(4), { timeout: 8000 })
+      .catch(() => problems.push(`${M} : le groupe supprimé reste dans la liste`));
+
+    // « Nouveau groupe » : au moins deux personnes, puis le nom ; create_group, puis le groupe s'ouvre.
+    await page.click('.dm-compose');
+    await page.click('dialog[open] .dm-quick-actions .dm-action-row:has-text("Nouveau groupe")');
+    await sheetTitle('Nouveau groupe');
+    await page.click('dialog[open] .dmg-step-button');
+    expectSame(M, 'participants manquants', await textOf(page, 'dialog[open] .dmg-step-error'), 'Choisissez au moins 2 personnes.');
+    await page.click('dialog[open] .dmg-picker-row:has-text("Julien M.")');
+    await page.click('dialog[open] .dmg-picker-row:has-text("Lucas G.")');
+    expectSame(M, 'participants choisis', [await page.$$eval('dialog[open] .dmg-chip', (els) => els.map((el) => el.getAttribute('aria-label'))),
+      await textOf(page, 'dialog[open] .dmg-picker-count strong')], [['Retirer Julien M.', 'Retirer Lucas G.'], '2 personnes choisies']);
+    await page.click('dialog[open] .dmg-step-button');
+    await sheetTitle('Infos du groupe');
+    await page.click('dialog[open] .dmg-step-button');
+    expectSame(M, 'nom manquant', await textOf(page, 'dialog[open] .dmg-error'), 'Donnez un nom au groupe.');
+    await page.fill('dialog[open] input.dmg-input', '  Achat à plusieurs  ');
+    await page.click('dialog[open] .choice-chip:has-text("Achat entre particuliers")');
+    expectSame(M, 'participants du groupe', [await textOf(page, 'dialog[open] .dmg-card-head .dmg-label'), await texts(page, 'dialog[open] .dmg-member-name')],
+      ['Participants · 3 avec vous', ['Vous', 'Julien M.', 'Lucas G.']]);
+    mark = chat.calls.length;
+    await page.click('dialog[open] .dmg-step-button');
+    const createdGroup = await oneCall(chat, 'rpc/create_group', mark, `${M} : nouveau groupe`);
+    if (createdGroup) {
+      if (!UPPER_UUID.test(createdGroup.body?.p_id ?? '')) problems.push(`${M} : identifiant du groupe ${createdGroup.body?.p_id}`);
+      expectSame(M, 'groupe créé', createdGroup.body, {
+        p_id: createdGroup.body?.p_id, p_name: 'Achat à plusieurs', p_member_ids: [OTHER_ID.toUpperCase(), LUCAS_ID.toUpperCase()], p_purpose: 'privateSale',
+      });
+      await page.waitForURL(`${base}/messages/?c=${String(createdGroup.body?.p_id).toLowerCase()}`).catch(() => problems.push(`${M} : le nouveau groupe ne s'ouvre pas (${page.url()})`));
+      await page.waitForFunction(() => document.querySelector('.dm-head-title')?.textContent === 'Achat à plusieurs', null, { timeout: 8000 })
+        .catch(() => problems.push(`${M} : en-tête du nouveau groupe`));
+      if (await page.locator('dialog.dm-sheet[open]').count()) problems.push(`${M} : « Nouveau groupe » reste ouverte`);
+    }
+
+    // « Nouvelle communauté » : nom, description, catégorie et couverture, puis « Passer » (sans premiers membres) ;
+    // create_community, puis la discussion principale s'ouvre.
+    await page.click('.dm-compose');
+    await page.click('dialog[open] .dm-quick-actions .dm-action-row:has-text("Nouvelle communauté")');
+    await sheetTitle('Nouvelle communauté');
+    expectSame(M, 'étape 1', [await textOf(page, 'dialog[open] .dmg-steps-title'), await page.locator('dialog[open] .dmg-category.is-on').innerText()],
+      ['Étape 1 sur 2 · Informations', 'Communauté immobilière générale']);
+    await page.click('dialog[open] .dmg-step-button');
+    expectSame(M, 'champs manquants', await texts(page, 'dialog[open] .dmg-error'), ['Donnez un nom à la communauté.', 'Expliquez en quelques mots le but de la communauté.']);
+    await page.fill('dialog[open] input.dmg-input >> nth=0', 'Locataires Lyon 7e');
+    await page.fill('dialog[open] textarea.dmg-editor', 'Entraide entre locataires : dossiers, visites et bons plans.');
+    await page.click('dialog[open] .dmg-category:has-text("Location")');
+    await page.click('dialog[open] .dmg-cover-choice[aria-label="Couverture Ciel"]');
+    expectSame(M, 'aperçu', await textOf(page, 'dialog[open] .dmg-preview-text'), 'Locataires Lyon 7e Location · Privée');
+    await page.click('dialog[open] .dmg-step-button');
+    await sheetTitle('Premiers membres');
+    expectSame(M, 'étape 2', [await textOf(page, 'dialog[open] .dmg-steps-title'), await textOf(page, 'dialog[open] .dm-sheet-trailing')], ['Étape 2 sur 2 · Membres', 'Passer']);
+    mark = chat.calls.length;
+    await page.click('dialog[open] .dm-sheet-trailing');
+    const createdCommunity = await oneCall(chat, 'rpc/create_community', mark, `${M} : nouvelle communauté`);
+    if (createdCommunity) {
+      const id = createdCommunity.body?.p_id ?? '';
+      if (!UPPER_UUID.test(id)) problems.push(`${M} : identifiant de la communauté ${id}`);
+      expectSame(M, 'communauté créée', createdCommunity.body, {
+        p_id: id, p_conversation_id: chatMainConversationId(id).toUpperCase(), p_name: 'Locataires Lyon 7e', p_details: 'Entraide entre locataires : dossiers, visites et bons plans.',
+        p_category: 'rental', p_cover: 'sky', p_member_ids: [],
+      });
+      await page.waitForURL(`${base}/messages/?c=${chatMainConversationId(id)}`).catch(() => problems.push(`${M} : la communauté ne s'ouvre pas (${page.url()})`));
+      await page.waitForFunction(() => document.querySelector('.dm-head-title')?.textContent === 'Locataires Lyon 7e', null, { timeout: 8000 })
+        .catch(() => problems.push(`${M} : en-tête de la nouvelle communauté`));
+      await page.click('.dm-head-who');
+      await page.waitForSelector('.dmg-hero.is-community');
+      expectSame(M, 'nouvelle communauté', [await textOf(page, '.dmg-hero-name'), await textOf(page, '.dmg-hero-sub'), await textOf(page, '.dmg-hero-line'), await members()],
+        ['Locataires Lyon 7e', 'Communauté · 1 membre', 'Privée · Location', [['Vous', 'Créateur']]]);
+    }
+
+    // La communauté de quartier : page, invitation (lien, QR code, copie, annulation), demandes, membres, départ.
+    const C = COMMUNITY_ID.toUpperCase();
+    await page.click(rowLink(9).replace(chatId(9), COMMUNITY_CHAT));
+    await page.waitForURL(`${base}/messages/?c=${COMMUNITY_CHAT}`);
+    await page.click('.dm-head-who');
+    await page.waitForURL(`${base}/messages/?c=${COMMUNITY_CHAT}&vue=communaute`);
+    await page.waitForSelector('.dm-action-row:has-text("Demandes")');
+    expectSame(M, 'communauté', {
+      bar: [await textOf(page, '.dmg-bar h2'), await textOf(page, '.dmg-bar-action')],
+      hero: [await textOf(page, '.dmg-hero-name'), await textOf(page, '.dmg-hero-sub'), await textOf(page, '.dmg-hero-line')],
+      tiles: await texts(page, '.dmg-tile'), sections: await texts(page, '.dmg-section-title'), by: await textOf(page, '.dmg-about-button'),
+      requests: await textOf(page, '.dm-action-row:has-text("Demandes") .dmg-badge'), main: await textOf(page, '.dm-action-row:has-text("Discussion principale")'),
+      foot: await textOf(page, '.dmg-foot'),
+    }, {
+      bar: ['Communauté', 'Modifier'], hero: ['Voisins de la Croix-Rousse', 'Communauté · 4 membres', 'Privée · Résidentiel · Lyon 4e'],
+      tiles: ['Ajouter', 'Rechercher', 'Inviter'], sections: ['À propos', 'Demandes', 'Discussions', '4 membres'], by: 'Créée par Camille R. · 12 octobre',
+      requests: '1', main: 'Discussion principale Bienvenue à tous ! Présentez-vous en quelques mots. Mer.', foot: 'Communauté privée · créée le 12 octobre 2026',
+    });
+    await waitForMembers([['Camille R.', 'Créateur'], ['Vous', 'Administrateur'], ['Marc P.', null], ['Lucas G.', null]], 'communauté');
+    expectSame(M, 'boutons et champs sans nom (communauté)', await unnamedControls(page), []);
+    await chatShot(page, '3-messages-communaute-1440.png');
+    mark = chat.calls.length;
+    await page.click('.dmg-tile:has-text("Inviter")');
+    await sheetTitle('Inviter');
+    await page.waitForSelector('dialog[open] .dmg-invite-qr svg');
+    const listed = await oneCall(chat, 'rpc/my_community_invites', mark, `${M} : liens actifs`);
+    if (listed) expectSame(M, 'liens actifs', listed.body, { p_community_id: C });
+    const invited = await oneCall(chat, 'rpc/create_community_invite', mark, `${M} : nouveau lien`);
+    if (invited) expectSame(M, 'nouveau lien', invited.body, { p_community_id: C, p_days: 7, p_requires_approval: true });
+    expectSame(M, 'invitation', [await textOf(page, 'dialog[open] .dmg-invite h3'), await textOf(page, 'dialog[open] .dmg-invite-link'), await textOf(page, 'dialog[open] .dmg-invite-validity'),
+      await page.getAttribute('dialog[open] .dmg-invite-qr svg', 'aria-label')],
+    ['Voisins de la Croix-Rousse', 'nidalo://invite/jeton-invitation-1', 'Valable jusqu\'au 13/11/2026', 'QR code d\'invitation']);
+    await page.click('dialog[open] button:has-text("Copier le lien")');
+    await page.waitForSelector('dialog[open] button:has-text("Lien copié")', { timeout: 8000 }).catch(() => problems.push(`${M} : « Lien copié » absent`));
+    expectSame(M, 'lien copié', await page.evaluate(() => navigator.clipboard.readText()), 'nidalo://invite/jeton-invitation-1');
+    await page.click('dialog[open] .dmg-text-danger');
+    expectSame(M, 'annuler le lien', [await dialogTitle(page), await texts(page, 'dialog.alert-dialog[open] .alert-actions button')], ['Annuler ce lien ?', ['Annuler ce lien', 'Garder le lien']]);
+    mark = chat.calls.length;
+    await alertButton(page, 'Annuler ce lien');
+    const revoked = await oneCall(chat, 'rpc/revoke_community_invite', mark, `${M} : lien annulé`);
+    if (revoked) expectSame(M, 'lien annulé', revoked.body, { p_invite_id: String(chat.invites[0]?.id).toUpperCase() });
+    await page.waitForSelector('dialog[open] button:has-text("Créer un nouveau lien")', { timeout: 8000 }).catch(() => problems.push(`${M} : « Créer un nouveau lien » absent`));
+    await page.click('dialog[open] .dm-sheet-close');
+    // Demandes : « Accepter » (decide_community_join_request), la personne rejoint les membres.
+    mark = chat.calls.length;
+    await page.click('.dm-action-row:has-text("Demandes")');
+    await page.waitForURL(`${base}/messages/?c=${COMMUNITY_CHAT}&vue=demandes`);
+    await page.waitForSelector('.dmg-request');
+    expectSame(M, 'demandes', [await textOf(page, '.dmg-section-title'), await texts(page, '.dmg-request-name'), await texts(page, '.dmg-request button')],
+      ['1 demande', ['Nina L.'], ['Refuser', 'Accepter']]);
+    await page.click('.dmg-accept');
+    const decided = await oneCall(chat, 'rpc/decide_community_join_request', mark, `${M} : demande acceptée`);
+    if (decided) expectSame(M, 'demande acceptée', decided.body, { p_request_id: 'E5000000-0000-4000-8000-000000000001', p_accept: true });
+    await page.waitForFunction(() => !document.querySelector('.dmg-request') && document.querySelector('.dmg-section-title')?.textContent === '0 demande', null, { timeout: 8000 })
+      .catch(() => problems.push(`${M} : la demande acceptée reste affichée`));
+    await page.click('.dmg-bar button[aria-label="Retour"]');
+    await page.waitForURL(`${base}/messages/?c=${COMMUNITY_CHAT}&vue=communaute`);
+    await waitForMembers([['Camille R.', 'Créateur'], ['Vous', 'Administrateur'], ['Marc P.', null], ['Lucas G.', null], ['Nina L.', null]], 'demande acceptée');
+    expectSame(M, 'section « Demandes » après la réponse', await page.locator('.dm-action-row:has-text("Demandes")').count(), 0);
+    // Un administrateur retire un simple membre ; ni le créateur ni lui-même n'ont de menu.
+    expectSame(M, 'menus des membres', [await page.locator('.dmg-members button.dmg-member-line').count(), await memberMenu('Marc P.')], [3, ['Retirer de la communauté']]);
+    mark = chat.calls.length;
+    await memberMenu('Marc P.', 'Retirer de la communauté');
+    const kicked = await oneCall(chat, 'rpc/remove_community_member', mark, `${M} : retrait de la communauté`);
+    if (kicked) expectSame(M, 'retiré de la communauté', kicked.body, { p_community_id: C, p_member_id: MARC_ID.toUpperCase() });
+    await waitForMembers([['Camille R.', 'Créateur'], ['Vous', 'Administrateur'], ['Lucas G.', null], ['Nina L.', null]], 'retrait de la communauté');
+    await page.click('.dmg-destructive:has-text("Quitter la communauté")');
+    expectSame(M, 'quitter la communauté', await dialogTitle(page), 'Quitter la communauté ?');
+    mark = chat.calls.length;
+    await alertButton(page, 'Quitter la communauté');
+    const leftCommunity = await oneCall(chat, 'rpc/leave_community', mark, `${M} : départ de la communauté`);
+    if (leftCommunity) expectSame(M, 'communauté quittée', leftCommunity.body, { p_community_id: C });
+    await page.waitForURL(`${base}/messages/`);
+
+    // « Nouvelle diffusion » : un message, deux destinataires (dont une agence pas encore contactée : sa conversation
+    // est créée), envoyé dans chaque conversation à deux ; « OK » referme l'écran.
+    await page.click('.dm-compose');
+    await page.click('dialog[open] .dm-quick-actions .dm-action-row:has-text("Nouvelle diffusion")');
+    await sheetTitle('Nouvelle diffusion');
+    expectSame(M, 'diffusion vide', [await textOf(page, 'dialog[open] .dmg-step-button'), await page.locator('dialog[open] .dmg-step-button').isDisabled()],
+      ['Choisissez des destinataires', true]);
+    await page.fill('dialog[open] textarea.dmg-broadcast-text', 'Bonjour, je serai absente la semaine prochaine.');
+    await page.click('dialog[open] .dmg-picker-row:has-text("Julien M.")');
+    await page.click('dialog[open] .dmg-picker-row:has-text("Immo Démo Croix-Rousse")');
+    expectSame(M, 'diffusion prête', [await textOf(page, 'dialog[open] .dm-results-title >> nth=1'), await textOf(page, 'dialog[open] .dmg-step-button')],
+      ['Destinataires · 2', 'Envoyer à 2 destinataires']);
+    mark = chat.calls.length;
+    await page.click('dialog[open] .dmg-step-button');
+    expectSame(M, 'diffusion envoyée', await dialogTitle(page), 'Message envoyé dans 2 conversations.');
+    const started = await oneCall(chat, 'rpc/start_direct_conversation', mark, `${M} : diffusion à l'agence`);
+    if (started) expectSame(M, 'conversation avec l\'agence', started.body, { p_user_id: PRO_ID.toUpperCase() });
+    const sent = chatCalls(chat, 'messages', mark).filter((call) => call.method === 'POST')
+      .map((call) => [String(call.body?.conversation_id).toLowerCase(), call.body?.content?.text?._0 ?? null]);
+    expectSame(M, 'messages diffusés', sent, [[chatId(8), 'Bonjour, je serai absente la semaine prochaine.'], [chatId(2), 'Bonjour, je serai absente la semaine prochaine.']]);
+    await alertButton(page, 'OK');
+    await page.waitForSelector('dialog.dm-sheet[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${M} : « Nouvelle diffusion » reste ouverte`));
+    await page.close();
+    await chatDesk.close();
+  }
+
+  // Sur téléphone : les mêmes écrans en plein écran, sans défilement de côté ; « Passer » dans la barre du titre.
+  {
+    const M = 'messages groupes téléphone';
+    const { context: chatPhone, chat } = await chatContext({ phone: true });
+    addChatCommunity(chat);
+    page = await open(chatPhone, `/messages/?c=${chatId(4)}`, M);
+    await page.waitForSelector('.dm-thread-inner .dm-day');
+    const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    expectSame(M, 'en-tête du groupe', await page.$$eval('.dm-head button', (els) => els.filter((el) => el.getClientRects().length).map((el) => el.getAttribute('aria-label'))),
+      ['Retour', 'Infos du groupe', 'Ajouter des membres', 'Plus d\'options']);
+    await page.click('.dm-head-who');
+    await page.waitForSelector('.dmg-hero');
+    expectSame(M, 'infos du groupe', [await overflow(), await page.locator('.dm-side').isVisible(), await unnamedControls(page)], [0, false, []]);
+    await chatShot(page, '3-messages-telephone-infos-groupe.png');
+    // « Signaler le groupe » avec « Quitter aussi le groupe » : le signalement, puis leave_conversation et son avis.
+    const mark = chat.calls.length;
+    await page.click('.dmg-destructive:has-text("Signaler le groupe")');
+    await page.click('dialog[open] .dm-choice:has-text("Spam")');
+    await page.click('dialog[open] .dm-report-leave input');
+    await page.click('dialog[open] button:text-is("Enregistrer le signalement")');
+    await page.waitForSelector('.dmg-destructive:has-text("Supprimer le groupe")', { timeout: 8000 }).catch(() => problems.push(`${M} : signaler et quitter : « Supprimer le groupe » absent`));
+    await page.waitForFunction(() => document.querySelector('.dmg-toast')?.textContent === 'Vous avez quitté le groupe', null, { timeout: 8000 })
+      .catch(() => problems.push(`${M} : signaler et quitter : pas d'avis « Vous avez quitté le groupe »`));
+    expectSame(M, 'signaler et quitter', [chatCalls(chat, 'reports', mark).length, chatCalls(chat, 'rpc/leave_conversation', mark).map((call) => call.body)],
+      [1, [{ p_conversation_id: chatId(4).toUpperCase() }]]);
+    await page.click('.dmg-bar button[aria-label="Retour"]');
+    await page.waitForURL(`${base}/messages/?c=${chatId(4)}`);
+    await page.goto(`${base}/messages/?c=${COMMUNITY_CHAT}&vue=communaute`);
+    await page.waitForSelector('.dmg-hero.is-community');
+    expectSame(M, 'communauté', [await overflow(), await unnamedControls(page)], [0, []]);
+    await page.goto(`${base}/messages/`);
+    await page.waitForSelector('.dm-list .dm-row');
+    await page.click('.dm-compose');
+    await page.click('dialog[open] .dm-quick-actions .dm-action-row:has-text("Nouvelle communauté")');
+    await page.fill('dialog[open] input.dmg-input >> nth=0', 'Voisins');
+    await page.fill('dialog[open] textarea.dmg-editor', 'Entraide.');
+    await page.click('dialog[open] .dmg-step-button');
+    await page.waitForSelector('dialog[open] .dm-sheet-trailing');
+    const bar = await page.evaluate(() => {
+      const box = (selector) => document.querySelector(selector)?.getBoundingClientRect();
+      const title = box('dialog[open] .dm-sheet-head h2');
+      const skip = box('dialog[open] .dm-sheet-trailing');
+      return { sameLine: !!title && !!skip && Math.abs((title.top + title.bottom) / 2 - (skip.top + skip.bottom) / 2) < 4, right: skip ? Math.round(innerWidth - skip.right) : null };
+    });
+    expectSame(M, '« Passer »', [bar.sameLine, bar.right <= 16, await overflow()], [true, true, 0]);
     await page.close();
     await chatPhone.close();
   }

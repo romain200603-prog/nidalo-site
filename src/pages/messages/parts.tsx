@@ -178,13 +178,15 @@ export function NoticeDialogs() {
   );
 }
 
-/** Confirmation de l'app (domiaConfirmationDialog) : titre, message facultatif, l'action puis « Annuler ». */
-export function ConfirmDialog({ open, title, message, confirm, destructive = false, onConfirm, onClose }: {
+/** Confirmation de l'app (domiaConfirmationDialog) : titre, message facultatif, l'action puis « Annuler » (ou `cancel`). */
+export function ConfirmDialog({ open, title, message, confirm, destructive = false, cancel = 'Annuler', onConfirm, onClose }: {
   open: boolean;
   title: string;
   message?: ReactNode;
   confirm: string;
   destructive?: boolean;
+  /** Bouton qui referme sans rien faire (« Garder le lien »). */
+  cancel?: string;
   onConfirm: () => void;
   onClose: () => void;
 }) {
@@ -194,7 +196,7 @@ export function ConfirmDialog({ open, title, message, confirm, destructive = fal
       <DialogContent titleId={`${id}-titre`} textId={`${id}-texte`} title={title} message={message} onDismiss={onClose}
         actions={[
           { label: confirm, onClick: () => { onClose(); onConfirm(); }, role: destructive ? 'destructive' : undefined },
-          { label: 'Annuler', onClick: onClose, role: 'cancel' },
+          { label: cancel, onClick: onClose, role: 'cancel' },
         ]} />
     </Dialog>
   );
@@ -289,7 +291,7 @@ export function ActionMenu({ label, items, className, children }: { label: strin
  * comme une feuille de l'iPhone et se referme en la tirant vers le bas par son en-tête (useSheetDrag) ; sur ordinateur,
  * la même au centre. En-tête : « Retour » éventuel, titre de 20 en gras, croix ronde bleu pâle de 34 (« Fermer »).
  */
-export function Sheet({ open, title, onClose, onBack, className = '', children, closeLabel = 'Fermer' }: {
+export function Sheet({ open, title, onClose, onBack, className = '', children, closeLabel = 'Fermer', trailing, hideClose = false }: {
   open: boolean;
   title: string;
   onClose: () => void;
@@ -298,11 +300,17 @@ export function Sheet({ open, title, onClose, onBack, className = '', children, 
   className?: string;
   children: ReactNode;
   closeLabel?: string;
+  /** Bouton de la barre à droite du titre (« Passer »). */
+  trailing?: ReactNode;
+  /** Écran poussé de l'app : le retour et le titre, sans la croix (Échap ferme toujours la feuille). */
+  hideClose?: boolean;
 }) {
   const id = useId();
   return (
     <Dialog open={open} onClose={onClose} className={`dm-dialog dm-sheet ${className}`} labelledBy={`${id}-titre`}>
-      <SheetBody titleId={`${id}-titre`} title={title} onClose={onClose} onBack={onBack} closeLabel={closeLabel}>{children}</SheetBody>
+      <SheetBody titleId={`${id}-titre`} title={title} onClose={onClose} onBack={onBack} closeLabel={closeLabel} trailing={trailing} hideClose={hideClose}>
+        {children}
+      </SheetBody>
     </Dialog>
   );
 }
@@ -337,12 +345,14 @@ function PlainSheetBody({ onClose, children }: { onClose: () => void; children: 
 }
 
 /** Contenu d'une feuille ouverte : la poignée et le glissement vers le bas ne vivent que pendant qu'elle est ouverte. */
-function SheetBody({ titleId, title, onClose, onBack, closeLabel, children }: {
+function SheetBody({ titleId, title, onClose, onBack, closeLabel, trailing, hideClose, children }: {
   titleId: string;
   title: string;
   onClose: () => void;
   onBack?: () => void;
   closeLabel: string;
+  trailing?: ReactNode;
+  hideClose: boolean;
   children: ReactNode;
 }) {
   const root = useRef<HTMLDivElement>(null);
@@ -357,9 +367,12 @@ function SheetBody({ titleId, title, onClose, onBack, closeLabel, children }: {
           </button>
         )}
         <h2 id={titleId} tabIndex={-1}>{title}</h2>
-        <button type="button" className="dm-sheet-close" onClick={onClose} aria-label={closeLabel} title={closeLabel}>
-          <Icon name="x" />
-        </button>
+        {trailing}
+        {!hideClose && (
+          <button type="button" className="dm-sheet-close" onClick={onClose} aria-label={closeLabel} title={closeLabel}>
+            <Icon name="x" />
+          </button>
+        )}
       </header>
       {children}
     </div>
