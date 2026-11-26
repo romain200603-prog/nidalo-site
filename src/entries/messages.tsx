@@ -6,5 +6,5 @@ import '../styles/messages.css';
 // Morceaux de l'app : réponses, transferts, réactions, liste (demande du 17/11).
 import '../styles/messages-app.css';
 
-// Messages : /messages/(?c=…) ; deux colonnes à partir de 1024 px, une seule en dessous (comme l'app).
+// Messages : /messages/(?c=…) ; la liste, puis la conversation par-dessus, comme l'app à toutes les largeurs.
 mount(<MessagesPage />);

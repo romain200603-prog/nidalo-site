@@ -1,11 +1,11 @@
 import { useSyncExternalStore, type MouseEvent } from 'react';
 import { PATHS } from '../../lib/paths';
 
-// Adresse de la page Messages sur ordinateur : la conversation ouverte (?c=…), puis l'écran poussé par-dessus,
-// comme la pile de navigation de l'app : « Détails » (&vue=details) et « Médias » (&vue=medias&onglet=…) ; pour un
-// groupe, « Infos du groupe » (&vue=groupe), « Ajouter des membres » (&vue=ajout) et « Messages éphémères »
-// (&vue=ephemeres) ; pour la discussion principale d'une communauté, « Communauté » (&vue=communaute) et ses
-// « Demandes » (&vue=demandes). Rien n'est ouvert sans ?c= : la page n'ouvre jamais une conversation d'elle-même.
+// Adresse de la page Messages : la conversation ouverte (?c=…), puis l'écran poussé par-dessus, comme la pile de
+// navigation de l'app : « Détails » (&vue=details) et « Médias » (&vue=medias&onglet=…) ; pour un groupe, « Infos du
+// groupe » (&vue=groupe), « Ajouter des membres » (&vue=ajout) et « Messages éphémères » (&vue=ephemeres) ; pour la
+// discussion principale d'une communauté, « Communauté » (&vue=communaute) et ses « Demandes » (&vue=demandes). Rien
+// n'est ouvert sans ?c= : la page n'ouvre jamais une conversation d'elle-même.
 
 export type MediaTab = 'photos' | 'documents' | 'liens';
 export type MessagesView = 'thread' | 'details' | 'medias' | 'groupe' | 'communaute' | 'ajout' | 'ephemeres' | 'demandes';
@@ -67,7 +67,7 @@ export function useRoute(): MessagesRoute {
   return useSyncExternalStore(subscribe, current, () => readRoute(''));
 }
 
-/** Clic simple sur un lien de conversation : elle s'ouvre à droite sans recharger la page. */
+/** Clic simple sur un lien de conversation : elle s'ouvre par-dessus la liste, sans recharger la page. */
 export function openOnClick(conversationId: string, route: Partial<MessagesRoute> = {}) {
   return (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
