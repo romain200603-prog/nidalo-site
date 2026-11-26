@@ -9,10 +9,10 @@ import { Modal } from './Dialogs';
 import { ExtraIcon } from './icons';
 
 // Galerie de la fiche (ListingDetailView.swift 270–365) et visionneuse plein écran (ListingPhotoViewer.swift,
-// MediaPager.swift). Téléphone : photo de 325 de haut sous la barre d'état, photos à faire défiler, points et compteur
-// « 2/8 » ; Retour, Partager, Favori et Comparer en ronds blancs de 44 posés dessus. Ordinateur : une grande photo et
-// deux petites, et « Voir les N photos ». Toucher une photo l'ouvre en grand ; en fermant, la galerie montre la
-// dernière photo vue.
+// MediaPager.swift) : photo de 325 de haut sous la barre d'état (sur ordinateur, la largeur de la colonne et la même
+// proportion), photos à faire défiler, points et compteur « 2/8 » ; Retour, Partager, Favori et Comparer en ronds
+// blancs de 44 posés dessus. Toucher (ou cliquer) une photo l'ouvre en grand, avec ses flèches et celles du clavier ;
+// en fermant, la galerie montre la dernière photo vue.
 
 function scrollToPage(el: HTMLElement | null, index: number, smooth: boolean) {
   if (!el) return;
@@ -253,19 +253,17 @@ function CompareRound({ listingId, onClick }: { listingId: string; onClick: () =
   );
 }
 
-export function Gallery({ photos, propertyType, onShare, onCompare, listingId, back, actions = true }: {
+export function Gallery({ photos, propertyType, onShare, onCompare, listingId, back }: {
   photos: PhotoRow[];
   /** Type du bien : la teinte d'une annonce sans photo. */
   propertyType: string;
   onShare: () => void;
-  /** « Comparer » posé sur la photo (téléphone). */
+  /** « Comparer » posé sur la photo. */
   onCompare?: () => void;
   /** Annonce du cœur (ajouter demande un compte). */
   listingId: string;
-  /** Retour, posé sur la photo (téléphone). */
+  /** Retour, posé sur la photo. */
   back: { href: string; label: string; onClick?: (event: MouseEvent<HTMLAnchorElement>) => void };
-  /** Retour, partage, cœur et comparaison posés sur la photo ; la fiche sur ordinateur les met à côté du titre. */
-  actions?: boolean;
 }) {
   const strip = useRef<HTMLDivElement>(null);
   const [page, setPage] = useState(0);
@@ -305,26 +303,20 @@ export function Gallery({ photos, propertyType, onShare, onCompare, listingId, b
             {photos.map((photo, index) => <span key={photo.id} className={index === page ? 'on' : undefined} />)}
           </div>
           <span className="gallery-counter" aria-hidden="true">{page + 1}/{count}</span>
-          <button type="button" className="gallery-all" onClick={() => setViewer(0)}>
-            <Icon name="image" />
-            Voir les {count} photos
-          </button>
         </>
       )}
-      {actions && (
-        <div className="gallery-bar">
-          <a className="gallery-back" href={back.href} onClick={back.onClick} aria-label="Retour" title={back.label}>
-            <Icon name="chevronLeft" />
-          </a>
-          <div className="gallery-actions">
-            <button type="button" className="gallery-action" onClick={onShare} aria-label="Partager l'annonce" title="Partager l'annonce">
-              <ExtraIcon name="shareUp" />
-            </button>
-            <HeartButton listingId={listingId} className="gallery-action gallery-heart" />
-            {onCompare && <CompareRound listingId={listingId} onClick={onCompare} />}
-          </div>
+      <div className="gallery-bar">
+        <a className="gallery-back" href={back.href} onClick={back.onClick} aria-label="Retour" title={back.label}>
+          <Icon name="chevronLeft" />
+        </a>
+        <div className="gallery-actions">
+          <button type="button" className="gallery-action" onClick={onShare} aria-label="Partager l'annonce" title="Partager l'annonce">
+            <ExtraIcon name="shareUp" />
+          </button>
+          <HeartButton listingId={listingId} className="gallery-action gallery-heart" />
+          {onCompare && <CompareRound listingId={listingId} onClick={onCompare} />}
         </div>
-      )}
+      </div>
       <PhotoViewer
         photos={photos}
         propertyType={propertyType}

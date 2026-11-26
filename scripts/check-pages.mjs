@@ -2513,9 +2513,9 @@ try {
   }
   await page.close();
   page = await open(signed, `/annonce/?id=${listings[0].id}`, 'annonce-connecte');
-  // Sur ordinateur, le cœur des favoris est « Enregistrer », à côté du titre (fiche de l'étape 3).
-  await page.waitForSelector('.dl-save[aria-pressed]');
-  if ((await page.getAttribute('.dl-save[aria-pressed]', 'aria-pressed')) !== 'true') problems.push('annonce : le cœur d\'un favori n\'est pas rempli');
+  // Sur ordinateur aussi, le cœur des favoris est posé sur la photo, comme dans l'app (étape 7 du site comme l'app).
+  await page.waitForSelector('.gallery-heart[aria-pressed]');
+  if ((await page.getAttribute('.gallery-heart[aria-pressed]', 'aria-pressed')) !== 'true') problems.push('annonce : le cœur d\'un favori n\'est pas rempli');
   await page.close();
   await signed.close();
 

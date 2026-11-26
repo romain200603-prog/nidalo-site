@@ -5,8 +5,8 @@ import { fetchAgenda, fetchVisitRequests, type AgendaVisit, type VisitRequestRow
 
 // Ce que l'app sait déjà du compte quand elle ouvre la fiche d'un autre : ses conversations (MessagingStore), ses
 // offres (OfferStore), son agenda (VisitStore) et ses demandes de visite (VisitRequestStore), lus à la connexion.
-// Le site les lit en ouvrant la fiche (ordinateur et téléphone), puis au retour sur l'onglet (l'app : au retour au premier
-// plan et en temps réel). Une lecture ratée laisse la liste vide : l'app n'affiche alors rien.
+// Le site les lit en ouvrant la fiche, puis au retour sur l'onglet (l'app : au retour au premier plan et en temps
+// réel). Une lecture ratée laisse la liste vide : l'app n'affiche alors rien.
 
 export type ListingAccount = {
   conversations: InboxRow[];

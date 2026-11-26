@@ -4,9 +4,7 @@
    colonne de 720 px au centre (--app-column), le fond de la page de chaque côté. */
 
 /* Les écrans « Faire une offre » et « Demande de visite » de la fiche s'ouvrent aussi dans la conversation : leurs
-   styles d'ordinateur et de téléphone sont repris ici par @import (ceux du téléphone, communs avec la page d'une
-   annonce, sont dans ecrans-fiche-telephone.css). */
-@import './ordinateur-fiche.css';
+   styles, communs avec la page d'une annonce, sont repris ici par @import (ecrans-fiche-telephone.css). */
 @import './ecrans-fiche-telephone.css';
 
 /* Couleurs et mesures de la page. Les jetons --d-… que la page et les écrans de la fiche utilisent sont définis ici, à
