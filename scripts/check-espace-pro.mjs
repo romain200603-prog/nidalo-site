@@ -1358,7 +1358,7 @@ try {
     await tab.emulateMedia({ media: 'print' });
     expectSame(N, 'impression', await tab.evaluate(() => [
       getComputedStyle(document.querySelector('.poster-screen > .screen-header')).display,
-      [...document.querySelectorAll('.dtop, .topbar, .dfoot, .footer, .tabbar')].every((el) => getComputedStyle(el).display === 'none'),
+      [...document.querySelectorAll('.footer, .tabbar')].every((el) => getComputedStyle(el).display === 'none'),
       Math.round(document.querySelector('.poster').getBoundingClientRect().width / 96 * 25.4),
     ]), ['none', true, 210]);
     expectSame(N, 'écritures', writeNames(writesSince(state, 0)), []);

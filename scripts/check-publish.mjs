@@ -443,7 +443,7 @@ async function mock(context, state, { signedIn = true } = {}) {
   await context.route('https://geo.api.gouv.fr/**', (route) => communes(state, route));
   await context.route('https://data.geopf.fr/**', (route) => geocoding(state, route));
   await context.route('https://tiles.openfreemap.org/**', (route) => empty(route));
-  // Temps réel (pastilles de la barre du haut) : les abonnements sont acceptés, aucun changement n'est envoyé.
+  // Temps réel (page Messages, écran Notifications) : les abonnements sont acceptés, aucun changement n'est envoyé.
   await context.routeWebSocket(/^wss:\/\/izzsoitqtzzswkpvdozd\.supabase\.co\/realtime\//, (ws) => {
     ws.onMessage((message) => {
       let frame;
@@ -890,7 +890,8 @@ try {
       const style = getComputedStyle(wrap);
       return { column: Math.round(wrap.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)), overflowX: document.documentElement.scrollWidth - innerWidth };
     });
-    expectSame(N, 'colonne', layout, { column: 640, overflowX: 0 });
+    // .account-wrap : 640 px sur toutes les largeurs (sa valeur du téléphone), jusqu'à l'étape 7f.
+    expectSame(N, 'colonne', layout, { column: 608, overflowX: 0 });
     await page.getByRole('button', { name: /^Résidentiel,/ }).click();
     await page.getByRole('button', { name: 'Appartement', exact: true }).click();
     const chosen = async () => [await textOf(page, '.dpub-category-tile[aria-pressed="true"] .dpub-category-title'), await textOf(page, '.dpub-types-grid [aria-pressed="true"]')];
@@ -1550,8 +1551,9 @@ try {
           getComputedStyle(type.querySelector('.dpub-type-title')).color],
       };
     });
+    // Deux tuiles et un écart de 10 px dans la colonne de 608 px de .account-wrap (jusqu'à l'étape 7f).
     expectSame(N, 'cartes et tuiles', look, {
-      tiles: [[315, 112, '22px'], [315, 112, '22px'], [315, 112, '22px'], [315, 112, '22px']],
+      tiles: [[299, 112, '22px'], [299, 112, '22px'], [299, 112, '22px'], [299, 112, '22px']],
       gaps: [10, 10, 8],
       chosen: ['rgb(60, 92, 176) 0px 0px 0px 2px inset', 'rgba(60, 92, 176, 0.18) 0px 4px 20px 0px', '1'],
       other: ['rgb(236, 234, 230) 0px 0px 0px 1px inset', '0'],

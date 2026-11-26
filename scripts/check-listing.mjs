@@ -160,9 +160,9 @@ const ACCOUNT_TABLES = [
   ...MESSAGING_TABLES,
 ];
 /**
- * La cloche des notifications n'est que dans la barre du haut de l'ordinateur : sous 1024 px, la fiche ne la lit jamais
- * (la page Messages lit les pastilles à toutes les tailles). Écrire, visiter et faire une offre sont sur téléphone
- * aussi, avec les mêmes tables que sur ordinateur.
+ * La fiche ne lit pas les notifications (leur cloche est celle de l'accueil et de Mon compte ; plus de barre du haut sur
+ * ordinateur) : vérifié sous 1024 px (la page Messages lit les pastilles à toutes les tailles). Écrire, visiter et faire
+ * une offre sont sur téléphone aussi, avec les mêmes tables que sur ordinateur.
  */
 const DESKTOP_ONLY = ['notifications', 'rpc/mark_notifications_read'];
 
@@ -474,7 +474,7 @@ async function signIn(context, state) {
     }
     return respond(route, state, table, request, url, body);
   });
-  // Temps réel (pastilles de la barre du haut) : les abonnements sont acceptés, aucun changement n'est envoyé.
+  // Temps réel (page Messages, écran Notifications) : les abonnements sont acceptés, aucun changement n'est envoyé.
   await context.routeWebSocket(/^wss:\/\/izzsoitqtzzswkpvdozd\.supabase\.co\/realtime\//, (ws) => {
     ws.onMessage((message) => {
       let frame;
@@ -1278,7 +1278,7 @@ async function checkDesktopLayout(page, name) {
   }
 }
 
-/** Écran de la colonne de 640 px (offre, visite, comparaison) : textes, débordements, colonne centrée de 640 px. */
+/** Écran de la colonne de 720 px (offre, visite, comparaison) : textes, débordements, colonne centrée de 688 px (720 avec ses marges de 16). */
 async function checkColumn(page, name, selector) {
   const issues = await page.evaluate((selector) => {
     const found = [];
@@ -1289,7 +1289,7 @@ async function checkColumn(page, name, selector) {
     const box = column.getBoundingClientRect();
     const style = getComputedStyle(column);
     const inner = Math.round(box.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
-    if (inner !== 640) found.push(`colonne de ${inner} px au lieu de 640`);
+    if (inner !== 688) found.push(`colonne de ${inner} px au lieu de 688`);
     if (Math.abs(box.left + box.width / 2 - document.documentElement.clientWidth / 2) > 1) found.push('colonne décentrée');
     for (const el of column.querySelectorAll('button, a, .dl-label, .dl-visit-listing-text > *, .cmp-value-text, .cmp-city')) {
       if (el.scrollWidth > el.clientWidth + 1) found.push(`débordement dans ${el.tagName.toLowerCase()}.${el.className} : « ${el.textContent.trim().slice(0, 60)} »`);
@@ -2587,7 +2587,7 @@ try {
     if (since(mark, table).length) problems.push(`mon-annonce: ${table} demandé pour sa propre annonce`);
   }
   await page.screenshot({ path: join(out, 'mon-annonce-1440.png') });
-  // « Voir les demandes » : les demandes du bien dans la colonne de 640 px (aucune ici : « Aucune visite à venir »).
+  // « Voir les demandes » : les demandes du bien dans la colonne de 720 px (aucune ici : « Aucune visite à venir »).
   mark = calls.length;
   await page.click('.dl-aside .dl-button >> nth=0');
   await waitForAddress(page, `${base}/annonce/?id=${MINE}&vue=demandes`);

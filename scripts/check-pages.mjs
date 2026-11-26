@@ -193,7 +193,7 @@ const MOCKUP_ACCOUNT = {
   ],
 };
 
-// MARK: - Ordinateur, barre du haut : conversations et notifications inventées, pour les pastilles.
+// MARK: - Pastilles : conversations et notifications inventées (barre d'onglets, cloches, écran Notifications).
 
 const HOUR = 3600 * 1000;
 const OTHER_ID = 'a0000000-0000-4000-8000-0000000000d2';
@@ -518,7 +518,7 @@ async function mock(context, { signedIn = false, listingRows = listings, account
 
 const problems = [];
 
-// MARK: - Ordinateur : vérifications de la barre du haut, du pied de page et des pastilles.
+// MARK: - Ordinateur : vérifications du cadre de l'app (barre d'onglets, pied de page) et de la pastille Messages.
 
 /** Attend une condition du côté du script (données du serveur simulé). */
 async function waitFor(condition, what, timeout = 8000) {
@@ -539,50 +539,66 @@ function contentWidth(page, selector) {
   });
 }
 
-/** Barre du haut et pied de page de l'ordinateur : mesures, liens, pas de catégories (demande de Romain du 7 novembre),
- *  libellés en entier, police. */
-async function checkChrome(page, name, { signedIn, margin }) {
+/**
+ * Cadre de l'app sur ordinateur (étape 7a) : pas de barre du haut ni de pied bleu ; la barre d'onglets de l'app en bas,
+ * son fond blanc sur toute la fenêtre, ses cinq onglets (42 de haut, au-dessus de la zone du bas de 4) dans un groupe
+ * centré de 720 px, l'onglet de la page en bleu ; le pied de page du web (Aide, Confidentialité, Mentions légales,
+ * Conditions, Contact, © 2026 Nidalo) au bas de la page, au-dessus de la barre, à la largeur du conteneur de la page
+ * (`footer` : la colonne de 720 px, 1180 pour une page `wide`, null sans pied) ; police Inter, fond de page de l'app.
+ */
+async function checkChrome(page, name, { signedIn, current = null, footer = 720 }) {
   await page.evaluate(() => document.fonts.ready);
   const info = await page.evaluate(() => {
-    const bar = document.querySelector('.dtop-bar');
     const box = (element) => element?.getBoundingClientRect();
-    const items = [...document.querySelectorAll('.dtop-bar > *')].map((element) => box(element));
+    const bar = document.querySelector('.tabbar');
+    const tabs = [...document.querySelectorAll('.tabbar a')];
+    const foot = document.querySelector('footer.footer');
     return {
-      height: box(document.querySelector('.dtop'))?.height,
-      overflow: bar ? bar.scrollWidth > bar.clientWidth : true,
-      outside: items.filter((item) => item.top < 0 || item.bottom > 72 || item.right > window.innerWidth).length,
-      left: box(document.querySelector('.dtop-brand'))?.left,
-      right: window.innerWidth - (box(document.querySelector('.dtop-space'))?.right ?? 0),
-      modes: [...document.querySelectorAll('.dtop a[href^="/recherche/"]')].map((link) => link.textContent.trim()),
-      labels: [document.querySelector('.dtop-publish')?.textContent.trim(), getComputedStyle(document.querySelector('.dtop-space-label') ?? document.body).display !== 'none'],
-      badges: document.querySelectorAll('.dtop-badge').length,
-      avatar: document.querySelector('.dtop-avatar')?.textContent.trim() ?? null,
-      avatarIcon: Boolean(document.querySelector('.dtop-avatar svg')),
-      font: getComputedStyle(document.querySelector('.dtop-publish') ?? document.body).fontFamily,
+      oldBars: document.querySelectorAll('.topbar, .dtop, .dfoot').length,
+      bar: bar ? [Math.round(box(bar).left), Math.round(box(bar).right), Math.round(innerHeight - box(bar).top), Math.round(box(bar).height),
+        getComputedStyle(bar).position, getComputedStyle(bar).backgroundColor] : null,
+      group: tabs.length ? [Math.round(box(tabs[0]).left), Math.round(box(tabs.at(-1)).right)] : null,
+      tabs: tabs.map((tab) => [tab.getAttribute('href'), tab.querySelector('.tabbar-label')?.textContent ?? null, Math.round(box(tab).width), Math.round(box(tab).height)]),
+      current: tabs.filter((tab) => tab.getAttribute('aria-current') === 'page').map((tab) => tab.getAttribute('href')),
+      badges: document.querySelectorAll('.tabbar-badge').length,
+      font: getComputedStyle(document.querySelector('.tabbar-label') ?? document.body).fontFamily,
       interLoaded: document.fonts.check('600 15px "Nidalo Inter"') && [...document.fonts].some((face) => face.family.includes('Nidalo Inter') && face.status === 'loaded'),
-      oldHeader: Boolean(document.querySelector('.topbar, footer.footer')),
-      footerColumns: [...document.querySelectorAll('.dfoot-column h2')].map((title) => title.textContent.trim()),
-      footerLinks: [...document.querySelectorAll('.dfoot a')].map((link) => link.getAttribute('href')),
-      footerText: document.querySelector('.dfoot')?.textContent.replace(/\s+/g, ' ') ?? '',
+      footer: foot && foot.getClientRects().length > 0 ? {
+        width: Math.round(box(foot.querySelector('.wrap')).width), centred: Math.abs(box(foot.querySelector('.wrap')).left + box(foot.querySelector('.wrap')).width / 2 - innerWidth / 2) <= 1,
+        links: [...foot.querySelectorAll('a')].map((link) => [link.textContent.trim(), link.getAttribute('href')]), text: foot.textContent.replace(/\s+/g, ' '),
+        // Au bas de la page, entièrement au-dessus de la barre d'onglets une fois la page défilée jusqu'en bas (mesures
+        // exactes : scrollHeight est arrondi, la page peut finir à un demi-pixel).
+        aboveBar: bar ? Math.abs(document.documentElement.getBoundingClientRect().bottom - box(foot).bottom - box(bar).height) < 0.5 : false,
+      } : null,
       bodyBackground: getComputedStyle(document.body).backgroundColor,
+      overflowX: document.documentElement.scrollWidth - innerWidth,
     };
   });
-  if (info.height !== 72) problems.push(`${name} : barre du haut de ${info.height} px au lieu de 72`);
-  if (info.overflow || info.outside) problems.push(`${name} : la barre du haut déborde (${info.outside} élément(s) hors de la barre)`);
-  if (Math.round(info.left) !== margin || Math.round(info.right) !== margin) problems.push(`${name} : marges ${info.left} / ${info.right} au lieu de ${margin}`);
-  if (info.modes.length) problems.push(`${name} : catégories encore dans la barre du haut ${JSON.stringify(info.modes)}`);
-  if (JSON.stringify(info.labels) !== JSON.stringify(['Publier une annonce', true])) problems.push(`${name} : libellés de la barre ${JSON.stringify(info.labels)}`);
-  if (!signedIn && (info.badges || !info.avatarIcon)) problems.push(`${name} : sans compte, ${info.badges} pastille(s), icône du compte ${info.avatarIcon}`);
-  if (signedIn && info.avatar !== 'CM') problems.push(`${name} : initiales « ${info.avatar} » au lieu de « CM »`);
+  const width = await page.evaluate(() => innerWidth);
+  if (info.oldBars) problems.push(`${name} : barre du haut ou pied bleu de l'ancien ordinateur affiché`);
+  expectSame(name, 'barre d\'onglets [gauche, droite, haut, hauteur, position, fond]', info.bar, [0, width, 46, 46, 'fixed', 'rgb(255, 255, 255)']);
+  expectSame(name, 'groupe des onglets [gauche, droite]', info.group, [Math.round(width / 2 - 360), Math.round(width / 2 + 360)]);
+  expectSame(name, 'onglets [adresse, libellé, largeur, hauteur]', info.tabs, [['/', 'Accueil', 144, 42], ['/favoris/', 'Favoris', 144, 42], ['/publier/', 'Publier', 144, 42],
+    ['/messages/', 'Messages', 144, 42], ['/compte/', 'Mon compte', 144, 42]]);
+  expectSame(name, 'onglet de la page', info.current, current ? [current] : []);
+  if (!signedIn && info.badges) problems.push(`${name} : sans compte, ${info.badges} pastille(s)`);
   if (!info.font.startsWith('"Nidalo Inter"') || !info.interLoaded) problems.push(`${name} : police ${info.font} (Inter chargée : ${info.interLoaded})`);
-  if (info.oldHeader) problems.push(`${name} : l'en-tête ou le pied du téléphone est affiché sur ordinateur`);
   if (info.bodyBackground !== 'rgb(250, 249, 246)') problems.push(`${name} : fond ${info.bodyBackground} au lieu de #FAF9F6`);
-  if (JSON.stringify(info.footerColumns) !== JSON.stringify(['Rechercher', 'Mon compte', 'Aide'])) problems.push(`${name} : colonnes du pied ${JSON.stringify(info.footerColumns)}`);
-  for (const text of ['Vos échanges, votre futur chez-vous.', 'Vos favoris', 'Aide et assistance', '© 2026 Nidalo', 'CGU', 'Confidentialité', 'Mentions légales']) {
-    if (!info.footerText.includes(text)) problems.push(`${name} : « ${text} » absent du pied de page`);
+  if (info.overflowX > 0) problems.push(`${name} : la page déborde en largeur de ${info.overflowX} px`);
+  if (footer === null) {
+    if (info.footer) problems.push(`${name} : pied de page affiché`);
+    return;
   }
+  if (!info.footer) {
+    problems.push(`${name} : pas de pied de page`);
+    return;
+  }
+  expectSame(name, 'pied de page [largeur, centré, au-dessus de la barre]', [info.footer.width, info.footer.centred, info.footer.aboveBar], [Math.min(footer, width), true, true]);
+  expectSame(name, 'liens du pied de page', info.footer.links.map(([text, href]) => [text, href.startsWith('mailto:') ? 'mailto:' : href]),
+    [['Aide', '/aide/'], ['Confidentialité', '/confidentialite/'], ['Mentions légales', '/mentions-legales/'], ['Conditions', '/conditions/'], ['Contact', 'mailto:']]);
+  if (!info.footer.text.includes('© 2026 Nidalo')) problems.push(`${name} : « © 2026 Nidalo » absent du pied de page`);
   // Uniquement des liens vers des pages qui existent déjà.
-  for (const href of info.footerLinks) {
+  for (const [, href] of info.footer.links) {
     if (href.startsWith('mailto:')) continue;
     const path = href.split('?')[0];
     if (!existsSync(join(docs, path, 'index.html'))) problems.push(`${name} : le pied de page mène à ${href}, page absente`);
@@ -590,8 +606,35 @@ async function checkChrome(page, name, { signedIn, margin }) {
 }
 
 /**
- * Pastille Messages de la barre d'onglets du téléphone (AppTabBar, n° 44) = non-lus du serveur simulé (archivées
- * exclues), « 99+ » au-delà de 99, et le libellé de l'app pour les lecteurs d'écran.
+ * Écran de connexion de la page (Mon compte, Favoris, Messages, Publier sans compte), comme l'app sur toutes les
+ * largeurs : plein écran, sans barre d'onglets, pied de page ni retour du site ; à partir de 1024 px, l'écran du
+ * téléphone dans la colonne de 720 px, centrée, le lancement en boucle sur toute sa largeur, la croix en haut.
+ */
+async function checkSignInScreen(page, name) {
+  await page.waitForSelector('.signin-card.is-page .auth-welcome');
+  const info = await page.evaluate(() => {
+    const box = (selector) => document.querySelector(selector)?.getBoundingClientRect();
+    const shown = (selector) => [...document.querySelectorAll(selector)].some((element) => element.getClientRects().length > 0);
+    const screen = box('.signin-card.is-page');
+    const column = box('.signin-card.is-page .auth-column');
+    return {
+      screen: [screen.left, screen.top, screen.width === innerWidth, screen.height === innerHeight, getComputedStyle(document.querySelector('.signin-card.is-page')).position],
+      column: [Math.round(column.width), Math.abs(column.left + column.width / 2 - innerWidth / 2) <= 1],
+      loop: Math.round(box('.signin-card.is-page .auth-loop-zone').width),
+      close: document.querySelector('.signin-card.is-page .auth-round.is-close')?.getClientRects().length > 0,
+      around: ['.tabbar', 'footer.footer', '.phone-page-head', '.topbar', '.dtop', '.dfoot'].filter(shown),
+      title: document.querySelector('.signin-card.is-page h1')?.textContent ?? null,
+    };
+  });
+  const width = await page.evaluate(() => innerWidth);
+  expectSame(name, 'écran de connexion', info, {
+    screen: [0, 0, true, true, 'fixed'], column: [Math.min(720, width), true], loop: Math.min(720, width), close: true, around: [], title: 'Votre prochain bien commence ici.',
+  });
+}
+
+/**
+ * Pastille Messages de la barre d'onglets (AppTabBar, n° 44), sur toutes les largeurs = non-lus du serveur simulé
+ * (archivées exclues), « 99+ » au-delà de 99, et le libellé de l'app pour les lecteurs d'écran.
  */
 async function checkTabBarBadge(page, state, name) {
   const { messages, messagesText } = expectedBadges(state);
@@ -621,36 +664,6 @@ async function checkTabBarBadge(page, state, name) {
     };
   });
   expectSame(name, 'pastille de la barre d\'onglets', look, { color: 'rgb(229, 56, 59)', height: 12, rightOfCenter: true, aboveCenter: true, inside: true });
-}
-
-/** Pastilles de la barre du haut = données du serveur simulé (archivées exclues, sortes inconnues ignorées). */
-async function checkBadges(page, state, name) {
-  const expected = expectedBadges(state);
-  const want = { messages: expected.messages ? expected.messagesText : '', notifications: expected.notifications ? expected.notificationsText : '' };
-  const read = () => ({
-    messages: document.querySelector('.dtop-round[href="/messages/"] .dtop-badge')?.textContent ?? '',
-    notifications: document.querySelector('.dtop-round[href="/compte/?vue=notifications"] .dtop-badge')?.textContent ?? '',
-  });
-  try {
-    // Fonction, pas texte : la CSP du site interdit d'évaluer du texte comme du code.
-    await page.waitForFunction((target) => {
-      const text = (selector) => document.querySelector(selector)?.textContent ?? '';
-      return text('.dtop-round[href="/messages/"] .dtop-badge') === target.messages
-        && text('.dtop-round[href="/compte/?vue=notifications"] .dtop-badge') === target.notifications;
-    }, want, { timeout: 8000 });
-  } catch {
-    problems.push(`${name} : pastilles ${JSON.stringify(await page.evaluate(read))} au lieu de ${JSON.stringify(want)}`);
-    return;
-  }
-  const labels = await page.evaluate(() => [
-    document.querySelector('.dtop-round[href="/messages/"]')?.getAttribute('aria-label'),
-    document.querySelector('.dtop-round[href="/compte/?vue=notifications"]')?.getAttribute('aria-label'),
-  ]);
-  const wantLabels = [
-    expected.messages ? `Messages, ${expected.messages} non lus` : 'Messages',
-    expected.notifications ? `Notifications, ${expected.notifications} non lues` : 'Notifications',
-  ];
-  if (JSON.stringify(labels) !== JSON.stringify(wantLabels)) problems.push(`${name} : libellés ${JSON.stringify(labels)} au lieu de ${JSON.stringify(wantLabels)}`);
 }
 
 /** Le bouton des filtres finit par donner le nombre d'annonces (« Afficher 2 annonces », « Aucune annonce »). */
@@ -1489,13 +1502,13 @@ async function textOf(page, selector) {
 }
 
 async function messagesBadge(page) {
-  return page.evaluate(() => document.querySelector('.dtop-round[href="/messages/"] .dtop-badge')?.textContent ?? '');
+  return page.evaluate(() => document.querySelector('.tabbar a[href="/messages/"] .tabbar-badge')?.textContent ?? '');
 }
 
-/** Pastille Messages de la barre du haut (« » : aucune). */
+/** Pastille Messages de la barre d'onglets (« » : aucune). */
 async function waitForMessagesBadge(page, want, name) {
   try {
-    await page.waitForFunction((target) => (document.querySelector('.dtop-round[href="/messages/"] .dtop-badge')?.textContent ?? '') === target, want, { timeout: 8000 });
+    await page.waitForFunction((target) => (document.querySelector('.tabbar a[href="/messages/"] .tabbar-badge')?.textContent ?? '') === target, want, { timeout: 8000 });
   } catch {
     problems.push(`${name} : pastille Messages « ${await messagesBadge(page)} » au lieu de « ${want} »`);
   }
@@ -2506,26 +2519,28 @@ try {
   await page.close();
   await signed.close();
 
-  // Ordinateur (≥ 1024 px) : barre du haut, pastilles, pied de page, colonne de 640 px et Notifications, à 1440 × 900
-  // et 1024 × 768, sans compte puis avec le compte de test. Captures à ×2, comme les maquettes de Romain.
+  // Ordinateur (≥ 1024 px) : le cadre de l'app (étape 7a), sans barre du haut : barre d'onglets, sa pastille Messages,
+  // pied de page du web, colonne de 720 px des pages que l'app n'a pas, écran de connexion et Notifications, à
+  // 1440 × 900 et 1024 × 768, sans compte puis avec le compte de test. Captures à ×2, comme les maquettes de Romain.
   for (const [width, height] of [[1440, 900], [1024, 768]]) {
     const margin = width >= 1280 ? 48 : 32;
     const guest = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR' });
     await mock(guest);
     page = await open(guest, '/', `barre-${width}-sans-compte`);
-    await page.waitForSelector('.dtop');
+    await page.waitForSelector('.tabbar');
     await page.waitForSelector('.home-section');
-    await checkChrome(page, `accueil ${width} sans compte`, { signedIn: false, margin });
-    await page.screenshot({ path: join(out, `barre-haut-${width}-sans-compte.png`), clip: { x: 0, y: 0, width, height: 72 } });
-    await page.locator('.dfoot').screenshot({ path: join(out, `pied-de-page-${width}.png`) });
+    await checkChrome(page, `accueil ${width} sans compte`, { signedIn: false, current: '/' });
+    await page.locator('.tabbar').screenshot({ path: join(out, `barre-onglets-${width}-sans-compte.png`) });
+    await page.locator('footer.footer').screenshot({ path: join(out, `pied-de-page-${width}.png`) });
     await page.screenshot({ path: join(out, `accueil-${width}-sans-compte.png`), fullPage: true });
     await page.close();
     // Recherche (demande de Romain du 7 novembre) : les catégories du milieu changent la recherche ; la liste sur toute
-    // la largeur en 3 colonnes, la carte fermée au départ ; la bascule « liste / carte » de l'app ouvre la carte sous la
-    // barre de 72 px, « Liste » ou Échap la referment ; la barre reste en haut quand la page défile.
+    // la largeur en 3 colonnes, la carte fermée au départ ; la bascule « liste / carte » de l'app ouvre la carte sur toute
+    // la fenêtre au-dessus de la barre d'onglets, « Liste » ou Échap la referment ; la barre d'onglets reste en bas quand
+    // la page défile ; le pied de page à la largeur du grand conteneur (page `wide`).
     page = await open(guest, '/recherche/?mode=invest', `recherche-${width}`);
     await page.waitForSelector('.listing-card');
-    await checkChrome(page, `recherche ${width}`, { signedIn: false, margin });
+    await checkChrome(page, `recherche ${width}`, { signedIn: false, current: '/', footer: 1180 });
     await page.click('.mode-tabs-search .mode-tab >> nth=1');
     await page.waitForURL(/\/recherche\/\?mode=rent$/);
     await page.waitForSelector('.listing-card');
@@ -2539,8 +2554,8 @@ try {
     expectSame(`recherche ${width}`, 'au départ', start, { map: 'none', pill: 'none', toggle: 'flex', columns: 3, column: Math.min(width, 1200 + 2 * margin) });
     await page.mouse.wheel(0, 600);
     await page.waitForTimeout(300);
-    const scrolled = await page.evaluate(() => [window.scrollY, document.querySelector('.dtop').getBoundingClientRect().top]);
-    if (scrolled[0] <= 0 || scrolled[1] !== 0) problems.push(`recherche ${width} : après défilement de ${scrolled[0]} px, barre à ${scrolled[1]} px`);
+    const scrolled = await page.evaluate(() => [window.scrollY, innerHeight - document.querySelector('.tabbar').getBoundingClientRect().bottom]);
+    if (scrolled[0] <= 0 || scrolled[1] !== 0) problems.push(`recherche ${width} : après défilement de ${scrolled[0]} px, barre d'onglets à ${scrolled[1]} px du bas`);
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: join(out, `recherche-${width}.png`) });
     await page.click('.view-toggle button[aria-label="Afficher sur la carte"]');
@@ -2548,9 +2563,9 @@ try {
     await page.waitForTimeout(400);
     const opened = await page.evaluate(() => {
       const box = document.querySelector('.map-column').getBoundingClientRect();
-      return [box.top, box.bottom, box.left, box.right === document.documentElement.clientWidth, document.querySelector('.dtop').getBoundingClientRect().top, location.search.includes('vue=carte')];
+      return [box.top, box.bottom, box.left, box.right === document.documentElement.clientWidth, document.querySelector('.tabbar').getBoundingClientRect().top, location.search.includes('vue=carte')];
     });
-    expectSame(`recherche ${width}`, 'carte ouverte [haut, bas, gauche, largeur, barre, adresse]', opened, [72, height, 0, true, 0, true]);
+    expectSame(`recherche ${width}`, 'carte ouverte [haut, bas, gauche, largeur, barre d\'onglets, adresse]', opened, [0, height - 46, 0, true, height - 46, true]);
     await page.screenshot({ path: join(out, `recherche-carte-${width}.png`) });
     await page.click('.map-close');
     await page.waitForFunction(() => !document.querySelector('.map-column.is-open') && !location.search.includes('vue=carte'), null, { timeout: 4000 })
@@ -2561,16 +2576,31 @@ try {
     await page.waitForFunction(() => !document.querySelector('.map-column.is-open'), null, { timeout: 4000 })
       .catch(() => problems.push(`recherche ${width} : Échap ne referme pas la carte`));
     await page.close();
-    // Écrans absents des maquettes : leur version actuelle, dans une colonne de 640 px. Publier sans compte :
-    // l'invitation à se connecter de Favoris (la publication elle-même est vérifiée par check-publish.mjs).
-    for (const [path, name, selector, wanted] of [['/aide/', 'aide', 'article.doc', 640], ['/mentions-legales/', 'mentions-legales', 'article.doc', 640],
-      ['/page-inexistante/', '404', 'main .wrap-narrow', 640], ['/publier/', 'publier', 'main .favorites-signin', 480], ['/compte/', 'connexion', '.account-wrap', 640]]) {
+    // Pages que l'app n'a pas : l'écran du téléphone dans la colonne de 720 px (16 de marge de chaque côté), avec son
+    // retour et son titre en haut, le h1 lu par les lecteurs d'écran.
+    for (const [path, name, selector, title] of [['/aide/', 'aide', 'article.doc', 'Aide'], ['/mentions-legales/', 'mentions-legales', 'article.doc', 'Mentions légales'],
+      ['/page-inexistante/', '404', 'main .wrap-narrow', 'Page introuvable']]) {
       const p = await open(guest, path, `${name}-${width}`);
-      await p.waitForSelector(`${selector} h1, ${selector} .signin-card`);
+      await p.waitForSelector(`${selector} h1`);
       const column = await contentWidth(p, selector);
-      if (column !== wanted) problems.push(`${name} ${width} : colonne de ${column} px au lieu de ${wanted}`);
+      if (column !== 688) problems.push(`${name} ${width} : colonne de ${column} px au lieu de 688`);
+      expectSame(`${name} ${width}`, 'retour et titre [largeur, centré, titre, retour, h1 masqué]', await p.evaluate(() => {
+        const head = document.querySelector('.phone-page-head');
+        const box = head?.getBoundingClientRect();
+        return box && box.width > 0 ? [Math.round(box.width), Math.abs(box.left + box.width / 2 - innerWidth / 2) <= 1, head.querySelector('.app-page-header-title')?.textContent ?? null,
+          head.querySelector('.app-round')?.getAttribute('aria-label') ?? null, Math.round(document.querySelector('main h1').getBoundingClientRect().width) <= 1] : null;
+      }), [720, true, title, 'Retour', true]);
+      await checkChrome(p, `${name} ${width}`, { signedIn: false });
       if (name === 'mentions-legales' && !(await p.textContent('article.doc'))?.includes('Inter (SIL Open Font License 1.1)')) problems.push('mentions légales : crédit de la police Inter absent');
       await p.screenshot({ path: join(out, `${name}-${width}.png`), fullPage: true });
+      await p.close();
+    }
+    // Publier et Mon compte sans compte : l'écran de connexion de l'app, plein écran, dans la colonne (la publication
+    // elle-même est vérifiée par check-publish.mjs).
+    for (const [path, name] of [['/publier/', 'publier'], ['/compte/', 'connexion']]) {
+      const p = await open(guest, path, `${name}-${width}`);
+      await checkSignInScreen(p, `${name} ${width}`);
+      await p.screenshot({ path: join(out, `${name}-${width}.png`) });
       await p.close();
     }
     // Notifications sans compte : l'écran de l'app, avec son message (la cloche de l'app s'ouvre aussi sans compte).
@@ -2586,53 +2616,52 @@ try {
     if (badgeRequests.some((request) => !request.signedIn)) problems.push('sans compte : pastilles ou notifications demandées au serveur');
     await guest.close();
 
-    // Avec le compte de test : pastilles de l'app, mises à jour en direct, initiales du compte.
+    // Avec le compte de test : la pastille Messages de la barre d'onglets (n° 44), comme sur téléphone : lue à
+    // l'ouverture de la page et au retour sur l'onglet, sans temps réel hors de la page Messages et de l'écran
+    // Notifications ; plus de cloche ni d'initiales dans le cadre (la cloche est celle de l'accueil et de Mon compte).
     const member = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR' });
     const live = await mock(member, { signedIn: true });
+    let asked = badgeRequests.length;
     page = await open(member, '/', `accueil-${width}-connecte`);
     await page.waitForFunction(() => document.querySelector('h1')?.textContent?.includes('Bonjour Claire'), null, { timeout: 8000 }).catch(() => undefined);
     await page.waitForSelector('.home-section');
-    await checkBadges(page, live.state, `accueil ${width} connecté`);
-    await checkChrome(page, `accueil ${width} connecté`, { signedIn: true, margin });
-    const conversationsCall = badgeRequests.find((request) => request.table === 'rpc/my_conversations');
+    await checkTabBarBadge(page, live.state, `accueil ${width} connecté`);
+    await checkChrome(page, `accueil ${width} connecté`, { signedIn: true, current: '/' });
+    const conversationsCall = badgeRequests.slice(asked).find((request) => request.table === 'rpc/my_conversations');
     if (!conversationsCall || conversationsCall.method !== 'POST' || JSON.stringify(conversationsCall.body) !== '{}') {
       problems.push(`pastille Messages : my_conversations appelée ${JSON.stringify(conversationsCall)} au lieu d'un POST sans paramètre`);
     }
-    const notificationsCall = badgeRequests.find((request) => request.table === 'notifications');
+    expectSame(`accueil ${width} connecté`, 'lectures des pastilles et temps réel', [[...new Set(badgeRequests.slice(asked).map((request) => request.table))], live.followed()],
+      [['rpc/my_conversations'], []]);
+    await page.locator('.tabbar').screenshot({ path: join(out, `barre-onglets-${width}-connecte.png`) });
+    await page.screenshot({ path: join(out, `accueil-${width}-connecte.png`), fullPage: true });
+    // Retour sur l'onglet : les non-lus sont relus, comme l'app au retour au premier plan (message reçu, conversation lue
+    // ailleurs).
+    live.state.conversations[1].unread_count += 2;
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await checkTabBarBadge(page, live.state, `retour sur l'onglet ${width} : nouveau message`);
+    live.state.conversations[0].unread_count = 0;
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await checkTabBarBadge(page, live.state, `retour sur l'onglet ${width} : conversation lue`);
+    // Plus de 99 messages non lus : « 99+ », comme l'app (n° 44).
+    live.state.conversations[0].unread_count = 120;
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await checkTabBarBadge(page, live.state, `plus de 99 non lus ${width}`);
+    if (width === 1440) await page.locator('.tabbar').screenshot({ path: join(out, `barre-onglets-${width}-99-plus.png`) });
+    live.state.conversations[0].unread_count = 1;
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await checkTabBarBadge(page, live.state, `retour à 1 non lu ${width}`);
+    await page.close();
+
+    asked = badgeRequests.length;
+    page = await open(member, '/compte/?vue=notifications', `notifications-${width}`);
+    await page.waitForSelector('.notification-row');
+    // Lecture des notifications : celle de l'app.
+    const notificationsCall = badgeRequests.slice(asked).find((request) => request.table === 'notifications');
     const query = new URLSearchParams(notificationsCall?.search ?? '');
     if (query.get('select') !== 'id,kind,request_id,listing_id,conversation_id,offer_id,title,body,created_at,read_at' || query.get('order') !== 'created_at.desc' || query.get('limit') !== '200') {
       problems.push(`notifications : lecture ${notificationsCall?.search} au lieu de celle de l'app`);
     }
-    await page.screenshot({ path: join(out, `barre-haut-${width}-connecte.png`), clip: { x: 0, y: 0, width, height: 72 } });
-    await page.screenshot({ path: join(out, `accueil-${width}-connecte.png`), fullPage: true });
-    // Temps réel : comme l'app, un changement sur messages, conversation_participants ou notifications relit la pastille.
-    await waitFor(() => ['messages', 'conversation_participants', 'notifications'].every((table) => live.followed().includes(table)), `temps réel ${width} : abonnements`);
-    live.state.notifications.push({ id: notificationId(6), kind: 'newRequest', request_id: 'e0000000-0000-4000-8000-000000000004', listing_id: listings[0].id, conversation_id: null,
-      offer_id: null, title: listings[0].title, body: 'Julien Moreau souhaite visiter ce bien.', created_at: new Date().toISOString(), read_at: null });
-    live.pushChange('notifications');
-    await checkBadges(page, live.state, `temps réel ${width} : nouvelle notification`);
-    live.state.conversations[1].unread_count += 2;
-    live.pushChange('messages');
-    await checkBadges(page, live.state, `temps réel ${width} : nouveau message`);
-    live.state.conversations[0].unread_count = 0;
-    live.pushChange('conversation_participants');
-    await checkBadges(page, live.state, `temps réel ${width} : conversation lue`);
-    // Retour sur l'onglet : tout est relu, comme l'app au retour au premier plan.
-    live.state.conversations[0].unread_count = 1;
-    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-    await checkBadges(page, live.state, `retour sur l'onglet ${width}`);
-    // Plus de 99 messages non lus : « 99+ », comme l'app (n° 44) ; la cloche reste à « 9+ ».
-    live.state.conversations[0].unread_count = 120;
-    live.pushChange('messages');
-    await checkBadges(page, live.state, `plus de 99 non lus ${width}`);
-    if (width === 1440) await page.screenshot({ path: join(out, `barre-haut-${width}-99-plus.png`), clip: { x: 0, y: 0, width, height: 72 } });
-    live.state.conversations[0].unread_count = 1;
-    live.pushChange('messages');
-    await checkBadges(page, live.state, `retour à 1 non lu ${width}`);
-    await page.close();
-
-    page = await open(member, '/compte/?vue=notifications', `notifications-${width}`);
-    await page.waitForSelector('.notification-row');
     const rows = await page.$$eval('.notification-row', (links) => links.map((link) => [link.querySelector('.notification-title')?.textContent, link.getAttribute('href'), Boolean(link.querySelector('.notification-dot'))]));
     const known = live.state.notifications.filter((row) => NOTIFICATION_KINDS.includes(row.kind)).sort((a, b) => b.created_at.localeCompare(a.created_at));
     if (rows.length !== known.length) problems.push(`notifications ${width} : ${rows.length} lignes au lieu de ${known.length} (sorte inconnue comprise ?)`);
@@ -2643,9 +2672,9 @@ try {
       if (!hrefs.includes(href)) problems.push(`notifications ${width} : aucun lien vers ${href} (${JSON.stringify(hrefs)})`);
     }
     await checkNotificationLayout(page, `notifications ${width}`, known);
-    const current = await page.evaluate(() => [document.querySelector('.dtop-round[href="/compte/?vue=notifications"]')?.getAttribute('aria-current'), document.querySelector('.dtop-space')?.getAttribute('aria-current')]);
-    if (current[0] !== 'page' || current[1] !== null) problems.push(`notifications ${width} : bouton actif ${JSON.stringify(current)}`);
-    if ((await contentWidth(page, '.account-wrap')) !== 640) problems.push(`notifications ${width} : colonne de ${await contentWidth(page, '.account-wrap')} px au lieu de 640`);
+    await checkChrome(page, `notifications ${width}`, { signedIn: true, current: '/compte/' });
+    // .account-wrap : 640 px sur toutes les largeurs (sa valeur du téléphone), jusqu'à l'étape 7e.
+    if ((await contentWidth(page, '.account-wrap')) !== 608) problems.push(`notifications ${width} : colonne de ${await contentWidth(page, '.account-wrap')} px au lieu de 608`);
     await page.screenshot({ path: join(out, `notifications-${width}.png`), fullPage: true });
     // Un clic : cette notification est marquée lue (p_ids : son id), puis son écran s'ouvre (ici l'annonce).
     let before = writes.length;
@@ -2657,34 +2686,36 @@ try {
       problems.push(`notifications ${width} : clic → ${JSON.stringify(clicked)} au lieu de mark_notifications_read { p_ids: ["${clickedId}"] }`);
     }
     await page.close();
-    // « Tout lire » : mark_notifications_read avec p_ids null, puis plus aucune non lue ni pastille.
+    // « Tout lire » : mark_notifications_read avec p_ids null, puis plus aucune non lue.
     page = await open(member, '/compte/?vue=notifications', `tout-lire-${width}`);
     await page.waitForSelector('.notifications-read-all');
     before = writes.length;
     await page.click('.notifications-read-all');
-    await page.waitForFunction(() => !document.querySelector('.notification-dot') && !document.querySelector('.dtop-round[href="/compte/?vue=notifications"] .dtop-badge')
-      && !document.querySelector('.notifications-read-all'), null, { timeout: 8000 }).catch(() => problems.push(`tout lire ${width} : non-lues ou pastille encore affichées`));
+    await page.waitForFunction(() => !document.querySelector('.notification-dot') && !document.querySelector('.notifications-read-all'), null, { timeout: 8000 })
+      .catch(() => problems.push(`tout lire ${width} : non-lues encore affichées`));
     await waitFor(() => writes.length > before, `tout lire ${width} : appel au serveur`);
     const all = writes.slice(before).filter((write) => write.table === 'rpc/mark_notifications_read');
     if (all.length !== 1 || all[0].method !== 'POST' || !all[0].body || !('p_ids' in all[0].body) || all[0].body.p_ids !== null) {
       problems.push(`tout lire ${width} : ${JSON.stringify(all)} au lieu de mark_notifications_read { p_ids: null }`);
     }
-    await checkBadges(page, live.state, `tout lire ${width}`);
+    await checkTabBarBadge(page, live.state, `tout lire ${width}`);
     await page.close();
-    // Mon espace : « Mon espace » mis en avant ; Mes informations dans la colonne de 640 px, l'espace garde sa largeur.
+    // Mon compte : l'onglet « Mon compte » en bleu ; Mes informations dans .account-wrap (640 px, comme sur téléphone,
+    // jusqu'à l'étape 7e), l'espace garde sa largeur.
     page = await open(member, '/compte/?vue=informations', `mes-informations-${width}`);
     await page.waitForSelector('input[autocomplete="tel"]');
-    if ((await contentWidth(page, '.account-wrap')) !== 640) problems.push(`Mes informations ${width} : colonne de ${await contentWidth(page, '.account-wrap')} px au lieu de 640`);
-    if ((await page.getAttribute('.dtop-space', 'aria-current')) !== 'page') problems.push(`Mes informations ${width} : « Mon espace » n'est pas mis en avant`);
+    if ((await contentWidth(page, '.account-wrap')) !== 608) problems.push(`Mes informations ${width} : colonne de ${await contentWidth(page, '.account-wrap')} px au lieu de 608`);
+    if ((await page.getAttribute('.tabbar a[href="/compte/"]', 'aria-current')) !== 'page') problems.push(`Mes informations ${width} : l'onglet « Mon compte » n'est pas en bleu`);
     await page.screenshot({ path: join(out, `mes-informations-${width}.png`), fullPage: true });
     await page.close();
-    // Mon espace (maquette 5) : contenu de 1200 px (960 à 1024 px), colonne de gauche de 280 px ; « Mon espace » mis en avant.
+    // Mon espace (maquette 5) : contenu de 1200 px (960 à 1024 px), colonne de gauche de 280 px ; l'onglet « Mon compte »
+    // en bleu.
     page = await open(member, '/compte/', `compte-espace-${width}`);
     await page.waitForSelector('.dsp-space-rows');
-    expectSame(`Mon espace ${width}`, 'largeurs et bouton actif', await page.evaluate(() => [Math.round(document.querySelector('.dsp').getBoundingClientRect().width),
-      Math.round(document.querySelector('.dsp-aside').getBoundingClientRect().width), document.querySelector('.dtop-space')?.getAttribute('aria-current') ?? null]),
+    expectSame(`Mon espace ${width}`, 'largeurs et onglet actif', await page.evaluate(() => [Math.round(document.querySelector('.dsp').getBoundingClientRect().width),
+      Math.round(document.querySelector('.dsp-aside').getBoundingClientRect().width), document.querySelector('.tabbar a[href="/compte/"]')?.getAttribute('aria-current') ?? null]),
     [width === 1440 ? 1200 : 960, 280, 'page']);
-    await checkChrome(page, `Mon espace ${width}`, { signedIn: true, margin });
+    await checkChrome(page, `Mon espace ${width}`, { signedIn: true, current: '/compte/' });
     await page.close();
     await member.close();
   }
@@ -2825,7 +2856,7 @@ try {
     expectSame(`accueil ${width} connecté`, 'cartes des sections', [await page.$$eval('.dhome-section article', (articles) => [...new Set(articles
       .filter((article) => article.getClientRects().length > 0).map((article) => `${article.classList[0]} ${article.parentElement.className}`))]),
     await page.locator('.dhome-list, .compact-card').count()], [['home-listing-card dhome-grid'], 0]);
-    await checkChrome(page, `accueil maquette ${width} connecté`, { signedIn: true, margin: width >= 1280 ? 48 : 32 });
+    await checkChrome(page, `accueil maquette ${width} connecté`, { signedIn: true, current: '/' });
     await page.mouse.move(0, 0);
     await page.waitForTimeout(300);
     await page.screenshot({ path: join(out, `1-accueil-${width}.png`), fullPage: true });
@@ -2972,16 +3003,17 @@ try {
     await phoneHome.close();
   }
 
-  // Largeurs limites : sans les catégories, la barre du haut tient sur une ligne avec « Publier une annonce » et
-  // « Mon espace » en entier dès 1024 px, avec des marges de 32 px jusqu'à 1279 px puis de 48 px.
+  // Largeurs limites : dès 1024 px, la barre d'onglets sur toute la largeur, ses cinq onglets dans le groupe centré de
+  // 720 px, « Publier une annonce » pour les lecteurs d'écran ; le pied de page de la recherche dans le grand conteneur
+  // (1180 px au plus) ; rien ne déborde.
   for (const width of [1024, 1179, 1180, 1279, 1280, 1365, 1366]) {
     const edge = await browser.newContext({ viewport: { width, height: 800 }, locale: 'fr-FR' });
     await mock(edge);
     const p = await open(edge, '/recherche/?mode=buy', `recherche-${width}`);
     await p.waitForSelector('.listing-card');
-    await checkChrome(p, `recherche ${width}`, { signedIn: false, margin: width >= 1280 ? 48 : 32 });
-    const names = await p.evaluate(() => [document.querySelector('.dtop-publish').getAttribute('aria-label'), document.querySelector('.dtop-space').getAttribute('aria-label')]);
-    if (JSON.stringify(names) !== JSON.stringify(['Publier une annonce', 'Mon espace'])) problems.push(`barre ${width} : noms des liens ${JSON.stringify(names)}`);
+    await checkChrome(p, `recherche ${width}`, { signedIn: false, current: '/', footer: 1180 });
+    const names = await p.evaluate(() => [document.querySelector('.tabbar-publish').getAttribute('aria-label'), document.querySelector('.tabbar a[href="/compte/"]').textContent.trim()]);
+    if (JSON.stringify(names) !== JSON.stringify(['Publier une annonce', 'Mon compte'])) problems.push(`barre d'onglets ${width} : noms des liens ${JSON.stringify(names)}`);
     await p.close();
     await edge.close();
   }
@@ -3046,14 +3078,14 @@ try {
       return {
         side: Math.round(box('.dm-side')?.width ?? 0), main: Math.round(box('.dm-main')?.width ?? 0), top: box('.dm')?.top, bottom: box('.dm')?.bottom,
         pageScroll: document.documentElement.scrollHeight - innerHeight, overflowX: document.documentElement.scrollWidth - innerWidth,
-        footer: Boolean(document.querySelector('.dfoot, footer.footer')), active: document.querySelector('.dtop-round[href="/messages/"]')?.getAttribute('aria-current') ?? null,
+        footer: Boolean(document.querySelector('footer.footer')), active: document.querySelector('.tabbar a[href="/messages/"]')?.getAttribute('aria-current') ?? null,
         search: Math.round(box('.dm-search')?.height ?? 0), tabs: [...document.querySelectorAll('.dm-tab')].map((tab) => Math.round(tab.getBoundingClientRect().height)),
         font: getComputedStyle(document.querySelector('.dm')).fontFamily.split(',')[0].replace(/["']/g, ''),
         rowAvatar: Math.round(document.querySelector('.dm-row .dm-avatar')?.getBoundingClientRect().width ?? 0),
       };
     });
     expectSame(M, 'mise en page', layout, {
-      side: 360, main: width - 360, top: 72, bottom: height, pageScroll: 0, overflowX: 0, footer: false, active: 'page', search: 44, tabs: [38, 38, 38, 38, 38],
+      side: 360, main: width - 360, top: 0, bottom: height - 46, pageScroll: 0, overflowX: 0, footer: false, active: 'page', search: 44, tabs: [38, 38, 38, 38, 38],
       font: 'Nidalo Inter', rowAvatar: 46,
     });
     expectSame(M, 'en-tête de la colonne', [await textOf(page, '.dm-side-head h1'), await page.getAttribute('.dm-compose', 'aria-label'),
@@ -5155,7 +5187,7 @@ try {
       await page.waitForSelector('.dfav-missing');
       await page.waitForSelector('.fav-tab-dot');
       await favoritePhotosLoaded(page, 2, `${F} maquette`);
-      await checkBadges(page, mockupServer.state, `${F} maquette`);
+      await checkTabBarBadge(page, mockupServer.state, `${F} maquette`);
       await favShot(page, `4-favoris-${width}.png`);
       if (width === 1440) {
         await page.click('.dfav .fav-tab >> nth=1');
@@ -5172,10 +5204,10 @@ try {
     await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', F);
     await page.waitForSelector('.fav-tab-dot');
     await favoritePhotosLoaded(page, 3, F);
-    await checkChrome(page, F, { signedIn: true, margin: width >= 1280 ? 48 : 32 });
-    await checkBadges(page, favServer.state, F);
+    await checkChrome(page, F, { signedIn: true, current: '/favoris/' });
+    await checkTabBarBadge(page, favServer.state, F);
     expectSame(F, 'en-tête', [await textOf(page, '.dfav-titles h1'), await textOf(page, '.dfav-titles p'), await page.getAttribute('.dfav-compare', 'aria-label'),
-      await page.isDisabled('.dfav-compare'), await page.locator('.dfav-compare-count').count(), await page.getAttribute('.dtop-round[href="/favoris/"]', 'aria-current')],
+      await page.isDisabled('.dfav-compare'), await page.locator('.dfav-compare-count').count(), await page.getAttribute('.tabbar a[href="/favoris/"]', 'aria-current')],
     ['Vos favoris', 'Retrouvez vos biens favoris et vos recherches', 'Comparer vos favoris', false, 0, 'page']);
     // Onglets de l'app (FavoritesTabs, demande du 17/11) : un seul sélecteur, la pastille bleue sous l'onglet choisi.
     expectSame(F, 'onglets', await page.$$eval('.dfav .fav-tab', (els) => els.map((el) => [el.querySelector('.fav-tab-title')?.textContent ?? null, el.querySelector('.fav-tab-count')?.textContent ?? null,
@@ -5204,7 +5236,7 @@ try {
         widths: [...new Set(items.map((rect) => Math.round(rect.width)))], heights: new Set(items.map((rect) => Math.round(rect.height))).size,
         photos: [...new Set([...document.querySelectorAll('.dfav-photo')].map((photo) => Math.round(box(photo).height)))], field: Math.round(field.width),
         tilesBelowField: box(document.querySelector('.dfav-categories')).top >= field.bottom && Math.round(box(document.querySelector('.dfav-categories')).width) === 480,
-        overflowX: document.documentElement.scrollWidth - innerWidth, footer: Boolean(document.querySelector('.dfoot')),
+        overflowX: document.documentElement.scrollWidth - innerWidth, footer: Boolean(document.querySelector('footer.footer')),
       };
     });
     expectSame(F, 'mise en page', favLayout, {
@@ -5524,7 +5556,7 @@ try {
     const { context, server: guestServer } = await favContext(1440, 900, FAV_LISTINGS, FAV_ACCOUNT, false);
     page = await open(context, '/favoris/', 'favoris sans compte');
     await page.waitForSelector('.signin-card');
-    await checkChrome(page, 'favoris sans compte', { signedIn: false, margin: 48 });
+    await checkSignInScreen(page, 'favoris sans compte');
     expectSame('favoris sans compte', 'page', [await page.locator('.dfav').count(), guestServer.requests.filter((request) => ['favorites', 'saved_searches'].includes(request.table)).length], [0, 0]);
     await page.close();
     await context.close();
@@ -5535,7 +5567,7 @@ try {
     await mock(context, { signedIn: true, listingRows: FAV_LISTINGS, account: FAV_ACCOUNT });
     page = await open(context, '/favoris/', 'favoris 1023');
     await page.waitForSelector('.favorite-card');
-    expectSame('favoris 1023', 'page du téléphone', [await page.locator('.favorite-card').count(), await page.locator('.dfav, .dtop, .dfoot').count()], [4, 0]);
+    expectSame('favoris 1023', 'page du téléphone', [await page.locator('.favorite-card').count(), await page.locator('.dfav').count()], [4, 0]);
     await page.close();
     await context.close();
   }
@@ -5588,8 +5620,8 @@ try {
           content: Math.round(box('.dsp').width), aside: Math.round(box('.dsp-aside').width), gap: Math.round(box('.dsp-main').left - box('.dsp-aside').right),
           sticky: getComputedStyle(document.querySelector('.dsp-aside')).position, lignes: Math.round(box('.dsp-space-rows').width),
           hauteurs: [...document.querySelectorAll('.dsp-space-rows .app-row')].map((row) => Math.round(row.getBoundingClientRect().height)),
-          dossier: Math.round(box('.dsp-dossier').width), overflowX: document.documentElement.scrollWidth - innerWidth, footer: Boolean(document.querySelector('.dfoot')),
-          current: document.querySelector('.dtop-space')?.getAttribute('aria-current') ?? null,
+          dossier: Math.round(box('.dsp-dossier').width), overflowX: document.documentElement.scrollWidth - innerWidth, footer: Boolean(document.querySelector('footer.footer')),
+          current: document.querySelector('.tabbar a[href="/compte/"]')?.getAttribute('aria-current') ?? null,
         };
       });
       expectSame(E, 'mise en page', spaceLayout, width === 1440
@@ -6197,7 +6229,7 @@ try {
       await page.waitForSelector('.dsc-project-screen .dsc-kinds');
       expectSame('Mon projet 1440', 'résumé', [await textOf(page, '.dsc-summary-ring .dsp-ring-label'), await textOf(page, '.dsc-steps-count'),
         await page.getAttribute('.dsc-kind[aria-pressed="true"]', 'aria-label'), (await contentWidth(page, '.account-wrap'))], ['57 %', '3 étapes sur 6',
-        'Investissement, Générer des revenus immobiliers', 640]);
+        'Investissement, Générer des revenus immobiliers', 608]);
       await tallShot(page, '5-mon-espace-projet-1440.png');
       await page.close();
       await context.close();
@@ -6223,7 +6255,7 @@ try {
       await mock(context, { signedIn: true });
       page = await open(context, '/compte/', 'Mon espace 1023');
       await page.waitForSelector('.app-space .app-row');
-      expectSame('Mon espace 1023', 'page du téléphone', [await page.locator('.dsp, .dsc, .dtop, .dfoot').count(), await page.locator('.space-profile').count()], [0, 1]);
+      expectSame('Mon espace 1023', 'page du téléphone', [await page.locator('.dsp, .dsc').count(), await page.locator('.space-profile').count()], [0, 1]);
       expectSame('Mon espace 1023', 'lien Mon agenda', await page.$$eval('a.app-row', (rows) => rows.filter((row) => row.querySelector('.app-row-title')?.textContent === 'Mon agenda')
         .map((row) => row.getAttribute('href'))), ['/compte/?vue=agenda']);
       await page.close();
@@ -6445,7 +6477,7 @@ try {
       tiles: [Math.round(tiles.left), Math.round(innerWidth - tiles.right)],
       head: [document.querySelector('.results-head h2')?.textContent, document.querySelector('.sort-select > span')?.textContent,
         document.querySelector('.save-search-button')?.textContent, box('.save-search-button')?.[3]],
-      blueBar: getComputedStyle(document.querySelector('.topbar')).display,
+      blueBar: document.querySelector('.topbar') ? getComputedStyle(document.querySelector('.topbar')).display : 'none',
       plusFilters: [...document.querySelectorAll('button')].filter((button) => button.textContent.includes('+ Filtres')).length,
       map: [map.className, getComputedStyle(map).opacity, Math.round(document.querySelector('.tabbar').getBoundingClientRect().top - map.getBoundingClientRect().bottom)],
     };
@@ -6757,7 +6789,8 @@ try {
       await phoneFits(page, P);
     } else {
       expectSame(P, 'bas de la page', (await place()).slice(2), ['static']);
-      if ((await contentWidth(page, '.account-wrap')) !== 640) problems.push(`${P} : colonne de ${await contentWidth(page, '.account-wrap')} px au lieu de 640`);
+      // .account-wrap : 640 px sur toutes les largeurs (sa valeur du téléphone), jusqu'à l'étape 7e.
+      if ((await contentWidth(page, '.account-wrap')) !== 608) problems.push(`${P} : colonne de ${await contentWidth(page, '.account-wrap')} px au lieu de 608`);
     }
     if (device === 'iPhone 13') {
       // Mesures de l'app : retour de 44, barre de 4, cartes aux coins de 22, carré d'icône de 42, rond coché de 24, bouton de 52 (coins 12).
@@ -6834,8 +6867,9 @@ try {
       };
     });
     page = await open(context, '/aide/', `${T} aide`);
+    // Sur toutes les largeurs (plus de barre blanche en haut sur ordinateur) : le fond de page de l'app.
     expectSame(T, 'couleur de la barre du navigateur', await page.$$eval('meta[name="theme-color"]', (metas) => metas.map((meta) => [meta.getAttribute('content'), meta.getAttribute('media')])),
-      [['#FAF9F6', '(max-width: 1023px)'], ['#FFFFFF', '(min-width: 1024px)']]);
+      [['#FAF9F6', null]]);
     await page.close();
     const unknownListing = '6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1aff';
     for (const [path, title, back, file] of [['/aide/', 'Aide', '/', 'aide'], ['/conditions/', 'Conditions d’utilisation', '/', 'conditions'],
@@ -6894,7 +6928,7 @@ try {
       expectSame(`${T} conversation`, '[haut, hauteur, barre du bas, en-tête bleu]', await page.evaluate(() => {
         const box = document.querySelector('.dm.is-thread').getBoundingClientRect();
         return [Math.round(box.top), Math.round(box.height) === innerHeight, getComputedStyle(document.querySelector('.tabbar')).display,
-          getComputedStyle(document.querySelector('.topbar')).display];
+          document.querySelector('.topbar') ? getComputedStyle(document.querySelector('.topbar')).display : 'none'];
       }), [0, true, 'none', 'none']);
       await page.screenshot({ path: join(out, 'haut-telephone-conversation.png') });
       await chatPhone.close();

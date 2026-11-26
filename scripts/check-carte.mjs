@@ -592,7 +592,8 @@ if (!before) {
   await mapReady(page, N);
   await page.screenshot({ path: join(out, 'carte-ordinateur.png') });
   if (!before) {
-    // Tracé à la souris : le bandeau en haut au centre à la place de « Liste », sans zoom ; l'outil en bas au centre.
+    // Tracé à la souris : le bandeau en haut au centre à la place de « Liste », sans zoom ; l'outil en bas au centre, à
+    // 24 px du bas de la carte, au-dessus de la barre d'onglets (46 px).
     await page.click('.zone-pencil');
     await page.waitForSelector('.zone-banner');
     const banner = await box(page, '.zone-banner');
@@ -600,7 +601,7 @@ if (!before) {
     expectSame(N, 'tracé', {
       text: tidy(await page.textContent('.zone-banner-text')), center: Math.round(banner[0] + banner[2] / 2), width: banner[2], list: await page.locator('.map-close').count(),
       zoom: await page.$eval('.map-column .maplibregl-ctrl-top-right', (el) => getComputedStyle(el).visibility), tools: [Math.round(tools[0] + tools[2] / 2), 900 - tools[1] - tools[3]],
-    }, { text: 'Tracez votre zone à la souris', center: 720, width: 480, list: 0, zoom: 'hidden', tools: [720, 24] });
+    }, { text: 'Tracez votre zone à la souris', center: 720, width: 480, list: 0, zoom: 'hidden', tools: [720, 24 + 46] });
     await page.screenshot({ path: join(out, 'zone-trace-ordinateur.png') });
     // La molette ne bouge pas la carte pendant le tracé.
     const shown = await anchors(page);
@@ -614,7 +615,7 @@ if (!before) {
     await page.waitForSelector('.zone-card');
     await expectCard(page, N);
     const card = await box(page, '.zone-card');
-    expectSame(N, 'carte de validation au centre, en bas', [Math.round(card[0] + card[2] / 2), card[2], 900 - card[1] - card[3]], [720, 420, 24]);
+    expectSame(N, 'carte de validation au centre, en bas', [Math.round(card[0] + card[2] / 2), card[2], 900 - card[1] - card[3]], [720, 420, 24 + 46]);
     await page.screenshot({ path: join(out, 'zone-validation-ordinateur.png') });
     // Échap : rien n'est posé, « Liste » revient ; la molette zoome de nouveau.
     await page.keyboard.press('Escape');
@@ -660,8 +661,9 @@ if (!before) {
   await page.screenshot({ path: join(out, 'zone-ville-ordinateur.png') });
   if (!before) {
     const hexagon = HEXAGON.map(([latitude, longitude]) => ({ latitude, longitude }));
+    // La pastille à 16 px du haut de la fenêtre : plus de barre du haut au-dessus de la carte.
     expectSame(N, 'zone sur une ville : biens, pastille', [await shownCount(page), await box(page, '.zone-chip .criterion-chip').then((b) => b && b.slice(0, 2))],
-      [salesInside(hexagon), [16, 88]]);
+      [salesInside(hexagon), [16, 16]]);
     await page.click('.map-round[aria-label="Vue plan"]');
     await page.waitForTimeout(500);
     await page.screenshot({ path: join(out, 'zone-ville-plan-ordinateur.png') });
