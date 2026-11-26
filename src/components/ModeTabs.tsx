@@ -4,7 +4,7 @@ import type { IconName } from './iconPaths';
 import { SEARCH_MODES, type SearchMode } from '../lib/labels';
 import '../styles/pieces-app.css';
 
-/** Carte des catégories de l'accueil du téléphone : toucher une catégorie ouvre ses filtres, la toucher encore les referme. */
+/** Carte des catégories de l'accueil : toucher une catégorie ouvre ses filtres, la toucher encore les referme. */
 export type ModeAccordion = {
   open: boolean;
   /** Identifiant des filtres ouverts sous les pavés. */
@@ -18,7 +18,7 @@ export type ModeAccordion = {
  * Pavé de 60 au pictogramme de 28, nom dessous, petit trait sous la catégorie choisie ; choisie, le pavé passe en
  * pleine couleur avec le ressort de l'app. Une catégorie est toujours choisie : toucher celle qui l'est ne fait rien.
  * Les flèches du clavier passent d'une catégorie à l'autre.
- * `accordion` (accueil du téléphone) : aucune catégorie ouverte au départ, chaque pavé ouvre ou referme ses filtres.
+ * `accordion` (accueil) : aucune catégorie ouverte au départ, chaque pavé ouvre ou referme ses filtres.
  */
 export function ModeTabs(props: {
   mode: SearchMode;

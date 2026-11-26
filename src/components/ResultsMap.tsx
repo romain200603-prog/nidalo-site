@@ -73,14 +73,12 @@ function showZone(map: MapLibreMap, zone: Coordinate[] | null | undefined, satel
 }
 
 /**
- * Marges du cadrage des biens, d'une zone ou de la France (MapTabView.searchedRegion de l'app). Téléphone : sous la
- * ligne du haut et la hauteur d'une vignette, au-dessus du panneau du bas en hauteur moyenne (362 + 30, + 60 pour la
- * France), à gauche des commandes ; ramenées à la hauteur de la carte sur un écran bas. Ordinateur : sous la ligne du
- * haut (et la pastille d'une zone), à gauche des commandes.
+ * Marges du cadrage des biens, d'une zone ou de la France (MapTabView.searchedRegion de l'app) : sous la ligne du haut et
+ * la hauteur d'une vignette, au-dessus du panneau du bas en hauteur moyenne (362 + 30, + 60 pour la France), à gauche
+ * des commandes ; ramenées à la hauteur de la carte sur un écran bas.
  */
 function framePadding(map: MapLibreMap, kind: 'results' | 'zone' | 'france') {
-  const { clientWidth: width, clientHeight: height } = map.getContainer();
-  if (width >= 1024) return kind === 'zone' ? { top: 84, bottom: 48, left: 60, right: 84 } : { top: 60, bottom: 60, left: 40, right: 40 };
+  const { clientHeight: height } = map.getContainer();
   const [top, left, bottom, right] = kind === 'zone' ? [124, 40, 392, 80] : kind === 'france' ? [66, 16, 452, 16] : [126, 50, 392, 80];
   const scale = Math.min(1, Math.max(0, height - 80) / (top + bottom));
   return { top: Math.round(top * scale), left, bottom: Math.round(bottom * scale), right };
@@ -100,7 +98,6 @@ type Props = {
   results: Result[];
   showsYield: boolean;
   selectedId: string | null;
-  hoveredId?: string | null;
   onSelect: (id: string | null) => void;
   frame: MapFrame;
   /** Zone visible après un déplacement fait par la personne. */
@@ -123,7 +120,7 @@ type Props = {
   /** Commandes ajoutées sous les deux de la carte (le crayon de la zone). */
   tools?: ReactNode;
   /**
-   * Toucher d'un marqueur, à la place de `onSelect` (téléphone, MapTabView.tap de l'app) : la page choisit entre
+   * Toucher (ou clic) d'un marqueur, à la place de `onSelect` (MapTabView.tap de l'app) : la page choisit entre
    * sélectionner le bien (et `center()` pour centrer la carte sur lui) et ouvrir son annonce.
    */
   onMarkerTap?: (id: string, center: () => void) => void;
@@ -150,14 +147,14 @@ function boundsOf(points: Coordinate[]): LngLatBounds | null {
 }
 
 export function ResultsMap({
-  results, showsYield, selectedId, hoveredId, onSelect, frame, onUserMove, className, zone, searchedZone, drawTool = null, onDrawZone,
+  results, showsYield, selectedId, onSelect, frame, onUserMove, className, zone, searchedZone, drawTool = null, onDrawZone,
   onDrawCircle, onDrawTooSmall, onVisibleArea, tools, onMarkerTap,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const [ready, setReady] = useState(false);
   /**
-   * Cadrage demandé pendant que la carte est cachée (liste du téléphone, carte fermée) : sans taille, MapLibre ne peut
+   * Cadrage demandé pendant que la carte est cachée (liste, carte fermée) : sans taille, MapLibre ne peut
    * rien cadrer ; il se fait quand la carte prend la sienne (son « resize »), sauf si un autre l'a remplacé.
    */
   const pendingFrame = useRef<(() => void) | null>(null);
@@ -363,7 +360,7 @@ export function ResultsMap({
       return;
     }
     const bounds = boundsOf(results.flatMap((r) => { const c = coordinateOf(r); return c ? [c] : []; }));
-    if (bounds && map) map.fitBounds(bounds, { padding: width >= 1024 ? 60 : framePadding(map, 'results'), maxZoom: 14, duration: 350 });
+    if (bounds && map) map.fitBounds(bounds, { padding: framePadding(map, 'results'), maxZoom: 14, duration: 350 });
   }
 
   // MARK: Tracé (handleDraw de l'app) : un seul pointeur, capturé ; le trait commence après un petit déplacement (un
@@ -507,7 +504,6 @@ export function ResultsMap({
           if (!result) return null;
           const { row, highlights } = result;
           const isSelected = row.id === selectedId;
-          const isHovered = row.id === hoveredId;
           const good = highlights ? highlights.grossYield >= GOOD_YIELD : false;
           // Location : le loyer charges comprises quand elles sont connues, comme les cartes (MapPricePin, n° 173).
           const price = formatPinPrice(cardPrice(row).value, row.transaction);
@@ -516,7 +512,7 @@ export function ResultsMap({
           return (
             <div
               key={row.id}
-              className={`map-marker${isSelected ? ' is-selected' : ''}${isHovered ? ' is-hovered' : ''}`}
+              className={`map-marker${isSelected ? ' is-selected' : ''}`}
               style={{ transform: `translate(${group.x}px, ${group.y}px) translate(-50%, calc(-100% + 6px))` }}
             >
               <span className="map-marker-inner">

@@ -10,6 +10,7 @@ import { OfflineState } from '../components/OfflineState';
 import { PhotoPager } from '../components/PhotoPager';
 import { SignInCard } from '../components/account/SignInCard';
 import { HeartIcon } from '../components/account/HeartButton';
+import { useRailScroll } from '../components/useRailScroll';
 import { isNewAccount } from '../lib/account/auth';
 import {
   categoryIncludes, categoryOfMode, FAVORITE_SORTS, favoriteDetails, favoriteSuggestions,
@@ -22,22 +23,20 @@ import { formatCardPrice, shortFacts, yieldTone } from '../lib/cardContent';
 import { fillCompareIfEmpty, useCompare } from '../lib/compare';
 import { formatFraction, formatPrice } from '../lib/format';
 import { DPE_COLORS } from '../lib/labels';
-import { useDesktop } from '../lib/desktop';
 import { sortedPhotos } from '../lib/listings';
 import { comparePath, listingPath, PATHS } from '../lib/paths';
 import { defaultDraft, filterChips, pricePerSquareMeter, type SearchDraft } from '../lib/search';
 import { FiltersDialog, type DraftsByMode } from './FiltersDialog';
 import { SavedSearchesList, useSearchCounts } from './account/SavedSearchesList';
 import { EmptyState, Spinner } from './account/parts';
-import { DesktopFavoritesPage } from './favorites/DesktopFavorites';
 import { filterCount, matchingIds, removeWithUndo, useFavoriteCards } from './favorites/data';
 import { FavoritesTabs } from './favorites/FavoritesTabs';
 import '../styles/account.css';
 
 // « Vos favoris » (Features/Favorites/FavoritesView.swift) : onglets Favoris et Recherches ; recherche, catégories,
 // filtres et tri sur les biens mis en cœur. Les filtres s'appliquent directement aux favoris chargés (même moteur
-// que la recherche), sans relancer une recherche complète. Ordinateur (≥ 1024 px) : DesktopFavoritesPage (maquette 4),
-// avec les mêmes données (favorites/data.ts) ; en dessous, la page du téléphone ci-dessous, inchangée.
+// que la recherche), sans relancer une recherche complète. À partir de 1024 px, le même écran dans le grand conteneur
+// (1180 px), ses cartes sur 2 ou 3 colonnes.
 
 function FavoriteHeart({ onRemove }: { onRemove: () => void }) {
   return (
@@ -393,10 +392,9 @@ function FavoritesBody() {
 }
 
 export function FavoritesPage() {
-  const desktop = useDesktop();
-  if (desktop) return <DesktopFavoritesPage />;
+  useRailScroll();
   return (
-    <Page section="favorites">
+    <Page section="favorites" wide>
       <div className="wrap favorites-wrap">
         <FavoritesBody />
       </div>

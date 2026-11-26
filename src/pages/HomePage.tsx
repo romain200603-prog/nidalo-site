@@ -7,14 +7,14 @@ import { ModeTabs } from '../components/ModeTabs';
 import { OfflineState } from '../components/OfflineState';
 import { PlaceField } from '../components/PlaceField';
 import { SelectionDialog } from '../components/SelectionDialog';
+import { useRailScroll } from '../components/useRailScroll';
 import { FiltersDialog } from './FiltersDialog';
 import { countFor, runPath } from './account/SavedSearchesList';
-import { accountStore, greetingName, loadAccount } from '../lib/account/profile';
 import { loadSavedSearches, markViewed, resumeSummaryOf, savedSearchesStore, type SavedSearch } from '../lib/account/savedSearches';
 import { useSession, useStore } from '../lib/account/session';
 import { notificationsLabel } from '../lib/badges';
 import { highlightsFor } from '../lib/highlights';
-import { categoryFields, categoryMoreHint, categorySearchTitle, homeTiles, moreCriteriaHint, type CriterionTileSpec } from '../lib/homeCriteria';
+import { categoryFields, categoryMoreHint, categorySearchTitle, type CriterionTileSpec } from '../lib/homeCriteria';
 import { loadHomeFeed, type HomeFeed } from '../lib/homeFeed';
 import { isOfflineFailure } from '../lib/loadFailure';
 import type { SearchMode } from '../lib/labels';
@@ -23,17 +23,15 @@ import { loadNotifications, notificationsStore, unreadNotificationCount } from '
 import { accountPath, listingPath, PATHS } from '../lib/paths';
 import type { PlaceSuggestion } from '../lib/places';
 import { chosenFromSuggestion, defaultDraft, paramsFromDraft, search, switchMode, type Result, type SearchDraft } from '../lib/search';
-import { useDesktop } from '../lib/desktop';
 import { loadProjectSearch, loadViewedListings, SIMILAR_LIMIT } from '../lib/homeDesktop';
 import { recentlyViewedIds } from '../lib/recentlyViewed';
-import '../styles/ordinateur-accueil.css';
 import '../styles/accueil-app.css';
 
-// Accueil. Sous 1024 px, celui de l'app (Features/Home : HomeView.swift, HomeCategoryCard.swift, HomeSections.swift) :
-// barre du haut sans fond (logo, nom, cloche), carte des catégories dont les filtres s'ouvrent dans la carte,
+// Accueil de l'app (Features/Home : HomeView.swift, HomeCategoryCard.swift, HomeSections.swift), à toutes les
+// largeurs : barre du haut sans fond (logo, nom, cloche), carte des catégories dont les filtres s'ouvrent dans la carte,
 // « Reprendre ma recherche », puis les sections de biens réels, toutes avec la grande carte de l'app (HomeListingCard,
-// version 1.0.1) et la pastille de leur section. Sur ordinateur, la mise en page de la maquette 1 de Romain, avec la
-// même carte.
+// version 1.0.1) et la pastille de leur section. À partir de 1024 px, le même écran élargi au grand conteneur (1180 px),
+// sous le bandeau bleu de l'accueil (accueil-app.css).
 
 const MODES: SearchMode[] = ['buy', 'rent', 'invest', 'hotel'];
 
@@ -55,17 +53,16 @@ function prefersReducedMotion(): boolean {
 }
 
 /**
- * Tuile de critère : icône, petit libellé, valeur en gras ; ouvre le menu de sélection. `app` : champ de la carte des
- * catégories du téléphone (HomeFilterField), sans chevron sauf sur toute la largeur ; sinon la tuile de l'ordinateur.
+ * Champ de la carte des catégories (HomeFilterField) : icône, petit libellé, valeur en gras, chevron seulement sur toute
+ * la largeur ; ouvre le menu de sélection.
  */
-function CriterionTile({ tile, onApply, app = false }: {
+function CriterionTile({ tile, onApply }: {
   tile: CriterionTileSpec;
   onApply: (apply: (draft: SearchDraft) => SearchDraft) => void;
-  app?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const value = tile.kind === 'single' ? tile.format(tile.value) : tile.valueLabel;
-  const full = app && tile.fullWidth === true;
+  const full = tile.fullWidth === true;
   const sheetIcon = tile.sheetIcon ?? tile.icon;
   return (
     <>
@@ -76,7 +73,7 @@ function CriterionTile({ tile, onApply, app = false }: {
           <span className="criterion-label">{tile.label}</span>
           <span className="criterion-value">{value}</span>
         </span>
-        {(!app || full) && <Icon name={app ? 'chevronRight' : 'chevronDown'} className="icon criterion-chevron" />}
+        {full && <Icon name="chevronRight" className="icon criterion-chevron" />}
       </button>
       {tile.kind === 'single' ? (
         <SelectionDialog
@@ -151,7 +148,7 @@ function useShrinkToFit() {
   return ref;
 }
 
-// ——— Téléphone et tablette (moins de 1024 px) : l'accueil de l'app ———
+// ——— L'accueil de l'app ———
 
 /**
  * Rubrique de l'accueil (HomeSection de l'app) : elle donne la couleur du pavé et de son pictogramme (inkHex,
@@ -319,7 +316,7 @@ function HomeCategoryCard({ mode, draft, changeMode, update, choosePlace, startS
           />
           <div className="home-category-fields">
             {fields.map((tile) => (
-              <CriterionTile key={`${mode}-${tile.id}`} tile={tile} onApply={update} app />
+              <CriterionTile key={`${mode}-${tile.id}`} tile={tile} onApply={update} />
             ))}
           </div>
           <button type="button" className="home-more" onClick={openFilters} aria-label={`Plus de critères : ${hint}`}>
@@ -411,15 +408,12 @@ function PhoneHome({ mode, draft, drafts, feed, feedStatus, onRetryFeed, extras,
     void loadSavedSearches();
   }, [session.status, userId]);
 
-  // Cloche : les notifications non lues font le point rouge. Lues une fois, sans temps réel (la barre du haut de
-  // l'accueil n'est visible que sous 1024 px ; au-dessus, la barre du haut de l'ordinateur prend sa place).
+  // Cloche : les notifications non lues font le point rouge, à toutes les largeurs. Lues une fois, sans temps réel, et
+  // relues au retour sur la page par « Précédent ».
   useEffect(() => {
     if (userId === null) return;
-    const phone = () => {
-      try { return window.matchMedia('(max-width: 1023px)').matches; } catch { return false; }
-    };
-    if (phone()) void loadNotifications();
-    const onShow = (event: PageTransitionEvent) => { if (event.persisted && phone()) void loadNotifications(); };
+    void loadNotifications();
+    const onShow = (event: PageTransitionEvent) => { if (event.persisted) void loadNotifications(); };
     window.addEventListener('pageshow', onShow);
     return () => window.removeEventListener('pageshow', onShow);
   }, [userId]);
@@ -534,8 +528,8 @@ function PhoneHome({ mode, draft, drafts, feed, feedStatus, onRetryFeed, extras,
 const FEED_RELOAD_DELAY = 600;
 
 /**
- * « Consultés récemment » et « Biens similaires à vos recherches » (HomeView.swift), au téléphone comme sur
- * ordinateur. Le projet du compte règle d'abord la recherche de sa catégorie (AppRouter.applyProject).
+ * « Consultés récemment » et « Biens similaires à vos recherches » (HomeView.swift). Le projet du compte règle d'abord
+ * la recherche de sa catégorie (AppRouter.applyProject).
  */
 function useHomeExtras(mode: SearchMode, draft: SearchDraft, drafts: Record<SearchMode, SearchDraft>,
   applyProject: (mode: SearchMode, next: SearchDraft, untouched: SearchDraft) => void): Extras {
@@ -607,165 +601,8 @@ function useHomeExtras(mode: SearchMode, draft: SearchDraft, drafts: Record<Sear
   return { viewed, similar };
 }
 
-// ——— Ordinateur (≥ 1024 px) : mise en page de la maquette 1 de Romain ———
-// Même état, mêmes tuiles, même recherche et mêmes filtres que l'accueil du téléphone ; mêmes titres et même carte
-// d'annonce que l'accueil de l'app (HomeListingCard, avec la pastille de chaque section), en grille.
-
-function DesktopSectionHead({ id, title, subtitle, href, picto }: { id: string; title: string; subtitle?: string; href: string; picto?: IconName }) {
-  return (
-    <div className="dhome-head">
-      <div className="dhome-head-text">
-        {picto ? (
-          <div className="dhome-title">
-            <Icon name={picto} className="icon dhome-picto" />
-            <h2 id={id}>{title}</h2>
-          </div>
-        ) : <h2 id={id}>{title}</h2>}
-        {subtitle && <p>{subtitle}</p>}
-      </div>
-      <a href={href} className="dhome-see-all">Voir tout<Icon name="chevronRight" /></a>
-    </div>
-  );
-}
-
-type DesktopHomeProps = {
-  greeting: string;
-  mode: SearchMode;
-  draft: SearchDraft;
-  drafts: Record<SearchMode, SearchDraft>;
-  tiles: CriterionTileSpec[];
-  feed: HomeFeed | null;
-  feedStatus: FeedStatus;
-  onRetryFeed: () => void;
-  extras: Extras;
-  update: (change: (current: SearchDraft) => SearchDraft) => void;
-  changeMode: (next: SearchMode) => void;
-  choosePlace: (place: PlaceSuggestion) => void;
-  startSearch: (event?: FormEvent) => void;
-  openFilters: () => void;
-};
-
-function DesktopHome({ greeting, mode, draft, drafts, tiles, feed: loadedFeed, feedStatus, onRetryFeed, extras, update, changeMode, choosePlace, startSearch, openFilters }: DesktopHomeProps) {
-  // Sans réseau ou pendant « Réessayer » : l'état de l'app à la place des sections.
-  const sections = feedStatus === 'content';
-  const feed = sections ? loadedFeed : null;
-  const viewed = sections ? extras.viewed : [];
-  const similar = sections ? extras.similar : [];
-  const sectionHref = searchHref(draft);
-  return (
-    <div className="dhome">
-      <section className="dhome-band" aria-labelledby="accueil-titre">
-        <div className="dhome-inner">
-          <h1 id="accueil-titre">{greeting}</h1>
-          <p>Que recherchez-vous aujourd’hui ?</p>
-        </div>
-      </section>
-      <div className="dhome-inner dhome-card-wrap">
-        <form className="home-search-card dhome-search" role="search" aria-label="Rechercher un bien" onSubmit={startSearch}>
-          <ModeTabs mode={mode} onChange={changeMode} />
-          {/* Le lieu sur toute la largeur, puis les critères en blocs en dessous, deux par ligne comme dans l'app
-              (demande de Romain du 7 novembre : plus tous les critères côte à côte). */}
-          <PlaceField
-            variant="home"
-            className="home-place-field dhome-place"
-            label="Où cherchez-vous ?"
-            placeholder="Ville, quartier, code postal..."
-            value={draft.place}
-            onChange={(text) => update((d) => ({ ...d, place: text }))}
-            onChoose={choosePlace}
-            onSubmit={() => startSearch()}
-            shortcuts
-          />
-          <div className="dhome-tiles">
-            {tiles.map((tile) => (
-              <CriterionTile key={`${mode}-${tile.id}`} tile={tile} onApply={update} />
-            ))}
-          </div>
-          <div className="dhome-actions">
-            <button type="button" className="dhome-more" onClick={openFilters} aria-label={`Plus de critères : ${moreCriteriaHint(mode)}`}>
-              <Icon name="sliders" />
-              <span className="dhome-more-title">Plus de critères</span>
-              <span className="dhome-more-hint">{moreCriteriaHint(mode)}</span>
-              <Icon name="chevronRight" />
-            </button>
-            <button type="submit" className="home-search-button dhome-submit">
-              <Icon name="search" />
-              <span>{mode === 'hotel' ? 'Rechercher des hôtels' : 'Rechercher des biens'}</span>
-            </button>
-          </div>
-        </form>
-      </div>
-
-      <div className="dhome-sections" aria-busy={loadedFeed === null || feedStatus === 'loading'}>
-        {feedStatus === 'offline' && <div className="dhome-inner"><OfflineState onRetry={onRetryFeed} className="home-feed-state" /></div>}
-        {feedStatus === 'loading' && <div className="dhome-inner home-feed-state home-feed-loading"><span className="spinner" role="status" aria-label="Chargement" /></div>}
-        {feed && feed.opportunities.length > 0 && (
-          <section className="home-section dhome-section dhome-opportunities" aria-labelledby="opportunites">
-            <div className="dhome-inner">
-              <DesktopSectionHead id="opportunites" title="Opportunités du moment" subtitle="Les dernières annonces pour investir."
-                href={searchHref(switchMode(draft, 'invest', drafts.invest))} picto="pictoOpportunites" />
-              <div className="dhome-grid">
-                {feed.opportunities.map(({ row, highlights }) => (
-                  <HomeListingCard key={row.id} row={row} highlights={highlights} badge="yield" heart href={listingPath(row.id, 'invest')} className="opportunity-card" />
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
-        {viewed.length > 0 && (
-          <section className="home-section dhome-section" aria-labelledby="consultes">
-            <div className="dhome-inner">
-              <DesktopSectionHead id="consultes" title="Vus récemment" href={sectionHref} picto="pictoConsultes" />
-              <div className="dhome-grid">
-                {viewed.map((row) => (
-                  <HomeListingCard key={row.id} row={row} highlights={highlightsFor(row, null)} badge="none" heart={false} href={listingPath(row.id)} />
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
-        {similar.length > 0 && (
-          <section className="home-section dhome-section" aria-labelledby="similaires">
-            <div className="dhome-inner">
-              <DesktopSectionHead id="similaires" title="Selon votre recherche" href={sectionHref} picto="pictoSimilaires" />
-              <div className="dhome-grid">
-                {similar.map(({ row, highlights }) => (
-                  <HomeListingCard key={row.id} row={row} highlights={highlights} badge="yield" heart href={listingPath(row.id)} />
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
-        {feed && feed.newest.length > 0 && (
-          <section className="home-section dhome-section" aria-labelledby="nouveautes">
-            <div className="dhome-inner">
-              <DesktopSectionHead id="nouveautes" title="Nouvelles annonces" subtitle="Les dernières annonces publiées." href={sectionHref} picto="pictoNouveautes" />
-              <div className="dhome-grid">
-                {feed.newest.map((row) => (
-                  <HomeListingCard key={row.id} row={row} highlights={highlightsFor(row, null)} badge="new" heart href={listingPath(row.id)} />
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
-        {feed && feed.priceDrops.length > 0 && (
-          <section className="home-section dhome-section" aria-labelledby="baisses">
-            <div className="dhome-inner">
-              <DesktopSectionHead id="baisses" title="Baisses de prix" subtitle="Leur prix vient de baisser." href={sectionHref} picto="pictoBaisses" />
-              <div className="dhome-grid">
-                {feed.priceDrops.map((row) => (
-                  <HomeListingCard key={row.id} row={row} highlights={highlightsFor(row, null)} badge="priceDrop" heart={false} href={listingPath(row.id)} />
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export function HomePage() {
+  useRailScroll();
   const [mode, setMode] = useState<SearchMode>('buy');
   const [drafts, setDrafts] = useState<Record<SearchMode, SearchDraft>>(
     () => Object.fromEntries(MODES.map((m) => [m, defaultDraft(m)])) as Record<SearchMode, SearchDraft>,
@@ -777,12 +614,6 @@ export function HomePage() {
   const [feedLoading, setFeedLoading] = useState(true);
   const [feedAttempt, setFeedAttempt] = useState(0);
   const draft = drafts[mode];
-  const session = useSession();
-  const account = useStore(accountStore);
-
-  useEffect(() => {
-    if (session.status === 'signedIn') void loadAccount();
-  }, [session.status, session.status === 'signedIn' ? session.userId : null]);
 
   useEffect(() => {
     let cancelled = false;
@@ -835,23 +666,13 @@ export function HomePage() {
     window.location.assign(searchHref(draft));
   }
 
-  const name = account.status === 'ready' ? greetingName(account.account) : null;
-  // « Bonjour Romain », « Bonjour » sans prénom connu, « Bienvenue sur Nidalo » sans compte (HomeBanner).
-  const greeting = session.status === 'signedIn' ? (name ? `Bonjour ${name}` : 'Bonjour') : 'Bienvenue sur Nidalo';
-  const desktop = useDesktop();
   const openFilters = () => setFiltersOpen(true);
 
   return (
-    <Page section="home">
-      {desktop ? (
-        <DesktopHome greeting={greeting} mode={mode} draft={draft} drafts={drafts} tiles={homeTiles(draft)} feed={feed}
-          feedStatus={feedStatus} onRetryFeed={retryFeed} extras={extras}
-          update={update} changeMode={changeMode} choosePlace={choosePlace} startSearch={startSearch} openFilters={openFilters} />
-      ) : (
-        <PhoneHome mode={mode} draft={draft} drafts={drafts} feed={feed} feedStatus={feedStatus} onRetryFeed={retryFeed} extras={extras}
-          changeMode={changeMode} update={update}
-          choosePlace={choosePlace} startSearch={startSearch} openFilters={openFilters} />
-      )}
+    <Page section="home" wide>
+      <PhoneHome mode={mode} draft={draft} drafts={drafts} feed={feed} feedStatus={feedStatus} onRetryFeed={retryFeed} extras={extras}
+        changeMode={changeMode} update={update}
+        choosePlace={choosePlace} startSearch={startSearch} openFilters={openFilters} />
       <FiltersDialog
         open={filtersOpen}
         draft={draft}

@@ -1,6 +1,6 @@
 /* Zone dessinée sur la carte de Votre recherche (MapTabView.swift et ListingsMapView.swift de l'app, prompt 30).
-   1 pt de l'app = 1 px ici ; ombres : flou CSS = 2 × le rayon SwiftUI. Téléphone : comme l'app ; ordinateur : la carte
-   plein écran du site, le bandeau à la place de « Liste », en haut au centre. */
+   1 pt de l'app = 1 px ici ; ombres : flou CSS = 2 × le rayon SwiftUI. Comme l'app à toutes les largeurs ; à partir
+   de 1024 px, le bandeau, la pastille et la carte de validation sur la colonne de 720 au milieu de l'écran. */
 
 /* ——— Tracé : surface au-dessus de la carte, sous les vignettes et les commandes ; elle seule bloque le défilement et
    le zoom de la page (touch-action), et seulement pendant le tracé. ——— */
@@ -127,24 +127,20 @@
 .zone-menu .dsc-menu-list button:disabled { color: var(--app-text-muted); cursor: default; }
 .zone-menu .dsc-menu-list .icon { flex: none; width: 18px; height: 18px; }
 
-/* ——— Téléphone : les commandes suivent la ligne du haut (pastille ou bandeau) ; le zoom sous les trois commandes ; la
-   mention des sources 12 au-dessus du choix de l'outil ou de la carte de validation (142 de haut), comme dans l'app. ——— */
-@media (max-width: 1023px) {
-  .map-column.is-open.has-zone .map-tools { top: calc(112px + env(safe-area-inset-top)); }
-  .map-column.is-open.is-editing-zone .map-tools { top: calc(68px + env(safe-area-inset-top)); }
-  .map-column.is-open.has-zone .maplibregl-ctrl-top-right { top: calc(276px + env(safe-area-inset-top)); }
-  .map-column.is-open.is-editing-zone .maplibregl-ctrl-top-right { top: calc(232px + env(safe-area-inset-top)); }
-  .map-column.is-open.is-zone-drawing .results-map-attribution { bottom: calc(76px + env(safe-area-inset-bottom)); }
-  .map-column.is-open.is-zone-proposal .results-map-attribution { bottom: calc(162px + env(safe-area-inset-bottom)); }
-}
+/* ——— Les commandes suivent la ligne du haut (pastille ou bandeau) ; le zoom sous les trois commandes ; la mention des
+   sources 12 au-dessus du choix de l'outil ou de la carte de validation (142 de haut), comme dans l'app. ——— */
+.map-column.is-open.has-zone .map-tools { top: calc(112px + env(safe-area-inset-top)); }
+.map-column.is-open.is-editing-zone .map-tools { top: calc(68px + env(safe-area-inset-top)); }
+.map-column.is-open.has-zone .maplibregl-ctrl-top-right { top: calc(276px + env(safe-area-inset-top)); }
+.map-column.is-open.is-editing-zone .maplibregl-ctrl-top-right { top: calc(232px + env(safe-area-inset-top)); }
+.map-column.is-open.is-zone-drawing .results-map-attribution { bottom: calc(76px + env(safe-area-inset-bottom)); }
+.map-column.is-open.is-zone-proposal .results-map-attribution { bottom: calc(162px + env(safe-area-inset-bottom)); }
 
-/* ——— Ordinateur : le bandeau en haut au centre (à la place de « Liste »), la carte de validation en bas au centre, la
-   pastille en haut à gauche. ——— */
+/* ——— Ordinateur (à partir de 1024 px) : le bandeau, la carte de validation et la pastille sur la colonne de 720 au
+   milieu de l'écran (--map-side, app.css) ; survol à la souris. ——— */
 @media (min-width: 1024px) {
-  .zone-banner { top: 16px; left: 50%; right: auto; width: min(480px, calc(100% - 220px)); transform: translateX(-50%); }
-  .zone-tools { bottom: 24px; }
-  .zone-card { left: 50%; right: auto; bottom: 24px; width: 420px; transform: translateX(-50%); }
-  .zone-chip { top: 16px; left: 16px; }
+  .zone-banner, .zone-card { left: var(--map-side); right: var(--map-side); }
+  .zone-chip { left: var(--map-side); }
   .zone-banner-cancel:hover, .zone-tool:not(.is-selected):hover { opacity: 0.8; }
   .zone-size:not([aria-disabled="true"]):hover { background: #F7F6F3; }
   .zone-restart:hover { background: #E4EAF6; }

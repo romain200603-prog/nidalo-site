@@ -27,121 +27,125 @@
 .compare-toggle-favoriteCard .icon { width: 17px; height: 17px; }
 .compare-toggle-favoriteCard.is-active { background: var(--app-brand); color: #FFFFFF; }
 
-/* ——— Écran Comparer du téléphone (CompareView), sous 1024 px ———
+/* ——— Écran Comparer (CompareView) ———
    Plein écran comme dans l'app (domiaFullScreenCover) : pas de barre d'onglets, l'en-tête « Comparer » et « Fermer »,
-   puis l'état vide, la roue, « Pas de connexion Internet » ou le tableau. Sur ordinateur : ordinateur-comparer.css. */
-@media (max-width: 1023px) {
-  .cmpm { display: flex; flex-direction: column; min-height: 100dvh; box-sizing: border-box; background: var(--app-page); color: var(--app-navy); font-family: var(--app-font); }
-  .cmpm-header { display: flex; align-items: flex-start; gap: 12px; padding: calc(20px + env(safe-area-inset-top)) 20px 0; }
-  .cmpm-titles { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; }
-  .cmpm-titles h1 { margin: 0; color: var(--app-navy); font: 700 28px/34px var(--app-font); }
-  .cmpm-titles p { margin: 0; color: var(--app-text-secondary); font: 400 14px/17px var(--app-font); }
-  /* « Fermer » : capsule blanche de 38, filet de 1, croix de 15 et 14 demi-gras. */
-  .cmpm-close {
-    flex: none; display: inline-flex; align-items: center; gap: 6px; height: 38px; margin: 0; padding: 0 13px; box-sizing: border-box;
-    border: 1px solid var(--app-border); border-radius: 999px; background: #FFFFFF; color: var(--app-navy); font: 600 14px/1 var(--app-font);
-    cursor: pointer; -webkit-tap-highlight-color: transparent;
-  }
-  .cmpm-close .icon { width: 15px; height: 15px; }
-  .cmpm :is(.cmpm-close, .cmpm-discover, .cmpm-add, .cmpm-clear, .cmpm-remove, .cmpm-make-reference):focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
-  .cmpm .stretched:focus-visible { outline: none; }
-  .cmpm-head:has(.stretched:focus-visible) { outline: 3px solid var(--app-brand); outline-offset: 2px; border-radius: 12px; }
+   puis l'état vide, la roue, « Pas de connexion Internet » ou le tableau. */
+.cmpm { display: flex; flex-direction: column; min-height: 100dvh; box-sizing: border-box; background: var(--app-page); color: var(--app-navy); font-family: var(--app-font); }
+.cmpm-header { display: flex; align-items: flex-start; gap: 12px; padding: calc(20px + env(safe-area-inset-top)) 20px 0; }
+.cmpm-titles { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; }
+.cmpm-titles h1 { margin: 0; color: var(--app-navy); font: 700 28px/34px var(--app-font); }
+.cmpm-titles p { margin: 0; color: var(--app-text-secondary); font: 400 14px/17px var(--app-font); }
+/* « Fermer » : capsule blanche de 38, filet de 1, croix de 15 et 14 demi-gras. */
+.cmpm-close {
+  flex: none; display: inline-flex; align-items: center; gap: 6px; height: 38px; margin: 0; padding: 0 13px; box-sizing: border-box;
+  border: 1px solid var(--app-border); border-radius: 999px; background: #FFFFFF; color: var(--app-navy); font: 600 14px/1 var(--app-font);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.cmpm-close .icon { width: 15px; height: 15px; }
+.cmpm :is(.cmpm-close, .cmpm-discover, .cmpm-add, .cmpm-clear, .cmpm-remove, .cmpm-make-reference):focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+.cmpm .stretched:focus-visible { outline: none; }
+.cmpm-head:has(.stretched:focus-visible) { outline: 3px solid var(--app-brand); outline-offset: 2px; border-radius: 12px; }
 
-  /* État vide, roue et coupure : au milieu de la place sous l'en-tête. */
-  .cmpm-center { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; padding: 24px 0; }
-  .cmpm-center > .app-offline { padding: 0 24px; }
-  .cmpm-empty { gap: 16px; padding: 24px 32px; text-align: center; }
-  .cmpm-empty-icon { display: inline-flex; align-items: center; justify-content: center; width: 72px; height: 72px; border-radius: 50%; background: var(--app-brand-soft); color: var(--app-brand); }
-  .cmpm-empty-icon .icon { width: 34px; height: 34px; }
-  .cmpm-empty h2 { margin: 0; color: var(--app-navy); font: 700 20px/24px var(--app-font); }
-  .cmpm-empty p { margin: 0; color: var(--app-text-secondary); font: 400 14px/17px var(--app-font); }
-  .cmpm-discover {
-    display: inline-flex; align-items: center; height: 48px; padding: 0 24px; border-radius: 14px; background: var(--app-brand); color: #FFFFFF;
-    font: 700 15px/1 var(--app-font); text-decoration: none; -webkit-tap-highlight-color: transparent;
-  }
-  .cmpm-discover:hover { color: #FFFFFF; text-decoration: none; }
-  .cmpm-discover:active { background: var(--app-brand-pressed); }
+/* État vide, roue et coupure : au milieu de la place sous l'en-tête. */
+.cmpm-center { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; padding: 24px 0; }
+.cmpm-center > .app-offline { padding: 0 24px; }
+.cmpm-empty { gap: 16px; padding: 24px 32px; text-align: center; }
+.cmpm-empty-icon { display: inline-flex; align-items: center; justify-content: center; width: 72px; height: 72px; border-radius: 50%; background: var(--app-brand-soft); color: var(--app-brand); }
+.cmpm-empty-icon .icon { width: 34px; height: 34px; }
+.cmpm-empty h2 { margin: 0; color: var(--app-navy); font: 700 20px/24px var(--app-font); }
+.cmpm-empty p { margin: 0; color: var(--app-text-secondary); font: 400 14px/17px var(--app-font); }
+.cmpm-discover {
+  display: inline-flex; align-items: center; height: 48px; padding: 0 24px; border-radius: 14px; background: var(--app-brand); color: #FFFFFF;
+  font: 700 15px/1 var(--app-font); text-decoration: none; -webkit-tap-highlight-color: transparent;
+}
+.cmpm-discover:hover { color: #FFFFFF; text-decoration: none; }
+.cmpm-discover:active { background: var(--app-brand-pressed); }
 
-  .cmpm-content { display: flex; flex-direction: column; gap: 14px; padding: 16px 16px 24px; }
-  .cmpm-mixed { display: flex; align-items: flex-start; gap: 6px; margin: 0; color: var(--app-text-secondary); font: 400 13px/16px var(--app-font); }
-  .cmpm-mixed .icon { flex: none; width: 14px; height: 14px; margin-top: 1px; }
-  /* « Ajouter un bien depuis la recherche » (moins de 3 biens) : 44, bleu pâle, coins 12 ; « Vider » : 40, rouge. */
-  .cmpm-add {
-    display: flex; align-items: center; justify-content: center; gap: 6px; height: 44px; border-radius: 12px; background: var(--app-brand-soft);
-    color: var(--app-brand); font: 600 14px/1 var(--app-font); text-decoration: none; -webkit-tap-highlight-color: transparent;
-  }
-  .cmpm-add:hover { color: var(--app-brand); text-decoration: none; }
-  .cmpm-add .icon { width: 15px; height: 15px; }
-  .cmpm-clear { height: 40px; margin: 0; padding: 0; border: 0; background: none; color: var(--red); font: 600 14px/1 var(--app-font); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.cmpm-content { display: flex; flex-direction: column; gap: 14px; padding: 16px 16px 24px; }
+.cmpm-mixed { display: flex; align-items: flex-start; gap: 6px; margin: 0; color: var(--app-text-secondary); font: 400 13px/16px var(--app-font); }
+.cmpm-mixed .icon { flex: none; width: 14px; height: 14px; margin-top: 1px; }
+/* « Ajouter un bien depuis la recherche » (moins de 3 biens) : 44, bleu pâle, coins 12 ; « Vider » : 40, rouge. */
+.cmpm-add {
+  display: flex; align-items: center; justify-content: center; gap: 6px; height: 44px; border-radius: 12px; background: var(--app-brand-soft);
+  color: var(--app-brand); font: 600 14px/1 var(--app-font); text-decoration: none; -webkit-tap-highlight-color: transparent;
+}
+.cmpm-add:hover { color: var(--app-brand); text-decoration: none; }
+.cmpm-add .icon { width: 15px; height: 15px; }
+.cmpm-clear { height: 40px; margin: 0; padding: 0; border: 0; background: none; color: var(--red); font: 600 14px/1 var(--app-font); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 
-  /* Tableau : carte blanche (filet 1, coins 16) ; à gauche la colonne des critères, à droite les biens qui défilent. */
-  .cmpm-card { display: flex; align-items: flex-start; overflow: hidden; border: 1px solid var(--app-border); border-radius: 16px; background: #FFFFFF; }
-  .cmpm-criteria { flex: none; width: 96px; background: #FFFFFF; }
-  .cmpm-criteria-head { height: 186px; }
-  /* Critère : icône de 15, nom 11,5 medium sur deux lignes au plus ; filet de l'iPhone dessous (sauf « Notre analyse »). */
-  .cmpm-criterion {
-    display: flex; align-items: center; gap: 8px; box-sizing: border-box; height: 50px; padding: 0 2px 0 9px; color: var(--app-navy);
-    border-bottom: 0.5px solid rgba(60, 60, 67, 0.29);
-  }
-  .cmpm-criterion.is-analysis { border-bottom: 0; }
-  .cmpm-criterion .icon { flex: none; width: 15px; height: 15px; }
-  .cmpm-criterion span { display: -webkit-box; overflow: hidden; font: 500 11.5px/1.22 var(--app-font); -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: break-word; }
-  .cmpm-scroll { flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
-  .cmpm-scroll::-webkit-scrollbar { display: none; }
-  .cmpm-columns { display: flex; align-items: flex-start; gap: 8px; width: max-content; margin: 0; padding: 6px 8px; list-style: none; }
-  /* Colonne d'un bien : 128 (8 de marge de chaque côté), blanche au filet léger ; la référence en bleu pâle cerclée de
-     bleu (1,5). */
-  .cmpm-column { position: relative; flex: none; box-sizing: border-box; width: 128px; padding: 8px 8px 0; border-radius: 16px; background: #FFFFFF; }
-  .cmpm-column::before { content: ''; position: absolute; inset: 0; border: 1px solid rgba(236, 234, 230, 0.6); border-radius: inherit; pointer-events: none; }
-  .cmpm-column.is-reference { background: var(--app-brand-soft); }
-  .cmpm-column.is-reference::before { border: 1.5px solid var(--app-brand); }
-  /* En-tête de colonne (178) : photo de 96 (coins 12), étoile de la référence, croix de 26 (zone de 44), titre 13 gras
-     sur deux lignes, ville 12,5, « Référence » ou « Prendre en référence » 11,5 ; toucher l'en-tête ouvre la fiche. */
-  .cmpm-head { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; height: 178px; }
-  .cmpm-photo { position: relative; display: block; width: 100%; height: 96px; overflow: hidden; border-radius: 12px; background: var(--app-segment); }
-  .cmpm-photo .photo { width: 100%; height: 100%; object-fit: cover; }
-  .cmpm-photo .photo-empty { background: var(--app-segment); color: #CBC6BD; }
-  .cmpm-photo .photo-empty .icon { width: 26px; height: 26px; }
-  .cmpm-star { position: absolute; top: 6px; left: 6px; z-index: 2; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: var(--app-brand); color: #FFFFFF; }
-  .cmpm-star .icon { width: 12px; height: 12px; fill: currentColor; stroke-width: 2.4; }
-  .cmpm-remove {
-    position: absolute; top: 6px; right: 6px; z-index: 2; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px;
-    margin: 0; padding: 0; border: 0; border-radius: 50%; background: #FFFFFF; color: var(--app-navy); cursor: pointer; -webkit-tap-highlight-color: transparent;
-  }
-  .cmpm-remove::after { content: ''; position: absolute; inset: -9px; }
-  .cmpm-remove .icon { width: 13px; height: 13px; }
-  .cmpm-title { display: -webkit-box; margin: 0; overflow: hidden; color: var(--app-navy); font: 700 13px/16px var(--app-font); -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; }
-  .cmpm-title a { color: inherit; text-decoration: none; }
-  .cmpm-city { max-width: 100%; overflow: hidden; color: var(--app-text-secondary); font: 400 12.5px/15px var(--app-font); text-overflow: ellipsis; white-space: nowrap; }
-  .cmpm-reference { color: var(--app-brand); font: 700 11.5px/14px var(--app-font); }
-  .cmpm-make-reference {
-    position: relative; z-index: 2; margin: 0; padding: 0; border: 0; background: none; color: var(--app-brand); font: 600 11.5px/14px var(--app-font);
-    text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
-  }
-  /* Zone de toucher de 44 sans changer le dessin (n° 67). */
-  .cmpm-make-reference::after { content: ''; position: absolute; inset: -14px; }
-  .cmpm-values { margin: 0; }
-  .cmpm-values dd { margin: 0; }
-  /* Case (50) : valeur 13 gras, « est. » 10, « Non renseigné » 12 gris clair, écart 11 gras en pastille de 18. */
-  .cmpm-cell { display: flex; flex-direction: column; justify-content: center; box-sizing: border-box; height: 50px; padding: 0 4px; border-bottom: 0.5px solid rgba(60, 60, 67, 0.29); }
-  .cmpm-cell dd { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
-  .cmpm-value { display: flex; align-items: center; gap: 4px; max-width: 100%; min-width: 0; }
-  .cmpm-value-text { min-width: 0; overflow: hidden; color: var(--app-navy); font: 700 13px/16px var(--app-font); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
-  .cmpm-estimate { flex: none; color: var(--app-text-secondary); font: 600 10px/12px var(--app-font); }
-  .cmpm-missing { color: var(--app-text-muted); font: 400 12px/15px var(--app-font); }
-  .cmpm-energy { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 26px; height: 22px; border-radius: 6px; font: 700 13px/1 var(--app-font); }
-  .cmpm-delta { display: inline-flex; align-items: center; max-width: 100%; height: 18px; padding: 0 6px; box-sizing: border-box; overflow: hidden; border-radius: 999px; font: 700 11px/1 var(--app-font); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
-  .cmpm-delta.is-favorable { background: rgba(87, 121, 101, 0.1); color: var(--green); }
-  .cmpm-delta.is-unfavorable { background: rgba(192, 57, 43, 0.1); color: var(--red); }
-  .cmpm-delta.is-neutral { background: rgba(117, 128, 139, 0.1); color: var(--app-text-secondary); }
-  /* « Notre analyse » : notes de 11,5 sous 10, coche verte ou triangle rouge pleins de 11. */
-  .cmpm-analysis { box-sizing: border-box; padding: 10px 4px 0; }
-  .cmpm-notes { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
-  .cmpm-notes li { display: flex; align-items: flex-start; gap: 5px; color: var(--app-navy); font: 400 11.5px/14px var(--app-font); overflow-wrap: anywhere; }
-  .cmpm-notes .icon { flex: none; width: 11px; height: 11px; margin-top: 2px; }
-  .cmpm-notes .is-strength .icon { color: var(--green); }
-  .cmpm-notes .is-warning .icon { color: var(--red); }
-  .cmpm-notes .icon :first-child { fill: currentColor; }
-  .cmpm-notes .icon :not(:first-child) { stroke: #FFFFFF; }
-  .cmpm-no-gap { margin: 0; color: var(--app-text-secondary); font: 400 12px/15px var(--app-font); }
+/* Tableau : carte blanche (filet 1, coins 16) ; à gauche la colonne des critères, à droite les biens qui défilent. */
+.cmpm-card { display: flex; align-items: flex-start; overflow: hidden; border: 1px solid var(--app-border); border-radius: 16px; background: #FFFFFF; }
+.cmpm-criteria { flex: none; width: 96px; background: #FFFFFF; }
+.cmpm-criteria-head { height: 186px; }
+/* Critère : icône de 15, nom 11,5 medium sur deux lignes au plus ; filet de l'iPhone dessous (sauf « Notre analyse »). */
+.cmpm-criterion {
+  display: flex; align-items: center; gap: 8px; box-sizing: border-box; height: 50px; padding: 0 2px 0 9px; color: var(--app-navy);
+  border-bottom: 0.5px solid rgba(60, 60, 67, 0.29);
+}
+.cmpm-criterion.is-analysis { border-bottom: 0; }
+.cmpm-criterion .icon { flex: none; width: 15px; height: 15px; }
+.cmpm-criterion span { display: -webkit-box; overflow: hidden; font: 500 11.5px/1.22 var(--app-font); -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: break-word; }
+.cmpm-scroll { flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.cmpm-scroll::-webkit-scrollbar { display: none; }
+.cmpm-columns { display: flex; align-items: flex-start; gap: 8px; width: max-content; margin: 0; padding: 6px 8px; list-style: none; }
+/* Colonne d'un bien : 128 (8 de marge de chaque côté), blanche au filet léger ; la référence en bleu pâle cerclée de
+   bleu (1,5). */
+.cmpm-column { position: relative; flex: none; box-sizing: border-box; width: 128px; padding: 8px 8px 0; border-radius: 16px; background: #FFFFFF; }
+.cmpm-column::before { content: ''; position: absolute; inset: 0; border: 1px solid rgba(236, 234, 230, 0.6); border-radius: inherit; pointer-events: none; }
+.cmpm-column.is-reference { background: var(--app-brand-soft); }
+.cmpm-column.is-reference::before { border: 1.5px solid var(--app-brand); }
+/* En-tête de colonne (178) : photo de 96 (coins 12), étoile de la référence, croix de 26 (zone de 44), titre 13 gras
+   sur deux lignes, ville 12,5, « Référence » ou « Prendre en référence » 11,5 ; toucher l'en-tête ouvre la fiche. */
+.cmpm-head { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; height: 178px; }
+.cmpm-photo { position: relative; display: block; width: 100%; height: 96px; overflow: hidden; border-radius: 12px; background: var(--app-segment); }
+.cmpm-photo .photo { width: 100%; height: 100%; object-fit: cover; }
+.cmpm-photo .photo-empty { background: var(--app-segment); color: #CBC6BD; }
+.cmpm-photo .photo-empty .icon { width: 26px; height: 26px; }
+.cmpm-star { position: absolute; top: 6px; left: 6px; z-index: 2; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: var(--app-brand); color: #FFFFFF; }
+.cmpm-star .icon { width: 12px; height: 12px; fill: currentColor; stroke-width: 2.4; }
+.cmpm-remove {
+  position: absolute; top: 6px; right: 6px; z-index: 2; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px;
+  margin: 0; padding: 0; border: 0; border-radius: 50%; background: #FFFFFF; color: var(--app-navy); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.cmpm-remove::after { content: ''; position: absolute; inset: -9px; }
+.cmpm-remove .icon { width: 13px; height: 13px; }
+.cmpm-title { display: -webkit-box; margin: 0; overflow: hidden; color: var(--app-navy); font: 700 13px/16px var(--app-font); -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; }
+.cmpm-title a { color: inherit; text-decoration: none; }
+.cmpm-city { max-width: 100%; overflow: hidden; color: var(--app-text-secondary); font: 400 12.5px/15px var(--app-font); text-overflow: ellipsis; white-space: nowrap; }
+.cmpm-reference { color: var(--app-brand); font: 700 11.5px/14px var(--app-font); }
+.cmpm-make-reference {
+  position: relative; z-index: 2; margin: 0; padding: 0; border: 0; background: none; color: var(--app-brand); font: 600 11.5px/14px var(--app-font);
+  text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+/* Zone de toucher de 44 sans changer le dessin (n° 67). */
+.cmpm-make-reference::after { content: ''; position: absolute; inset: -14px; }
+.cmpm-values { margin: 0; }
+.cmpm-values dd { margin: 0; }
+/* Case (50) : valeur 13 gras, « est. » 10, « Non renseigné » 12 gris clair, écart 11 gras en pastille de 18. */
+.cmpm-cell { display: flex; flex-direction: column; justify-content: center; box-sizing: border-box; height: 50px; padding: 0 4px; border-bottom: 0.5px solid rgba(60, 60, 67, 0.29); }
+.cmpm-cell dd { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+.cmpm-value { display: flex; align-items: center; gap: 4px; max-width: 100%; min-width: 0; }
+.cmpm-value-text { min-width: 0; overflow: hidden; color: var(--app-navy); font: 700 13px/16px var(--app-font); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.cmpm-estimate { flex: none; color: var(--app-text-secondary); font: 600 10px/12px var(--app-font); }
+.cmpm-missing { color: var(--app-text-muted); font: 400 12px/15px var(--app-font); }
+.cmpm-energy { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 26px; height: 22px; border-radius: 6px; font: 700 13px/1 var(--app-font); }
+.cmpm-delta { display: inline-flex; align-items: center; max-width: 100%; height: 18px; padding: 0 6px; box-sizing: border-box; overflow: hidden; border-radius: 999px; font: 700 11px/1 var(--app-font); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.cmpm-delta.is-favorable { background: rgba(87, 121, 101, 0.1); color: var(--green); }
+.cmpm-delta.is-unfavorable { background: rgba(192, 57, 43, 0.1); color: var(--red); }
+.cmpm-delta.is-neutral { background: rgba(117, 128, 139, 0.1); color: var(--app-text-secondary); }
+/* « Notre analyse » : notes de 11,5 sous 10, coche verte ou triangle rouge pleins de 11. */
+.cmpm-analysis { box-sizing: border-box; padding: 10px 4px 0; }
+.cmpm-notes { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.cmpm-notes li { display: flex; align-items: flex-start; gap: 5px; color: var(--app-navy); font: 400 11.5px/14px var(--app-font); overflow-wrap: anywhere; }
+.cmpm-notes .icon { flex: none; width: 11px; height: 11px; margin-top: 2px; }
+.cmpm-notes .is-strength .icon { color: var(--green); }
+.cmpm-notes .is-warning .icon { color: var(--red); }
+.cmpm-notes .icon :first-child { fill: currentColor; }
+.cmpm-notes .icon :not(:first-child) { stroke: #FFFFFF; }
+.cmpm-no-gap { margin: 0; color: var(--app-text-secondary); font: 400 12px/15px var(--app-font); }
+
+/* Ordinateur (à partir de 1024 px) : l'en-tête et le tableau dans le grand conteneur (1180) ; les colonnes gardent leurs
+   128 et la carte la largeur du conteneur, comme l'app sur un grand écran. */
+@media (min-width: 1024px) {
+  .cmpm-header, .cmpm-content { width: 100%; max-width: var(--app-wide); margin-left: auto; margin-right: auto; }
 }

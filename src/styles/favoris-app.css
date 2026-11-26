@@ -114,7 +114,7 @@
 /* « Pas de connexion Internet » (n° 54) : 62 sous les onglets quand les favoris du compte n'ont pas été lus, 24 sous
    la recherche et les catégories quand leurs fiches ne l'ont pas été (padding .top 62 et Spacing.xl de l'app). */
 .fav-empty-place-favorites > .app-offline { padding: 0 24px; }
-.favorites-list > .app-offline, .dfav-list > .app-offline { grid-column: 1 / -1; padding: 24px 24px 0; }
+.favorites-list > .app-offline { grid-column: 1 / -1; padding: 24px 24px 0; }
 
 @media (prefers-reduced-motion: reduce) {
   .fav-tabs-pill { display: none; }
