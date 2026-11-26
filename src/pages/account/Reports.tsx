@@ -9,8 +9,7 @@ import {
 import { PUBLIC_STATUSES } from '../../lib/listings';
 import { listingPath } from '../../lib/paths';
 import { RoundButton } from '../../components/RoundButton';
-import { useDesktop } from '../../lib/desktop';
-import { ChoiceDialog, ScreenHead } from './DesktopParts';
+import { ChoiceDialog } from './DesktopParts';
 import { ScreenHeader, Spinner, Toast } from './parts';
 
 // « Signalements » (modération, 15 novembre 2026), pour les comptes modérateurs seulement : les signalements envoyés
@@ -140,29 +139,14 @@ export function Reports() {
 
   const asked = pending ? confirmation(pending.action, pending.name) : null;
   const reserved = state.status === 'reserved';
-  const desktop = useDesktop();
   const refresh = () => setReload((n) => n + 1);
 
   return (
-    <div className={desktop ? 'dsc dsc-reports-screen' : 'dsc dsc-reports-screen is-phone'}>
+    <div className="dsc dsc-reports-screen is-phone">
       <Toast text={toast} />
-      {desktop ? (
-        <ScreenHead
-          title="Signalements"
-          subtitle={reserved ? undefined : SUBTITLE}
-          action={!reserved && (
-            <button type="button" className="dsc-square" aria-label="Actualiser" onClick={refresh}>
-              <Icon name="rotateCcw" />
-            </button>
-          )}
-        />
-      ) : (
-        // Téléphone : l'en-tête de l'app et son bouton rond « Actualiser » (refresh-cw), puis la phrase de 13,5 grise.
-        <>
-          <ScreenHeader title="Signalements" action={!reserved && <RoundButton icon="refreshCw" label="Actualiser" onClick={refresh} />} />
-          {!reserved && <p className="reports-subtitle">{SUBTITLE}</p>}
-        </>
-      )}
+      {/* L'en-tête de l'app et son bouton rond « Actualiser » (refresh-cw), puis la phrase de 13,5 grise. */}
+      <ScreenHeader title="Signalements" action={!reserved && <RoundButton icon="refreshCw" label="Actualiser" onClick={refresh} />} />
+      {!reserved && <p className="reports-subtitle">{SUBTITLE}</p>}
       {!reserved && (
         <div className="dsc-tabs" role="tablist" aria-label="Signalements">
           <button type="button" role="tab" aria-selected={tab === 'open'} className="dsc-tab" onClick={() => setTab('open')}>

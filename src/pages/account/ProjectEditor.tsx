@@ -21,15 +21,13 @@ import { placeShortName, placeSuggestions } from '../../lib/places';
 import { draftFromProject } from '../../lib/projectSearch';
 import { knownCityCenter, OUTDOOR_LABELS, OUTDOOR_SPACES, paramsFromDraft, type OutdoorSpace } from '../../lib/search';
 import { HidesTabBar } from '../../components/HidesTabBar';
-import { useDesktop } from '../../lib/desktop';
-import { ChoiceDialog, ProgressRing, ScreenHead } from './DesktopParts';
+import { ChoiceDialog, ProgressRing } from './DesktopParts';
 import { AppSection, ScreenHeader, Spinner } from './parts';
 
-// « Mon projet immobilier » sur ordinateur (Features/Profile/ProjectEditorView.swift et
-// DesignSystem/Components/FormControls.swift), dans la colonne de 640 px : les quatre parcours aux critères propres,
-// le résumé qui suit la saisie, « Montrer mon projet à mes contacts » et l'avancement du projet. Comme l'app, tout
-// porte sur une copie, enregistrée d'un coup par « Enregistrer mon projet » (upsert de real_estate_projects,
-// lib/account/projectEditor).
+// « Mon projet immobilier » (Features/Profile/ProjectEditorView.swift et DesignSystem/Components/FormControls.swift),
+// la page de l'app sur toutes les largeurs : les quatre parcours aux critères propres, le résumé qui suit la saisie,
+// « Montrer mon projet à mes contacts » et l'avancement du projet. Comme l'app, tout porte sur une copie, enregistrée
+// d'un coup par « Enregistrer mon projet » (upsert de real_estate_projects, lib/account/projectEditor).
 
 const SCOPES: HotelScope[] = ['wallsAndBusiness', 'wallsOnly', 'businessOnly'];
 const KIND_ICONS = Object.fromEntries(SEARCH_MODES.map((mode) => [mode.mode, mode.icon])) as Record<ProjectKind, 'house' | 'key' | 'bars' | 'bed'>;
@@ -57,17 +55,9 @@ function offsetAfterSignificant(formatted: string, count: number): number {
   return formatted.length;
 }
 
-/** Carte titrée ; sur téléphone, la section de l'app (NidaloSection : libellé gris en capitales, puis la carte). */
+/** Carte titrée : la section de l'app (NidaloSection : libellé gris en capitales, puis la carte). */
 function CardSection({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
-  const id = useId();
-  const desktop = useDesktop();
-  if (!desktop) return <AppSection title={title} className={className ? `project-section ${className}` : 'project-section'}>{children}</AppSection>;
-  return (
-    <section className={`dsc-card ${className ?? ''}`} aria-labelledby={id}>
-      <h2 id={id} className="dsc-card-title">{title}</h2>
-      {children}
-    </section>
-  );
+  return <AppSection title={title} className={className ? `project-section ${className}` : 'project-section'}>{children}</AppSection>;
 }
 
 function FieldLabel({ children, id }: { children: ReactNode; id?: string }) {
@@ -526,7 +516,6 @@ function Editor({ saved }: { saved: Project }) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const stepsId = useId();
-  const desktop = useDesktop();
 
   const issues = projectIssues(draft.criteria, draft.kind);
   const hasIssues = Object.keys(issues).length > 0;
@@ -572,20 +561,14 @@ function Editor({ saved }: { saved: Project }) {
   const active = !isEmptyCriteria(saved.criteria) && <span className="dsc-active"><span aria-hidden="true" />Projet actif</span>;
 
   return (
-    <div className={desktop ? 'dsc dsc-project-screen' : 'dsc dsc-project-screen is-phone'}>
-      {desktop ? (
-        <ScreenHead title="Mon projet immobilier" subtitle={PROJECT_INTRO} onBack={leave}>{active}</ScreenHead>
-      ) : (
-        // Téléphone : la page de l'app (barre d'onglets masquée), retour qui demande « Enregistrer les modifications ? ».
-        <>
-          <HidesTabBar />
-          <ScreenHeader title="Mon projet immobilier" onBack={leave} />
-          <div className="project-intro">
-            <p>{PROJECT_INTRO}</p>
-            {active}
-          </div>
-        </>
-      )}
+    <div className="dsc dsc-project-screen is-phone">
+      {/* La page de l'app (barre d'onglets masquée), retour qui demande « Enregistrer les modifications ? ». */}
+      <HidesTabBar />
+      <ScreenHeader title="Mon projet immobilier" onBack={leave} />
+      <div className="project-intro">
+        <p>{PROJECT_INTRO}</p>
+        {active}
+      </div>
 
       <CardSection title="Votre projet">
         <div className="dsc-kinds">
@@ -707,20 +690,15 @@ function Editor({ saved }: { saved: Project }) {
 
 export function ProjectEditor() {
   const state = useStore(editableProjectStore);
-  const desktop = useDesktop();
   useEffect(() => {
     void loadEditableProject();
   }, []);
   if (state.status === 'ready') return <Editor saved={state.project} />;
   return (
-    <div className={desktop ? 'dsc dsc-project-screen' : 'dsc dsc-project-screen is-phone'}>
-      {desktop ? <ScreenHead title="Mon projet immobilier" subtitle={PROJECT_INTRO} /> : (
-        <>
-          <HidesTabBar />
-          <ScreenHeader title="Mon projet immobilier" />
-          <p className="project-intro">{PROJECT_INTRO}</p>
-        </>
-      )}
+    <div className="dsc dsc-project-screen is-phone">
+      <HidesTabBar />
+      <ScreenHeader title="Mon projet immobilier" />
+      <p className="project-intro">{PROJECT_INTRO}</p>
       {state.status === 'error' ? (
         // Projet illisible : rien n'est proposé à l'enregistrement, pour ne pas remplacer le projet du compte par un projet vide.
         <div className="dsc-empty">

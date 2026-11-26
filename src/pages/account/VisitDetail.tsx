@@ -7,12 +7,10 @@ import {
   acceptsReport, canContact, directionsUrl, displayStatus, isVideoVisit, noAddressNotice, routableAddress, STATUS_LABELS, visitDetails,
   type AgendaItem, type VisitDisplayStatus,
 } from '../../lib/account/agenda';
-import { useDesktop } from '../../lib/desktop';
 import { formatPrice } from '../../lib/format';
 import { visitDateLong } from '../../lib/listing/visits';
 import { formattedPhoneNumber } from '../../lib/messages/format';
 import { accountPath } from '../../lib/paths';
-import { ScreenHead } from './DesktopParts';
 import { Spinner } from './parts';
 
 // « Détail de la visite » (/compte/?vue=agenda&visite=…), comme l'app (Features/Visits/VisitDetailView.swift) : photo
@@ -68,20 +66,15 @@ export type VisitDetailActions = {
 export function VisitDetail({ item, load, onRetry, now, actions }: {
   item: AgendaItem | null; load: 'loading' | 'offline' | 'ready'; onRetry: () => void; now: Date; actions: VisitDetailActions;
 }) {
-  const desktop = useDesktop();
   const back = accountPath('agenda');
-  const header = desktop ? (
-    <ScreenHead title="Détail de la visite" back={back} action={item ? (
-      <button type="button" className="dsc-button" onClick={() => actions.iphone('Ajouter une note')}>Note</button>
-    ) : undefined} />
-  ) : (
+  const header = (
     <PageHeader title="Détail de la visite" back={back} history trailing={item ? (
       <button type="button" className="app-detail-note" onClick={() => actions.iphone('Ajouter une note')} aria-label="Ajouter une note">Note</button>
     ) : undefined} />
   );
   if (!item) {
     return (
-      <div className={desktop ? 'dsc app-request app-detail is-desktop' : 'app-request app-detail'}>
+      <div className="app-request app-detail">
         {header}
         {load === 'loading' ? <Spinner label="Chargement de la visite…" />
           : load === 'offline' ? <OfflineState onRetry={onRetry} />
@@ -97,7 +90,7 @@ export function VisitDetail({ item, load, onRetry, now, actions }: {
   const contact = [item.contactName ?? 'Non renseigné', details.contactPhone ? formattedPhoneNumber(details.contactPhone) : null].filter(Boolean).join(' · ');
   const report = acceptsReport(item, now) ? details.report : null;
   return (
-    <div className={desktop ? 'dsc app-request app-detail is-desktop' : 'app-request app-detail'}>
+    <div className="app-request app-detail">
       {header}
       <div className="app-detail-body">
         <div className="app-detail-photo" aria-hidden="true">

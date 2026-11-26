@@ -1,43 +1,39 @@
-/* Écrans de Mon compte communs à l'ordinateur et au téléphone (demande de Romain du 14 novembre 2026) : Notifications
-   (la cloche) et les écrans de la colonne (.dsc) : Mon agenda et Ajouter une visite, plus Mon projet et Biens consultés
-   (ordinateur seulement pour l'instant). Ces règles étaient réservées à l'ordinateur, dans ordinateur.css
-   (Notifications) et ordinateur-mon-espace.css (.dsc) ; elles valent maintenant à toutes les largeurs, dans le même
-   ordre : sur ordinateur, rien ne change à l'écran. En fin de fichier, les mesures du téléphone (moins de 1024 px),
-   prises sur l'app (VisitsAgendaView.swift, NotificationsView). */
+/* Écrans de Mon compte : Notifications (la cloche) et les écrans .dsc (Ajouter une visite, Mon projet, Signalements),
+   ceux du téléphone sur toutes les largeurs (à partir de 1024 px, dans la colonne de la page). Les mesures de l'app
+   (NotificationsView, VisitFormView.swift, ProjectEditorView.swift, ModerationReportsView) suivent les premières
+   mesures des écrans .dsc et l'emportent sur elles. Leurs cartes, champs et choix servent aussi à Publier. */
 
-/* Téléphone : les jetons de l'ordinateur (--d-…) que ces écrans utilisent, avec les valeurs de l'ordinateur (sur
-   ordinateur, ils viennent de :root dans ordinateur.css). Les fenêtres (.dsc-dialog, .dsc-picker), Mon agenda, Mes
-   recherches et Mes annonces (leur menu « … ») les reçoivent aussi. */
-@media (max-width: 1023.98px) {
-  :is(.dsc, .dsc-dialog, .dsc-picker, .notifications-screen, .app-agenda, .saved-searches-screen, .my-listings-screen) {
-    --d-bg: #FAF9F6;
-    --d-text: #242D38;
-    --d-grey: #75808B;
-    --d-help: #9AA2AA;
-    --d-icon: #5B6571;
-    --d-chevron: #A7AEB5;
-    --d-card-border: #ECEAE6;
-    --d-separator: #F2F0EC;
-    --d-field-border: #E3E0DA;
-    --d-blue: #3C5CB0;
-    --d-blue-hover: #2F4A92;
-    --d-blue-light: #EEF2FA;
-    --d-blue-line: #C9D3EE;
-    --d-green: #577965;
-    --d-green-pill: #E9F0E8;
-    --d-green-text: #3F6650;
-    --d-red: #C0392B;
-    --d-hover: #F4F2EE;
-    --d-card-radius: 18px;
-    --d-card-hover-shadow: 0 10px 28px rgba(36, 45, 56, 0.08);
-    --d-button-height: 44px;
-    --d-button-radius: 12px;
-  }
+/* Les jetons (--d-…) que ces écrans utilisent, sur toutes les largeurs (les valeurs de :root dans ordinateur.css). La
+   fenêtre « Bien concerné » (.dsc-picker), Mon agenda, Mes recherches et Mes annonces (leur menu « … ») les reçoivent
+   aussi. */
+:is(.dsc, .dsc-picker, .notifications-screen, .app-agenda, .saved-searches-screen, .my-listings-screen) {
+  --d-bg: #FAF9F6;
+  --d-text: #242D38;
+  --d-grey: #75808B;
+  --d-help: #9AA2AA;
+  --d-icon: #5B6571;
+  --d-chevron: #A7AEB5;
+  --d-card-border: #ECEAE6;
+  --d-separator: #F2F0EC;
+  --d-field-border: #E3E0DA;
+  --d-blue: #3C5CB0;
+  --d-blue-hover: #2F4A92;
+  --d-blue-light: #EEF2FA;
+  --d-blue-line: #C9D3EE;
+  --d-green: #577965;
+  --d-green-pill: #E9F0E8;
+  --d-green-text: #3F6650;
+  --d-red: #C0392B;
+  --d-hover: #F4F2EE;
+  --d-card-radius: 18px;
+  --d-card-hover-shadow: 0 10px 28px rgba(36, 45, 56, 0.08);
+  --d-button-height: 44px;
+  --d-button-radius: 12px;
 }
 
-/* ——— Écrans de la colonne de 640 px (.dsc) : Mon agenda, Ajouter une visite, Mon projet, Biens consultés ———
-   Les contrôles partagés avec le téléphone (pastilles, champs, interrupteurs) prennent les couleurs de l'ordinateur
-   par leurs variables, redéfinies ici. */
+/* ——— Écrans .dsc : Ajouter une visite, Mon projet, Signalements ———
+   Les contrôles partagés (pastilles, champs, interrupteurs) prennent les couleurs de ces écrans par leurs variables,
+   redéfinies ici. */
 .dsc {
   --blue: var(--d-blue);
   --blue-press: var(--d-blue-hover);
@@ -122,35 +118,13 @@
 .dsc-menu-list button.is-danger { color: var(--d-red); }
 .dsc-menu-list .icon { flex: none; width: 17px; height: 17px; }
 
-/* Onglets avec leur nombre et bouton carré (Signalements) ; Mon agenda a ceux de l'app (agenda-app.css) */
+/* Onglets avec leur nombre (Signalements) ; Mon agenda a ceux de l'app (agenda-app.css) */
 .dsc-tabs { flex: 1; min-width: 0; display: flex; padding: 3px; border: 1px solid var(--d-card-border); border-radius: 999px; background: #FFFFFF; }
 .dsc-tab { flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 38px; padding: 0 10px; border: 0; border-radius: 999px; background: transparent; color: var(--d-text); font-size: 15px; font-weight: 500; white-space: nowrap; cursor: pointer; }
 .dsc-tab:hover { background: var(--d-hover); }
 .dsc-tab[aria-selected="true"] { background: var(--d-blue); color: #FFFFFF; font-weight: 700; }
 .dsc-tab-count { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: #F2F0EC; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .dsc-tab[aria-selected="true"] .dsc-tab-count { background: rgba(255, 255, 255, 0.22); }
-.dsc-square { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; border: 1px solid var(--d-card-border); border-radius: 12px; background: #FFFFFF; color: var(--d-blue); }
-.dsc-square:hover { background: var(--d-hover); }
-.dsc-square .icon { width: 20px; height: 20px; }
-
-/* Biens consultés : lignes reliées par des filets, « Retirer » à droite */
-.dsc-viewed-list { margin: 0; padding: 0; list-style: none; overflow: hidden; border: 1px solid var(--d-card-border); border-radius: var(--d-card-radius); background: #FFFFFF; }
-.dsc-viewed { display: flex; align-items: center; gap: 8px; padding-right: 14px; }
-.dsc-viewed + .dsc-viewed { border-top: 1px solid var(--d-separator); }
-.dsc-viewed-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; padding: 12px 14px; color: var(--d-text); text-decoration: none; }
-.dsc-viewed-link:hover .dsc-viewed-title { color: var(--d-blue); }
-.dsc-viewed-photo { width: 88px; height: 66px; }
-.dsc-viewed-photo.is-faded img { opacity: 0.55; }
-.dsc-viewed-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.dsc-viewed-title { overflow: hidden; font-size: 15px; font-weight: 600; line-height: 21px; text-overflow: ellipsis; white-space: nowrap; }
-.dsc-viewed-line { color: var(--d-grey); font-size: 13.5px; line-height: 19px; }
-.dsc-viewed-price { display: flex; align-items: baseline; gap: 4px; font-size: 15px; line-height: 21px; }
-.dsc-viewed-price strong { font-weight: 700; }
-.dsc-viewed-month { color: var(--d-grey); font-size: 13px; }
-.dsc-viewed-status { margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #F2F0EC; color: var(--d-grey); font-size: 12px; font-weight: 600; }
-.dsc-viewed-remove { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: none; color: var(--d-grey); font-size: 14px; font-weight: 600; cursor: pointer; }
-.dsc-viewed-remove:hover { background: var(--d-hover); color: var(--d-text); }
-.dsc-viewed-remove .icon { width: 16px; height: 16px; }
 
 /* Formulaires (Nouvelle visite, Mon projet) : champs, pastilles et interrupteurs du téléphone à la taille de l'ordinateur */
 .dsc .field-label, .dsc .number-field label, .dsc-label, .dsc-field label, .dsc-inline-field label { color: var(--d-grey); font-size: 14px; font-weight: 600; }
@@ -373,82 +347,78 @@
   .notification-row:hover { background: #FAF9F7; }
 }
 
-/* ——— Téléphone (moins de 1024 px) : les mêmes écrans, aux mesures de l'app ——— */
+/* ——— Les mêmes écrans aux mesures de l'app (celles du téléphone), sur toutes les largeurs ——— */
+/* En-tête : retour rond de 42 px comme les autres écrans du téléphone, titre plus petit */
+.dsc { gap: 14px; padding: 4px 0 32px; }
+.dsc-head { gap: 12px; margin-bottom: 2px; }
+.dsc-back { width: 42px; height: 42px; }
+.dsc-titles { gap: 2px; padding-top: 6px; }
+.dsc-titles h1 { font-size: 22px; line-height: 28px; }
+.dsc-titles p { font-size: 14px; line-height: 20px; }
+
+/* Onglets avec leur nombre (Signalements) */
+.dsc-tab { gap: 5px; height: 36px; padding: 0 6px; font-size: 14px; }
+.dsc-tab-count { min-width: 20px; height: 20px; padding: 0 5px; font-size: 11.5px; }
+
+/* Cartes, formulaires et fenêtres */
+.dsc-card { padding: 16px; }
+.dsc-empty { padding: 32px 18px; }
+/* Signalements : les gestes remplissent leur ligne (souvent un par ligne), centrés. */
+.dsc-report-actions .dsc-small { flex: 1 1 auto; justify-content: center; }
+.dsc-input-auto { min-width: 0; width: 180px; max-width: 62%; }
+.dsc-menu-list { min-width: 220px; scroll-margin: 12px 0; }
+/* Sous 1024 px, 16 px de chaque côté : la largeur maximale d'une fenêtre de Chrome (100 % - 38 px) est remplacée. */
 @media (max-width: 1023.98px) {
-  /* En-tête : retour rond de 42 px comme les autres écrans du téléphone, titre plus petit */
-  .dsc { gap: 14px; padding: 4px 0 32px; }
-  .dsc-head { gap: 12px; margin-bottom: 2px; }
-  .dsc-back { width: 42px; height: 42px; }
-  .dsc-titles { gap: 2px; padding-top: 6px; }
-  .dsc-titles h1 { font-size: 22px; line-height: 28px; }
-  .dsc-titles p { font-size: 14px; line-height: 20px; }
-
-  /* Onglets avec leur nombre et bouton carré (Signalements) */
-  .dsc-tab { gap: 5px; height: 36px; padding: 0 6px; font-size: 14px; }
-  .dsc-tab-count { min-width: 20px; height: 20px; padding: 0 5px; font-size: 11.5px; }
-  .dsc-square { width: 44px; height: 44px; }
-
-  /* Cartes, formulaires et fenêtres */
-  .dsc-card { padding: 16px; }
-  .dsc-empty { padding: 32px 18px; }
-  /* Signalements : les gestes remplissent leur ligne (souvent un par ligne), centrés. */
-  .dsc-report-actions .dsc-small { flex: 1 1 auto; justify-content: center; }
-  .dsc-input-auto { min-width: 0; width: 180px; max-width: 62%; }
-  .dsc-menu-list { min-width: 220px; scroll-margin: 12px 0; }
-  /* 16 px de chaque côté : la largeur maximale d'une fenêtre de Chrome (100 % - 38 px) est remplacée. */
   .dsc-picker { width: calc(100% - 32px); max-width: calc(100% - 32px); max-height: calc(100dvh - 48px); }
   .dsc-picker-body { padding: 16px; }
-
-  /* Au-dessus de la barre d'onglets quand la page défile pour montrer un menu « … ». */
-  .dsc-menu-list { scroll-margin-bottom: calc(var(--tabbar-height) + var(--tabbar-bottom) + 12px); }
 }
 
-/* ——— Mon projet immobilier sur téléphone (ProjectEditorView.swift) ———
+/* Au-dessus de la barre d'onglets quand la page défile pour montrer un menu « … ». */
+.dsc-menu-list { scroll-margin-bottom: calc(var(--tabbar-height) + var(--tabbar-bottom) + 12px); }
+
+/* ——— Mon projet immobilier (ProjectEditorView.swift), sur toutes les largeurs ———
    Phrase d'intro de 13 medium grise et pastille « Projet actif » (12 gras vert, 26 de haut) sous l'en-tête ; sections
    de l'app (libellé gris en capitales, carte de 22 à l'ombre, marges 16) ; tuiles de parcours (coins 16, marges 12,
    icône de 20 dans un cadre de 34, titre 15 très gras, sous-titre 12) ; barre d'actions blanche collée en bas avec son
    ombre, « Réinitialiser » (150 au plus) et « Enregistrer mon projet » de 56, coins 18. */
-@media (max-width: 1023.98px) {
-  .dsc-project-screen.is-phone { gap: 14px; padding: 0; font-family: var(--app-font); }
-  .dsc-project-screen.is-phone > .screen-header { margin-bottom: -6px; }
-  .project-intro { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin: 0; padding-top: 4px; }
-  .project-intro, .project-intro p { color: var(--app-text-secondary); font: 500 13px/1.4 var(--app-font); }
-  .project-intro p { margin: 0; }
-  .dsc-project-screen.is-phone .dsc-active { height: 26px; margin-top: 4px; padding: 0 10px; background: #E9F0E8; color: #577965; font: 700 12px/1 var(--app-font); }
-  .dsc-project-screen.is-phone .dsc-card { gap: 14px; padding: 16px; border-color: #ECEAE6; border-radius: 22px; box-shadow: var(--shadow); }
-  .dsc-project-screen.is-phone .dsc-card-title { font: 700 16px/1.3 var(--app-font); }
-  .dsc-project-screen.is-phone .dsc-kinds { gap: 10px; }
-  .dsc-project-screen.is-phone .dsc-kind { gap: 8px; padding: 12px; border-color: #ECEAE6; }
-  .dsc-project-screen.is-phone .dsc-kind[aria-pressed="true"] { padding: 11.5px; }
-  .dsc-project-screen.is-phone .dsc-kind > .icon { width: 20px; height: 20px; margin: 7px; color: #5B6571; }
-  .dsc-project-screen.is-phone .dsc-kind-title { font: 800 15px/1.25 var(--app-font); }
-  .dsc-project-screen.is-phone .dsc-kind-subtitle { font: 500 12px/1.35 var(--app-font); }
-  .dsc-project-screen.is-phone .dsc-kind-check { top: 8px; right: 8px; width: 20px; height: 20px; }
-  .dsc-project-screen.is-phone .dsc-summary-row dt { font: 500 12.5px/1.3 var(--app-font); }
-  .dsc-project-screen.is-phone .dsc-summary-row dd { font: 700 13px/1.3 var(--app-font); }
-  .dsc-project-screen.is-phone .dsc-note { font: 400 12.5px/1.45 var(--app-font); }
-  .dsc-project-screen.is-phone .dsc-steps-count { font: 700 13px/1 var(--app-font); }
-  .dsc-project-screen.is-phone .dsc-action-bar { margin: 4px -16px 0; padding: 10px 16px calc(6px + env(safe-area-inset-bottom)); border-top: 0; background: #FFFFFF; box-shadow: 0 -2px 10px rgba(36, 45, 56, 0.06); }
-  .dsc-project-screen.is-phone .dsc-action-message { color: var(--d-red); font: 600 13px/1.35 var(--app-font); text-align: center; }
-  .dsc-project-screen.is-phone .dsc-text-button { font: 700 14px/1.2 var(--app-font); }
-  /* Le libellé rapetisse sur un écran étroit, comme minimumScaleFactor(0.75) de l'app (16 au plus, 13 au moins). */
-  .dsc-project-screen.is-phone .dsc-action-buttons { grid-template-columns: minmax(0, 132px) minmax(0, 1fr); }
-  .dsc-project-screen.is-phone .dsc-action-buttons .dsc-button { gap: 6px; height: 56px; padding: 0 12px; overflow: hidden; border-radius: 18px; font: 700 clamp(13px, 3.6vw, 16px)/1 var(--app-font); white-space: nowrap; }
-  /* Anneau « Projet complété » (le même que sur ordinateur). */
-  .dsc-project-screen.is-phone .dsp-ring { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; }
-  .dsc-project-screen.is-phone .dsp-ring svg { position: absolute; inset: 0; }
-  .dsc-project-screen.is-phone .dsp-ring-track { stroke: #EEEBE6; }
-  .dsc-project-screen.is-phone .dsp-ring-value { stroke: var(--d-blue); }
-  .dsc-project-screen.is-phone .dsp-ring-label { position: relative; color: var(--d-text); font: 700 14px/1 var(--app-font); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .dsc-project-screen.is-phone .dsc-summary { gap: 14px; }
-  .dsc-project-screen.is-phone .dsc-summary-ring { font: 500 11px/1.2 var(--app-font); }
-}
+.dsc-project-screen.is-phone { gap: 14px; padding: 0; font-family: var(--app-font); }
+.dsc-project-screen.is-phone > .screen-header { margin-bottom: -6px; }
+.project-intro { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin: 0; padding-top: 4px; }
+.project-intro, .project-intro p { color: var(--app-text-secondary); font: 500 13px/1.4 var(--app-font); }
+.project-intro p { margin: 0; }
+.dsc-project-screen.is-phone .dsc-active { height: 26px; margin-top: 4px; padding: 0 10px; background: #E9F0E8; color: #577965; font: 700 12px/1 var(--app-font); }
+.dsc-project-screen.is-phone .dsc-card { gap: 14px; padding: 16px; border-color: #ECEAE6; border-radius: 22px; box-shadow: var(--shadow); }
+.dsc-project-screen.is-phone .dsc-card-title { font: 700 16px/1.3 var(--app-font); }
+.dsc-project-screen.is-phone .dsc-kinds { gap: 10px; }
+.dsc-project-screen.is-phone .dsc-kind { gap: 8px; padding: 12px; border-color: #ECEAE6; }
+.dsc-project-screen.is-phone .dsc-kind[aria-pressed="true"] { padding: 11.5px; }
+.dsc-project-screen.is-phone .dsc-kind > .icon { width: 20px; height: 20px; margin: 7px; color: #5B6571; }
+.dsc-project-screen.is-phone .dsc-kind-title { font: 800 15px/1.25 var(--app-font); }
+.dsc-project-screen.is-phone .dsc-kind-subtitle { font: 500 12px/1.35 var(--app-font); }
+.dsc-project-screen.is-phone .dsc-kind-check { top: 8px; right: 8px; width: 20px; height: 20px; }
+.dsc-project-screen.is-phone .dsc-summary-row dt { font: 500 12.5px/1.3 var(--app-font); }
+.dsc-project-screen.is-phone .dsc-summary-row dd { font: 700 13px/1.3 var(--app-font); }
+.dsc-project-screen.is-phone .dsc-note { font: 400 12.5px/1.45 var(--app-font); }
+.dsc-project-screen.is-phone .dsc-steps-count { font: 700 13px/1 var(--app-font); }
+.dsc-project-screen.is-phone .dsc-action-bar { margin: 4px -16px 0; padding: 10px 16px calc(6px + env(safe-area-inset-bottom)); border-top: 0; background: #FFFFFF; box-shadow: 0 -2px 10px rgba(36, 45, 56, 0.06); }
+.dsc-project-screen.is-phone .dsc-action-message { color: var(--d-red); font: 600 13px/1.35 var(--app-font); text-align: center; }
+.dsc-project-screen.is-phone .dsc-text-button { font: 700 14px/1.2 var(--app-font); }
+/* Le libellé rapetisse sur un écran étroit, comme minimumScaleFactor(0.75) de l'app (16 au plus, 13 au moins). */
+.dsc-project-screen.is-phone .dsc-action-buttons { grid-template-columns: minmax(0, 132px) minmax(0, 1fr); }
+.dsc-project-screen.is-phone .dsc-action-buttons .dsc-button { gap: 6px; height: 56px; padding: 0 12px; overflow: hidden; border-radius: 18px; font: 700 clamp(13px, 3.6vw, 16px)/1 var(--app-font); white-space: nowrap; }
+/* Anneau « Projet complété » (ProgressRing). */
+.dsc-project-screen.is-phone .dsp-ring { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; }
+.dsc-project-screen.is-phone .dsp-ring svg { position: absolute; inset: 0; }
+.dsc-project-screen.is-phone .dsp-ring-track { stroke: #EEEBE6; }
+.dsc-project-screen.is-phone .dsp-ring-value { stroke: var(--d-blue); }
+.dsc-project-screen.is-phone .dsp-ring-label { position: relative; color: var(--d-text); font: 700 14px/1 var(--app-font); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dsc-project-screen.is-phone .dsc-summary { gap: 14px; }
+.dsc-project-screen.is-phone .dsc-summary-ring { font: 500 11px/1.2 var(--app-font); }
 
-/* Signalements sur téléphone (ModerationReportsView) : en-tête de l'app, phrase de 13,5 grise sous le titre. */
-@media (max-width: 1023.98px) {
-  .dsc-reports-screen.is-phone > .screen-header { margin-bottom: -6px; }
-  .reports-subtitle { margin: 0; color: var(--app-text-secondary); font: 400 13.5px/1.4 var(--app-font); }
-}
+/* Signalements (ModerationReportsView), sur toutes les largeurs : en-tête de l'app, phrase de 13,5 grise sous le
+   titre. */
+.dsc-reports-screen.is-phone > .screen-header { margin-bottom: -6px; }
+.reports-subtitle { margin: 0; color: var(--app-text-secondary); font: 400 13.5px/1.4 var(--app-font); }
 
 /* « Bien concerné » d'une nouvelle visite sur téléphone (VisitListingPicker, domiaSheet) : feuille posée en bas, coins
    du haut arrondis, presque toute la hauteur, qui monte comme les autres feuilles ; titre centré de 17 semibold et
