@@ -14,19 +14,18 @@ import {
   visitShareText, visitSlotCount, visitTimeRange, type AgendaItem, type VisitDisplayStatus, type VisitSession, type VisitTab,
 } from '../../lib/account/agenda';
 import { useSession, useStore } from '../../lib/account/session';
-import { useDesktop } from '../../lib/desktop';
 import { openListingConversation } from '../../lib/listing/conversation';
 import { visitDateLong } from '../../lib/listing/visits';
 import { accountPath, conversationPath, PATHS, visitRequestPath } from '../../lib/paths';
 import { useFitTexts } from '../listing/fitText';
-import { ActionMenu, ChoiceDialog, IphoneOnlyDialog, ScreenHead, type MenuItem } from './DesktopParts';
+import { ActionMenu, ChoiceDialog, IphoneOnlyDialog, type MenuItem } from './DesktopParts';
 import { Spinner } from './parts';
 import { VisitDetail } from './VisitDetail';
 import '../../styles/agenda-app.css';
 
-// « Mon agenda », comme l'app (Features/Visits/VisitsAgendaView.swift) : sur téléphone, son écran (retour rond, « + »,
-// grand titre, onglets sur la piste grise, visites groupées par période, cartes avec le bloc date) ; sur ordinateur, la
-// mise en page du site (en-tête, onglets et « + » sur une ligne) avec ces pièces. Itinéraire (Plans, sauf en visio),
+// « Mon agenda », comme l'app (Features/Visits/VisitsAgendaView.swift) : son écran sur toutes les largeurs (retour
+// rond, « + », grand titre, onglets sur la piste grise, visites groupées par période, cartes avec le bloc date).
+// Itinéraire (Plans, sauf en visio),
 // Message (la conversation liée ; pour une demande reçue, celle déjà ouverte avec le demandeur ; sinon une conversation
 // avec le vendeur) et le menu « … ». Les visites viennent de agenda_visits, les demandes de visite pas encore acceptées
 // de my_visit_requests, les créneaux ouverts de my_visit_sessions (lib/account/agenda). Toucher une visite ouvre son
@@ -181,7 +180,6 @@ export function AgendaScreen() {
   const state = useStore(agendaStore);
   const sessionsState = useStore(visitSessionsStore);
   const session = useSession();
-  const desktop = useDesktop();
   const me = session.status === 'signedIn' ? session.userId : null;
   const [tab, setTab] = useState<VisitTab>('upcoming');
   const [notice, setNotice] = useState<string | null>(null);
@@ -366,22 +364,13 @@ export function AgendaScreen() {
 
   const tabs = <AgendaTabs tab={tab} counts={counts} onChange={setTab} />;
   return (
-    <div className={desktop ? 'dsc app-agenda is-desktop' : 'app-agenda'}>
-      {desktop ? (
-        <>
-          <ScreenHead title="Agenda des visites" subtitle="Toutes vos visites à venir et passées." />
-          <div className="app-agenda-bar">{tabs}<AddVisitButton href={addPath} /></div>
-        </>
-      ) : (
-        <>
-          <div className="app-agenda-top">
-            <RoundButton icon="arrowLeft" label="Retour" href={PATHS.account} />
-            <AddVisitButton href={addPath} />
-          </div>
-          <LargeHeader className="app-agenda-header" title="Agenda des visites" subtitle="Toutes vos visites à venir et passées." />
-          {tabs}
-        </>
-      )}
+    <div className="app-agenda">
+      <div className="app-agenda-top">
+        <RoundButton icon="arrowLeft" label="Retour" href={PATHS.account} />
+        <AddVisitButton href={addPath} />
+      </div>
+      <LargeHeader className="app-agenda-header" title="Agenda des visites" subtitle="Toutes vos visites à venir et passées." />
+      {tabs}
       <div className="app-agenda-panel" role="tabpanel" aria-label={TAB_TITLES[tab]}>{content}</div>
       {dialogs}
     </div>

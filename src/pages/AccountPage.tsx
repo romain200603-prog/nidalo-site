@@ -7,12 +7,10 @@ import { PATHS } from '../lib/paths';
 import { accountStore, loadAccount } from '../lib/account/profile';
 import { cleanToken, invitationPath, pendingInvitation, rememberInvitation } from '../lib/account/team';
 import { recoveryStore, useSession, useStore } from '../lib/account/session';
-import { useDesktop } from '../lib/desktop';
 import { AddVisit } from './account/AddVisit';
 import { AgencyProfile } from './account/AgencyProfile';
 import { AgendaScreen } from './account/Agenda';
 import { Contacts } from './account/Contacts';
-import { DesktopSpace } from './account/DesktopSpace';
 import { Diffusion } from './account/Diffusion';
 import { Hub } from './account/Hub';
 import { Mandates } from './account/Mandates';
@@ -92,7 +90,6 @@ function AccountContent() {
   const recovery = useStore(recoveryStore);
   const account = useStore(accountStore);
   const link = useEmailLink();
-  const desktop = useDesktop();
   const [, refresh] = useState(0);
   const params = new URLSearchParams(window.location.search);
   const view = params.get('vue');
@@ -163,16 +160,16 @@ function AccountContent() {
     case 'preferences': return <PreferencesScreen />;
     // « Mes visites » (professionnel) : toutes les demandes de visite envoyées et reçues, en trois onglets.
     case 'visites': return <><HidesTabBar /><ListingRequestsScreen listingId={null} me={current.profile.id} onClose={() => window.location.assign(PATHS.account)} /></>;
-    // Notifications, Mon agenda et Ajouter une visite : les écrans de l'app, sur ordinateur et sur téléphone.
+    // Notifications, Mon agenda et Ajouter une visite : les écrans de l'app.
     case 'notifications': return <NotificationsScreen signedIn />;
     case 'agenda': return <AgendaScreen />;
     case 'ajouter-visite': return <AddVisit fromAgenda={params.get('depuis') === 'agenda'} />;
-    // Mon projet et Biens consultés : les écrans de l'app, sur téléphone et sur ordinateur.
+    // Mon projet et Biens consultés : les écrans de l'app.
     case 'projet': return <ProjectEditor />;
     case 'consultes': return <ViewedListings />;
     case 'demande-visite': return <VisitRequestDetail requestId={params.get('id')} />;
     case 'bientot': return <SoonScreen screen={params.get('ecran')} />;
-    // Profil agence : la page de l'agence et son formulaire, sur téléphone et sur ordinateur.
+    // Profil agence : la page de l'agence et son formulaire.
     case 'agence': return <AgencyProfile account={current} editing={params.get('ecran') === 'modifier'} />;
     // Outils de diffusion : lien, QR code, texte et affiche de vitrine (format A4) de chaque annonce en ligne.
     case 'diffusion': return <Diffusion />;
@@ -190,15 +187,15 @@ function AccountContent() {
     case 'equipes': return <Team screen={params.get('ecran')} invitation={null} />;
     // Signalements : la modération de Nidalo (le serveur réserve la page aux comptes modérateurs).
     case 'signalements': return <Reports />;
-    // Ordinateur : Mon espace de la maquette 5 pour un compte particulier ; l'espace professionnel garde son écran.
-    default: return desktop && current.profile.account_type !== 'professional' ? <DesktopSpace account={current} /> : <Hub account={current} />;
+    // Mon espace ou l'Espace professionnel de l'app, sur toutes les largeurs.
+    default: return <Hub account={current} />;
   }
 }
 
 export function AccountPage() {
   return (
     <Page section="account">
-      <div className="wrap account-wrap">
+      <div className="wrap account-wrap account-page">
         <AccountContent />
       </div>
     </Page>

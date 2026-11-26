@@ -7,7 +7,6 @@ import {
   agendaStore, CONVERSATION_NOT_FOUND, findExistingConversation, loadAgenda, visitEnd, type AgendaRequestRow,
 } from '../../lib/account/agenda';
 import { useSession, useStore } from '../../lib/account/session';
-import { useDesktop } from '../../lib/desktop';
 import { formatPrice } from '../../lib/format';
 import { openListingConversation } from '../../lib/listing/conversation';
 import {
@@ -23,7 +22,6 @@ import { photoUrl } from '../../lib/listings';
 import { acceptVisitRequest, proposeVisitSlots } from '../../lib/messages/visitRequests';
 import { accountPath, conversationPath, listingPath, visitRequestPath } from '../../lib/paths';
 import { AlertDialog } from '../listing/Dialogs';
-import { ScreenHead } from './DesktopParts';
 import { Spinner } from './parts';
 import '../../styles/agenda-app.css';
 
@@ -32,8 +30,8 @@ import '../../styles/agenda-app.css';
 // (chevauchement signalé), le message, les demandes liées, puis « Proposer une autre date » (après un refus, le
 // formulaire de la fiche), « Proposer d'autres créneaux », « Refuser » (motif facultatif), « Annuler », « Écrire à … » et
 // l'historique. Les réponses partent avec les fonctions de l'app (accept_visit_request, decline_visit_request,
-// propose_visit_slots, cancel_visit_request), puis la demande est relue. Sur téléphone, l'écran de l'app (retour rond,
-// titre centré) ; sur ordinateur, la colonne de Mon compte avec les mêmes pièces.
+// propose_visit_slots, cancel_visit_request), puis la demande est relue. L'écran de l'app (retour rond, titre centré)
+// sur toutes les largeurs.
 
 const TONES: Record<VisitRequestDisplayStatus, string> = {
   accepted: 'green', pending: 'amber', counterProposed: 'blue', declined: 'red', cancelled: 'red', past: 'gray',
@@ -108,7 +106,6 @@ function ProposeSlots({ request, busy, sending, onClose, onSend }: {
   onClose: () => void;
   onSend: (starts: Date[]) => void;
 }) {
-  const desktop = useDesktop();
   const [drafts, setDrafts] = useState<SlotDraft[]>(() => [suggestedSlot(new Date())]);
   const [error, setError] = useState<string | null>(null);
   const title = request.status === 'accepted' ? 'Proposer un autre créneau' : 'Proposer d\'autres créneaux';
@@ -122,8 +119,8 @@ function ProposeSlots({ request, busy, sending, onClose, onSend }: {
     onSend(starts as Date[]);
   };
   return (
-    <div className={desktop ? 'dsc app-request is-desktop' : 'app-request'}>
-      {desktop ? <ScreenHead title={title} onBack={onClose} /> : <PageHeader title={title} onBack={onClose} />}
+    <div className="app-request">
+      <PageHeader title={title} onBack={onClose} />
       <div className="app-request-body">
         {request.status === 'accepted' && (
           <p className="app-request-note">La visite reste confirmée sur son créneau actuel tant que l'autre personne n'a pas accepté le nouveau.</p>
@@ -159,7 +156,6 @@ function ProposeSlots({ request, busy, sending, onClose, onSend }: {
 export function VisitRequestDetail({ requestId }: { requestId: string | null }) {
   const state = useStore(agendaStore);
   const session = useSession();
-  const desktop = useDesktop();
   const me = session.status === 'signedIn' ? session.userId : null;
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -217,9 +213,7 @@ export function VisitRequestDetail({ requestId }: { requestId: string | null }) 
     else setMissingConversation(true);
   }
 
-  const header = desktop
-    ? <ScreenHead title="Demande de visite" back={back} />
-    : <PageHeader title="Demande de visite" back={back} history />;
+  const header = <PageHeader title="Demande de visite" back={back} history />;
 
   let content;
   if (!request && (state.status === 'loading' || state.status === 'none')) {
@@ -387,7 +381,7 @@ export function VisitRequestDetail({ requestId }: { requestId: string | null }) 
 
   const confirmed = request?.accepted_slot != null;
   return (
-    <div className={desktop ? 'dsc app-request is-desktop' : 'app-request'}>
+    <div className="app-request">
       {/* Comme l'app (hidesTabBar) : l'écran d'une demande masque la barre d'onglets. */}
       <HidesTabBar />
       {header}

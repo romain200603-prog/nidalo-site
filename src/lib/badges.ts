@@ -218,8 +218,8 @@ export function startLiveBadges(): () => void {
 }
 
 /**
- * Sur téléphone, l'écran Notifications seul (pas de barre du haut ni de pastilles) : il lit et suit seulement les
- * notifications, comme NotificationsView de l'app, et les relit quand l'onglet redevient visible.
+ * L'écran Notifications, sur toutes les largeurs : il lit et suit seulement les notifications, comme NotificationsView
+ * de l'app, et les relit quand l'onglet redevient visible.
  */
 export function startLiveNotifications(): () => void {
   void loadNotifications();

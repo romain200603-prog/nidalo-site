@@ -1,14 +1,11 @@
-/* Mon agenda, comme l'app (Features/Visits/VisitsAgendaView.swift). Téléphone : retour rond et « + » rond bleu clair,
-   12 au-dessus du grand titre, onglets 16 plus bas, visites par période ; ordinateur : l'en-tête du site (.dsc-head),
-   les onglets et le « + » sur une ligne, puis les mêmes cartes. Pièces communes dans pieces-app.css. */
+/* Mon agenda, comme l'app (Features/Visits/VisitsAgendaView.swift), sur toutes les largeurs : retour rond et « + » rond
+   bleu clair, 12 au-dessus du grand titre, onglets 16 plus bas, visites par période. Pièces communes dans
+   pieces-app.css. */
 
 .app-agenda { display: flex; flex-direction: column; padding-bottom: 24px; color: var(--app-navy); font-family: var(--app-font); }
-.app-agenda.is-desktop { padding-bottom: 48px; }
 .app-agenda :where(h1, h2, h3, p) { margin: 0; }
 .app-agenda-top { display: flex; align-items: center; justify-content: space-between; }
 .app-agenda-header { margin-top: 12px; }
-.app-agenda-bar { display: flex; align-items: center; gap: 12px; }
-.app-agenda-bar .app-agenda-tabs { flex: 1; min-width: 0; margin-top: 0; }
 
 /* « + » (menu Ajouter de l'app) : rond bleu clair de 42, plus de 20 en bleu, zone d'appui de 44. */
 .app-agenda-plus {
@@ -166,7 +163,6 @@
 .app-request.is-desktop { min-height: 0; padding-bottom: 48px; }
 .app-request :where(h1, h2, h3, p, ol) { margin: 0; }
 .app-request-body { display: flex; flex-direction: column; gap: 14px; padding: 8px 0 28px; }
-.app-request.is-desktop .app-request-body { gap: 16px; padding-top: 16px; }
 .app-request-missing { margin: auto 0; padding: 40px 0; color: var(--app-text-secondary); font: 400 14px/20px var(--app-font); text-align: center; }
 
 .app-request-listing, .app-request-card, .app-request-section, .app-request-link, .app-request-row {
@@ -295,7 +291,6 @@
   position: sticky; z-index: 5; bottom: 0; margin: auto -16px 0; padding: 10px 16px calc(6px + env(safe-area-inset-bottom));
   background: #FFFFFF; box-shadow: 0 -2px 20px rgba(36, 45, 56, 0.06);
 }
-.app-request.is-desktop .app-request-bar { position: static; margin: 0; padding: 0; background: none; box-shadow: none; }
 
 /* « Demandes de visite » d'une annonce, ouvertes sur la fiche : la page de l'app sous 1024 px (fond de page, 16 sur
    les côtés, 6 au-dessus de l'en-tête) ; sur ordinateur, la colonne de 640 px de la fiche. */
@@ -348,7 +343,6 @@
    annuler et supprimer ; « Note » en haut à droite. */
 .app-request.app-detail { min-height: 0; }
 .app-detail-body { display: flex; flex-direction: column; gap: 16px; padding: 8px 0 28px; }
-.app-request.is-desktop .app-detail-body { padding-top: 16px; }
 .app-detail-photo {
   display: flex; align-items: center; justify-content: center; height: 190px; overflow: hidden; border-radius: 18px;
   background: var(--app-brand-soft); color: var(--app-brand);
