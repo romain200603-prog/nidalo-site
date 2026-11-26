@@ -12,7 +12,7 @@ import { currentUserId, useStore } from '../../lib/account/session';
 import { authorOf, canEditOf, savedTeamView, saveTeamView, useTeamScope, type TeamScope, type TeamView } from '../../lib/account/team';
 import { listLabel, telHref } from '../../lib/messages/format';
 import { accountPath, contactPath, CONTACTS_PATH, conversationPath, NEW_CONTACT_PATH } from '../../lib/paths';
-import { AuthorLine, Avatar, EmptyState, ScreenHeader, Spinner, TeamViewSwitch, Toast } from './parts';
+import { AuthorLine, Avatar, EmptyState, LoadFailure, ScreenHeader, Spinner, TeamViewSwitch, Toast } from './parts';
 
 // « Mes contacts » de l'espace professionnel : la liste (recherche et filtres), la fiche d'un contact (ses échanges,
 // une note) et le formulaire d'un contact ajouté à la main. Avec une équipe : « Les miens » ou « L'agence » (avec
@@ -50,8 +50,7 @@ export function Contacts({ contactKey, screen }: { contactKey: string | null; sc
     return (
       <div className="space">
         <ScreenHeader title="Mes contacts" />
-        <p className="signin-error" role="alert">{state.message}</p>
-        <button type="button" className="btn btn-light" onClick={() => void loadContacts()}>Réessayer</button>
+        <LoadFailure message={state.message} onRetry={() => void loadContacts()} />
       </div>
     );
   }
@@ -122,6 +121,16 @@ function ContactList({ contacts: all, scope }: { contacts: Contact[]; scope: Tea
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
+              {/* La croix de l'app (« Effacer la recherche ») ; celle du navigateur est masquée. */}
+              {query !== '' && (
+                <button type="button" className="contacts-search-clear" aria-label="Effacer la recherche" onClick={(event) => {
+                  // Le focus revient dans le champ (la croix disparaît).
+                  event.currentTarget.parentElement?.querySelector('input')?.focus();
+                  setQuery('');
+                }}>
+                  <Icon name="x" />
+                </button>
+              )}
             </label>
             <div className="contacts-filters" role="group" aria-label="Filtrer les contacts">
               {CONTACT_FILTERS.map((item) => (

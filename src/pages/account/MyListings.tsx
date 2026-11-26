@@ -6,11 +6,11 @@ import {
 } from '../../lib/account/myListings';
 import { currentUserId, useStore } from '../../lib/account/session';
 import { authorOf, canEditOf, savedTeamView, saveTeamView, teamIds, useTeamScope, type TeamView } from '../../lib/account/team';
-import { formatCardPrice, cardContent } from '../../lib/cardContent';
-import { photoUrl, sortedPhotos, type ListingRow } from '../../lib/listings';
+import type { ListingRow } from '../../lib/listings';
 import { useDesktop } from '../../lib/desktop';
 import { listingPath, publishPath } from '../../lib/paths';
-import { AuthorLine, EmptyState, ScreenHeader, Spinner, TeamViewSwitch } from './parts';
+import { ActionMenu } from './DesktopParts';
+import { AppListingRow, AuthorLine, EmptyState, LoadFailure, ScreenHeader, Spinner, TeamViewSwitch } from './parts';
 import { soonPath } from './Screens';
 
 // « Mes annonces » (Features/Profile/MyListingsView.swift). Avec une équipe : « Les miennes » ou « L'agence » (les
@@ -26,13 +26,14 @@ const TABS: { tab: Tab; title: string; matches: (status: string) => boolean }[] 
   { tab: 'done', title: 'Vendues ou louées', matches: (status) => status === 'sold' || status === 'rented' },
 ];
 
-const STATUS_BADGES: Record<string, { text: string; tone: string }> = {
-  active: { text: 'En ligne', tone: 'positive' },
-  underOffer: { text: 'Sous offre', tone: 'positive' },
-  archived: { text: 'Suspendue', tone: 'estimated' },
-  draft: { text: 'Brouillon', tone: 'muted' },
-  sold: { text: 'Vendu', tone: 'brand' },
-  rented: { text: 'Loué', tone: 'brand' },
+/** Pastille d'état de l'app (statusLabel, statusTone) : En ligne vert, Sous offre et Brouillon ambre, Suspendue rouge, Vendu et Loué bleu. */
+const STATUS_BADGES: Record<string, { text: string; tone: 'green' | 'amber' | 'red' | 'blue' | 'gray' }> = {
+  active: { text: 'En ligne', tone: 'green' },
+  underOffer: { text: 'Sous offre', tone: 'amber' },
+  archived: { text: 'Suspendue', tone: 'red' },
+  draft: { text: 'Brouillon', tone: 'amber' },
+  sold: { text: 'Vendu', tone: 'blue' },
+  rented: { text: 'Loué', tone: 'blue' },
 };
 
 const shortDate = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long' });
@@ -54,7 +55,6 @@ export function MyListings() {
   const state = showsAgency ? agency : mine;
   const me = currentUserId();
   const [tab, setTab] = useState<Tab>('all');
-  const [menu, setMenu] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<ListingRow | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -76,7 +76,6 @@ export function MyListings() {
   function chooseView(next: TeamView) {
     setView(next);
     saveTeamView('annonces', next);
-    setMenu(null);
   }
 
   const items = state.status === 'ready' ? state.items : [];
@@ -88,8 +87,12 @@ export function MyListings() {
     if (emptiedTab) setTab('all');
   }, [emptiedTab]);
 
+  function retry() {
+    if (showsAgency && ids) void loadAgencyListings(ids.split(','));
+    else void loadMyListings();
+  }
+
   async function changeStatus(row: ListingRow, status: 'active' | 'archived') {
-    setMenu(null);
     setBusy(row.id);
     const failure = await setListingStatus(row.id, status);
     setBusy(null);
@@ -107,7 +110,7 @@ export function MyListings() {
   }
 
   return (
-    <div className="space">
+    <div className="space my-listings-screen">
       <ScreenHeader title="Mes annonces" />
       {scope && <TeamViewSwitch value={view} onChange={chooseView} mine="Les miennes" />}
       <div className="chips-row my-listings-tabs" role="tablist" aria-label="Statut des annonces">
@@ -123,7 +126,8 @@ export function MyListings() {
       </div>
       <a className="btn btn-primary deposit-button" href={desktop ? publishPath() : soonPath('publier')}><Icon name="plus" />Déposer une annonce</a>
       {state.status === 'loading' && <Spinner />}
-      {state.status === 'error' && <EmptyState icon="triangleAlert" title="Erreur" text={state.message} />}
+      {/* Annonces non lues : « Pas de connexion Internet » et « Réessayer » hors ligne, comme l'app ; sinon l'erreur. */}
+      {state.status === 'error' && <LoadFailure message={state.message} onRetry={retry} />}
       {state.status === 'ready' && shown.length === 0 && (
         <EmptyState
           icon="house"
@@ -133,61 +137,40 @@ export function MyListings() {
       )}
       <div className="my-listings">
         {shown.map((row) => {
-          const badge = STATUS_BADGES[row.status] ?? { text: row.status, tone: 'muted' };
-          const photo = sortedPhotos(row)[0];
-          const price = formatCardPrice(cardContent(row, null, null).price);
+          const badge = STATUS_BADGES[row.status] ?? { text: row.status, tone: 'gray' };
           const isOnline = ONLINE_STATUSES.includes(row.status);
           const author = authorOf(scope, row.owner_id);
           const editable = canEditOf(scope, row.owner_id, me);
           return (
-            <article key={row.id} className="my-listing space-card" aria-busy={busy === row.id}>
-              <div className="my-listing-top">
-                <span className="my-listing-photo">
-                  {photo ? <img src={photoUrl(photo.storage_path)} alt="" width={92} height={80} loading="lazy" /> : <Icon name="image" />}
-                </span>
-                <div className="my-listing-text">
-                  <div className="my-listing-title-row">
-                    <h2>{row.title || 'Annonce sans titre'}</h2>
-                    <span className={`status-badge tone-${badge.tone}`}>{badge.text}</span>
-                  </div>
-                  <p className="my-listing-line">{row.transaction === 'rent' ? 'Location' : 'Vente'} · {row.city}</p>
-                  <p className="my-listing-price"><strong>{price.amount}</strong>{price.suffix && <span>{price.suffix}</span>}</p>
-                  <p className="my-listing-date">{dateLine(row)}</p>
-                  <AuthorLine author={author} verb="Ajoutée par" />
-                </div>
+            <article key={row.id} className="my-listing app-card" aria-busy={busy === row.id}>
+              <AppListingRow row={row} pills={<span className={`app-pill app-tone-${badge.tone}`}>{badge.text}</span>} />
+              <div className="my-listing-titles">
+                <h2>{row.title || 'Annonce sans titre'}</h2>
+                <p className="my-listing-date">{dateLine(row)}</p>
+                <AuthorLine author={author} verb="Ajoutée par" />
               </div>
               <div className="my-listing-actions">
-                {isOnline && <a className="action-button" href={listingPath(row.id)}><Icon name="eye" />Voir</a>}
+                {isOnline && <a className="action-button" href={listingPath(row.id)}><Icon name="arrowUpRight" />Voir</a>}
                 {!editable ? (
                   !isOnline && <span className="my-listing-readonly">Lecture seule</span>
                 ) : row.status === 'archived' ? (
                   <button type="button" className="action-button is-filled" onClick={() => void changeStatus(row, 'active')} disabled={busy === row.id}>
-                    <Icon name="rotateCcw" />Republier
+                    <Icon name="arrowUp" />Republier
                   </button>
                 ) : row.status === 'draft' ? (
-                  <a className="action-button is-filled" href={editPath(row.id)}><Icon name="pen" />Reprendre</a>
+                  <a className="action-button is-filled" href={editPath(row.id)}><Icon name="squarePen" />Reprendre</a>
                 ) : (
-                  <a className="action-button" href={editPath(row.id)}><Icon name="pen" />Modifier</a>
+                  <a className="action-button" href={editPath(row.id)}><Icon name="squarePen" />Modifier</a>
                 )}
-                {editable && <div className="menu-anchor">
-                  <button
-                    type="button"
-                    className="round-menu"
-                    aria-label="Actions sur l'annonce"
-                    aria-expanded={menu === row.id}
-                    onClick={() => setMenu(menu === row.id ? null : row.id)}
-                  >
-                    <Icon name="ellipsis" />
-                  </button>
-                  {menu === row.id && (
-                    <div className="menu-popover" role="menu">
-                      <a role="menuitem" href={editPath(row.id)}>Modifier l&apos;annonce</a>
-                      <a role="menuitem" href={editPath(row.id, 'photos')}>Mettre à jour les photos</a>
-                      {isOnline && <button type="button" role="menuitem" onClick={() => void changeStatus(row, 'archived')}>Suspendre</button>}
-                      <button type="button" role="menuitem" className="is-danger" onClick={() => { setMenu(null); setToDelete(row); }}>Supprimer</button>
-                    </div>
-                  )}
-                </div>}
+                {/* Le menu de l'app, avec ses icônes (« Messages (N) » et « Ouvrir des créneaux » restent dans l'app). */}
+                {editable && (
+                  <ActionMenu label="Actions sur l'annonce" className="my-listing-menu" items={[
+                    { label: 'Modifier l\'annonce', icon: 'squarePen', onClick: () => window.location.assign(editPath(row.id)) },
+                    { label: 'Mettre à jour les photos', icon: 'image', onClick: () => window.location.assign(editPath(row.id, 'photos')) },
+                    ...(isOnline ? [{ label: 'Suspendre', icon: 'pause' as const, onClick: () => void changeStatus(row, 'archived') }] : []),
+                    { label: 'Supprimer', icon: 'trash', danger: true, onClick: () => setToDelete(row) },
+                  ]} />
+                )}
               </div>
             </article>
           );

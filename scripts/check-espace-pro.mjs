@@ -1011,7 +1011,12 @@ try {
     const context = await phone();
     await mock(context, state);
     const page = await open(context, '/compte/', N);
-    await page.getByRole('link', { name: /Type de compte/ }).or(page.getByRole('button', { name: /Type de compte/ })).first().click();
+    // « Type de compte » ouvre la page de l'app (étape 5) : le type actuel coché, puis « Passer en professionnel ».
+    await page.getByRole('link', { name: /Type de compte/ }).first().click();
+    await page.waitForURL('**/compte/?vue=type');
+    expectSame(N, 'page Type de compte', [tidy(await page.locator('.screen-header h1').textContent()), tidy(await page.locator('.app-row-title').first().textContent()),
+      await page.locator('.menu-page-check').count()], ['Type de compte', 'Particulier', 1]);
+    await page.locator('.menu-page-button').click();
     const link = dialog(page).getByRole('link', { name: 'Passer en professionnel' });
     expectSame(N, 'lien du choix', await link.getAttribute('href'), FORM_PATH);
     await link.click();
@@ -1075,7 +1080,7 @@ try {
     await imagesLoaded(page, '.agency-head .agency-logo img', 1, `${N} : logo de la page`);
     expectSame(N, 'message', tidy(await page.locator('.account-toast').textContent().catch(() => null)), 'Fiche agence enregistrée');
     expectSame(N, 'page de l\'agence', await viewSummary(page), {
-      title: 'Profil agence', name: 'Agence du Parc', badges: ['PRO'], place: 'Lyon (69006)',
+      title: 'Agence', name: 'Agence du Parc', badges: ['PRO'], place: 'Lyon (69006)',
       cards: ['Présentation', 'Contact', 'Informations professionnelles'],
       rows: ['Téléphone : 04 78 12 34 56', `E-mail : ${USER_EMAIL}`, 'SIREN : 443061841', 'SIRET : 44306184100005', 'Carte professionnelle : CPI 6901 2026 000 000 001', 'Garantie financière : Galian'],
       site: ['www.agenceduparc.fr', 'https://www.agenceduparc.fr'], listings: 'Ses biens', cardsShown: 0,
@@ -1093,7 +1098,7 @@ try {
     await shot(page, 'agence-telephone-page.png');
 
     // Retour à Mon compte : l'espace professionnel, la carte de l'agence mène à sa page.
-    await page.locator('.screen-header .round-back').click();
+    await page.locator('.screen-header > .app-round').click();
     await page.waitForURL('**/compte/');
     await page.waitForFunction(() => document.querySelector('.space-profile-name')?.textContent === 'Agence du Parc', null, { timeout: 8000 })
       .catch(() => undefined);
@@ -1125,7 +1130,7 @@ try {
     }, null, { timeout: 8000 }).catch(() => problems.push(`${N} : photo de l'annonce non chargée`));
     await page.evaluate(() => window.scrollTo(0, 0));
     expectSame(N, 'page de l\'agence', await viewSummary(page), {
-      title: 'Profil agence', name: 'Rhône Immobilier', badges: ['PRO'], place: 'Lyon (69006)',
+      title: 'Agence', name: 'Rhône Immobilier', badges: ['PRO'], place: 'Lyon (69006)',
       cards: ['Présentation', 'Contact', 'Informations professionnelles'],
       rows: [
         'Téléphone : 04 78 12 34 56', 'E-mail : contact@rhone-immobilier.fr', 'SIREN : 443061841', 'SIRET : 44306184100005',
@@ -1153,7 +1158,7 @@ try {
     await shot(page, 'agence-ordinateur-formulaire.png');
 
     // Sans changement, Retour ramène à la page sans rien demander.
-    await page.locator('.screen-header .round-back').click();
+    await page.locator('.screen-header > .app-round').click();
     await page.waitForURL('**/compte/?vue=agence');
     await page.getByRole('link', { name: 'Modifier' }).click();
     await page.waitForURL(`**${FORM_PATH}`);
@@ -1161,7 +1166,7 @@ try {
 
     await field(page, 'Code postal').fill('69100');
     await field(page, 'Ville').fill('Villeurbanne');
-    await page.locator('.screen-header .round-back').click();
+    await page.locator('.screen-header > .app-round').click();
     expectSame(N, 'quitter', [
       tidy(await dialog(page).locator('h2').textContent()),
       await dialog(page).getByRole('link', { name: 'Quitter sans enregistrer' }).getAttribute('href'),
@@ -1312,11 +1317,16 @@ try {
       .catch(() => problems.push(`${N} : pas de message « Texte copié »`));
     expectSame(N, 'texte copié', (await page.evaluate(() => navigator.clipboard.readText())) === shown, true);
 
-    // Affiche : nouvel onglet, A4, une seule page en PDF.
+    // Affiche : dans la page, comme dans l'app (aperçu A4 et « Imprimer ou enregistrer »), une seule page en PDF.
     const poster = card.getByRole('link', { name: 'Affiche' });
-    expectSame(N, 'lien de l\'affiche', [await poster.getAttribute('href'), await poster.getAttribute('target')], [`/compte/?vue=affiche&annonce=${SALE.id}`, '_blank']);
-    const [tab] = await Promise.all([context.waitForEvent('page'), poster.click()]);
+    expectSame(N, 'lien de l\'affiche', [await poster.getAttribute('href'), await poster.getAttribute('target')], [`/compte/?vue=affiche&annonce=${SALE.id}`, null]);
+    await poster.click();
+    const tab = page;
+    await tab.waitForURL(/vue=affiche/);
     await tab.waitForLoadState('networkidle');
+    expectSame(N, 'page de l\'affiche', [tidy(await tab.locator('.poster-screen > .screen-header h1').textContent()),
+      await tab.locator('.poster-screen > .screen-header > .app-round').getAttribute('href'), tidy(await tab.locator('.poster-print').textContent())],
+    ['Affiche de vitrine', '/compte/?vue=diffusion', 'Imprimer ou enregistrer']);
     await tab.locator('.poster').waitFor();
     await tab.waitForFunction(() => [...document.querySelectorAll('.poster img')].every((img) => img.complete && img.naturalWidth > 0), null, { timeout: 8000 })
       .catch(() => problems.push(`${N} : images de l'affiche non chargées`));
@@ -1347,7 +1357,7 @@ try {
     expectSame(N, 'pages du PDF', pdfPages(pdf), 1);
     await tab.emulateMedia({ media: 'print' });
     expectSame(N, 'impression', await tab.evaluate(() => [
-      getComputedStyle(document.querySelector('.poster-toolbar')).display,
+      getComputedStyle(document.querySelector('.poster-screen > .screen-header')).display,
       [...document.querySelectorAll('.dtop, .topbar, .dfoot, .footer, .tabbar')].every((el) => getComputedStyle(el).display === 'none'),
       Math.round(document.querySelector('.poster').getBoundingClientRect().width / 96 * 25.4),
     ]), ['none', true, 210]);
@@ -1528,7 +1538,7 @@ try {
       await field(page, 'E-mail (facultatif)').inputValue(), tidy(await page.locator('.contact-save').textContent()),
     ], ['Modifier le contact', 'Julie Bernard', '07 81 22 33 44', 'julie.bernard@exemple.fr', 'Enregistrer les modifications']);
     await field(page, 'Téléphone (facultatif)').fill('+44 20 7946 0000');
-    await page.locator('.screen-header .round-back').click();
+    await page.locator('.screen-header > .app-round').click();
     await dialog(page).getByRole('button', { name: 'Continuer' }).waitFor();
     expectSame(N, 'quitter sans enregistrer', tidy(await dialog(page).locator('h2, .alert-title').first().textContent()), 'Quitter sans enregistrer ?');
     await dialog(page).getByRole('button', { name: 'Continuer' }).click();
@@ -1849,7 +1859,7 @@ try {
     await field(page, 'Prix de vente (facultatif)').pressSequentially('199000');
     expectSame(N, 'prix espacé pendant la saisie', tidy(await field(page, 'Prix de vente (facultatif)').inputValue()), '199 000');
     await date('Offre acceptée le').fill(dayAgo(2));
-    await page.locator('.screen-header .round-back').click();
+    await page.locator('.screen-header > .app-round').click();
     await dialog(page).getByRole('button', { name: 'Continuer' }).waitFor();
     expectSame(N, 'quitter sans enregistrer', tidy(await dialog(page).locator('h2, .alert-title').first().textContent()), 'Quitter sans enregistrer ?');
     await dialog(page).getByRole('button', { name: 'Continuer' }).click();
@@ -2098,7 +2108,7 @@ try {
     await field(page, 'Loyer mensuel (facultatif)').pressSequentially('1250');
     expectSame(N, 'loyer espacé pendant la saisie', tidy(await field(page, 'Loyer mensuel (facultatif)').inputValue()), '1 250');
     await pdfInput.setInputFiles({ name: 'Mandat Tilleuls.pdf', mimeType: 'application/pdf', buffer: PDF });
-    await page.locator('.screen-header .round-back').click();
+    await page.locator('.screen-header > .app-round').click();
     await dialog(page).getByRole('button', { name: 'Continuer' }).waitFor();
     await dialog(page).getByRole('button', { name: 'Continuer' }).click();
     expectSame(N, 'rien d\'écrit avant un formulaire juste', writeNames(writesSince(state, mark)), []);
@@ -2346,7 +2356,7 @@ try {
       ['Aucune', SALE.title, `${DRAFT.title} (brouillon)`]);
     await date('À relancer le (facultatif)').fill(dayIn(1));
     await page.locator('.sale-note-input').fill('Rappeler après 18 h.');
-    await page.locator('.screen-header .round-back').click();
+    await page.locator('.screen-header > .app-round').click();
     await dialog(page).getByRole('button', { name: 'Continuer' }).waitFor();
     await dialog(page).getByRole('button', { name: 'Continuer' }).click();
     expectSame(N, 'rien d\'écrit avant un formulaire juste', writeNames(writesSince(state, mark)), []);
@@ -2508,7 +2518,7 @@ try {
     ], ['3 membres', '/compte/?vue=equipes', '/compte/?vue=agence', 1]);
     // « Mes informations » dans « Compte et sécurité », seul chemin de l'espace professionnel vers cette page (n° 117).
     expectSame(N, 'Compte et sécurité', await securityGroup(page), [['Informations de l\'agence', FORM_PATH], ['Mes informations', '/compte/?vue=informations'],
-      ['Connexion et sécurité', '/compte/?vue=securite'], ['Confidentialité et données', '/compte/?vue=confidentialite'], ['Type de compte', null]]);
+      ['Connexion et sécurité', '/compte/?vue=securite'], ['Confidentialité et données', '/compte/?vue=confidentialite'], ['Type de compte', '/compte/?vue=type']]);
 
     await row.click();
     await page.waitForURL('**/compte/?vue=equipes');
@@ -2660,7 +2670,7 @@ try {
     ], ['Agent de l\'équipe', '/compte/?vue=equipes', '3 membres', 0, 0]);
     // Membre d'une équipe : « Mes informations » aussi (n° 117), sans les informations de l'agence.
     expectSame(N, 'Compte et sécurité', await securityGroup(page), [['Mes informations', '/compte/?vue=informations'],
-      ['Connexion et sécurité', '/compte/?vue=securite'], ['Confidentialité et données', '/compte/?vue=confidentialite'], ['Type de compte', null]]);
+      ['Connexion et sécurité', '/compte/?vue=securite'], ['Confidentialité et données', '/compte/?vue=confidentialite'], ['Type de compte', '/compte/?vue=type']]);
     await shot(page, 'equipes-telephone-agent-compte.png');
 
     await page.locator('.space-profile').click();
@@ -2904,7 +2914,7 @@ try {
     return [
       text(el.querySelector('h2')), text(el.querySelector('.team-author')),
       [...el.querySelectorAll('.my-listing-actions > a, .my-listing-actions > button, .my-listing-actions > span')].map(text),
-      Boolean(el.querySelector('.round-menu')),
+      Boolean(el.querySelector('.dsc-menu-button')),
     ];
   }));
   const contactRows = (page) => page.$$eval('.contact-row', (els) => els.map((el) => [

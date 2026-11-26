@@ -19,6 +19,8 @@ export type AccountView =
   | 'informations' | 'annonces' | 'recherches' | 'confidentialite' | 'legal' | 'securite' | 'supprimer' | 'bientot'
   | 'notifications' | 'demande-visite' | 'agenda' | 'ajouter-visite' | 'projet' | 'consultes' | 'agence' | 'diffusion' | 'affiche'
   | 'contacts' | 'statistiques' | 'ventes' | 'mandats' | 'opportunites' | 'equipes'
+  // Pages de l'app ajoutées à Mon compte : type de compte, aide, préférences, « Mes visites » (professionnels).
+  | 'type' | 'aide' | 'preferences' | 'visites'
   // Modération (comptes modérateurs seulement) : le lien de la notification « Nouveau signalement ».
   | 'signalements';
 

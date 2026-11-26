@@ -8,8 +8,10 @@ import {
 } from '../../lib/account/moderation';
 import { PUBLIC_STATUSES } from '../../lib/listings';
 import { listingPath } from '../../lib/paths';
+import { RoundButton } from '../../components/RoundButton';
+import { useDesktop } from '../../lib/desktop';
 import { ChoiceDialog, ScreenHead } from './DesktopParts';
-import { Spinner, Toast } from './parts';
+import { ScreenHeader, Spinner, Toast } from './parts';
 
 // « Signalements » (modération, 15 novembre 2026), pour les comptes modérateurs seulement : les signalements envoyés
 // depuis l'app et le site, à traiter sous 24 heures (conditions d'utilisation). Chaque fiche montre ce qui a été
@@ -32,6 +34,9 @@ const ACTION_ICONS: Record<ModerationAction, IconName> = {
   unsuspend_user: 'rotateCcw',
   dismiss: 'check',
 };
+
+/** Phrase sous le titre (ModerationText.subtitle). */
+const SUBTITLE = 'Chaque signalement est à traiter sous 24 heures.';
 
 const isPublic = (status: string | null) => status !== null && (PUBLIC_STATUSES as readonly string[]).includes(status);
 
@@ -135,19 +140,29 @@ export function Reports() {
 
   const asked = pending ? confirmation(pending.action, pending.name) : null;
   const reserved = state.status === 'reserved';
+  const desktop = useDesktop();
+  const refresh = () => setReload((n) => n + 1);
 
   return (
-    <div className="dsc dsc-reports-screen">
+    <div className={desktop ? 'dsc dsc-reports-screen' : 'dsc dsc-reports-screen is-phone'}>
       <Toast text={toast} />
-      <ScreenHead
-        title="Signalements"
-        subtitle={reserved ? undefined : 'Chaque signalement est à traiter sous 24 heures.'}
-        action={!reserved && (
-          <button type="button" className="dsc-square" aria-label="Actualiser" onClick={() => setReload((n) => n + 1)}>
-            <Icon name="rotateCcw" />
-          </button>
-        )}
-      />
+      {desktop ? (
+        <ScreenHead
+          title="Signalements"
+          subtitle={reserved ? undefined : SUBTITLE}
+          action={!reserved && (
+            <button type="button" className="dsc-square" aria-label="Actualiser" onClick={refresh}>
+              <Icon name="rotateCcw" />
+            </button>
+          )}
+        />
+      ) : (
+        // Téléphone : l'en-tête de l'app et son bouton rond « Actualiser » (refresh-cw), puis la phrase de 13,5 grise.
+        <>
+          <ScreenHeader title="Signalements" action={!reserved && <RoundButton icon="refreshCw" label="Actualiser" onClick={refresh} />} />
+          {!reserved && <p className="reports-subtitle">{SUBTITLE}</p>}
+        </>
+      )}
       {!reserved && (
         <div className="dsc-tabs" role="tablist" aria-label="Signalements">
           <button type="button" role="tab" aria-selected={tab === 'open'} className="dsc-tab" onClick={() => setTab('open')}>

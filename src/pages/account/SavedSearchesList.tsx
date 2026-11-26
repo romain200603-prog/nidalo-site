@@ -11,7 +11,8 @@ import { highlightsFor } from '../../lib/highlights';
 import { SEARCH_MODES } from '../../lib/labels';
 import { PATHS } from '../../lib/paths';
 import { paramsFromDraft, search, type SearchDraft } from '../../lib/search';
-import { EmptyState, Spinner } from './parts';
+import { ActionMenu } from './DesktopParts';
+import { LoadFailure, Spinner } from './parts';
 import { FavoritesEmptyState } from '../../components/FavoritesEmptyState';
 
 // « Mes recherches » (Features/Profile/SavedSearchesView.swift), dans Mon compte et dans l'onglet Recherches des Favoris.
@@ -127,7 +128,10 @@ export function SavedSearchesList({ embedded = false, counts: provided }: {
   }
 
   if (state.status === 'loading' || state.status === 'none') return <Spinner />;
-  if (state.status === 'error') return <EmptyState icon="triangleAlert" title="Erreur" text={state.message} />;
+  // Recherches non lues : la coupure de l'app hors ligne, sinon le message ; « Réessayer » dans les deux cas.
+  if (state.status === 'error') {
+    return <LoadFailure message={state.message} onRetry={() => void loadSavedSearches(true)} />;
+  }
   // Même état vide illustré dans Vos favoris (98 sous les onglets) et dans Mon espace (centré), comme l'app.
   if (!items.length) {
     return (
@@ -150,37 +154,60 @@ export function SavedSearchesList({ embedded = false, counts: provided }: {
           : count.total === 0 ? 'Aucun résultat pour l\'instant'
             : count.total === 1 ? 'Voir le résultat' : `Voir les ${count.total} résultats`;
         return (
-          <article key={item.id} className="saved-search space-card">
+          <article key={item.id} className={embedded ? 'saved-search space-card' : 'saved-search app-card is-nidalo'}>
             <div className="saved-search-top">
-              <span className="tinted-icon"><Icon name={icon} /></span>
+              {/* Page de Mon compte : icône dans un carré teinté de 40, comme l'app (isNidalo). */}
+              <span className={embedded ? 'tinted-icon' : 'saved-search-tile'}><Icon name={icon} /></span>
               <div className="saved-search-text">
                 <h3>{item.name}</h3>
                 <p>{line}</p>
                 {criteria && <p className="saved-search-criteria">{criteria}</p>}
               </div>
-              <div className="menu-anchor">
-                <button type="button" className="round-menu" aria-label="Actions sur la recherche" aria-expanded={menu === item.id} onClick={() => setMenu(menu === item.id ? null : item.id)}>
-                  <Icon name="ellipsis" />
-                </button>
-                {menu === item.id && (
-                  <div className="menu-popover" role="menu">
-                    <button type="button" role="menuitem" onClick={() => { setMenu(null); setEditing(item); }}>Modifier les critères</button>
-                    <button type="button" role="menuitem" onClick={() => { setMenu(null); setNewName(item.name); setRenaming(item); }}>Renommer</button>
-                    <button type="button" role="menuitem" onClick={() => { setMenu(null); void update(item, { alerts_enabled: !item.alerts_enabled }); }}>
-                      {item.alerts_enabled ? 'Désactiver les alertes' : 'Activer les alertes'}
-                    </button>
-                    <button type="button" role="menuitem" className="is-danger" onClick={() => { setMenu(null); setToDelete(item); }}>Supprimer</button>
-                  </div>
-                )}
+              {embedded ? (
+                <div className="menu-anchor">
+                  <button type="button" className="round-menu" aria-label="Actions sur la recherche" aria-expanded={menu === item.id} onClick={() => setMenu(menu === item.id ? null : item.id)}>
+                    <Icon name="ellipsis" />
+                  </button>
+                  {menu === item.id && (
+                    <div className="menu-popover" role="menu">
+                      <button type="button" role="menuitem" onClick={() => { setMenu(null); setEditing(item); }}>Modifier les critères</button>
+                      <button type="button" role="menuitem" onClick={() => { setMenu(null); setNewName(item.name); setRenaming(item); }}>Renommer</button>
+                      <button type="button" role="menuitem" onClick={() => { setMenu(null); void update(item, { alerts_enabled: !item.alerts_enabled }); }}>
+                        {item.alerts_enabled ? 'Désactiver les alertes' : 'Activer les alertes'}
+                      </button>
+                      <button type="button" role="menuitem" className="is-danger" onClick={() => { setMenu(null); setToDelete(item); }}>Supprimer</button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // Le menu de l'app, avec ses icônes (Menu de SavedSearchCard).
+                <ActionMenu label="Actions sur la recherche" items={[
+                  { label: 'Modifier les critères', icon: 'sliders', onClick: () => setEditing(item) },
+                  { label: 'Renommer', icon: 'pencil', onClick: () => { setNewName(item.name); setRenaming(item); } },
+                  { label: item.alerts_enabled ? 'Désactiver les alertes' : 'Activer les alertes', icon: item.alerts_enabled ? 'bellOff' : 'bell',
+                    onClick: () => void update(item, { alerts_enabled: !item.alerts_enabled }) },
+                  { label: 'Supprimer', icon: 'trash', danger: true, onClick: () => setToDelete(item) },
+                ]} />
+              )}
+            </div>
+            {embedded ? (
+              <div className="saved-search-meta">
+                {count && count.news > 0 && <span className="news-badge">{count.news === 1 ? '1 nouvelle annonce' : `${count.news} nouvelles annonces`}</span>}
+                {item.alerts_enabled
+                  ? <span className="alerts-on"><Icon name="bell" />Alertes actives</span>
+                  : <span className="alerts-off"><Icon name="bellOff" />Alertes désactivées</span>}
+                <span className="seen">{seen}</span>
               </div>
-            </div>
-            <div className="saved-search-meta">
-              {count && count.news > 0 && <span className="news-badge">{count.news === 1 ? '1 nouvelle annonce' : `${count.news} nouvelles annonces`}</span>}
-              {item.alerts_enabled
-                ? <span className="alerts-on"><Icon name="bell" />Alertes actives</span>
-                : <span className="alerts-off"><Icon name="bellOff" />Alertes désactivées</span>}
-              <span className="seen">{seen}</span>
-            </div>
+            ) : (
+              // Pastilles de l'app (NidaloPill) : nouveautés en bleu, alertes en vert ou en gris, puis la date.
+              <div className="saved-search-meta is-pills">
+                {count && count.news > 0 && <span className="app-pill app-tone-blue">{count.news === 1 ? '1 nouvelle annonce' : `${count.news} nouvelles annonces`}</span>}
+                <span className={`app-pill ${item.alerts_enabled ? 'app-tone-green alerts-on' : 'app-tone-gray alerts-off'}`}>
+                  {item.alerts_enabled ? 'Alertes actives' : 'Alertes désactivées'}
+                </span>
+                <span className="seen">{seen}</span>
+              </div>
+            )}
             <button type="button" className="run-button" onClick={() => void run(item)}>
               <Icon name="search" />
               {button}

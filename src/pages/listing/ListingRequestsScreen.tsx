@@ -13,7 +13,7 @@ import {
 import { fetchVisitRequests, requestDisplayStatus, requestSlotLabel } from '../../lib/listing/visits';
 import { isOfflineFailure } from '../../lib/loadFailure';
 import { photoUrl } from '../../lib/listings';
-import { conversationPath, visitRequestPath } from '../../lib/paths';
+import { conversationPath, listingPath, visitRequestPath } from '../../lib/paths';
 import { RequestStatusBadge } from '../account/VisitRequestDetail';
 import { Spinner } from '../account/parts';
 import { AlertDialog } from './Dialogs';
@@ -23,13 +23,14 @@ import '../../styles/agenda-app.css';
 // (Features/Visits/MyVisitsView.swift avec listingId) : les demandes du compte pour ce bien (my_visit_requests), en trois
 // onglets (À traiter, À venir, Historique ; À venir d'emblée quand rien n'attend de réponse). Chaque ligne ouvre la
 // demande ; « Message » ouvre la conversation déjà ouverte avec le demandeur, « Voir le bien » revient à la fiche.
+// Sans annonce (`listingId` nul) : « Mes visites » de Mon compte, toutes les demandes ; « Voir le bien » ouvre sa fiche.
 
 const TABS: RequestTab[] = ['toHandle', 'upcoming', 'history'];
 const sameId = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
 type Load = { status: 'loading' } | { status: 'offline' } | { status: 'ready'; requests: DetailRequestRow[] };
 
-export function ListingRequestsScreen({ listingId, me, onClose }: { listingId: string; me: string | null; onClose: () => void }) {
+export function ListingRequestsScreen({ listingId, me, onClose }: { listingId: string | null; me: string | null; onClose: () => void }) {
   const desktop = useDesktop();
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [tab, setTab] = useState<RequestTab | null>(null);
@@ -39,7 +40,7 @@ export function ListingRequestsScreen({ listingId, me, onClose }: { listingId: s
     setLoad({ status: 'loading' });
     try {
       const rows = (await fetchVisitRequests()) as DetailRequestRow[];
-      setLoad({ status: 'ready', requests: rows.filter((row) => sameId(row.listing_snapshot?.listingId ?? row.listing_id, listingId)) });
+      setLoad({ status: 'ready', requests: listingId === null ? rows : rows.filter((row) => sameId(row.listing_snapshot?.listingId ?? row.listing_id, listingId)) });
     } catch (error) {
       // Demandes non lues : la coupure et « Réessayer », pas « aucune demande » (n° 75).
       setLoad(isOfflineFailure(error) ? { status: 'offline' } : { status: 'ready', requests: [] });
@@ -68,6 +69,13 @@ export function ListingRequestsScreen({ listingId, me, onClose }: { listingId: s
     else setMissing(true);
   }
 
+  function openListing(request: DetailRequestRow) {
+    const listing = request.listing_snapshot?.listingId ?? request.listing_id;
+    if (listingId === null && listing) window.location.assign(listingPath(listing));
+    else onClose();
+  }
+
+  const title = listingId === null ? 'Mes visites' : 'Demandes de visite';
   let content;
   if (load.status === 'loading') content = <Spinner label="Chargement des demandes…" />;
   else if (load.status === 'offline') content = <OfflineState onRetry={() => void read()} />;
@@ -106,7 +114,7 @@ export function ListingRequestsScreen({ listingId, me, onClose }: { listingId: s
               </a>
               <div className="app-request-row-buttons">
                 <button type="button" onClick={() => void message(request)}><Icon name="messageCircle" />Message</button>
-                <button type="button" onClick={onClose}><Icon name="house" />Voir le bien</button>
+                <button type="button" onClick={() => openListing(request)}><Icon name="house" />Voir le bien</button>
               </div>
             </article>
           );
@@ -119,11 +127,11 @@ export function ListingRequestsScreen({ listingId, me, onClose }: { listingId: s
     <div className={`app-request app-requests dl-screen${desktop ? ' is-desktop wrap wrap-narrow' : ''}`}>
       {desktop ? (
         <header className="dl-screen-head">
-          <div className="dl-screen-titles"><h1 tabIndex={-1}>Demandes de visite</h1></div>
+          <div className="dl-screen-titles"><h1 tabIndex={-1}>{title}</h1></div>
           <button type="button" className="dl-screen-close" onClick={onClose} aria-label="Fermer" title="Fermer"><Icon name="x" /></button>
         </header>
       ) : (
-        <PageHeader title="Demandes de visite" onBack={onClose} />
+        <PageHeader title={title} onBack={onClose} />
       )}
       <div className="app-request-tabs" role="tablist" aria-label="Demandes">
         {TABS.map((option) => {

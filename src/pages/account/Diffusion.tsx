@@ -102,7 +102,7 @@ function DiffusionCard({ row, onLink, onOpen }: { row: ListingRow; onLink: () =>
         <button type="button" className="diffusion-tool" onClick={onLink}><Icon name="link" />Lien</button>
         <button type="button" className="diffusion-tool" onClick={() => onOpen('qr')}><Icon name="scan" />QR code</button>
         <button type="button" className="diffusion-tool" onClick={() => onOpen('text')}><Icon name="messageSquareText" />Texte</button>
-        <a className="diffusion-tool" href={posterPath(row.id)} target="_blank" rel="noopener"><Icon name="fileText" />Affiche</a>
+        <a className="diffusion-tool" href={posterPath(row.id)}><Icon name="fileText" />Affiche</a>
       </div>
     </article>
   );

@@ -448,7 +448,10 @@ try {
       await page.locator('.app-group a.app-row', { hasText: 'Signalements' }).click();
       await page.waitForURL(/vue=signalements/);
       await waitCards(page, 4, N);
-      expectSame(N, 'titre', tidy(await page.locator('.dsc-titles').textContent()), 'SignalementsChaque signalement est à traiter sous 24 heures.');
+      // En-tête de l'app sur téléphone : titre, bouton rond « Actualiser » (refresh-cw), puis la phrase sous le titre.
+      expectSame(N, 'titre', [tidy(await page.locator('.screen-header h1').textContent()),
+        await page.locator('.screen-header .app-page-header-trailing button.app-round[aria-label="Actualiser"]').count(),
+        tidy(await page.locator('.reports-subtitle').textContent())], ['Signalements', 1, 'Chaque signalement est à traiter sous 24 heures.']);
       expectSame(N, 'onglets', await texts(page, '.dsc-tab'), ['À traiter4', 'Traités']);
       expectSame(N, 'ordre (le plus ancien d\'abord)', await cardTitles(page), [
         'Annonce · Fraude immobilière ou arnaque', 'Message · Harcèlement', 'Compte · Usurpation d\'identité', 'Conversation · Spam',
@@ -575,7 +578,7 @@ try {
       await page.goto(`${base}/compte/?vue=signalements`, { waitUntil: 'networkidle' });
       await page.locator('.dsc-empty').waitFor({ timeout: 8000 }).catch(() => undefined);
       expectSame(N, 'page réservée', [tidy(await page.locator('.dsc-empty').textContent().catch(() => null)), await page.locator('.dsc-tabs').count(),
-        await page.locator('.dsc-square').count()], ['Page réservéeCette page est réservée à la modération de Nidalo.', 0, 0]);
+        await page.locator('button[aria-label="Actualiser"]').count()], ['Page réservéeCette page est réservée à la modération de Nidalo.', 0, 0]);
       await context.close();
     }
 

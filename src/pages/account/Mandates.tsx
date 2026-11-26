@@ -16,7 +16,7 @@ import { formatPrice } from '../../lib/format';
 import { parisDay } from '../../lib/listing/views';
 import { photoUrl, sortedPhotos, type ListingRow } from '../../lib/listings';
 import { accountPath, listingPath, MANDATES_PATH, mandatePath, NEW_MANDATE_PATH } from '../../lib/paths';
-import { AuthorLine, EmptyState, ScreenHeader, Spinner, TeamViewSwitch, Toast } from './parts';
+import { AuthorLine, EmptyState, LoadFailure, ScreenHeader, Spinner, TeamViewSwitch, Toast } from './parts';
 
 // « Mes mandats » de l'espace professionnel : le registre des mandats (en cours, terminés), la fiche d'un mandat
 // (ses informations, le PDF signé, la note) et son formulaire. Mêmes styles que Mes ventes (classes sale-*). Avec une
@@ -68,8 +68,7 @@ export function Mandates({ mandateId, screen }: { mandateId: string | null; scre
     return (
       <div className="space">
         <ScreenHeader title="Mes mandats" />
-        <p className="signin-error" role="alert">{state.message}</p>
-        <button type="button" className="btn btn-light" onClick={() => void loadMandates()}>Réessayer</button>
+        <LoadFailure message={state.message} onRetry={() => void loadMandates()} />
       </div>
     );
   }

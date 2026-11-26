@@ -10,7 +10,7 @@ import {
 } from '../../lib/account/team';
 import { plural } from '../../lib/format';
 import { accountPath, AGENCY_FORM_PATH, PATHS, TEAM_INVITE_PATH, TEAM_PATH } from '../../lib/paths';
-import { Avatar, EmptyState, ScreenHeader, Spinner, Toast } from './parts';
+import { Avatar, EmptyState, LoadFailure, ScreenHeader, Spinner, Toast } from './parts';
 
 // « Gestion des équipes » de l'espace professionnel : l'équipe de l'agence (gérant, responsables, agents), les
 // invitations en cours, « Inviter un collaborateur » (un lien à copier ou à envoyer par e-mail) et l'invitation
@@ -82,8 +82,7 @@ function TeamSpace({ screen }: { screen: string | null }) {
     return (
       <div className="space">
         <ScreenHeader title="Gestion des équipes" />
-        <p className="signin-error" role="alert">{state.message}</p>
-        <button type="button" className="btn btn-light" onClick={() => void loadTeam()}>Réessayer</button>
+        <LoadFailure message={state.message} onRetry={() => void loadTeam()} />
       </div>
     );
   }
@@ -472,8 +471,7 @@ function InvitationScreen({ token }: { token: string }) {
     return (
       <div className="space">
         <ScreenHeader title="Invitation" />
-        <p className="signin-error" role="alert">{state.message}</p>
-        <button type="button" className="btn btn-light" onClick={() => void load()}>Réessayer</button>
+        <LoadFailure message={state.message} onRetry={() => void load()} />
       </div>
     );
   }
