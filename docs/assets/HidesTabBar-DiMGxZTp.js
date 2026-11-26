@@ -1,0 +1,1 @@
+import{r as e}from"./react-D-jsuesX.js";var t=e();function n(){return(0,t.jsx)(`span`,{"data-hides-tab-bar":``,hidden:!0})}export{n as t};

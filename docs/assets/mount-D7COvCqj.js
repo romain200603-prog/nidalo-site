@@ -1,0 +1,1 @@
+import{r as e,t}from"./react-D-jsuesX.js";import{t as n}from"./client-Bw_7M0VY.js";var r=t(),i=n(),a=e();function o(e){let t=document.getElementById(`root`);if(!t)throw Error(`Élément #root absent`);(0,i.createRoot)(t).render((0,a.jsx)(r.StrictMode,{children:e}))}export{o as t};
