@@ -6,7 +6,6 @@ import { SignInCard } from '../../components/account/SignInCard';
 import { isNewAccount } from '../../lib/account/auth';
 import { accountStore, formFor, loadAccount, publicName, saveProfile, type Account } from '../../lib/account/profile';
 import { useSession, useStore } from '../../lib/account/session';
-import { useDesktop } from '../../lib/desktop';
 import { UUID_PATTERN } from '../../lib/listings';
 import { accountPath, listingPath, PATHS, publishPath } from '../../lib/paths';
 import { locateAddress, PlaceSearchError } from '../../lib/places';
@@ -34,14 +33,14 @@ import { StepSlide } from './StepSlide';
 // « Publier une annonce » (Features/Publish/PublishFlowView.swift) : les sept étapes de l'app, « Brouillon » à chaque
 // étape, la vérification, puis la confirmation. /publier/?annonce=… reprend un brouillon ou modifie une annonce déjà
 // publiée (« Enregistrer », jamais de brouillon). Tout s'écrit dans les tables de l'app (lib/publish/save).
-// Sur ordinateur, dans la colonne de 640 px ; sur téléphone (moins de 1024 px), l'assistant plein écran de l'app, sans
-// barre d'onglets : l'en-tête et la barre d'étapes en haut, « Retour » et « Continuer » en bas. Sans compte, la
-// connexion d'abord. La saisie reste la même quand la fenêtre change de largeur.
+// Sur toutes les largeurs, l'assistant plein écran de l'app, sans barre d'onglets : l'en-tête et la barre d'étapes en
+// haut, « Retour » et « Continuer » en bas ; à partir de 1024 px, dans la colonne de 720 px. Sans compte, la connexion
+// d'abord. La saisie reste la même quand la fenêtre change de largeur.
 
 export function PublishPage() {
   return (
     <Page section="publish">
-      {/* Comme l'assistant de l'app (plein écran), la page n'a pas de barre d'onglets sur téléphone. */}
+      {/* Comme l'assistant de l'app (plein écran), la page n'a pas de barre d'onglets, sur toutes les largeurs. */}
       <HidesTabBar />
       <div className="dpub-root"><PublishScreen /></div>
     </Page>
@@ -204,7 +203,7 @@ function showField(anchor: HTMLElement) {
   const viewport = window.visualViewport;
   let viewTop = viewport?.offsetTop ?? 0;
   let viewBottom = viewTop + (viewport?.height ?? window.innerHeight);
-  // Téléphone : l'en-tête reste en haut de l'écran, par-dessus l'étape.
+  // L'en-tête reste en haut de l'écran, par-dessus l'étape.
   const head = document.querySelector('.dpub .ppub-head');
   if (head) viewTop = Math.max(viewTop, head.getBoundingClientRect().bottom);
   const bar = document.querySelector('.dpub .dsc-action-bar');
@@ -218,8 +217,6 @@ function showField(anchor: HTMLElement) {
 
 function PublishFlow({ start, account, listingId, photosFirst }: { start: Start; account: Account; listingId: string | null; photosFirst: boolean }) {
   const editing = start.listingStatus !== null && start.listingStatus !== 'draft';
-  // Ordinateur : la colonne de 640 px ; téléphone : l'assistant plein écran de l'app. Même saisie, même logique.
-  const desktop = useDesktop();
   const [draft, setDraft] = useState(start.draft);
   const [saved, setSaved] = useState<PublishDraft | null>(start.listingStatus !== null ? start.draft : null);
   const [step, setStep] = useState<PublishStep>(() => openingStep(start, editing, photosFirst));
@@ -277,7 +274,7 @@ function PublishFlow({ start, account, listingId, photosFirst }: { start: Start;
     : null;
   const title = editing ? 'Modifier l\'annonce' : start.listingStatus === 'draft' ? 'Reprendre le brouillon' : 'Publier une annonce';
   const busy = publishing || savingDraft;
-  const dialogOpen = leaving || askName || refusal !== null || (!desktop && message !== null);
+  const dialogOpen = leaving || askName || refusal !== null || message !== null;
 
   // Fermer l'onglet ou suivre un lien avec une saisie non enregistrée : le navigateur demande confirmation.
   useEffect(() => {
@@ -398,7 +395,7 @@ function PublishFlow({ start, account, listingId, photosFirst }: { start: Start;
       setLeaving(false);
       setAskName(false);
       setRefusal(null);
-      if (!desktop) setMessage(null);
+      setMessage(null);
       return;
     }
     if (busy) return;
@@ -516,7 +513,7 @@ function PublishFlow({ start, account, listingId, photosFirst }: { start: Start;
   if (published) {
     return (
       <div className="dsc dpub">
-        <SuccessView listingId={published.id} title={published.title} editing={editing} back={back} phone={!desktop} />
+        <SuccessView listingId={published.id} title={published.title} editing={editing} back={back} />
       </div>
     );
   }
@@ -559,12 +556,12 @@ function PublishFlow({ start, account, listingId, photosFirst }: { start: Start;
   const subtitle = `Étape ${index + 1} sur ${PUBLISH_STEPS.length} · ${STEP_TITLES[step]}`;
   const headAction = editing ? (
     // Modification : on enregistre l'annonce elle-même, jamais un brouillon.
-    <button type="button" className={desktop ? 'dsc-button dsc-button-light' : 'ppub-pill'} onClick={() => void publish()} disabled={busy}
+    <button type="button" className="ppub-pill" onClick={() => void publish()} disabled={busy}
       aria-label="Enregistrer les modifications">
       Enregistrer
     </button>
   ) : draft.category !== null ? (
-    <button type="button" className={desktop ? 'dsc-button dsc-button-light' : 'ppub-pill'} onClick={() => void saveDraft()} disabled={busy}
+    <button type="button" className="ppub-pill" onClick={() => void saveDraft()} disabled={busy}
       aria-label="Enregistrer en brouillon">
       {savingDraft ? <span className="spinner dpub-spinner" role="status" aria-label="Enregistrement" /> : 'Brouillon'}
     </button>
@@ -590,35 +587,14 @@ function PublishFlow({ start, account, listingId, photosFirst }: { start: Start;
 
   return (
     <div className="dsc dpub dpub-flow">
-      {desktop ? (
-        <>
-          <ScreenHead
-            title={title}
-            subtitle={subtitle}
-            onBack={stepBack}
-            action={(
-              <div className="dpub-head-actions">
-                {headAction}
-                {/* Fermer depuis n'importe quelle étape : le même rond que la flèche. */}
-                <button type="button" className="dsc-back dpub-close" onClick={leave} aria-label={closeLabel}>
-                  <Icon name="x" />
-                </button>
-              </div>
-            )}
-          />
-          {progressBar}
-        </>
-      ) : (
-        <PhoneHeader title={title} subtitle={subtitle} backLabel={index === 0 ? closeLabel : 'Étape précédente'} onBack={stepBack}
-          action={headAction} closeLabel={closeLabel} onClose={leave} progress={progressBar} />
-      )}
-      {notice && <div className="dsc-saved" role="status">{desktop ? <Icon name="check" /> : <CheckCircleFill />}{notice}</div>}
+      <PhoneHeader title={title} subtitle={subtitle} backLabel={index === 0 ? closeLabel : 'Étape précédente'} onBack={stepBack}
+        action={headAction} closeLabel={closeLabel} onClose={leave} progress={progressBar} />
+      {notice && <div className="dsc-saved" role="status"><CheckCircleFill />{notice}</div>}
 
       <StepSlide ref={slide} index={index}>{stepView}</StepSlide>
 
       <div ref={actionBar} className="dsc-action-bar">
-        {/* Sur téléphone, un brouillon non enregistré se dit dans une fenêtre, comme l'app. */}
-        {desktop && message && <p className="dsc-action-message" role="alert">{message}</p>}
+        {/* Un brouillon non enregistré se dit dans une fenêtre, comme l'app (plus bas). */}
         {progress && <p className="dpub-progress-text" role="status">{`Envoi des photos : ${progress.sent} sur ${progress.total}`}</p>}
         <div className={`dsc-action-buttons${step === 'category' ? ' is-single' : ''}`}>
           {step !== 'category' && (
@@ -637,8 +613,8 @@ function PublishFlow({ start, account, listingId, photosFirst }: { start: Start;
             <button type="button" className={`dsc-button dsc-button-primary${draft.category === null && draft.propertyType === null ? ' is-dimmed' : ''}`}
               onClick={() => { if (!slide.current?.isSliding) void goForward(); }} disabled={(draft.category === null && draft.propertyType === null) || resolving}>
               {resolving ? <span className="spinner dsc-button-spinner" role="status" aria-label="Recherche de l'adresse" />
-                // L'app montre la flèche devant le mot (Label) ; l'ordinateur la garde après.
-                : desktop ? <>Continuer<Icon name="chevronRight" /></> : <><Icon name="chevronRight" />Continuer</>}
+                // L'app montre la flèche devant le mot (Label).
+                : <><Icon name="chevronRight" />Continuer</>}
             </button>
           )}
         </div>
@@ -666,9 +642,9 @@ function PublishFlow({ start, account, listingId, photosFirst }: { start: Start;
           editing ? { label: 'Continuer', onClick: () => setLeaving(false) } : { label: 'Continuer', role: 'cancel', onClick: () => setLeaving(false) },
         ]}
       />
-      {/* Téléphone : brouillon impossible à enregistrer (type, code postal, ville) ou refusé, comme l'app (« Compris »). */}
+      {/* Brouillon impossible à enregistrer (type, code postal, ville) ou refusé, comme l'app (« Compris »). */}
       <ChoiceDialog
-        open={!desktop && message !== null}
+        open={message !== null}
         title="Brouillon non enregistré"
         message={message ?? ''}
         onClose={() => setMessage(null)}
