@@ -6,7 +6,6 @@ import { Page } from '../components/Layout';
 import { OfflineState } from '../components/OfflineState';
 import { requireAccount } from '../lib/account/gate';
 import { cardKind } from '../lib/cardContent';
-import { useDesktop } from '../lib/desktop';
 import { formatArea, formatPrice } from '../lib/format';
 import { fetchListing, ListingNotFound, placeLine, sortedPhotos, UUID_PATTERN, type ListingRow } from '../lib/listings';
 import { listingConversation } from '../lib/listing/conversation';
@@ -30,7 +29,6 @@ import { Spinner } from './account/parts';
 import { ActionBar } from './listing/ActionBar';
 import { HotelSection, ProfitabilityCard, RentalCostCard } from './listing/CategoryCards';
 import { backTarget, coordinateOf, hotelPerformanceOf, rentalCostOf, toggleListingCompare } from './listing/data';
-import { DesktopListing } from './listing/DesktopListing';
 import { AlertDialog, NoPhoneDialog } from './listing/Dialogs';
 import { Gallery } from './listing/Gallery';
 import { LocationSection } from './listing/Location';
@@ -40,17 +38,18 @@ import { Description, Energy, Features, Footnote, HotelActivity, PracticalInfo, 
 import { HeaderCard, VisitCard } from './listing/TopCards';
 import { useListingScreens } from './listing/useListingScreens';
 
-// Fiche d'une annonce (ListingDetailView.swift). Téléphone : mêmes sections, dans le même ordre ; écrire au vendeur,
-// demander une visite et faire une offre comme sur ordinateur (useListingScreens), les deux écrans à leur propre
-// adresse (&vue=visite, &vue=offre) ; en bas, la barre de contact « Duo » (ou la barre blanche de sa propre annonce),
-// et la visite se demande sur la carte « Aucune visite prévue ». Ordinateur (≥ 1024 px) : DesktopListing.
+// Fiche d'une annonce (ListingDetailView.swift), à toutes les tailles : mêmes sections, dans le même ordre ; écrire au
+// vendeur, demander une visite et faire une offre (useListingScreens), les deux écrans à leur propre adresse
+// (&vue=visite, &vue=offre) ; en bas, la barre de contact « Duo » (ou la barre blanche de sa propre annonce), et la
+// visite se demande sur la carte « Aucune visite prévue ». Ordinateur (≥ 1024 px) : le même écran, dans la colonne de
+// 720 px (listing.css).
 
 type State = { status: 'loading' } | { status: 'notFound' } | { status: 'error' } | { status: 'offline' } | { status: 'ready'; row: ListingRow };
 
 type Notice = 'noPhone' | null;
 
 function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }) {
-  // Écrire, visiter, faire une offre : communs avec l'ordinateur (useListingScreens).
+  // Écrire, visiter, faire une offre (useListingScreens).
   const {
     session, me, isOwn, account, opening, shown, renderScreen, closeScreen, requestVisit, makeOffer, contactSeller, openProfile, openRequests,
     conversationAlert,
@@ -124,7 +123,7 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
 
   const fees = feesLabel(row);
 
-  // ——— État de l'offre et des visites (lus avec le compte), comme sur ordinateur ———
+  // ——— État de l'offre et des visites (lus avec le compte) ———
   const now = new Date();
   const conversation = listingConversation(account.conversations, row.id, me);
   const offerLabel = offerStateLabel(account.offers, conversation, now);
@@ -138,12 +137,6 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
 
   return (
     <div className="listing">
-      <div className="wrap listing-top">
-        <a className="listing-back-link" href={back.href} onClick={onBack}>
-          <Icon name="chevronLeft" />
-          {back.label}
-        </a>
-      </div>
       <div className="listing-gallery-wrap">
         <Gallery photos={photos} propertyType={row.property_type} onShare={share} onCompare={() => toggleListingCompare(row.id, mode)}
           listingId={row.id} back={{ href: back.href, label: back.label, onClick: onBack }} />
@@ -267,7 +260,6 @@ export function ListingPage() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const id = params.get('id') ?? '';
   const mode = listingModeFromParams(params);
-  const desktop = useDesktop();
   const [state, setState] = useState<State>(() => (UUID_PATTERN.test(id) ? { status: 'loading' } : { status: 'notFound' }));
   const [attempt, setAttempt] = useState(0);
 
@@ -296,12 +288,12 @@ export function ListingPage() {
     document.body.classList.toggle('page-listing-ready', ready);
   }, [ready]);
 
-  // Annonce introuvable, indisponible ou hors connexion, sur téléphone : retour et titre en haut, comme un écran poussé.
+  // Annonce introuvable, indisponible ou hors connexion : retour et titre en haut, comme un écran poussé.
   const stateTitle = state.status === 'notFound' ? 'Annonce introuvable' : state.status === 'error' ? 'Annonce indisponible'
     : state.status === 'offline' ? 'Annonce' : null;
   return (
     <Page section="search" phoneHeader={stateTitle ? { title: stateTitle, back: PATHS.search } : undefined}>
-      {state.status === 'ready' && (desktop ? <DesktopListing row={state.row} mode={mode} /> : <ListingView row={state.row} mode={mode} />)}
+      {state.status === 'ready' && <ListingView row={state.row} mode={mode} />}
       {state.status === 'loading' && <Loading />}
       {state.status === 'notFound' && (
         <div className="wrap">

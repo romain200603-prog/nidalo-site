@@ -3,7 +3,6 @@ import { Icon } from '../../components/Icon';
 import { SectionLabel } from '../../components/MenuRows';
 import { PageHeader } from '../../components/PageHeader';
 import { ListingPhoto } from '../../components/PhotoPager';
-import { useDesktop } from '../../lib/desktop';
 import { formatPrice } from '../../lib/format';
 import {
   areValidSlots, bookOpenSlot, createVisitRequestParams, dayString, fetchOpenSlots, INVALID_SLOTS_MESSAGE, isSlotPast,
@@ -19,12 +18,12 @@ import { ExtraIcon } from './icons';
 
 // « Demander une visite » (/annonce/?id=…&vue=visite), et dans une conversation de Messages : le formulaire de l'app
 // (Features/Visits/VisitRequestFormView.swift, VisitRequestComponents.swift, OpenSlotsSection de VisitSessionViews.swift),
-// mêmes champs, textes et règles. Sur téléphone, son écran : retour rond et titre centré (RentalHeader), vignette du bien,
-// mention, créneaux ouverts par le vendeur (visites groupées, « Réserver »), cartes titrées, et la barre blanche du bas
-// avec « Envoyer la demande », puis « Voir mon agenda » et « Fermer ». Sur ordinateur, la colonne de 640 px du site
-// (titre et croix en haut, boutons à la fin) avec ces pièces. La demande part avec create_visit_request et les
-// arguments de l'app (avec la demande refusée pour « Proposer une autre date ») ; un créneau ouvert se réserve avec
-// book_visit_slot, et la visite est confirmée tout de suite.
+// mêmes champs, textes et règles. Son écran, à toutes les tailles (sur ordinateur, dans la colonne de 720 px) : retour
+// rond et titre centré (RentalHeader), vignette du bien, mention, créneaux ouverts par le vendeur (visites groupées,
+// « Réserver »), cartes titrées, et la barre blanche du bas avec « Envoyer la demande », puis « Voir mon agenda » et
+// « Fermer ». La demande part avec create_visit_request et les arguments de l'app (avec la demande refusée pour
+// « Proposer une autre date ») ; un créneau ouvert se réserve avec book_visit_slot, et la visite est confirmée tout de
+// suite.
 
 const MODES: { value: VisitMode; label: string }[] = [{ value: 'onSite', label: 'Sur place' }, { value: 'video', label: 'En visio' }];
 
@@ -138,7 +137,6 @@ export function VisitRequestScreen({ row, photo, recipientName, initialMode = 'o
   /** Demande enregistrée (relue sur le serveur) : la fiche l'ajoute aux demandes du compte. */
   onSent: (request: VisitRequestRow) => void;
 }) {
-  const desktop = useDesktop();
   const [opened] = useState(() => new Date());
   const [first, setFirst] = useState<SlotDraft>(() => suggestedSlot(opened));
   const [second, setSecond] = useState<SlotDraft>(() => suggestedSlot(opened, new Date(opened.getFullYear(), opened.getMonth(), opened.getDate() + 1)));
@@ -243,18 +241,7 @@ export function VisitRequestScreen({ row, photo, recipientName, initialMode = 'o
 
   return (
     <div className="wrap wrap-narrow dl-screen dl-visit-screen">
-      {desktop ? (
-        <header className="dl-screen-head">
-          <div className="dl-screen-titles">
-            <h1 tabIndex={-1}>{title}</h1>
-          </div>
-          <button type="button" className="dl-screen-close" onClick={onClose} aria-label="Fermer" title="Fermer">
-            <Icon name="x" />
-          </button>
-        </header>
-      ) : (
-        <PageHeader title={title} onBack={onClose} className="visit-header" />
-      )}
+      <PageHeader title={title} onBack={onClose} className="visit-header" />
 
       <div className="visit-body">
         <ListingHeader row={row} photo={photo} />
@@ -354,7 +341,7 @@ export function VisitRequestScreen({ row, photo, recipientName, initialMode = 'o
         )}
       </div>
 
-      {/* Barre blanche du bas (safeAreaInset de l'app) sur téléphone ; à la fin de la colonne sur ordinateur. */}
+      {/* Barre blanche du bas (safeAreaInset de l'app). */}
       <div className="visit-bar">
         {error && <p className="dl-error visit-bar-error" role="alert">{error}</p>}
         {actions}

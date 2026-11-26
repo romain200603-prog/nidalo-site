@@ -73,9 +73,8 @@ export function HeaderCard({ category, price, priceSecondary, priceNote, conditi
 
 /**
  * Carte Visite (agendaCard de l'app) : le prochain rendez-vous du bien, avec « Agenda » qui ouvre Mon agenda ; sinon la
- * demande envoyée, dont toute la carte ouvre la demande (son écran est encore « bientôt » sur le site, comme sur
- * ordinateur) ; sinon « Aucune visite prévue » avec la pastille « Demander » (la visite se demande ici depuis que la
- * barre du bas n'a plus « Visiter »), qui demande un compte comme avant.
+ * demande envoyée, dont toute la carte ouvre la demande ; sinon « Aucune visite prévue » avec la pastille « Demander »
+ * (la visite se demande ici depuis que la barre du bas n'a plus « Visiter »), qui demande un compte comme avant.
  */
 export function VisitCard({ upcoming = null, request = null, now, isRental, onRequest }: {
   upcoming?: AgendaVisit | null;

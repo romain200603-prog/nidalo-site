@@ -20,46 +20,34 @@
 }
 @media (min-width: 600px) { .listing { --k: 1; } }
 
-/* La barre du bas du site laisse la place à la barre d'actions (hidesTabBar dans l'app) : la dernière carte remonte
-   entièrement au-dessus des capsules Duo (56 px, 2 px au-dessus de la zone sûre, 10 px sans zone sûre) ou de la barre
-   blanche de sa propre annonce (8 + 46 + 6 px et la zone sûre). */
+/* La barre d'onglets laisse la place à la barre d'actions (hidesTabBar dans l'app), à toutes les largeurs : la dernière
+   carte remonte entièrement au-dessus des capsules Duo (56 px, 2 px au-dessus de la zone sûre, 10 px sans zone sûre)
+   ou de la barre blanche de sa propre annonce (8 + 46 + 6 px et la zone sûre), sans la place de la barre d'onglets. */
 body.page-listing-ready .tabbar { display: none; }
-@media (max-width: 1023px) {
-  body.page-listing-ready { padding-bottom: calc(56px + max(10px, env(safe-area-inset-bottom) + 2px)); }
-  body.page-listing-ready:has(.owner-bar) { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
-  /* « Demander une visite » ou « Faire une offre » ouvert : pas de barre d'actions, donc pas de place pour elle ; un
-     écran avec sa barre blanche du bas (profil, formulaire de visite) lui laisse sa place (52 + 10 + 6 et la zone sûre). */
-  body.page-listing-ready:has(.listing-screen) { padding-bottom: 0; }
-  body.page-listing-ready:has(.listing-screen .screen-bottom-bar) { padding-bottom: calc(68px + env(safe-area-inset-bottom)); }
-}
+body.page-listing-ready { padding-bottom: calc(56px + max(10px, env(safe-area-inset-bottom) + 2px)); }
+body.page-listing-ready:has(.owner-bar) { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
+/* « Demander une visite » ou « Faire une offre » ouvert : pas de barre d'actions, donc pas de place pour elle ; un
+   écran avec sa barre blanche du bas (profil, formulaire de visite) lui laisse sa place (52 + 10 + 6 et la zone sûre). */
+body.page-listing-ready:has(.listing-screen) { padding-bottom: 0; }
+body.page-listing-ready:has(.listing-screen .screen-bottom-bar) { padding-bottom: calc(68px + env(safe-area-inset-bottom)); }
 
 /* ——— Mise en page ——— */
-.listing-top { display: none; }
-.listing-back-link { display: inline-flex; align-items: center; gap: 2px; padding: 6px 8px 6px 0; border-radius: 8px; color: var(--blue); font-size: 15px; font-weight: 600; text-decoration: none; }
-.listing-back-link:hover { text-decoration: underline; }
-.listing-back-link .icon { width: 18px; height: 18px; }
 .listing-body { display: flex; flex-direction: column; padding-top: 16px; padding-bottom: 24px; }
 .listing-main, .listing-category { min-width: 0; }
 
-/* Téléphone et tablette : une colonne, dans l'ordre de l'app (résumé, visite, bloc de la catégorie, sections) : la
-   carte des visites juste sous le résumé, au-dessus de « Rentabilité », pour toutes les catégories (14 novembre). */
-@media (max-width: 1023px) {
-  .listing-aside, .listing-aside-inner, .listing-main { display: contents; }
-  .listing-body > .listing-aside .header-card { order: 1; margin: 0 -3px; }
-  .listing-body > .listing-aside .visit-card { order: 2; margin: 12px -3px 0; }
-  .listing-main > .listing-category { order: 3; margin: 12px -3px 0; }
-  .listing-main > :not(.listing-category) { order: 4; margin-top: 14px; }
-  .listing-main > .listing-report { margin-top: 6px; }
-}
+/* Une colonne, dans l'ordre de l'app (résumé, visite, bloc de la catégorie, sections) : la carte des visites juste sous
+   le résumé, au-dessus de « Rentabilité », pour toutes les catégories (14 novembre). */
+.listing-aside, .listing-aside-inner, .listing-main { display: contents; }
+.listing-body > .listing-aside .header-card { order: 1; margin: 0 -3px; }
+.listing-body > .listing-aside .visit-card { order: 2; margin: 12px -3px 0; }
+.listing-main > .listing-category { order: 3; margin: 12px -3px 0; }
+.listing-main > :not(.listing-category) { order: 4; margin-top: 14px; }
+.listing-main > .listing-report { margin-top: 6px; }
 
-/* Ordinateur : galerie large, puis le contenu à gauche et le résumé avec les actions à droite. */
+/* Ordinateur : l'écran du téléphone dans la colonne de 720 px (16 sur les côtés), la galerie sur toute sa largeur. */
 @media (min-width: 1024px) {
-  .listing-top { display: block; padding-top: 14px; }
-  .listing-gallery-wrap { width: 100%; max-width: 1180px; margin: 8px auto 0; padding: 0 16px; }
-  .listing-body { display: grid; grid-template-columns: minmax(0, 1fr) 380px; column-gap: 28px; align-items: start; padding-top: 24px; padding-bottom: 8px; }
-  .listing-aside { grid-column: 2; grid-row: 1; position: sticky; top: 16px; }
-  .listing-aside-inner { display: flex; flex-direction: column; gap: 12px; }
-  .listing-main { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; gap: 14px; }
+  .listing-gallery-wrap { max-width: var(--app-column); margin: 0 auto; }
+  .listing-body { max-width: var(--app-column); }
 }
 
 /* ——— Galerie ———
@@ -81,7 +69,6 @@ div.gallery-page { cursor: default; }
 .gallery-dots span { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.5); transition: background 0.2s; }
 .gallery-dots span.on { background: #FFFFFF; }
 .gallery-counter { position: absolute; right: 12px; bottom: 12px; height: 24px; padding: 0 9px; border-radius: 999px; background: rgba(0, 0, 0, 0.5); color: #FFFFFF; font-size: 12px; font-weight: 700; line-height: 24px; font-variant-numeric: tabular-nums; pointer-events: none; }
-.gallery-all { display: none; }
 .gallery-bar { position: absolute; top: calc(6px + env(safe-area-inset-top)); left: 12px; right: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; pointer-events: none; }
 .gallery-actions { display: flex; gap: 8px; }
 .gallery-action, .gallery-back {
@@ -100,20 +87,11 @@ div.gallery-page { cursor: default; }
   .gallery-action:active, .gallery-back:active { transform: none; }
 }
 
+/* Ordinateur : la largeur de la colonne, à la proportion de l'app (390 × 325 sur l'iPhone, soit 720 × 600) ; au
+   clavier, le contour d'une photo choisie se voit à l'intérieur de la galerie. */
 @media (min-width: 1024px) {
-  .gallery { height: 440px; border-radius: 20px; background: transparent; }
-  .gallery-strip { display: grid; grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; gap: 8px; overflow: hidden; scroll-snap-type: none; }
-  .gallery-page { width: auto; height: auto; min-height: 0; }
-  .gallery-page:first-child { grid-row: 1 / 3; }
-  .gallery-page:nth-child(n + 4) { display: none; }
-  .gallery-two .gallery-page:nth-child(2) { grid-row: 1 / 3; }
-  .gallery-one .gallery-strip, .gallery-empty .gallery-strip { grid-template-columns: 1fr; grid-template-rows: 1fr; }
-  .gallery-empty { height: 300px; }
-  .gallery-page .photo { transition: transform 0.3s ease, filter 0.3s ease; }
-  .gallery-page:hover .photo { filter: brightness(0.94); }
-  .gallery-dots, .gallery-counter, .gallery-bar { display: none; }
-  .gallery-all { position: absolute; right: 16px; bottom: 16px; display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border: 0; border-radius: 12px; background: #FFFFFF; color: var(--ink); font-size: 14px; font-weight: 700; box-shadow: 0 2px 8px rgba(36, 45, 56, 0.16); cursor: pointer; }
-  .gallery-all .icon { width: 18px; height: 18px; color: var(--blue); }
+  .gallery { height: auto; aspect-ratio: 390 / 325; }
+  .gallery-page:focus-visible { outline-offset: -3px; }
 }
 
 /* Visionneuse plein écran (ListingPhotoViewer) : fond noir, compteur 15 gras dans une capsule blanche à 16 % (34 de
@@ -181,16 +159,20 @@ a.visit-card { color: inherit; text-decoration: none; }
 .visit-chevron { flex: none; width: 16px; height: 16px; color: var(--text-muted); }
 :is(.visit-agenda, a.visit-card):focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
 
-/* ——— Barre du bas, sur téléphone et tablette ———
+/* ——— Barre du bas ———
    Annonce d'un autre : la barre de contact « Duo » (ContactBar.tsx, ListingContactBar.swift), deux capsules qui
-   flottent au-dessus de la fiche sur un dégradé de la couleur de la page (les 112 derniers pixels, sans toucher). Ses
-   capsules servent aussi sur ordinateur, dans la colonne de droite (ordinateur-fiche.css). Courbes de Romain : Morph,
-   Appui, Rebond (les autres sont dans contactBar.ts). Ses couleurs viennent de captures (Display P3) ; le bleu est
-   celui de l'app (#3C5CB0, qui s'affiche #435BAA en Display P3). L'app est en mode clair : la barre aussi. */
+   flottent au-dessus de la fiche sur un dégradé de la couleur de la page (les 112 derniers pixels, sans toucher).
+   Courbes de Romain : Morph, Appui, Rebond (les autres sont dans contactBar.ts). Ses couleurs viennent de captures
+   (Display P3) ; le bleu est celui de l'app (#3C5CB0, qui s'affiche #435BAA en Display P3). L'app est en mode clair :
+   la barre aussi. */
 .duo-bar { position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; padding: 0 20px max(10px, env(safe-area-inset-bottom) + 2px); pointer-events: none; }
 .duo-fade { position: absolute; left: 0; right: 0; bottom: 0; height: 112px; background: linear-gradient(rgba(250, 249, 246, 0), rgba(250, 249, 246, 0.7) 50%, rgba(250, 249, 246, 0.94)); pointer-events: none; }
 /* Tablette : les capsules gardent la largeur de l'ancienne barre (520 px), au centre. */
 .duo-bar .duo-row { max-width: 520px; margin: 0 auto; }
+/* Ordinateur : la barre et son dégradé à la largeur de la colonne de 720 px, les capsules au centre (520 px). */
+@media (min-width: 1024px) {
+  .duo-bar { left: calc(50% - var(--app-column) / 2); right: calc(50% - var(--app-column) / 2); }
+}
 
 .duo-row {
   --duo-morph: cubic-bezier(0.32, 0.72, 0, 1);
@@ -273,10 +255,17 @@ a.visit-card { color: inherit; text-decoration: none; }
 }
 
 /* Sa propre annonce : barre blanche sur toute la largeur, « Voir les demandes » (bleu clair) et « Gérer l'annonce »
-   (bleu), 46 px de haut, rayon 12, pictogrammes de 18 px et texte de 14 px gras. Tablette : 520 px au centre. */
+   (bleu), 46 px de haut, rayon 12, pictogrammes de 18 px et texte de 14 px gras. Tablette : 520 px au centre.
+   Ordinateur : la barre à la largeur de la colonne de 720 px, ses boutons sur 520 px au centre. */
 .owner-bar {
   position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; display: flex; gap: 10px;
   padding: 8px max(16px, (100% - 520px) / 2) calc(6px + env(safe-area-inset-bottom)); background: #FFFFFF; box-shadow: 0 -2px 20px rgba(36, 45, 56, 0.06);
+}
+@media (min-width: 1024px) {
+  .owner-bar {
+    left: calc(50% - var(--app-column) / 2); right: calc(50% - var(--app-column) / 2);
+    padding-left: calc((var(--app-column) - 520px) / 2); padding-right: calc((var(--app-column) - 520px) / 2);
+  }
 }
 .owner-bar-button {
   flex: 1 1 0; min-width: 0; min-height: 46px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0;
@@ -527,6 +516,10 @@ a.visit-card { color: inherit; text-decoration: none; }
 .full-map-title { color: var(--ink); font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .full-map-sub { color: var(--text-secondary); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .full-map-chevron { width: 16px; height: 16px; color: var(--text-muted); }
+/* Ordinateur : la carte sur toute la fenêtre, ses boutons du haut et sa carte du bas dans la colonne de 720 px. */
+@media (min-width: 1024px) {
+  .full-map-top, .full-map-bottom { left: calc(50% - var(--app-column) / 2 + 16px); right: calc(50% - var(--app-column) / 2 + 16px); }
+}
 
 /* ——— Fenêtres ——— */
 .copy-link { width: 100%; height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--page); color: var(--ink); font: inherit; font-size: 14px; }
@@ -607,9 +600,20 @@ a.visit-card { color: inherit; text-decoration: none; }
 .profile-empty { margin: 0; color: var(--app-text-secondary); font: 400 13px/1.4 var(--app-font); }
 .screen-bottom-bar { position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; padding: 10px max(16px, (100% - 600px) / 2) calc(6px + env(safe-area-inset-bottom)); background: #FFFFFF; box-shadow: 0 -2px 20px rgba(36, 45, 56, 0.06); }
 .screen-bottom-bar .btn { width: 100%; min-height: 52px; border-radius: 12px; font: 600 15px/1.2 var(--app-font); }
+/* Ordinateur : le profil dans la colonne de 720 px (16 sur les côtés), sa barre du bas à la largeur de la colonne et
+   « Contacter… » sur 600 px au centre. */
 @media (min-width: 1024px) {
-  .listing-profile { width: min(640px, 100% - 64px); margin: 0 auto; padding: 32px 0 24px; background: none; }
-  .listing-profile .screen-bottom-bar { position: static; margin-top: 16px; padding: 0; background: none; box-shadow: none; }
+  .listing-profile { max-width: var(--app-column); margin: 0 auto; }
+  .screen-bottom-bar {
+    left: calc(50% - var(--app-column) / 2); right: calc(50% - var(--app-column) / 2);
+    padding-left: calc((var(--app-column) - 600px) / 2); padding-right: calc((var(--app-column) - 600px) / 2);
+  }
+}
+
+/* « Demandes de visite » de sa propre annonce (ListingRequestsScreen.tsx, styles dans agenda-app.css) : sur ordinateur,
+   la page de l'app sous 1024 px (fond de page, 16 sur les côtés, 6 au-dessus de l'en-tête) dans la colonne de 720 px. */
+@media (min-width: 1024px) {
+  .listing-screen .app-requests { max-width: var(--app-column); min-height: 100dvh; margin: 0 auto; padding: 6px 16px 0; background: var(--app-page); }
 }
 
 /* ——— Chargement et erreurs ———
