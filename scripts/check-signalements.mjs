@@ -421,11 +421,16 @@ try {
     await page.locator('.delete-card').screenshot({ path: join(out, 'supprimer-apple-carte.png') });
     await context.close();
 
+    // Ordinateur : le groupe de l'écran du téléphone, dans la colonne de 720 px (avant l'étape 7e : la section de
+    // « Mon espace »).
     context = await desktop();
     await mock(context, newState());
-    page = await open(context, '/compte/', 'Mon espace (ordinateur)');
-    await page.locator('#compte-et-securite').waitFor();
-    await page.locator('#compte-et-securite').screenshot({ path: join(out, 'moncompte-ordinateur.png') });
+    page = await open(context, '/compte/', 'Mon compte (ordinateur)');
+    const security = page.locator('#compte-et-securite')
+      .or(page.locator('.app-menu-group', { has: page.locator('.app-section-label', { hasText: 'Compte et sécurité' }) }));
+    await security.waitFor();
+    await page.waitForTimeout(300);
+    await security.screenshot({ path: join(out, 'moncompte-ordinateur.png') });
     await context.close();
   }
 
@@ -548,20 +553,28 @@ try {
       await context.close();
     }
 
-    // 2. Ordinateur, compte modérateur (particulier : Mon espace) : la ligne, puis la page.
+    // 2. Ordinateur, compte modérateur : Mon compte est l'écran du téléphone (la ligne dans « Compte et sécurité »),
+    //    puis la page, avec l'en-tête de l'app comme sur téléphone.
     {
       const N = 'signalements (ordinateur)';
       const state = newState();
       const context = await desktop();
       await mock(context, state);
       const page = await open(context, '/compte/', N);
-      await page.locator('#compte-et-securite .app-row', { hasText: 'Signalements' }).waitFor({ timeout: 8000 })
+      await page.waitForFunction(() => [...document.querySelectorAll('.app-row-title')].some((el) => el.textContent === 'Signalements'), null, { timeout: 8000 })
         .catch(() => problems.push(`${N} : ligne « Signalements » absente`));
-      expectSame(N, 'Compte et sécurité', await texts(page, '#compte-et-securite .app-row-title'),
-        ['Connexion et sécurité', 'Confidentialité et données', 'Type de compte', 'Signalements']);
-      await page.locator('#compte-et-securite .app-row', { hasText: 'Signalements' }).click();
+      const section = await page.$$eval('.app-menu-group', (els) => {
+        const found = els.find((el) => el.querySelector('.app-section-label')?.textContent.includes('Compte et sécurité'));
+        return found ? [...found.querySelectorAll('.app-row-title')].map((el) => el.textContent) : [];
+      });
+      expectSame(N, 'Compte et sécurité', section, ['Connexion et sécurité', 'Confidentialité et données', 'Type de compte', 'Signalements']);
+      await page.locator('.app-group a.app-row', { hasText: 'Signalements' }).click();
       await page.waitForURL(/vue=signalements/);
       await waitCards(page, 4, N);
+      expectSame(N, 'titre', [tidy(await page.locator('.screen-header h1').textContent()),
+        await page.locator('.screen-header .app-page-header-trailing button.app-round[aria-label="Actualiser"]').count(),
+        tidy(await page.locator('.reports-subtitle').textContent())], ['Signalements', 1, 'Chaque signalement est à traiter sous 24 heures.']);
+      expectSame(N, 'onglets', await texts(page, '.dsc-tab'), ['À traiter4', 'Traités']);
       await shot(page, 'signalements-ordinateur.png');
       await context.close();
     }
