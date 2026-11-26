@@ -6237,7 +6237,7 @@ try {
     const unknownListing = '6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1aff';
     for (const [path, title, back, file] of [['/aide/', 'Aide', '/', 'aide'], ['/conditions/', 'Conditions d’utilisation', '/', 'conditions'],
       ['/confidentialite/', 'Politique de confidentialité', '/', 'confidentialite'], ['/mentions-legales/', 'Mentions légales', '/', 'mentions-legales'],
-      ['/page-inexistante/', 'Page introuvable', '/', '404'], ['/publier/', 'Publier une annonce', '/', 'publier'],
+      ['/page-inexistante/', 'Page introuvable', '/', '404'],
       [`/annonce/?id=${unknownListing}`, 'Annonce introuvable', '/recherche/', 'annonce-introuvable']]) {
       // La page 404 répond avec le code 404 (signalé par Chrome, voir open()).
       const name = file === '404' ? `404 ${T}` : `${T} ${file}`;
@@ -6248,6 +6248,16 @@ try {
       await page.screenshot({ path: join(out, `haut-telephone-${file}.png`) });
       await page.close();
     }
+    // Publier (étape 6) : l'assistant plein écran de l'app (PublishFlowView), son propre en-tête en haut (le rond qui
+    // ferme, « Publier une annonce » visible), sans en-tête bleu, sans retour du site ni barre d'onglets.
+    page = await open(context, '/publier/', `${T} publier`);
+    await page.waitForSelector('.ppub-head h1', { timeout: 8000 }).catch(() => problems.push(`${T} publier : en-tête de l'assistant absent`));
+    expectSame(`${T} publier`, 'haut de la page', [await topOf(page), await page.evaluate(() => [Math.round(document.querySelector('.ppub-head').getBoundingClientRect().top),
+      document.querySelector('.ppub-back')?.getAttribute('aria-label') ?? null, [...document.querySelectorAll('.tabbar')].every((bar) => getComputedStyle(bar).display === 'none')])],
+    [{ band: true, background: 'rgb(250, 249, 246)', header: null, h1: [['Publier une annonce', false]] }, [0, 'Fermer la publication', true]]);
+    await phoneFits(page, `${T} publier`);
+    await page.screenshot({ path: join(out, 'haut-telephone-publier.png') });
+    await page.close();
     // Comparer (CompareView de l'app, en plein écran, étape 2 du site comme l'app) : grand titre et « Fermer » en haut,
     // sans retour rond ni barre d'onglets ; ouvert seul, « Fermer » mène à la recherche.
     page = await open(context, '/comparer/', `${T} comparer`);
@@ -6300,6 +6310,7 @@ try {
     await context.close();
     // Entre 761 et 1023 px : la page du téléphone (retour et titre en haut, h1 lu par les lecteurs d'écran), sans en-tête
     // bleu ; la barre d'onglets de l'app en bas (42 de haut, au-dessus de la zone du bas de 4 au moins), ses cinq onglets.
+    // Publier (étape 6) : l'assistant de l'app, sans retour du site ; son titre (ou celui de la connexion) reste visible.
     const tablet = await browser.newContext({ viewport: { width: 800, height: 1000 }, locale: 'fr-FR' });
     await mock(tablet);
     for (const path of ['/aide/', '/publier/', '/page-inexistante/']) {
@@ -6307,7 +6318,7 @@ try {
       page = await open(tablet, path, name);
       await page.waitForSelector('main h1');
       expectSame(name, '[en-tête bleu, retour du téléphone, h1 visible]', [await page.locator('.topbar').isVisible(), await page.locator('.phone-page-head').isVisible(),
-        await page.locator('main h1').first().evaluate((heading) => heading.getBoundingClientRect().width > 1)], [false, true, false]);
+        await page.locator('main h1').first().evaluate((heading) => heading.getBoundingClientRect().width > 1)], path === '/publier/' ? [false, false, true] : [false, true, false]);
       if (path === '/aide/') {
         expectSame(name, 'barre d\'onglets [haut, hauteur, onglets]', await page.evaluate(() => {
           const bar = document.querySelector('.tabbar');

@@ -1,10 +1,11 @@
-// Vérification de « Publier une annonce » sur ordinateur (/publier/) dans Chromium, sans réseau : le serveur Supabase
-// et les services d'adresse sont simulés avec des données inventées et notent tout ce que la page envoie. Le compte de
-// test publie une annonce de bout en bout (sept étapes, deux photos, prénom demandé, un refus du serveur puis la mise
-// en ligne), enregistre un brouillon puis le reprend, modifie une annonce en ligne et ses photos. Les écritures suivent
-// l'ordre de l'app (SupabaseListingRepository.publish) : l'annonce en brouillon, l'adresse exacte, les photos (sans
-// métadonnées), puis la mise en ligne. Sans compte : l'invitation à se connecter ; sous 1024 px : la page « bientôt »,
-// sans rien demander au serveur. Captures pour Romain : publier-*.png.
+// Vérification de « Publier une annonce » (/publier/) dans Chromium, sans réseau : le serveur Supabase et les services
+// d'adresse sont simulés avec des données inventées et notent tout ce que la page envoie. Le compte de test publie une
+// annonce de bout en bout (sept étapes, deux photos, prénom demandé, un refus du serveur puis la mise en ligne),
+// enregistre un brouillon puis le reprend, modifie une annonce en ligne et ses photos. Les écritures suivent l'ordre de
+// l'app (SupabaseListingRepository.publish) : l'annonce en brouillon, l'adresse exacte, les photos (sans métadonnées),
+// puis la mise en ligne. Sans compte : l'invitation à se connecter. Sous 1024 px : l'assistant plein écran de l'app,
+// sans barre d'onglets (en-tête, barre d'étapes, barre du bas, brouillon, publication, modification depuis Mes annonces
+// et depuis la fiche, confirmation en pleine page), avec les mêmes écritures. Captures pour Romain : publier-*.png.
 // Lancer après la construction : node scripts/check-publish.mjs [dossier construit, docs/ par défaut] [dossier des captures]
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
@@ -207,7 +208,6 @@ function rest(state, route, signedIn) {
   const width = pageWidth(request);
   state.calls.push({ table, method, search: decodeURIComponent(url.search), body, width });
   if (!signedIn && (LISTING_TABLES.includes(table) || ['profiles', 'profile_details'].includes(table))) problems.push(`sans compte : ${method} ${table} demandé`);
-  if (width !== null && width < 1024 && LISTING_TABLES.includes(table)) problems.push(`téléphone : ${method} ${table} demandé (rien ne doit changer sous 1024 px)`);
   const now = new Date().toISOString();
   const rows = Array.isArray(body) ? body : body && typeof body === 'object' ? [body] : [];
   // Pas de réseau au moment d'écrire l'annonce : la demande ne part pas.
@@ -376,7 +376,6 @@ async function storage(state, route) {
     const name = path.slice(PUBLIC.length);
     return route.fulfill({ status: 200, contentType: 'image/jpeg', headers: cors, body: state.files.get(name)?.bytes ?? PHOTO });
   }
-  if (width !== null && width < 1024) problems.push(`téléphone : stockage ${method} demandé`);
   if (method === 'POST' && path.startsWith(`${OBJECT}/`)) {
     const name = path.slice(OBJECT.length + 1);
     const file = multipartFile(request.postDataBuffer(), request.headers()['content-type']);
@@ -530,13 +529,18 @@ async function open(context, path, name) {
 }
 
 const CONTINUE = '.dpub .dsc-action-buttons .dsc-button-primary';
-const head = async (page) => [await textOf(page, '.dsc-head h1'), await textOf(page, '.dsc-head .dsc-titles p')];
+/** Adresse introuvable, comme l'app (PublishValidation). */
+const ADDRESS_NOT_FOUND = 'Veuillez renseigner une adresse valide.';
+/** Titre et sous-titre de l'en-tête : celui de l'ordinateur, ou celui du téléphone (PhoneHeader). */
+const TITLE = ':is(.dsc-head h1, .ppub-titles h1)';
+const SUBTITLE = ':is(.dsc-head .dsc-titles p, .ppub-titles p)';
+const head = async (page) => [await textOf(page, TITLE), await textOf(page, SUBTITLE)];
 /**
  * Étape affichée, par son sous-titre (« Étape 3 sur 7 · Caractéristiques »), une fois arrivée : le glissement d'une
  * étape à l'autre terminé (la copie de l'étape quittée retirée).
  */
 async function waitStep(page, number, title, name) {
-  await page.waitForFunction(([n, t]) => document.querySelector('.dsc-head .dsc-titles p')?.textContent === `Étape ${n} sur 7 · ${t}`, [number, title], { timeout: 8000 })
+  await page.waitForFunction(([n, t, sel]) => document.querySelector(sel)?.textContent === `Étape ${n} sur 7 · ${t}`, [number, title, SUBTITLE], { timeout: 8000 })
     .catch(async () => problems.push(`${name} : étape « ${(await head(page))[1]} » au lieu de « Étape ${number} sur 7 · ${title} »`));
   await slideEnd(page, name);
 }
@@ -580,6 +584,30 @@ async function shot(page, file) {
   await page.setViewportSize(viewport);
   await page.waitForTimeout(100);
 }
+/**
+ * Capture de l'assistant sur téléphone : la fenêtre prend sa hauteur (mesurée sans le minimum d'un écran), pour que
+ * l'en-tête reste en haut et la barre du bas en bas, sans le pied de page.
+ */
+async function phoneShot(page, file) {
+  const viewport = page.viewportSize();
+  await page.evaluate(() => { if (document.activeElement instanceof HTMLElement && !document.activeElement.closest('dialog')) document.activeElement.blur(); });
+  await page.evaluate(() => document.fonts.ready);
+  const height = await page.evaluate(() => {
+    const flow = document.querySelector('.dpub-flow, .dpub-success');
+    if (!flow || document.querySelector('dialog[open]')) return innerHeight;
+    flow.style.minHeight = '0px';
+    const rect = flow.getBoundingClientRect();
+    const total = Math.ceil(rect.top + window.scrollY + rect.height);
+    flow.style.minHeight = '';
+    return total;
+  });
+  await page.setViewportSize({ width: viewport.width, height: Math.max(viewport.height, height) });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: join(out, file) });
+  await page.setViewportSize(viewport);
+  await page.waitForTimeout(100);
+}
 /** Toutes les images d'un sélecteur chargées (photos choisies, photos en ligne, aperçu). */
 async function imagesLoaded(page, selector, count, name) {
   await page.waitForFunction(([sel, n]) => {
@@ -607,20 +635,238 @@ try {
     await context.close();
   }
 
-  // 2. Sous 1024 px (iPhone, 1023 px) : le message « bientôt » du téléphone, même avec le compte ; rien n'est demandé.
-  for (const [name, options] of [['publier iPhone', { ...devices['iPhone 13'], locale: 'fr-FR' }], ['publier 1023', { viewport: { width: 1023, height: 768 }, locale: 'fr-FR' }]]) {
-    const state = newState({ listings: [ONLINE], photos: ONLINE_PHOTOS, locations: [ONLINE_LOCATION] });
-    const context = await browser.newContext(options);
-    await mock(context, state);
-    for (const path of ['/publier/', `/publier/?annonce=${ONLINE_ID}`]) {
-      const page = await open(context, path, `${name} ${path}`);
-      await page.waitForSelector('.soon-page h1');
-      expectSame(`${name} ${path}`, 'page « bientôt »', [await textOf(page, '.soon-page h1'), await textOf(page, '.soon-page p'), await page.locator('.dpub').count()],
-        ['Publier une annonce', 'Bientôt sur le site. Pour l’instant, une annonce se publie dans l’app : touchez le bouton + au centre de la barre du bas.', 0]);
-      await page.close();
-    }
+  // 2. Téléphone (iPhone 13, 390 px) : l'assistant plein écran de l'app (PublishFlowView), sans barre d'onglets. Sans
+  //    compte : la connexion d'abord, en pleine page, sans rien demander au serveur. Avec le compte : l'en-tête collé en
+  //    haut (ronds de 36, titre de 20 qui rapetisse jusqu'à 80 %, « Étape 1 sur 7 · Catégorie » de 13, pastille de 36),
+  //    la barre d'étapes (traits de 4, 6 pour l'étape en cours, zones de 44), la barre du bas collée en bas de l'écran
+  //    (« Retour » de 130, « Continuer » de 52, la flèche devant le mot, atténué sans catégorie), le glissement des
+  //    étapes sans débordement, « Brouillon non enregistré » dans une fenêtre, « Brouillon enregistré », puis la
+  //    publication de bout en bout, avec les écritures de l'ordinateur, et la confirmation en pleine page.
+  const phone = () => browser.newContext({ ...devices['iPhone 13'], deviceScaleFactor: 2, locale: 'fr-FR', timezoneId: 'Europe/Paris' });
+  {
+    const N = 'publier téléphone sans compte';
+    const state = newState();
+    const context = await phone();
+    await mock(context, state, { signedIn: false });
+    const page = await open(context, '/publier/', N);
+    await page.waitForSelector('.signin-card');
+    expectSame(N, 'connexion d\'abord', [await textOf(page, '.signin-card h1'), await page.locator('.dpub').count(), await page.locator('.tabbar').isVisible()],
+      ['Votre prochain bien commence ici.', 0, false]);
     const asked = state.calls.filter((call) => LISTING_TABLES.includes(call.table) || call.table === 'storage');
-    if (asked.length) problems.push(`${name} : ${writeNames(asked).join(', ')} demandé`);
+    if (asked.length) problems.push(`${N} : ${writeNames(asked).join(', ')} demandé`);
+    await shot(page, 'publier-telephone-sans-compte.png');
+    await context.close();
+  }
+  {
+    const N = 'publier téléphone';
+    const state = newState();
+    const context = await phone();
+    await mock(context, state);
+    const page = await open(context, '/publier/', N);
+    await page.waitForSelector('.dpub .dpub-category-grid');
+    /** Mesures de l'écran : ce qui reste du site autour, l'en-tête, la barre d'étapes, la barre du bas et ses boutons. */
+    const frame = () => page.evaluate(() => {
+      const box = (el) => {
+        const rect = el.getBoundingClientRect();
+        return [Math.round(rect.width), Math.round(rect.height)];
+      };
+      const one = (selector) => document.querySelector(selector);
+      const css = (selector, property) => getComputedStyle(one(selector))[property];
+      const bar = one('.dpub .dsc-action-bar');
+      return {
+        around: [...document.querySelectorAll('.tabbar, .topbar, .dpub .dsc-head')].filter((el) => el.getClientRects().length > 0).length,
+        head: [css('.ppub-head', 'position'), Math.round(one('.ppub-head').getBoundingClientRect().top)],
+        rounds: [box(one('.ppub-back')), box(one('.dpub-close')), css('.ppub-back', 'backgroundColor')],
+        title: [css('.ppub-titles h1', 'fontSize'), css('.ppub-titles h1', 'fontWeight'), css('.ppub-titles p', 'fontSize')],
+        pill: one('.ppub-pill') ? [one('.ppub-pill').textContent, box(one('.ppub-pill'))[1], css('.ppub-pill', 'backgroundColor')] : null,
+        segments: [...document.querySelectorAll('.dpub-progress > * > span')].map((el) => Math.round(el.getBoundingClientRect().height)),
+        zones: [...document.querySelectorAll('.dpub-progress > *')].map((el) => Math.round(el.getBoundingClientRect().height)),
+        bar: [getComputedStyle(bar).position, Math.round(innerHeight - bar.getBoundingClientRect().bottom), getComputedStyle(bar).backgroundColor],
+        buttons: [...bar.querySelectorAll('.dsc-action-buttons > .dsc-button')]
+          .map((el) => [...box(el), el.firstElementChild?.tagName.toLowerCase() ?? null, el.textContent.trim(), getComputedStyle(el).opacity]),
+        overflow: document.documentElement.scrollWidth - innerWidth,
+      };
+    });
+    expectSame(N, 'étape 1 sans choix', [await frame(), await page.locator(CONTINUE).isDisabled()], [{
+      around: 0, head: ['sticky', 0], rounds: [[36, 36], [36, 36], 'rgb(242, 240, 236)'], title: ['20px', '700', '13px'], pill: null,
+      segments: [6, 4, 4, 4, 4, 4, 4], zones: [44, 44, 44, 44, 44, 44, 44], bar: ['sticky', 0, 'rgb(255, 255, 255)'],
+      buttons: [[358, 52, 'svg', 'Continuer', '0.5']], overflow: 0,
+    }, true]);
+    await page.getByRole('button', { name: /^Résidentiel,/ }).click();
+    await page.getByRole('button', { name: 'Appartement', exact: true }).click();
+    // Avec la pastille « Brouillon », « Publier une annonce » ne tient plus : il rapetisse à 80 % (16 px), puis se coupe.
+    await page.waitForFunction((sel) => getComputedStyle(document.querySelector(sel)).opacity === '1', CONTINUE, { timeout: 3000 }).catch(() => undefined);
+    const chosen = await frame();
+    expectSame(N, 'étape 1 choisie', [chosen.title, chosen.pill, chosen.buttons], [['16px', '700', '13px'], ['Brouillon', 36, 'rgb(238, 242, 250)'],
+      [[358, 52, 'svg', 'Continuer', '1']]]);
+    await phoneShot(page, 'publier-telephone-1-categorie.png');
+    // L'étape suivante glisse de toute la largeur de l'écran, le sous-titre en fondu, sans faire défiler la page de côté.
+    await page.click(CONTINUE);
+    expectSame(N, 'glissement', await page.evaluate(() => ({
+      sliding: document.querySelector('.dpub-steps').classList.contains('is-sliding'),
+      animations: [getComputedStyle(document.querySelector('.dpub-step')).animationName, getComputedStyle(document.querySelector('.dpub-step-exit > *')).animationName,
+        getComputedStyle(document.querySelector('.ppub-titles p')).animationName],
+      overflow: document.documentElement.scrollWidth - innerWidth,
+    })), { sliding: true, animations: ['ppub-step-from-right', 'ppub-step-to-left', 'app-fade-in'], overflow: 0 });
+    await waitStep(page, 2, 'Informations principales', N);
+    const second = await frame();
+    expectSame(N, 'étape 2', [second.segments, second.buttons, second.overflow],
+      [[4, 6, 4, 4, 4, 4, 4], [[130, 52, 'svg', 'Retour', '1'], [218, 52, 'svg', 'Continuer', '1']], 0]);
+    // « Brouillon » trop tôt : la fenêtre de l'app, rien d'envoyé, rien dans la barre du bas.
+    await page.click('.ppub-pill');
+    await page.waitForSelector('dialog.alert-dialog[open]');
+    expectSame(N, 'brouillon trop tôt', [await textOf(page, 'dialog[open] h2'), await textOf(page, 'dialog[open] p'),
+      await page.$$eval('dialog[open] .alert-actions button', (els) => els.map((el) => el.textContent.trim())), await page.locator('.dsc-action-message').count(),
+      writeNames(writesSince(state, 0))],
+    ['Brouillon non enregistré', 'Pour enregistrer le brouillon, indiquez d’abord le type de bien, le code postal et la ville.', ['Compris'], 0, []]);
+    await phoneShot(page, 'publier-telephone-brouillon-refuse.png');
+    await page.click('dialog[open] button:text("Compris")');
+    await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached' }).catch(() => undefined);
+    await page.getByRole('combobox', { name: 'Rue et numéro (facultatif)' }).fill('12 rue Mercière');
+    await page.getByRole('option', { name: /12 Rue Mercière/ }).click();
+    await page.waitForTimeout(700);
+    await amount(page, 'Prix de vente').fill('320000');
+    let mark = state.calls.length;
+    await page.click('.ppub-pill');
+    await page.waitForSelector('.dsc-saved', { timeout: 8000 }).catch(() => problems.push(`${N} : « Brouillon enregistré » absent`));
+    const draftId = state.listings[0]?.id;
+    expectSame(N, 'brouillon enregistré', [writeNames(writesSince(state, mark)), await textOf(page, '.dsc-saved'), page.url(),
+      await page.$eval('.dsc-saved', (el) => [Math.round(el.getBoundingClientRect().height), getComputedStyle(el).backgroundColor, el.firstElementChild?.classList.contains('ppub-check')])],
+    [['POST listings', 'POST listing_locations'], 'Brouillon enregistré', `${base}/publier/?annonce=${draftId}`, [44, 'rgb(87, 121, 101)', true]]);
+    await page.waitForSelector('.dsc-saved', { state: 'detached', timeout: 5000 }).catch(() => undefined);
+    await phoneShot(page, 'publier-telephone-2-informations.png');
+    await page.click(CONTINUE);
+    await waitStep(page, 3, 'Caractéristiques', N);
+    await amount(page, 'Surface habitable').fill('62');
+    await chip(page, 'Pièces', '3').click();
+    await chip(page, 'Chambres', '2').click();
+    await page.getByRole('button', { name: 'DPE (classe énergie) C', exact: true }).click();
+    await page.getByRole('button', { name: 'GES (classe climat) B', exact: true }).click();
+    await amount(page, 'Dépenses d\'énergie minimum').fill('820');
+    await amount(page, 'Dépenses d\'énergie maximum').fill('1150');
+    // Pièces et chambres : cinq pastilles de 40 à 6 d'écart sur une ligne (RoomsPicker) ; « Studio » rapetisse un peu pour
+    // tenir en entier, les chiffres gardent 13,5.
+    expectSame(N, 'pièces', await page.$$eval('.dpub-choices-rooms', (rows) => rows.map((row) => {
+      const chips = [...row.children];
+      const rect = (el) => el.getBoundingClientRect();
+      const title = chips[0].querySelector('.dpub-chip-title');
+      return [chips.length, Math.round(rect(chips[1]).left - rect(chips[0]).right), Math.round(rect(chips[0]).height), title.textContent,
+        title.scrollWidth <= title.clientWidth, Number(parseFloat(getComputedStyle(title).fontSize).toFixed(1))];
+    })), [[5, 6, 40, 'Studio', true, 13.1], [5, 6, 40, '1', true, 13.5]]);
+    await phoneShot(page, 'publier-telephone-3-caracteristiques.png');
+    await page.click(CONTINUE);
+    await waitStep(page, 4, 'Prix et finances', N);
+    await page.click(CONTINUE);
+    await waitStep(page, 5, 'Photos', N);
+    await page.setInputFiles('.dpub input[type="file"]', [
+      { name: 'IMG_0001.jpg', mimeType: 'image/jpeg', buffer: PHOTO_GPS },
+      { name: 'IMG_0002.jpg', mimeType: 'image/jpeg', buffer: PHOTO },
+    ]);
+    await imagesLoaded(page, '.dpub-photo img', 2, `${N} : photos choisies`);
+    // Photos : trois colonnes à 8 d'écart, « Principale » de 20 sur le bleu, menu rond de 28 (PublishMediaStep).
+    expectSame(N, 'photos', await page.evaluate(() => {
+      const photos = [...document.querySelectorAll('.dpub-photo')];
+      const rect = (el) => el.getBoundingClientRect();
+      const main = document.querySelector('.dpub-photo-main');
+      return [getComputedStyle(document.querySelector('.dpub-photos')).gridTemplateColumns.split(' ').length, Math.round(rect(photos[1]).left - rect(photos[0]).right),
+        Math.round(rect(main).height), getComputedStyle(main).backgroundColor, Math.round(rect(document.querySelector('.dpub-photo-menu')).width)];
+    }), [3, 8, 20, 'rgb(60, 92, 176)', 28]);
+    await phoneShot(page, 'publier-telephone-5-photos.png');
+    await page.click(CONTINUE);
+    await waitStep(page, 6, 'Description et aperçu', N);
+    await page.getByRole('button', { name: 'Proposer : « Appartement 3 pièces – Lyon »' }).click();
+    await page.getByRole('button', { name: 'Rédiger à partir de mes informations' }).click();
+    await page.click(CONTINUE);
+    await waitStep(page, 7, 'Vérification', N);
+    expectSame(N, 'récapitulatif', await page.$$eval('.dpub-recap-row', (rows) => rows.map((row) => `${row.querySelector('dt').textContent}: ${row.querySelector('dd span').textContent}`)),
+      ['Catégorie: Résidentiel · Appartement', 'Adresse: 12 Rue Mercière, 69002 Lyon', 'Prix: 320 000 €', 'Surface: 62 m²', 'DPE: C', 'Photos: 2']);
+    await phoneShot(page, 'publier-telephone-7-verification.png');
+    // « Fermer » : la question de l'app, « Continuer » y reste.
+    await page.click('.dpub-close');
+    await page.waitForSelector('dialog.alert-dialog[open]');
+    expectSame(N, 'quitter ?', [await textOf(page, 'dialog[open] h2'), await page.$$eval('dialog[open] .alert-actions button', (els) => els.map((el) => el.textContent.trim()))],
+      ['Quitter la publication ?', ['Enregistrer le brouillon', 'Quitter sans enregistrer', 'Continuer']]);
+    await page.click('dialog[open] button:text("Continuer")');
+    await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached' }).catch(() => undefined);
+    mark = state.calls.length;
+    await page.getByRole('button', { name: 'Publier mon annonce' }).click();
+    await page.waitForSelector('.dpub-success', { timeout: 15000 }).catch(() => problems.push(`${N} : confirmation absente`));
+    expectSame(N, 'écritures', writeNames(writesSince(state, mark)), ['PATCH listings', 'POST listing_locations', 'POST storage', 'POST listing_photos', 'POST storage',
+      'POST listing_photos', 'PATCH listings']);
+    expectSame(N, 'annonce en ligne', [state.listings.length, state.listings[0]?.status, state.photos.length], [1, 'active', 2]);
+    // Confirmation en pleine page : la coche verte de 64, le titre de 24, les trois boutons en bas de l'écran.
+    expectSame(N, 'confirmation', await page.evaluate(() => {
+      const rect = (el) => el.getBoundingClientRect();
+      const success = document.querySelector('.dpub-success');
+      const actions = [...document.querySelectorAll('.dpub-success-actions a')];
+      return {
+        page: [Math.round(rect(success).top), Math.round(rect(success).width), Math.round(rect(success).height) >= innerHeight],
+        check: [Math.round(rect(document.querySelector('.dpub-success-check')).width), getComputedStyle(document.querySelector('.dpub-success-check')).color],
+        title: [document.querySelector('.dpub-success h1').textContent, getComputedStyle(document.querySelector('.dpub-success h1')).fontSize],
+        actions: actions.map((el) => [el.textContent.trim(), Math.round(rect(el).height)]),
+        bottom: Math.round(innerHeight - rect(actions.at(-1)).bottom),
+        around: [...document.querySelectorAll('.tabbar, .topbar')].filter((el) => el.getClientRects().length > 0).length,
+      };
+    }), {
+      page: [0, 390, true], check: [64, 'rgb(87, 121, 101)'], title: ['Annonce publiée', '24px'],
+      actions: [['Voir l\'annonce', 52], ['Mes annonces', 52], ['Fermer', 17]], bottom: 24, around: 0,
+    });
+    await phoneShot(page, 'publier-telephone-publiee.png');
+    await context.close();
+  }
+
+  // 2 bis. Téléphone : « Modifier l'annonce » et « Mettre à jour les photos » depuis Mes annonces (n° E11), et « Gérer
+  //    l'annonce » depuis sa fiche (n° E12) : l'assistant s'ouvre en modification, « Enregistrer » dans l'en-tête ;
+  //    « Fermer » revient d'où il a été ouvert.
+  {
+    const N = 'modifier téléphone';
+    const state = newState({ listings: [ONLINE], photos: ONLINE_PHOTOS, locations: [ONLINE_LOCATION] });
+    const context = await phone();
+    await mock(context, state);
+    const page = await open(context, '/compte/?vue=annonces', N);
+    await page.waitForSelector('.my-listing');
+    await page.click('.my-listing .round-menu');
+    expectSame(N, 'Mes annonces', [await page.getAttribute('.deposit-button', 'href'),
+      await page.$$eval('.my-listing-actions a', (els) => els.map((el) => [el.textContent.trim(), el.getAttribute('href')]))], ['/publier/', [
+      ['Voir', `/annonce/?id=${ONLINE_ID}`], ['Modifier', `/publier/?annonce=${ONLINE_ID}`], ['Modifier l\'annonce', `/publier/?annonce=${ONLINE_ID}`],
+      ['Mettre à jour les photos', `/publier/?annonce=${ONLINE_ID}&etape=photos`]]]);
+    await page.click('.menu-popover a:text("Modifier l\'annonce")');
+    await page.waitForSelector('.dpub .dsc-card');
+    await waitStep(page, 2, 'Informations principales', N);
+    expectSame(N, 'ouverture', [...await head(page), await page.getAttribute('.ppub-pill', 'aria-label'), await textOf(page, '.ppub-pill'),
+      await amount(page, 'Prix de vente').inputValue(), await page.locator('.tabbar').isVisible()],
+    ['Modifier l\'annonce', 'Étape 2 sur 7 · Informations principales', 'Enregistrer les modifications', 'Enregistrer', '238 000', false]);
+    await phoneShot(page, 'publier-telephone-modifier.png');
+    await amount(page, 'Prix de vente').fill('230000');
+    let mark = state.calls.length;
+    await page.click('.ppub-pill');
+    await page.waitForSelector('.dpub-success', { timeout: 15000 }).catch(() => problems.push(`${N} : confirmation absente`));
+    expectSame(N, 'enregistrée', [writeNames(writesSince(state, mark)), state.listings[0].price, state.listings[0].status, await textOf(page, '.dpub-success h1'),
+      await page.$$eval('.dpub-success-actions a', (links) => links.map((link) => [link.textContent.trim(), link.getAttribute('href')]))],
+    [['PATCH listings', 'POST listing_locations'], 230000, 'active', 'Modifications enregistrées',
+      [['Voir mon annonce', `/annonce/?id=${ONLINE_ID}`], ['Mes annonces', '/compte/?vue=annonces'], ['Fermer', '/compte/?vue=annonces']]]);
+    // « Mettre à jour les photos » : l'annonce s'ouvre sur ses photos ; la seconde est retirée à l'enregistrement.
+    await page.goto(`${base}/compte/?vue=annonces`, { waitUntil: 'networkidle' });
+    await page.waitForSelector('.my-listing');
+    await page.click('.my-listing .round-menu');
+    await page.click('.menu-popover a:text("Mettre à jour les photos")');
+    await page.waitForSelector('.dpub-photo img');
+    await waitStep(page, 5, 'Photos', N);
+    await imagesLoaded(page, '.dpub-photo img', 2, `${N} photos`);
+    await page.getByRole('button', { name: 'Options de la photo 2' }).click();
+    await page.getByRole('menuitem', { name: 'Supprimer' }).click();
+    mark = state.calls.length;
+    await page.click('.ppub-pill');
+    await page.waitForSelector('.dpub-success', { timeout: 15000 }).catch(() => problems.push(`${N} photos : confirmation absente`));
+    expectSame(N, 'photo retirée', [writeNames(writesSince(state, mark)), state.photos.map((photo) => photo.id)],
+      [['PATCH listings', 'POST listing_locations', 'DELETE listing_photos', 'DELETE storage'], [ONLINE_PHOTOS[0].id]]);
+    // Depuis sa fiche : « Gérer l'annonce » ouvre la modification ; « Fermer », sans changement, ramène à la fiche.
+    await page.goto(`${base}/annonce/?id=${ONLINE_ID}`, { waitUntil: 'networkidle' });
+    await page.getByRole('button', { name: 'Gérer l\'annonce' }).click();
+    await page.waitForURL(`${base}/publier/?annonce=${ONLINE_ID}`);
+    await page.waitForSelector('.dpub .dsc-card');
+    await page.click('.dpub-close');
+    await page.waitForURL(`${base}/annonce/?id=${ONLINE_ID}`, { timeout: 8000 }).catch(() => problems.push(`${N} : « Fermer » ne revient pas à la fiche (${page.url()})`));
     await context.close();
   }
 
@@ -648,13 +894,14 @@ try {
     const chosen = async () => [await textOf(page, '.dpub-category-tile[aria-pressed="true"] .dpub-category-title'), await textOf(page, '.dpub-types-grid [aria-pressed="true"]')];
     expectSame(N, 'catégorie choisie', [...await chosen(), await page.locator('.dsc-head-action button[aria-label="Enregistrer en brouillon"]').count(),
       await page.locator(CONTINUE).isDisabled()], ['Résidentiel', 'Appartement', 1, false]);
-    // Fenêtre rétrécie un instant sous 1024 px : le message du téléphone à la place, puis la saisie revient telle quelle.
+    // Fenêtre rétrécie un instant sous 1024 px : l'assistant du téléphone, avec la même saisie, puis l'ordinateur à nouveau.
     await page.setViewportSize({ width: 800, height: 900 });
-    await page.waitForSelector('.soon-page h1');
-    expectSame(N, 'fenêtre étroite', [await page.locator('.dpub-root').isHidden(), await textOf(page, '.soon-page h1')], [true, 'Publier une annonce']);
+    await page.waitForSelector('.dpub .ppub-head');
+    expectSame(N, 'fenêtre étroite', [...await chosen(), await page.locator('.dpub .dsc-head').count(), await textOf(page, '.ppub-titles h1')],
+      ['Résidentiel', 'Appartement', 0, 'Publier une annonce']);
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.waitForSelector('.dpub .dpub-category-grid');
-    expectSame(N, 'saisie gardée', [...await chosen(), await page.locator('.soon-page').count()], ['Résidentiel', 'Appartement', 0]);
+    await page.waitForSelector('.dpub .dsc-head');
+    expectSame(N, 'saisie gardée', [...await chosen(), await page.locator('.ppub-head').count()], ['Résidentiel', 'Appartement', 0]);
     await shot(page, 'publier-1-categorie.png');
     expectSame(N, 'saisie gardée après la capture', await chosen(), ['Résidentiel', 'Appartement']);
     await page.click(CONTINUE);
@@ -677,16 +924,17 @@ try {
     await page.click(CONTINUE);
     await page.waitForFunction(() => [...document.querySelectorAll('.dpub .field-error')].some((el) => el.textContent.startsWith('L\'adresse n\'a pas pu')), null, { timeout: 12000 })
       .catch(async () => problems.push(`${N} : adresse sans réseau non signalée (${JSON.stringify(await errorsOf(page))})`));
-    expectSame(N, 'adresse sans réseau', [await errorsOf(page), await textOf(page, '.dsc-head .dsc-titles p')],
+    expectSame(N, 'adresse sans réseau', [await errorsOf(page), await textOf(page, SUBTITLE)],
       [['L\'adresse n\'a pas pu être vérifiée. Vérifiez votre connexion, puis réessayez.'], 'Étape 2 sur 7 · Informations principales']);
     state.offlineGeocoding = false;
     await page.click(CONTINUE);
-    await page.waitForFunction(() => [...document.querySelectorAll('.dpub .field-error')].some((el) => el.textContent.startsWith('Adresse introuvable')), null, { timeout: 8000 })
+    // Adresse introuvable : le message de l'app (PublishValidation, n° E19).
+    await page.waitForFunction((text) => [...document.querySelectorAll('.dpub .field-error')].some((el) => el.textContent === text), ADDRESS_NOT_FOUND, { timeout: 8000 })
       .catch(async () => problems.push(`${N} : adresse introuvable non signalée (${JSON.stringify(await errorsOf(page))})`));
     await waitStep(page, 2, 'Informations principales', N);
-    // L'adresse modifiée, « Adresse introuvable » disparaît.
+    // L'adresse modifiée, le message disparaît.
     await page.getByRole('combobox', { name: 'Code postal' }).fill('');
-    expectSame(N, 'adresse modifiée', (await errorsOf(page)).filter((text) => text.startsWith('Adresse introuvable')), []);
+    expectSame(N, 'adresse modifiée', (await errorsOf(page)).filter((text) => text === ADDRESS_NOT_FOUND), []);
     await page.getByRole('combobox', { name: 'Ville' }).fill('');
     await page.getByRole('combobox', { name: 'Rue et numéro (facultatif)' }).fill('12 rue Mercière');
     await page.getByRole('option', { name: /12 Rue Mercière/ }).click();
@@ -821,7 +1069,7 @@ try {
     ]);
     expectSame(N, 'lignes des photos', first.filter((call) => call.table === 'listing_photos').map((call) => call.body),
       uploads.map((call, position) => ({ listing_id: listingId, storage_path: call.search, position, width: call.body.width, height: call.body.height })));
-    expectSame(N, 'après le refus', [state.listings[0]?.status, state.listings[0]?.published_at, await textOf(page, '.dsc-head .dsc-titles p')],
+    expectSame(N, 'après le refus', [state.listings[0]?.status, state.listings[0]?.published_at, await textOf(page, SUBTITLE)],
       ['draft', null, 'Étape 7 sur 7 · Vérification']);
     await page.click('dialog[open] button:text("Compris")');
     // Second essai : la mise en ligne passe. Les photos du premier essai sont remplacées, sans doublon.
@@ -887,8 +1135,8 @@ try {
     await page.click('.dpub-close');
     await page.waitForSelector('dialog.alert-dialog[open]');
     expectSame(N, 'quitter ?', [await textOf(page, 'dialog[open] h2'), await page.$$eval('dialog[open] .alert-actions button', (els) => els.map((el) => el.textContent.trim()))],
-      // « Continuer » n'a pas le rôle d'annulation dans l'app : la fenêtre de choix ajoute son « Annuler » (DomiaDialog).
-      ['Quitter la publication ?', ['Enregistrer le brouillon', 'Quitter sans enregistrer', 'Continuer', 'Annuler']]);
+      // « Continuer » a le rôle d'annulation dans l'app (PublishFlowView) : pas d'« Annuler » en plus (n° E17).
+      ['Quitter la publication ?', ['Enregistrer le brouillon', 'Quitter sans enregistrer', 'Continuer']]);
     await shot(page, 'publier-brouillon-quitter.png');
     await page.click('dialog[open] button:text("Continuer")');
     await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached' }).catch(() => undefined);
@@ -995,16 +1243,18 @@ try {
     await context.close();
   }
 
-  // 7. Étapes : revenir librement et être guidé vers ce qui manque, sur ordinateur et sur tablette (iPad en paysage, et
-  //    iPad Pro 12,9" en portrait : 1024 px). La flèche, « Retour », la barre d'étapes et le retour du navigateur
-  //    ramènent en arrière sans rien demander ; « Continuer » et « Publier » mènent au premier champ à compléter, même
-  //    dans une étape précédente, et le prénom n'est demandé qu'une fois l'annonce complète.
+  // 7. Étapes : revenir librement et être guidé vers ce qui manque, sur ordinateur, sur tablette (iPad en paysage, et
+  //    iPad Pro 12,9" en portrait : 1024 px) et sur téléphone. La flèche, « Retour », la barre d'étapes et le retour du
+  //    navigateur ramènent en arrière sans rien demander ; « Continuer » et « Publier » mènent au premier champ à
+  //    compléter, même dans une étape précédente (sous l'en-tête collé du téléphone), et le prénom n'est demandé qu'une
+  //    fois l'annonce complète.
   const tablet = (width, height) => browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,
     userAgent: devices['iPad Pro 11'].userAgent, locale: 'fr-FR', timezoneId: 'Europe/Paris' });
   for (const [N, makeContext, touch, file] of [
     ['étapes ordinateur', () => desktop(), false, 'etapes-ordinateur'],
     ['étapes tablette paysage', () => tablet(1194, 834), true, 'etapes-tablette-paysage'],
     ['étapes tablette portrait', () => tablet(1024, 1366), true, 'etapes-tablette-portrait'],
+    ['étapes téléphone', () => phone(), true, 'etapes-telephone'],
   ]) {
     const state = newState({ firstName: '' });
     const context = await makeContext();
@@ -1027,7 +1277,10 @@ try {
         await page.waitForTimeout(150);
       }
     };
-    /** Champ guidé : entièrement visible entre le haut de l'écran et la barre d'actions ; le curseur dedans seulement avec une souris. */
+    /**
+     * Champ guidé : entièrement visible entre le haut de l'écran (le bas de l'en-tête collé, sur téléphone) et la barre
+     * d'actions ; le curseur dedans seulement avec une souris.
+     */
     const guidedTo = async (field, what, { focus = true } = {}) => {
       await settle();
       const seen = await page.evaluate((guide) => {
@@ -1035,8 +1288,9 @@ try {
         if (!anchor) return { found: false };
         const rect = anchor.getBoundingClientRect();
         const barTop = document.querySelector('.dpub .dsc-action-bar')?.getBoundingClientRect().top ?? innerHeight;
+        const headBottom = document.querySelector('.dpub .ppub-head')?.getBoundingClientRect().bottom ?? 0;
         const active = document.activeElement;
-        return { found: true, visible: rect.top >= 0 && rect.bottom <= barTop + 0.5, focused: active !== anchor && anchor.contains(active) };
+        return { found: true, visible: rect.top >= headBottom - 0.5 && rect.bottom <= barTop + 0.5, focused: active !== anchor && anchor.contains(active) };
       }, field);
       expectSame(N, what, focus ? seen : { found: seen.found, visible: seen.visible }, focus ? { found: true, visible: true, focused: !touch } : { found: true, visible: true });
     };
@@ -1057,7 +1311,7 @@ try {
     expectSame(N, 'barre : zones de 44 px', await page.$$eval('.dpub-progress > *', (els) => els.map((el) => Math.round(el.getBoundingClientRect().height))), [44, 44, 44, 44, 44, 44, 44]);
 
     // La flèche du haut : l'étape d'avant, sans question, saisie gardée.
-    await page.locator('.dsc-back:not(.dpub-close)').first().click();
+    await page.locator(':is(.dsc-back, .ppub-back):not(.dpub-close)').first().click();
     await waitStep(page, 2, 'Informations principales', N);
     expectSame(N, 'flèche : étape 2', [await dialogs(), await amount(page, 'Prix de vente').inputValue(), await page.getByRole('combobox', { name: 'Ville' }).inputValue()], [0, '320 000', 'Lyon']);
     // La barre : toute étape déjà atteinte s'ouvre d'un clic, avant ou après celle en cours.
