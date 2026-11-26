@@ -144,10 +144,7 @@ export function ShortFactsLine({ row, highlights, content }: { row: ListingRow; 
   );
 }
 
-/**
- * Carte de 248 (photo de 186, rayon 22) de l'app. `heart` : cœur des favoris (rond blanc de 32 sur la photo). Sur
- * ordinateur, la carte prend la largeur de sa colonne, la photo garde ses proportions.
- */
+/** Carte de 248 (photo de 186, rayon 22) de l'app. `heart` : cœur des favoris (rond blanc de 32 sur la photo). */
 export function HomeListingCard({ row, highlights, badge, heart, href, investment = true, className = '' }: {
   row: ListingRow;
   highlights: Highlights | null;

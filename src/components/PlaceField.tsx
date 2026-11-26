@@ -17,8 +17,8 @@ type Props = {
   className?: string;
   /**
    * `home` : champ « Où cherchez-vous ? » de l'accueil (épingle, libellé visible, chevron) ;
-   * `search` : champ de la page de recherche (loupe, libellé lu par les lecteurs d'écran) ;
-   * `app` : champ blanc de la ligne du haut de Votre recherche sur téléphone (SearchPlaceField de l'app).
+   * `search` (par défaut) : champ simple (loupe, libellé lu par les lecteurs d'écran) ;
+   * `app` : champ blanc de la ligne du haut de Votre recherche et de sa carte (SearchPlaceField de l'app).
    */
   variant?: 'search' | 'home' | 'app';
   /** Hors saisie, texte montré à la place du lieu (« Lyon et alentours »), comme le champ de l'app. */

@@ -16,7 +16,7 @@ import { listingPath } from '../lib/paths';
 import type { Result } from '../lib/search';
 import '../styles/carte-panneau.css';
 
-// Panneau du bas de la carte du téléphone (MapBottomPanel et MapResultsPanel de l'app, Features/Map/MapResultsPanel.swift) :
+// Panneau du bas de la carte (MapBottomPanel et MapResultsPanel de l'app, Features/Map/MapResultsPanel.swift) :
 // poignée, « 42 biens sur la carte », le lieu et le tri, puis le carrousel des fiches (hauteurs compacte et moyenne) ou
 // leur liste (grande hauteur). La fiche au centre du carrousel est le bien sélectionné sur la carte ; un marqueur touché
 // fait défiler le carrousel jusqu'à sa fiche. Le panneau se tire au doigt (ou à la souris) entre ses trois hauteurs.
