@@ -6,6 +6,9 @@ import '../styles/account.css';
 import '../styles/ordinateur-mon-espace.css';
 import '../styles/ecrans-compte.css';
 import '../styles/ordinateur-publier.css';
+// Téléphone (< 1024 px) : l'assistant plein écran de l'app, mis en dernier pour l'emporter sur les mesures d'ordinateur
+// des cartes et des champs (.dsc).
+import '../styles/publier-telephone.css';
 
-// Publier : /publier/(?annonce=…) ; sur téléphone, le message « bientôt » d'avant, inchangé.
+// Publier : /publier/(?annonce=…), sur ordinateur comme sur téléphone.
 mount(<PublishPage />);

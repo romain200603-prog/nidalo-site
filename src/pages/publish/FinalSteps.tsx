@@ -3,21 +3,28 @@ import { InfoLine } from '../../components/FilterControls';
 import { Icon } from '../../components/Icon';
 import { ListingCard } from '../../components/ListingCard';
 import { cardContent } from '../../lib/cardContent';
+import { useDesktop } from '../../lib/desktop';
 import { accountPath, listingPath } from '../../lib/paths';
-import { missingRequiredFields, STEP_TITLES, type PublishStep, type RequiredField } from '../../lib/publish/draft';
+import { descriptionIsOptional, missingRequiredFields, STEP_TITLES, type PublishStep, type RequiredField } from '../../lib/publish/draft';
 import { missingLabel, previewRow, recapRows, stepsToComplete, type Guide } from '../../lib/publish/flow';
 import { proposedDescription, proposedTitle } from '../../lib/publish/writing';
 import { ChoiceDialog } from '../account/DesktopParts';
 import { Card, ErrorLine, TextInput, type StepProps } from './controls';
+import { CheckCircleFill } from './PhoneParts';
 
 // Étapes « Description et aperçu » et « Vérification », puis la confirmation (PublishFinalSteps.swift).
 
-/** Titre, description (avec une aide qui reprend seulement les informations saisies) et la vraie carte de résultat. */
+/**
+ * Titre, description (avec une aide qui reprend seulement les informations saisies) et la vraie carte de résultat.
+ * Investissement (six types) : description facultative, sans aide à la rédaction (la fiche ne montre que le texte du
+ * vendeur).
+ */
 export function DescriptionStep({ draft, update, showsErrors, ownerId }: StepProps & { ownerId: string }) {
   const id = useId();
   const [replacing, setReplacing] = useState(false);
   const titleMissing = draft.title.trim() === '';
-  const descriptionMissing = showsErrors && draft.description.trim() === '';
+  const optional = descriptionIsOptional(draft);
+  const descriptionMissing = showsErrors && !optional && draft.description.trim() === '';
   const preview = useMemo(() => previewRow(draft, ownerId), [draft, ownerId]);
   const proposal = proposedTitle(draft);
   const setDescription = (description: string) => update((current) => ({ ...current, description }));
@@ -33,7 +40,7 @@ export function DescriptionStep({ draft, update, showsErrors, ownerId }: StepPro
           </button>
         )}
       </Card>
-      <Card title="Description">
+      <Card title={optional ? 'Description (facultatif)' : 'Description'}>
         <div className={`dsc-field${descriptionMissing ? ' has-error' : ''}`} data-guide="description">
           <textarea id={id} className="dsc-input dpub-textarea" value={draft.description} maxLength={10_000} rows={9}
             aria-label="Description de l'annonce" aria-invalid={descriptionMissing ? true : undefined}
@@ -41,16 +48,20 @@ export function DescriptionStep({ draft, update, showsErrors, ownerId }: StepPro
             onChange={(event) => setDescription(event.target.value)} />
           {descriptionMissing && <p id={`${id}-erreur`} className="field-error">La description est obligatoire.</p>}
         </div>
-        <div className="dsc-small-row">
-          <button type="button" className="dsc-button dsc-button-light"
-            onClick={() => {
-              if (draft.description.trim() === '') setDescription(proposedDescription(draft));
-              else setReplacing(true);
-            }}>
-            <Icon name="squarePen" />Rédiger à partir de mes informations
-          </button>
-        </div>
-        <InfoLine>Le texte proposé reprend uniquement les informations que vous avez saisies : relisez-le et complétez-le.</InfoLine>
+        {!optional && (
+          <>
+            <div className="dsc-small-row">
+              <button type="button" className="dsc-button dsc-button-light"
+                onClick={() => {
+                  if (draft.description.trim() === '') setDescription(proposedDescription(draft));
+                  else setReplacing(true);
+                }}>
+                <Icon name="squarePen" />Rédiger à partir de mes informations
+              </button>
+            </div>
+            <InfoLine>Le texte proposé reprend uniquement les informations que vous avez saisies : relisez-le et complétez-le.</InfoLine>
+          </>
+        )}
       </Card>
       <Card title="Aperçu dans les résultats">
         {preview ? (
@@ -87,10 +98,13 @@ export function ReviewStep({ draft, onEdit, onFix, onFixStep, errorMessage }: {
   onFixStep: (target: Guide) => void;
   errorMessage: string | null;
 }) {
+  const desktop = useDesktop();
   const missing = missingRequiredFields(draft);
   const steps = stepsToComplete(draft);
   return (
     <>
+      {/* Refus du serveur (mots interdits…) : en haut, visible sans faire défiler, comme l'app. */}
+      {errorMessage && <ErrorLine>{errorMessage}</ErrorLine>}
       {missing.length === 0 && steps.length === 0 ? (
         <Card title="Prête à publier">
           <InfoLine>Toutes les informations obligatoires sont renseignées. Les autres champs restent facultatifs.</InfoLine>
@@ -121,7 +135,8 @@ export function ReviewStep({ draft, onEdit, onFix, onFixStep, errorMessage }: {
               <dd>
                 <span>{row.value}</span>
                 <button type="button" className="dpub-recap-edit" aria-label={`Modifier ${row.title}`} onClick={() => onEdit(row.step)}>
-                  <Icon name="pen" />
+                  {/* Le crayon seul de l'app sur téléphone ; l'ordinateur garde le sien. */}
+                  <Icon name={desktop ? 'pen' : 'pencil'} />
                 </button>
               </dd>
             </div>
@@ -129,16 +144,28 @@ export function ReviewStep({ draft, onEdit, onFix, onFixStep, errorMessage }: {
         </dl>
       </Card>
       <InfoLine>Une fois publiée, l'annonce est visible par tous dans Nidalo : recherche, carte et votre profil, avec l'adresse que vous avez choisi de montrer.</InfoLine>
-      {errorMessage && <ErrorLine>{errorMessage}</ErrorLine>}
     </>
   );
 }
 
-/** Écran affiché quand la publication est confirmée par le serveur (PublishSuccessView). */
-export function SuccessView({ listingId, title, editing, back }: { listingId: string; title: string; editing: boolean; back: string }) {
+/**
+ * Écran affiché quand la publication est confirmée par le serveur (PublishSuccessView). Sur téléphone (`phone`), la
+ * page entière de l'app : la coche verte pleine de 64, le titre et la phrase au milieu, les trois boutons en bas.
+ */
+export function SuccessView({ listingId, title, editing, back, phone = false }: {
+  listingId: string;
+  title: string;
+  editing: boolean;
+  back: string;
+  phone?: boolean;
+}) {
   return (
     <div className="dpub-success">
-      <span className="dpub-success-icon" aria-hidden="true"><Icon name="circleCheck" /></span>
+      {phone ? (
+        <CheckCircleFill className="dpub-success-check" />
+      ) : (
+        <span className="dpub-success-icon" aria-hidden="true"><Icon name="circleCheck" /></span>
+      )}
       <h1>{editing ? 'Modifications enregistrées' : 'Annonce publiée'}</h1>
       <p>
         {editing

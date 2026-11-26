@@ -310,9 +310,9 @@ function InvestmentCards(props: StepProps) {
             <Amount label="Surface logements" value={building.residentialArea} unit="m²" onChange={(residentialArea) => setBuilding({ residentialArea })} />
             <Amount label="Surface commerces" value={building.commercialArea} unit="m²" onChange={(commercialArea) => setBuilding({ commercialArea })} />
           </div>
-          <Amount label="Loyers annuels actuels des logements (HC)" value={building.residentialAnnualRent} unit="€/an"
+          <Amount label="Loyers annuels encaissés des logements (HC)" value={building.residentialAnnualRent} unit="€/an"
             onChange={(residentialAnnualRent) => setBuilding({ residentialAnnualRent })} />
-          <Amount label="Loyers annuels actuels des commerces (HC)" value={building.commercialAnnualRent} unit="€/an"
+          <Amount label="Loyers annuels encaissés des commerces (HC)" value={building.commercialAnnualRent} unit="€/an"
             onChange={(commercialAnnualRent) => setBuilding({ commercialAnnualRent })} />
           <InfoLine>Loyers effectivement perçus aujourd'hui, hors charges récupérables. Les loyers espérés se saisissent à part, comme hypothèse.</InfoLine>
           {tenantShare('Part des charges payée par les locataires')}
@@ -327,7 +327,7 @@ function InvestmentCards(props: StepProps) {
             <>
               {/* Loyer annuel saisi pour un local ou des bureaux, enregistré en mensuel (comme les autres annonces), relu à
                   l'euro près quand l'écart ne vient que de l'arrondi du mois (n° 82). */}
-              <Amount label="Loyer annuel actuel hors charges" value={annualFromMonthly(rental.currentMonthlyRent)} unit="€/an"
+              <Amount label="Loyer annuel encaissé hors charges" value={annualFromMonthly(rental.currentMonthlyRent)} unit="€/an"
                 onChange={(annual) => setRental({ currentMonthlyRent: monthlyFromAnnual(annual) })} />
               {tenantShare('Part des charges payée par le locataire')}
               <LeaseTypeChoice value={leaseOf(draft).leaseType} onChange={(leaseType) => setLease({ leaseType })} />
@@ -335,7 +335,7 @@ function InvestmentCards(props: StepProps) {
             </>
           ) : (
             <>
-              <Amount label="Loyer mensuel actuel hors charges" value={rental.currentMonthlyRent} unit="€/mois"
+              <Amount label="Loyer mensuel encaissé hors charges" value={rental.currentMonthlyRent} unit="€/mois"
                 onChange={(currentMonthlyRent) => setRental({ currentMonthlyRent })} />
               {tenantShare('Part des charges payée par le locataire')}
               <DateChoice title="Fin du bail en cours" value={rental.leaseEndDate} onChange={(leaseEndDate) => setRental({ leaseEndDate })} />
@@ -346,16 +346,16 @@ function InvestmentCards(props: StepProps) {
       <Card title="Loyer potentiel (hypothèse)">
         <Amount label="Loyer mensuel envisagé hors charges" value={rental.potentialMonthlyRent} unit="€/mois"
           onChange={(potentialMonthlyRent) => setRental({ potentialMonthlyRent })} />
-        <InfoLine>Hypothèse du vendeur, affichée séparément des loyers actuels et signalée comme telle sur l'annonce.</InfoLine>
+        <InfoLine>Hypothèse du vendeur, affichée séparément des loyers encaissés et signalée comme telle sur l'annonce.</InfoLine>
       </Card>
       <IndicatorsCard
         rows={[
           { title: 'Prix au m²', value: perSquareMeter(pricePerSquareMeter(draft)), formula: 'Prix ÷ surface' },
           {
-            title: 'Loyers annuels actuels', value: annualRent === null ? null : `${formatPrice(annualRent)}/an`,
-            formula: type === 'building' ? 'Somme des loyers par usage' : 'Loyer actuel × 12',
+            title: 'Loyers annuels encaissés', value: annualRent === null ? null : `${formatPrice(annualRent)}/an`,
+            formula: type === 'building' ? 'Somme des loyers par usage' : 'Loyer encaissé × 12',
           },
-          { title: 'Rendement brut actuel', value: gross === null ? null : formatFraction(gross), formula: 'Loyers annuels actuels hors charges récupérables ÷ prix de vente × 100' },
+          { title: 'Rendement brut actuel', value: gross === null ? null : formatFraction(gross), formula: 'Loyers annuels encaissés hors charges récupérables ÷ prix de vente × 100' },
           {
             title: 'Rendement potentiel (hypothèse)', value: potential === null ? null : formatFraction(potential),
             formula: 'Loyer envisagé × 12 ÷ prix de vente × 100', isHypothesis: true, hidesWhenMissing: true,

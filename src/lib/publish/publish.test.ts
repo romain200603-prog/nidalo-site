@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { groupDigits, parseGrouped, pastedAmount } from '../../components/NumberField';
 import { groupedInput, inputAmount } from '../account/projectEditor';
 import {
-  annualFromMonthly, buildingOfDraft, coOwnershipLotsIssue, coOwnershipNeedsProcedure, emptyBuilding, emptyHotel, emptyRental, energyCostHint, energyDetailIssues, flatRateWarning,
+  annualFromMonthly, buildingOfDraft, coOwnershipLotsIssue, coOwnershipNeedsProcedure, descriptionIsOptional, emptyBuilding, emptyHotel, emptyRental, energyCostHint, energyDetailIssues, flatRateWarning,
   hotelOfDraft, inventoryFeeIssue, missingRequiredFields, monthlyFromAnnual,
   energyPriceYearIssue, newDraft, rentalAvailability, rentalBanMessage, rentalChargesLabel, saleChargesLabel, selectCategory, selectSubtype, showsCoOwnership, showsEnergyCosts, showsInventoryFee,
   showsRentControl, stepIsComplete, stepIssues, subtypes, tenantShareWarning, PUBLISH_CATEGORIES, PUBLISH_STEPS, STEP_TITLES,
@@ -243,6 +243,28 @@ describe('charges, énergie, honoraires et loyer des murs', () => {
     expect(tenantShareWarning(leased)).toBeNull();
     expect(tenantShareWarning({ ...leased, monthlyCharges: 100 })).toBe('La part du locataire dépasse les charges : vérifiez les deux montants.');
     expect([saleChargesLabel('building'), saleChargesLabel('apartment')]).toEqual(["Charges de l'immeuble", 'Charges de copropriété']);
+    // Le texte proposé dit « encaissés », comme l'app (PublishWriting).
+    expect(plain(proposedDescription(leased))).toContain('Vendu loué : 11 400 € de loyers annuels encaissés hors charges.');
+  });
+
+  it('investir : description facultative pour les six types de l’app, obligatoire ailleurs (n° E29)', () => {
+    for (const option of subtypes('investment')) {
+      const draft: PublishDraft = { ...selectSubtype(selectCategory(flat(), 'investment'), option), description: '' };
+      expect(descriptionIsOptional(draft), option.title).toBe(true);
+      expect(missingRequiredFields(draft, NOW), option.title).not.toContain('description');
+      expect(stepIssues(draft, 'description', NOW), option.title).toEqual([]);
+      expect(stepIsComplete(draft, 'description', NOW), option.title).toBe(true);
+    }
+    for (const category of ['residential', 'rental', 'hotel'] as const) {
+      const draft: PublishDraft = { ...selectSubtype(selectCategory(flat(), category), subtypes(category)[0]), description: '' };
+      expect(descriptionIsOptional(draft), category).toBe(false);
+      expect(missingRequiredFields(draft, NOW), category).toContain('description');
+      expect(stepIssues(draft, 'description', NOW), category).toEqual(['description']);
+    }
+    // L'aperçu d'une annonce d'investissement garde sa description vide (PublishPreview.make).
+    const shop: PublishDraft = { ...selectSubtype(selectCategory(flat(), 'investment'), subtypes('investment')[4]), description: '' };
+    expect(previewRow(shop, 'u', NOW)?.description).toBe('');
+    expect(previewRow({ ...flat(), description: '' }, 'u', NOW)?.description).toBe('Description à rédiger.');
   });
 
   it('location : charges au forfait ou en provisions, gardées et relues', () => {

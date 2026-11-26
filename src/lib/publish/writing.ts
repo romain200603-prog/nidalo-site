@@ -69,7 +69,7 @@ export function proposedDescription(draft: PublishDraft): string {
   }
   const annualRent = currentAnnualRent(draft);
   if (draft.transaction === 'sale' && draft.rentalInfo?.isLeased === true && annualRent !== null) {
-    sentences.push(`Vendu loué : ${formatPrice(annualRent)} de loyers annuels actuels hors charges.`);
+    sentences.push(`Vendu loué : ${formatPrice(annualRent)} de loyers annuels encaissés hors charges.`);
   }
   if (draft.transaction === 'rent') {
     if (draft.price !== null) {

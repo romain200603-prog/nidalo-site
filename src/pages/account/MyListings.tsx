@@ -8,10 +8,8 @@ import { currentUserId, useStore } from '../../lib/account/session';
 import { authorOf, canEditOf, savedTeamView, saveTeamView, teamIds, useTeamScope, type TeamView } from '../../lib/account/team';
 import { formatCardPrice, cardContent } from '../../lib/cardContent';
 import { photoUrl, sortedPhotos, type ListingRow } from '../../lib/listings';
-import { useDesktop } from '../../lib/desktop';
 import { listingPath, publishPath } from '../../lib/paths';
 import { AuthorLine, EmptyState, ScreenHeader, Spinner, TeamViewSwitch } from './parts';
-import { soonPath } from './Screens';
 
 // « Mes annonces » (Features/Profile/MyListingsView.swift). Avec une équipe : « Les miennes » ou « L'agence » (les
 // annonces de toute l'agence, avec leur auteur ; un agent ne modifie que les siennes).
@@ -58,10 +56,9 @@ export function MyListings() {
   const [toDelete, setToDelete] = useState<ListingRow | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  // Sur ordinateur, « Reprendre », « Modifier » et « Déposer » ouvrent la page Publier ; sur téléphone, toujours
-  // l'écran « bientôt ».
-  const desktop = useDesktop();
-  const editPath = (id: string, step: 'photos' | null = null) => (desktop ? publishPath(id, step) : soonPath('publier'));
+  // « Reprendre », « Modifier », « Mettre à jour les photos » et « Déposer » ouvrent l'assistant Publier (sur
+  // téléphone, en plein écran comme l'app).
+  const editPath = (id: string, step: 'photos' | null = null) => publishPath(id, step);
 
   useEffect(() => {
     void loadMyListings();
@@ -121,7 +118,7 @@ export function MyListings() {
           );
         })}
       </div>
-      <a className="btn btn-primary deposit-button" href={desktop ? publishPath() : soonPath('publier')}><Icon name="plus" />Déposer une annonce</a>
+      <a className="btn btn-primary deposit-button" href={publishPath()}><Icon name="plus" />Déposer une annonce</a>
       {state.status === 'loading' && <Spinner />}
       {state.status === 'error' && <EmptyState icon="triangleAlert" title="Erreur" text={state.message} />}
       {state.status === 'ready' && shown.length === 0 && (

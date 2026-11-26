@@ -2,7 +2,7 @@ import { formatArea, formatPrice } from '../format';
 import { PROPERTY_TYPE_LABELS } from '../labels';
 import type { ListingRow, RentalInfo } from '../listings';
 import {
-  cityOf, missingRequiredFields, newDraft, postalCodeOf, PUBLISH_STEPS, rentalBanMessage, REQUIRED_FIELD_LABELS, stepIsComplete, stepIssues,
+  cityOf, descriptionIsOptional, missingRequiredFields, newDraft, postalCodeOf, PUBLISH_STEPS, rentalBanMessage, REQUIRED_FIELD_LABELS, stepIsComplete, stepIssues,
   stepOf, syncBuildingRent, type PublishDraft, type PublishStep, type RequiredField, type StepIssue,
 } from './draft';
 import { CATEGORY_TITLES } from './labels';
@@ -59,7 +59,8 @@ export function previewRow(source: PublishDraft, ownerId: string, now = new Date
   const draft: PublishDraft = {
     ...syncBuildingRent(source),
     title: source.title.trim() === '' ? proposedTitle(source) : source.title,
-    description: source.description.trim() === '' ? 'Description à rédiger.' : source.description,
+    // Investissement : description facultative, laissée vide (PublishPreview.make).
+    description: source.description.trim() === '' && !descriptionIsOptional(source) ? 'Description à rédiger.' : source.description,
   };
   const coordinate = draft.coordinate;
   if (missingRequiredFields(draft, now).length > 0 || coordinate === null) return null;
