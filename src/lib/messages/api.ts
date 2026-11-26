@@ -268,8 +268,8 @@ export function preferencesOf(row: ServerInboxRow): Preferences {
  * Ligne de conversation_preferences telle que l'app l'écrit (PreferencesWrite) : muted_until et cleared_at toujours
  * présents (null s'ils sont vides), hidden_at seulement pour masquer.
  */
-export function preferencesWrite(conversationId: string, preferences: Preferences): Record<string, unknown> {
-  return {
+export function preferencesWrite(conversationId: string, preferences: Preferences, hiddenAt: string | null = null): Record<string, unknown> {
+  const write: Record<string, unknown> = {
     conversation_id: upper(conversationId),
     is_archived: preferences.isArchived,
     is_favorite: preferences.isFavorite,
@@ -277,16 +277,20 @@ export function preferencesWrite(conversationId: string, preferences: Preference
     saves_photos: preferences.savesPhotos,
     cleared_at: preferences.clearedAt,
   };
+  if (hiddenAt) write.hidden_at = hiddenAt;
+  return write;
 }
 
 /**
  * Change un réglage comme l'app : relit la conversation (réglages actuels), puis enregistre tous ses réglages avec
- * le changement (setArchived, setMuted, updateSettings).
+ * le changement (setArchived, setMuted, updateSettings). `hidden` : la conversation est aussi retirée de la liste
+ * (hidden_at à maintenant, deleteConversation : « Supprimer le groupe » une fois quitté).
  */
-export async function savePreferences(conversationId: string, change: (current: Preferences) => Preferences): Promise<void> {
+export async function savePreferences(conversationId: string, change: (current: Preferences) => Preferences,
+  { hidden = false }: { hidden?: boolean } = {}): Promise<void> {
   const [row] = await fetchInboxRows(conversationId);
   if (!row) throw new MessagingError('Conversation introuvable.');
-  const write = preferencesWrite(conversationId, change(preferencesOf(row)));
+  const write = preferencesWrite(conversationId, change(preferencesOf(row)), hidden ? new Date().toISOString() : null);
   const { error } = await supabase.from('conversation_preferences').upsert(write, { onConflict: 'conversation_id,user_id' });
   if (error) throw error;
 }

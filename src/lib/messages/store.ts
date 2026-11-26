@@ -41,6 +41,8 @@ type Extras = { participants: ParticipantRow[]; profiles: Map<string, ProfileRow
 let extras: Extras = { participants: [], profiles: new Map(), communities: [] };
 let lastRows: ServerInboxRow[] | null = null;
 let build = 0;
+/** Lecture en cours des membres, profils et communautés des dernières lignes (reloadConversations l'attend). */
+let extrasReady: Promise<void> = Promise.resolve();
 
 function publish(rows: ServerInboxRow[]) {
   const me = currentUserId();
@@ -56,6 +58,10 @@ async function loadExtras(rows: ServerInboxRow[]): Promise<Extras> {
     fetchProfiles([...others, ...participants.map((member) => member.user_id)]),
     groups.length ? fetchCommunities().catch(() => extras.communities) : Promise.resolve<CommunityRow[]>([]),
   ]);
+  // Membres d'une communauté absents des groupes lus : leurs noms aussi (communities(from:) de l'app).
+  const missing = communities.flatMap((community) => community.members.map((member) => member.user_id))
+    .filter((id) => !profiles.has(id.toLowerCase()));
+  if (missing.length) for (const [id, profile] of await fetchProfiles(missing)) profiles.set(id, profile);
   return { participants, profiles, communities };
 }
 
@@ -71,13 +77,26 @@ function onRows(value: ConversationRows) {
     publish(rows);
   } else {
     const token = ++build;
-    void loadExtras(rows).then((next) => {
+    extrasReady = loadExtras(rows).then((next) => {
       if (token !== build) return;
       extras = next;
       if (lastRows) publish(lastRows);
-    });
+    }).catch(() => undefined);
   }
   markOpenConversationRead();
+}
+
+/**
+ * Relit les conversations, puis attend leurs membres, profils et communautés (reloadConversations de l'app) : après une
+ * création, un ajout ou un départ, la liste et la conversation ouverte sont à jour.
+ */
+export async function reloadConversations(): Promise<void> {
+  await liveReload();
+  let pending: Promise<void>;
+  do {
+    pending = extrasReady;
+    await pending;
+  } while (pending !== extrasReady);
 }
 
 conversationRowsStore.subscribe(() => onRows(conversationRowsStore.get()));

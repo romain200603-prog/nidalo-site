@@ -27,7 +27,7 @@ import { MediaViewer } from './Thread';
 // « Détails » d'une conversation à deux (ConversationDetailsView.swift), ouvert en cliquant sur l'en-tête :
 // l'interlocuteur, cinq actions (Appeler, Vidéo, Visite, Profil, Silencieux), le bien concerné, la prochaine visite,
 // les médias et fichiers, les paramètres et la confidentialité ; puis « Médias » (SharedMediaView,
-// GroupInfoView.swift:892) avec ses trois onglets.
+// GroupInfoView.swift:892) avec ses trois onglets, aussi ouvert depuis « Infos du groupe ».
 
 type DetailsProps = {
   conversation: Conversation;
@@ -315,7 +315,7 @@ function DetailsSection({ title, link, children }: { title: string; link?: Secti
 }
 
 /** Vignette carrée d'un média partagé (SharedMediaTile) : photo, ou vignette d'une vidéo avec sa durée. */
-function MediaTile({ item, onOpen }: { item: SharedItem; onOpen: () => void }) {
+export function MediaTile({ item, onOpen }: { item: SharedItem; onOpen: () => void }) {
   const attachment = item.attachment;
   const url = useSignedUrl(attachment?.kind === 'video' ? attachment.thumbnailPath : attachment?.storagePath);
   return (
@@ -360,7 +360,7 @@ export function MediaView({ conversation, messages, tab, me }: { conversation: C
         <button
           type="button"
           className="dm-round is-plain"
-          onClick={() => navigate({ conversationId: conversation.id, view: 'details' })}
+          onClick={() => navigate({ conversationId: conversation.id, view: conversation.isGroup ? 'groupe' : 'details' })}
           aria-label="Retour"
           title="Retour"
         >

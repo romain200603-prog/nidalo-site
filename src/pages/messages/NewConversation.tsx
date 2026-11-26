@@ -10,14 +10,21 @@ import { formattedPhoneNumber, looksLikePhoneNumber, normalizedPhoneNumber, typi
 import {
   accountContactKey, alphabetical, contactDetail, contactMatches, contactsFrom, sectionLetter, type Contact, type Conversation,
 } from '../../lib/messages/inbox';
+import { newCommunityDraft, type CommunityDraft } from '../../lib/messages/communities';
+import { newGroupDraft, type GroupDraft } from '../../lib/messages/groups';
 import { loadProfessionals, professionalsStore } from '../../lib/messages/store';
 import { PATHS } from '../../lib/paths';
+import { Broadcast } from './Broadcast';
+import { NewCommunityInfo, NewCommunityMembers, useCommunityCreation } from './Community';
+import { NewGroupDetails, NewGroupParticipants } from './NewGroup';
 import { CounterpartAvatar, Sheet, showIphoneOnly, showNotice } from './parts';
 import { navigate } from './route';
 
 // « Nouvelle discussion » (NewConversationView.swift) : recherche, actions rapides, contacts fréquents puis tous les
 // contacts par lettre ; « Nouveau contact » cherche un compte Nidalo par son numéro (AddContactView.swift). Les
-// coordonnées des contacts ne sont jamais affichées. Groupes, communautés et diffusions : dans l'app iPhone.
+// coordonnées des contacts ne sont jamais affichées. Les actions rapides poussent leurs écrans dans la feuille, comme
+// la pile de l'app : « Nouveau groupe » (NewGroup.tsx), « Nouvelle communauté » (Community.tsx), « Nouveau contact »
+// et « Nouvelle diffusion » (Broadcast.tsx).
 
 /** Contact ou compte dont la conversation n'a pas pu s'ouvrir (n° 109). */
 export const OPEN_FAILED = 'La conversation n\'a pas pu s\'ouvrir. Vérifiez votre connexion.';
@@ -175,16 +182,33 @@ export function PhoneLookupCard({ phone, contacts, onOpened }: { phone: string; 
   );
 }
 
-const QUICK_ACTIONS: { key: 'group' | 'community' | 'contact' | 'broadcast'; icon: IconName; title: string; hint: string }[] = [
+type QuickAction = 'group' | 'community' | 'contact' | 'broadcast';
+
+const QUICK_ACTIONS: { key: QuickAction; icon: IconName; title: string; hint: string }[] = [
   { key: 'group', icon: 'users', title: 'Nouveau groupe', hint: 'Une conversation avec plusieurs personnes' },
   { key: 'community', icon: 'community', title: 'Nouvelle communauté', hint: 'Rassembler autour d\'un projet ou d\'un thème' },
   { key: 'contact', icon: 'userPlus', title: 'Nouveau contact', hint: 'Par son numéro, s\'il a un compte Nidalo' },
   { key: 'broadcast', icon: 'megaphone', title: 'Nouvelle diffusion', hint: 'Un même message, envoyé séparément à chacun' },
 ];
 
+type Screen = 'main' | 'contact' | 'group' | 'groupDetails' | 'community' | 'communityMembers' | 'broadcast';
+
+const TITLES: Record<Screen, string> = {
+  main: 'Nouvelle discussion', contact: 'Nouveau contact', group: 'Nouveau groupe', groupDetails: 'Infos du groupe',
+  community: 'Nouvelle communauté', communityMembers: 'Premiers membres', broadcast: 'Nouvelle diffusion',
+};
+
+/** Écran sous chaque écran poussé (« Retour »). */
+const PARENTS: Partial<Record<Screen, Screen>> = {
+  contact: 'main', group: 'main', groupDetails: 'group', community: 'main', communityMembers: 'community', broadcast: 'main',
+};
+
 export function NewConversationSheet({ open, conversations, onClose }: { open: boolean; conversations: Conversation[]; onClose: () => void }) {
-  const [screen, setScreen] = useState<'main' | 'contact'>('main');
+  const [screen, setScreen] = useState<Screen>('main');
   const [query, setQuery] = useState('');
+  const [groupDraft, setGroupDraft] = useState<GroupDraft>(newGroupDraft);
+  const [communityDraft, setCommunityDraft] = useState<CommunityDraft>(newCommunityDraft);
+  const [membersReached, setMembersReached] = useState(false);
   const professionals = useStore(professionalsStore);
   useEffect(() => {
     if (!open) return;
@@ -193,26 +217,64 @@ export function NewConversationSheet({ open, conversations, onClose }: { open: b
     loadProfessionals();
   }, [open]);
   const contacts = contactsFrom(conversations, professionals.value);
+  /** Créé : la feuille se ferme et la conversation s'ouvre (adresse en minuscules, comme les identifiants du serveur). */
+  const opened = (conversationId: string) => {
+    navigate({ conversationId: conversationId.toLowerCase() });
+    onClose();
+  };
+  const creation = useCommunityCreation(communityDraft, { onMissingInfo: () => setScreen('community'), onCreated: opened });
+  const parent = PARENTS[screen];
+
+  const start = (key: QuickAction) => {
+    if (key === 'group') setGroupDraft(newGroupDraft());
+    if (key === 'community') {
+      setCommunityDraft(newCommunityDraft());
+      setMembersReached(false);
+      creation.reset();
+    }
+    setScreen(key);
+  };
+
   return (
     <Sheet
       open={open}
-      title={screen === 'main' ? 'Nouvelle discussion' : 'Nouveau contact'}
+      title={TITLES[screen]}
       onClose={onClose}
-      onBack={screen === 'contact' ? () => setScreen('main') : undefined}
+      onBack={parent ? () => setScreen(parent) : undefined}
+      // Écrans poussés de l'app : le retour, sans la croix (« Nouveau contact » garde la sienne).
+      hideClose={screen !== 'main' && screen !== 'contact'}
+      trailing={screen === 'communityMembers' && communityDraft.members.length === 0 ? (
+        <button type="button" className="dmg-bar-action dm-sheet-trailing" disabled={creation.sending} onClick={() => void creation.create()}>Passer</button>
+      ) : undefined}
       className="dm-new"
     >
-      {screen === 'contact' ? <AddContact contacts={contacts} onOpened={onClose} /> : (
-        <NewConversationMain contacts={contacts} query={query} setQuery={setQuery} onAddContact={() => setScreen('contact')} onOpened={onClose} />
-      )}
+      {screen === 'contact' ? <AddContact contacts={contacts} onOpened={onClose} />
+        : screen === 'group' ? <NewGroupParticipants draft={groupDraft} onChange={setGroupDraft} onNext={() => setScreen('groupDetails')} />
+          : screen === 'groupDetails' ? (
+            <NewGroupDetails draft={groupDraft} onChange={setGroupDraft} onEditParticipants={() => setScreen('group')} onCreated={opened} />
+          ) : screen === 'community' ? (
+            <NewCommunityInfo
+              draft={communityDraft}
+              onChange={setCommunityDraft}
+              reached={membersReached}
+              onNext={() => {
+                setMembersReached(true);
+                setScreen('communityMembers');
+              }}
+            />
+          ) : screen === 'communityMembers' ? (
+            <NewCommunityMembers draft={communityDraft} onChange={setCommunityDraft} onBack={() => setScreen('community')} creation={creation} />
+          ) : screen === 'broadcast' ? <Broadcast contacts={contacts} onFinish={onClose} />
+            : <NewConversationMain contacts={contacts} query={query} setQuery={setQuery} onAction={start} onOpened={onClose} />}
     </Sheet>
   );
 }
 
-function NewConversationMain({ contacts, query, setQuery, onAddContact, onOpened }: {
+function NewConversationMain({ contacts, query, setQuery, onAction, onOpened }: {
   contacts: Contact[];
   query: string;
   setQuery: (value: string) => void;
-  onAddContact: () => void;
+  onAction: (key: QuickAction) => void;
   onOpened: () => void;
 }) {
   const text = query.trim();
@@ -266,7 +328,7 @@ function NewConversationMain({ contacts, query, setQuery, onAddContact, onOpened
                   type="button"
                   className="dm-action-row"
                   title={action.hint}
-                  onClick={() => (action.key === 'contact' ? onAddContact() : showIphoneOnly(action.title))}
+                  onClick={() => onAction(action.key)}
                 >
                   <Icon name={action.icon} />
                   <span className="dm-action-text"><span>{action.title}</span></span>
@@ -275,14 +337,7 @@ function NewConversationMain({ contacts, query, setQuery, onAddContact, onOpened
               </li>
             ))}
           </ul>
-          {contacts.length === 0 ? (
-            <div className="dm-empty-contacts">
-              <span className="dm-icon-tile"><Icon name="messageCircle" /></span>
-              <h3>Aucun contact pour l'instant</h3>
-              <p>Vos contacts apparaissent dès votre premier échange. Pour écrire à un vendeur, une agence ou un bailleur, touchez « Message » sur son annonce.</p>
-              <a className="dm-button is-light" href={PATHS.search}>Rechercher un bien</a>
-            </div>
-          ) : (
+          {contacts.length === 0 ? <EmptyContacts /> : (
             <>
               {frequent.length > 0 && (
                 <>
@@ -300,6 +355,23 @@ function NewConversationMain({ contacts, query, setQuery, onAddContact, onOpened
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Aucun contact (EmptyContactsCard) : « Rechercher un bien » mène à la recherche ; la diffusion le remplace par
+ * « Fermer ».
+ */
+export function EmptyContacts({ action }: { action?: { label: string; onClick: () => void } }) {
+  return (
+    <div className="dm-empty-contacts">
+      <span className="dm-icon-tile"><Icon name="messageCircle" /></span>
+      <h3>Aucun contact pour l'instant</h3>
+      <p>Vos contacts apparaissent dès votre premier échange. Pour écrire à un vendeur, une agence ou un bailleur, touchez « Message » sur son annonce.</p>
+      {action
+        ? <button type="button" className="dm-button is-light" onClick={action.onClick}>{action.label}</button>
+        : <a className="dm-button is-light" href={PATHS.search}>Rechercher un bien</a>}
     </div>
   );
 }
