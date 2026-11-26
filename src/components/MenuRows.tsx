@@ -25,6 +25,8 @@ export type MenuRowItem = {
   external?: boolean;
   /** Ligne d'information, sans action ni chevron (« Avec ce compte »). */
   info?: boolean;
+  /** À droite à la place de la pastille et du chevron (la coche de « Type actuel »), comme `trailing` de l'app. */
+  trailing?: ReactNode;
 };
 
 /** Petit titre gris en capitales au-dessus d'une carte de groupe (NidaloSectionLabel). */
@@ -48,7 +50,7 @@ export function GroupCard({ children, separatorInset = 68, label, className }: {
 }
 
 /** Ligne de menu (NidaloMenuRow) : carré d'icône teinté de 40 px, titre, sous-titre, pastille, chevron. */
-export function MenuRow({ icon, title, subtitle, tint = 'gray', badge, badgeTone = 'red', href, onClick, external, info }: MenuRowItem) {
+export function MenuRow({ icon, title, subtitle, tint = 'gray', badge, badgeTone = 'red', href, onClick, external, info, trailing }: MenuRowItem) {
   const content = (
     <>
       <span className={`app-row-tile is-${tint}`} aria-hidden="true"><Icon name={icon} /></span>
@@ -56,8 +58,12 @@ export function MenuRow({ icon, title, subtitle, tint = 'gray', badge, badgeTone
         <span className="app-row-title">{title}</span>
         {subtitle ? <span className="app-row-subtitle">{subtitle}</span> : null}
       </span>
-      {badge ? <span className={`app-row-badge is-${badgeTone}`}>{badge}</span> : null}
-      {!info && <Icon name="chevronRight" className="icon app-row-chevron" />}
+      {trailing ?? (
+        <>
+          {badge ? <span className={`app-row-badge is-${badgeTone}`}>{badge}</span> : null}
+          {!info && <Icon name="chevronRight" className="icon app-row-chevron" />}
+        </>
+      )}
     </>
   );
   if (info) return <div className="app-row is-info">{content}</div>;

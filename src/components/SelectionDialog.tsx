@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Icon } from './Icon';
+import { useSheetDrag } from './useSheetDrag';
 import type { IconName } from './iconPaths';
 
 // Menu de sélection, comme DomiaSelectionSheet dans l'app : en-tête (icône, titre, précision, croix), liste
@@ -73,6 +74,8 @@ export function SelectionDialog<T>(props: Single<T> | Multiple<T>) {
   const [pending, setPending] = useState<T[]>([]);
   const [customText, setCustomText] = useState('');
   const [negative, setNegative] = useState(false);
+  // Sous 1024 px, la feuille se referme aussi en la tirant vers le bas par son en-tête (sans rien appliquer).
+  useSheetDrag(dialog, onClose, open);
 
   // À chaque ouverture, on repart de la valeur actuelle.
   useEffect(() => {
@@ -155,7 +158,8 @@ export function SelectionDialog<T>(props: Single<T> | Multiple<T>) {
       }}
     >
       <div className="selection-sheet">
-        <div className="selection-head">
+        <span className="selection-grabber" aria-hidden="true" />
+        <div className="selection-head" data-sheet-grab="">
           {icon && <span className="selection-icon"><Icon name={icon} /></span>}
           <div className="selection-titles">
             <h2 id={titleId}>{title}</h2>

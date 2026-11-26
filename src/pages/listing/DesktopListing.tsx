@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { showToast } from '../../components/AppToast';
 import { Icon } from '../../components/Icon';
 import { HeartIcon } from '../../components/account/HeartButton';
 import { toggleFavorite, useFavorites } from '../../lib/account/favorites';
+import { requireAccount } from '../../lib/account/gate';
 import { cardKind } from '../../lib/cardContent';
-import { compareState, compareToast, toggleCompare, useCompare } from '../../lib/compare';
+import { useCompare } from '../../lib/compare';
 import { formatArea, formatPrice } from '../../lib/format';
 import type { SearchMode } from '../../lib/labels';
 import { listingConversation } from '../../lib/listing/conversation';
@@ -22,16 +24,17 @@ import {
 } from '../../lib/listing/visits';
 import { countListingView } from '../../lib/listing/views';
 import { placeLine, sortedPhotos, type ListingRow } from '../../lib/listings';
-import { accountPath, comparePath, conversationPath, visitRequestPath } from '../../lib/paths';
+import { accountPath, conversationPath, publishPath, visitRequestPath } from '../../lib/paths';
 import { recordView } from '../../lib/recentlyViewed';
 import { HotelSection, ProfitabilityCard, RentalCostCard } from './CategoryCards';
 import { ContactCapsules } from './ContactBar';
-import { backTarget, coordinateOf, hotelPerformanceOf, rentalCostOf } from './data';
+import { backTarget, coordinateOf, hotelPerformanceOf, rentalCostOf, toggleListingCompare } from './data';
 import { AlertDialog } from './Dialogs';
 import { Gallery } from './Gallery';
 import { ExtraIcon } from './icons';
 import { LocationSection } from './Location';
-import { Avatar, Description, Energy, Features, Footnote, HotelActivity, PracticalInfo, PublisherCard, RiskNote } from './Sections';
+import { ReportListingSheet } from './ReportSheet';
+import { Avatar, Description, Energy, Features, Footnote, HotelActivity, PracticalInfo, PublisherCard, ReportRow } from './Sections';
 import { useListingScreens } from './useListingScreens';
 
 // Fiche d'une annonce sur ordinateur (maquette 2 de Romain), avec les actions de l'app (ListingDetailView.swift) :
@@ -44,22 +47,21 @@ import { useListingScreens } from './useListingScreens';
 /** Chiffres du numéro gardés pour l'appel (« tel: »), comme l'app : les chiffres et le « + ». */
 const telHref = (phone: string) => `tel:${phone.replace(/[^\d+]/g, '')}`;
 
-type Toast = { id: number; icon: 'check' | 'columns'; text: string; action: { label: string; href: string } | null; duration: number };
-
-/** Fenêtre ouverte : sans numéro, ou une action qui reste dans l'app iPhone (sa propre annonce). */
-type Notice = 'noPhone' | 'requests' | 'manage' | null;
-
-const NOTICE_TITLES: Record<'requests' | 'manage', string> = { requests: 'Voir les demandes', manage: 'Gérer l\'annonce' };
+/** Fenêtre ouverte : « Appeler » sans numéro publié. */
+type Notice = 'noPhone' | null;
 
 export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMode | null }) {
   // Écrire, visiter, faire une offre : communs avec le téléphone (useListingScreens).
-  const { session, me, isOwn, account, opening, renderScreen, requestVisit, makeOffer, contactSeller, conversationAlert } = useListingScreens(row, mode);
+  const {
+    session, me, isOwn, account, opening, renderScreen, requestVisit, makeOffer, contactSeller, openProfile, openRequests, conversationAlert,
+  } = useListingScreens(row, mode);
   const [publisher, setPublisher] = useState<Publisher | null>(null);
   const [activeCount, setActiveCount] = useState<number | null>(null);
   const [choice, setChoice] = useState(STANDARD_CHOICE);
-  const [toast, setToast] = useState<Toast | null>(null);
   const [copyLink, setCopyLink] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
+  const [reporting, setReporting] = useState(false);
+  const [reportNotice, setReportNotice] = useState<string | null>(null);
   const back = useMemo(backTarget, []);
 
   const kind = cardKind(row, mode);
@@ -103,27 +105,14 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
     return () => { cancelled = true; };
   }, [row.owner_id]);
 
-  useEffect(() => {
-    if (!toast) return;
-    const timer = window.setTimeout(() => setToast(null), toast.duration);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
-
   const share = useCallback(async () => {
     const outcome = await shareListing(row, mode);
-    if (outcome === 'copied') setToast({ id: Date.now(), icon: 'check', text: 'Lien de l’annonce copié', action: null, duration: 2600 });
+    if (outcome === 'copied') showToast({ icon: 'check', text: 'Lien de l’annonce copié' });
     else if (typeof outcome === 'object') setCopyLink(outcome.link);
   }, [row, mode]);
 
-  /** « Comparer » (CompareButton de l'app) : ajoute ou retire le bien, puis le toast pendant 4 secondes. */
-  const compare = () => {
-    const message = compareToast(toggleCompare(row.id), compareState().ids.length);
-    if (!message) return;
-    setToast({
-      id: Date.now(), icon: 'columns', text: message.text, duration: 4000,
-      action: message.action ? { label: message.action, href: comparePath(mode) } : null,
-    });
-  };
+  /** « Comparer » (CompareButton de l'app) : ajoute ou retire le bien, puis le message du bas pendant 4 secondes. */
+  const compare = () => toggleListingCompare(row.id, mode);
 
   const onBack = (event: MouseEvent<HTMLAnchorElement>) => {
     if (back.fromSearch && window.history.length > 1) {
@@ -144,7 +133,7 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
   const recipientName = publisher?.name ?? (isRental ? 'Le propriétaire' : 'Le vendeur');
   const phone = publisher?.phone?.trim();
 
-  const opened = renderScreen({ photo: photos[0], recipientName, profitability });
+  const opened = renderScreen({ photo: photos[0], recipientName, profitability, publisher });
   if (opened) return <div className="listing dl">{opened}</div>;
 
   return (
@@ -170,7 +159,8 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
           </div>
         </header>
         <div className="dl-gallery">
-          <Gallery photos={photos} onShare={() => void share()} listingId={row.id} back={{ href: back.href, label: back.label, onClick: onBack }} actions={false} />
+          <Gallery photos={photos} propertyType={row.property_type} onShare={() => void share()} listingId={row.id}
+            back={{ href: back.href, label: back.label, onClick: onBack }} actions={false} />
         </div>
 
         <div className="dl-body">
@@ -201,7 +191,10 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
             {activity && <HotelActivity rows={activity.rows} showsNote={activity.showsNote} />}
             {row.description?.trim() && <Description text={row.description.trim()} />}
             <Features rows={featureRows(row)} />
-            {publisher && <PublisherCard publisher={publisher} fees={feesLabel(row)} activeCount={activeCount} onContact={isOwn ? undefined : contactSeller} isRental={isRental} />}
+            {publisher && (
+              <PublisherCard publisher={publisher} fees={feesLabel(row)} activeCount={activeCount} onOpenProfile={openProfile}
+                onContact={isOwn ? undefined : contactSeller} isRental={isRental} />
+            )}
             <Energy energyClass={energyLetter(row.energy_class)} climateClass={energyLetter(row.climate_class)} lines={energyLines(row)} />
             <LocationSection
               coordinate={coordinateOf(row)}
@@ -215,8 +208,8 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
               }}
               isRental={isRental}
             />
-            <RiskNote />
             <Footnote text={footnote(row)} />
+            {!isOwn && <ReportRow onClick={() => void requireAccount(() => setReporting(true))} />}
           </div>
 
           <aside className="dl-aside" aria-label="Contact et visite">
@@ -235,14 +228,14 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
               {publisher && <SellerRow publisher={publisher} />}
               {isOwn ? (
                 <div className="dl-actions">
-                  <button type="button" className="dl-button dl-button-light" onClick={() => setNotice('requests')}>
+                  <button type="button" className="dl-button dl-button-light" onClick={openRequests}>
                     <Icon name="calendarCheck" />
                     Voir les demandes
                   </button>
-                  <button type="button" className="dl-button dl-button-filled" onClick={() => setNotice('manage')}>
+                  <a className="dl-button dl-button-filled" href={publishPath(row.id)}>
                     <Icon name="pen" />
                     Gérer l'annonce
-                  </button>
+                  </a>
                 </div>
               ) : (
                 // Les capsules de la barre Duo, sans l'arrivée ni le repli au défilement (la colonne ne flotte pas).
@@ -278,18 +271,19 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
         title="Numéro non disponible"
         message={`Ce ${isRental ? 'propriétaire' : 'vendeur'} ne communique pas son numéro. Écrivez-lui sur Nidalo.`}
         actions={[
-          { label: 'Envoyer un message', onClick: () => { setNotice(null); contactSeller(); }, tone: 'primary' },
-          { label: 'Fermer', onClick: () => setNotice(null), tone: 'quiet' },
+          { label: 'Envoyer un message', onClick: () => { setNotice(null); contactSeller(); } },
+          { label: 'Fermer', onClick: () => setNotice(null), role: 'cancel' },
         ]}
       />
       {conversationAlert}
+      <ReportListingSheet open={reporting} listingId={row.id} onClose={() => setReporting(false)}
+        onSent={(text) => { setReporting(false); setReportNotice(text); }} />
       <AlertDialog
-        open={notice === 'requests' || notice === 'manage'}
-        onClose={() => setNotice(null)}
+        open={reportNotice !== null}
+        onClose={() => setReportNotice(null)}
         dismissible={false}
-        title={notice === 'manage' ? NOTICE_TITLES.manage : NOTICE_TITLES.requests}
-        message="Dans l’app iPhone pour l’instant."
-        actions={[{ label: 'Fermer', onClick: () => setNotice(null), tone: 'primary' }]}
+        title={reportNotice ?? ''}
+        actions={[{ label: 'OK', onClick: () => setReportNotice(null), role: 'cancel' }]}
       />
       <AlertDialog
         open={copyLink !== null}
@@ -297,19 +291,10 @@ export function DesktopListing({ row, mode }: { row: ListingRow; mode: SearchMod
         dismissible={false}
         title="Partager l’annonce"
         message="Copiez ce lien pour partager l’annonce."
-        actions={[{ label: 'Fermer', onClick: () => setCopyLink(null), tone: 'primary' }]}
+        actions={[{ label: 'Fermer', onClick: () => setCopyLink(null), role: 'cancel' }]}
       >
         <input className="copy-link" type="url" readOnly value={copyLink ?? ''} aria-label="Lien de l’annonce" onFocus={(event) => event.currentTarget.select()} autoFocus />
       </AlertDialog>
-      <div className={`dl-toast${toast ? ' is-shown' : ''}`} role="status" aria-live="polite">
-        {toast && (
-          <span key={toast.id} className="dl-toast-box">
-            <Icon name={toast.icon} />
-            <span className="dl-toast-text">{toast.text}</span>
-            {toast.action && <a href={toast.action.href}>{toast.action.label}</a>}
-          </span>
-        )}
-      </div>
     </div>
   );
 }

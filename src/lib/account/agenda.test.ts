@@ -3,9 +3,9 @@ import {
   agendaErrorMessage, agendaSummary, CONVERSATION_NOT_FOUND, countIn, DEFAULT_REMINDERS, defaultVisitStart, directionsUrl,
   existingConversationId, groupKind, groupsIn, groupTitle, isDuplicate, isVideoVisit, itemsIn, newVisitRow, noAddressNotice, noSellerNotice,
   PERIOD_TITLES, periodGroupsIn, periodOf, receivedRequest, reminderLabel, remindersSummary, requestEntries, sessionBookedLabel,
-  sessionFromRow, sessionTitle, upcomingSessions, upcomingSessionsOf, upcomingVisitForListing, visitAddressFor, visitCardTitle,
-  visitContactFor, visitDateBlock, visitFromRow, visitPersonLine, visitSlotCount, visitTimeRange, type AgendaInboxRow, type AgendaItem,
-  type AgendaRequestRow, type NewVisit, type VisitListing, type VisitSessionRow,
+  reportFolder, sessionFromRow, sessionTitle, upcomingSessions, upcomingSessionsOf, upcomingVisitForListing, visitAddressFor, visitCalendarFile,
+  visitCardTitle, visitChanges, visitContactFor, visitDateBlock, visitDetails, visitFromRow, visitPersonLine, visitShareText, visitSlotCount,
+  visitTimeRange, type AgendaInboxRow, type AgendaItem, type AgendaRequestRow, type NewVisit, type VisitListing, type VisitSessionRow,
 } from './agenda';
 
 const ME = 'a0000000-0000-4000-8000-0000000000c1';
@@ -381,5 +381,59 @@ describe('Ajouter une visite (VisitFormView, SupabaseAgendaRepository.create)', 
     expect(visitContactFor({ public_name: 'Claire M.', account_type: 'individual', agency_id: null, agency_name: null })).toBe('Claire M.');
     expect(visitContactFor({ public_name: 'Marc D.', account_type: 'professional', agency_id: 'g1', agency_name: 'Agence du Parc' })).toBe('Agence du Parc');
     expect(visitContactFor(null)).toBe('Particulier');
+  });
+});
+
+describe('Détail de la visite (VisitDetailView, VisitStore.cancel et delete, VisitActions.addToCalendar)', () => {
+  const row = {
+    id: 'D0000000-0000-4000-8000-000000000001', start_at: '2026-11-13T09:00:00', status: 'confirmed', request_id: null, listing_id: 'L1',
+    visit: {
+      id: 'D0000000-0000-4000-8000-000000000001', start: '2026-11-13T09:00:00.000', status: 'confirmed', durationMinutes: 45, contactName: 'Agence du Parc',
+      contactPhone: '0639981234', address: '3 quai Rambaud, 69002 Lyon', notes: 'Digicode 1234, 2e étage ; demander la cave',
+      participants: [{ id: 'P1', name: 'Paul' }, { id: 'P2', name: 'Léa', phone: '0639985678' }],
+      reminders: { eveningBefore: true, twoHoursBefore: true },
+      report: { opinion: 'loved', decision: 'makeOffer', positives: 'Lumineux', worksEstimate: 15000, photos: [{ id: 'F1' }, { id: 'F2' }] },
+      preparation: {
+        items: [
+          { id: 'I1', section: 'questions', text: 'Pourquoi le bien est-il en vente ?', isChecked: true },
+          { id: 'I2', section: 'questions', text: 'Quand le bien est-il disponible ?', isChecked: false },
+          { id: 'I3', section: 'works', text: 'Cuisine à refaire', isChecked: true },
+        ],
+        condition: 'refresh',
+      },
+      listing: { listingId: 'L1', title: 'Appartement 3 pièces', price: 320000, transaction: 'sale', city: 'Lyon' },
+    },
+  };
+  const read = visitFromRow(row as never)!;
+
+  it('colonnes réécrites : début, statut, annonce et visite ; une demande absente n’est pas envoyée', () => {
+    const visit = { ...read.stored!.visit, status: 'cancelled' };
+    expect(visitChanges(read.stored!, visit)).toEqual({ start_at: '2026-11-13T09:00:00.000', status: 'cancelled', listing_id: 'L1', visit });
+    expect(visitChanges({ ...read.stored!, requestId: 'R1' }, visit)).toMatchObject({ request_id: 'R1' });
+    expect(reportFolder('A0000000-0000-4000-8000-0000000000C1', read.id)).toBe('a0000000-0000-4000-8000-0000000000c1/d0000000-0000-4000-8000-000000000001');
+  });
+
+  it('informations : téléphone, participants, rappels sans « rappels », notes, compte rendu et préparation retenue', () => {
+    const details = visitDetails(read);
+    expect(details).toMatchObject({
+      contactPhone: '0639981234', participants: ['Paul', 'Léa'], reminders: 'La veille et 2 h avant', notes: 'Digicode 1234, 2e étage ; demander la cave',
+      preparation: { sections: [{ title: 'Questions à poser', items: ['Pourquoi le bien est-il en vente ?'] }, { title: 'Travaux à prévoir', items: ['Cuisine à refaire'] }],
+        condition: 'À rafraîchir' },
+    });
+    expect(details.report).toEqual({ summary: 'Coup de cœur · Faire une offre', positives: 'Lumineux', negatives: null, personalNote: null, worksEstimate: 15000, photos: 2 });
+    // Visite annulée : plus de rappels ; rien de retenu : pas de préparation.
+    const cancelled = visitFromRow({ ...row, status: 'cancelled', visit: { ...row.visit, status: 'cancelled', preparation: { items: [row.visit.preparation.items[1]] } } } as never)!;
+    expect([visitDetails(cancelled).reminders, visitDetails(cancelled).preparation]).toEqual([null, null]);
+  });
+
+  it('texte partagé et fichier du calendrier : bien, date, durée, adresse, contact et notes', () => {
+    expect(visitShareText(read, () => 'Vendredi 13 novembre · 10h00')).toBe(
+      'Visite : Appartement 3 pièces\nVendredi 13 novembre · 10h00 (45 min)\nAdresse : 3 quai Rambaud, 69002 Lyon\nContact : Agence du Parc · 06 39 98 12 34');
+    expect(visitCalendarFile(read, new Date('2026-11-06T09:50:00Z')).split('\r\n')).toEqual([
+      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Nidalo//Agenda des visites//FR', 'CALSCALE:GREGORIAN', 'BEGIN:VEVENT',
+      'UID:d0000000-0000-4000-8000-000000000001@nidalo.fr', 'DTSTAMP:20261106T095000Z', 'DTSTART:20261113T090000Z', 'DTEND:20261113T094500Z',
+      'SUMMARY:Visite : Appartement 3 pièces', 'LOCATION:3 quai Rambaud\\, 69002 Lyon', 'DESCRIPTION:Digicode 1234\\, 2e étage \\; demander la cave',
+      'END:VEVENT', 'END:VCALENDAR', '',
+    ]);
   });
 });

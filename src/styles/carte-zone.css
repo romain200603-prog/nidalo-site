@@ -14,7 +14,7 @@
 }
 /* Pendant le tracé ou l'ajustement d'une zone, les vignettes des biens ne captent pas le pointeur : il va au tracé ou
    à la carte en dessous (MapMarkersLayer, allowsHitTesting, n° 52). */
-.map-column.is-editing-zone .map-markers > button { pointer-events: none; }
+.map-column.is-editing-zone .map-markers > button, .map-column.is-editing-zone .map-markers .map-marker-button { pointer-events: none; }
 /* Pendant le tracé, la carte ne bouge pas : ses boutons de zoom s'effacent. */
 .results-map.is-drawing .maplibregl-ctrl-top-right { visibility: hidden; }
 /* Étiquette « Rayon : 2,5 km » : capsule blanche de 28, 13,5 gras bleu marine, au-dessus des vignettes des biens. */
@@ -134,8 +134,8 @@
   .map-column.is-open.is-editing-zone .map-tools { top: calc(68px + env(safe-area-inset-top)); }
   .map-column.is-open.has-zone .maplibregl-ctrl-top-right { top: calc(276px + env(safe-area-inset-top)); }
   .map-column.is-open.is-editing-zone .maplibregl-ctrl-top-right { top: calc(232px + env(safe-area-inset-top)); }
-  .map-column.is-open.is-zone-drawing .maplibregl-ctrl-bottom-left { bottom: calc(66px + env(safe-area-inset-bottom)); }
-  .map-column.is-open.is-zone-proposal .maplibregl-ctrl-bottom-left { bottom: calc(152px + env(safe-area-inset-bottom)); }
+  .map-column.is-open.is-zone-drawing .results-map-attribution { bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .map-column.is-open.is-zone-proposal .results-map-attribution { bottom: calc(162px + env(safe-area-inset-bottom)); }
 }
 
 /* ——— Ordinateur : le bandeau en haut au centre (à la place de « Liste »), la carte de validation en bas au centre, la

@@ -12,7 +12,7 @@ import { currentUserId, useStore } from '../../lib/account/session';
 import { authorOf, canEditOf, savedTeamView, saveTeamView, useTeamScope, type TeamScope, type TeamView } from '../../lib/account/team';
 import { listLabel, telHref } from '../../lib/messages/format';
 import { accountPath, contactPath, CONTACTS_PATH, conversationPath, NEW_CONTACT_PATH } from '../../lib/paths';
-import { AuthorLine, Avatar, EmptyState, ScreenHeader, Spinner, TeamViewSwitch, Toast } from './parts';
+import { AuthorLine, Avatar, EmptyState, LoadFailure, ScreenHeader, Spinner, TeamViewSwitch, Toast } from './parts';
 
 // « Mes contacts » de l'espace professionnel : la liste (recherche et filtres), la fiche d'un contact (ses échanges,
 // une note) et le formulaire d'un contact ajouté à la main. Avec une équipe : « Les miens » ou « L'agence » (avec
@@ -50,8 +50,7 @@ export function Contacts({ contactKey, screen }: { contactKey: string | null; sc
     return (
       <div className="space">
         <ScreenHeader title="Mes contacts" />
-        <p className="signin-error" role="alert">{state.message}</p>
-        <button type="button" className="btn btn-light" onClick={() => void loadContacts()}>Réessayer</button>
+        <LoadFailure message={state.message} onRetry={() => void loadContacts()} />
       </div>
     );
   }
@@ -98,7 +97,7 @@ function ContactList({ contacts: all, scope }: { contacts: Contact[]; scope: Tea
   return (
     <div className="space contacts">
       <Toast text={toast} />
-      <ScreenHeader title="Mes contacts" action={<a className="save-capsule" href={NEW_CONTACT_PATH}>Ajouter</a>} />
+      <ScreenHeader title="Mes contacts" action={<a className="nav-text-button" href={NEW_CONTACT_PATH}>Ajouter</a>} />
       {scope && <TeamViewSwitch value={view} onChange={chooseView} mine="Les miens" />}
       {contacts.length === 0 ? (
         <EmptyState
@@ -122,6 +121,16 @@ function ContactList({ contacts: all, scope }: { contacts: Contact[]; scope: Tea
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
+              {/* La croix de l'app (« Effacer la recherche ») ; celle du navigateur est masquée. */}
+              {query !== '' && (
+                <button type="button" className="contacts-search-clear" aria-label="Effacer la recherche" onClick={(event) => {
+                  // Le focus revient dans le champ (la croix disparaît).
+                  event.currentTarget.parentElement?.querySelector('input')?.focus();
+                  setQuery('');
+                }}>
+                  <Icon name="x" />
+                </button>
+              )}
             </label>
             <div className="contacts-filters" role="group" aria-label="Filtrer les contacts">
               {CONTACT_FILTERS.map((item) => (
@@ -209,7 +218,7 @@ function ContactDetail({ contact, scope }: { contact: Contact; scope: TeamScope 
       <ScreenHeader
         title="Contact"
         back={CONTACTS_PATH}
-        action={isManual && editable ? <a className="save-capsule" href={contactPath(contact.key, true)}>Modifier</a> : undefined}
+        action={isManual && editable ? <a className="nav-text-button" href={contactPath(contact.key, true)}>Modifier</a> : undefined}
       />
       <section className="contact-head space-card">
         <Avatar name={contact.name} path={contact.avatarPath} size={76} />
@@ -395,9 +404,9 @@ function ContactEditor({ contact, scope }: { contact: Contact | null; scope: Tea
         title="Quitter sans enregistrer ?"
         message="Vos modifications ne sont pas encore enregistrées."
         actions={[
-          { label: 'Enregistrer', onClick: () => { setDialog(null); void save(); }, tone: 'primary' },
-          { label: 'Quitter sans enregistrer', href: backPath },
-          { label: 'Continuer', onClick: () => setDialog(null), tone: 'quiet' },
+          { label: 'Enregistrer', onClick: () => { setDialog(null); void save(); } },
+          { label: 'Quitter sans enregistrer', href: backPath, role: 'destructive' },
+          { label: 'Continuer', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
       <AlertDialog
@@ -406,8 +415,8 @@ function ContactEditor({ contact, scope }: { contact: Contact | null; scope: Tea
         title="Supprimer ce contact ?"
         message={authorOf(scope, contact?.ownerId) ? 'Ses coordonnées et sa note seront effacées pour toute l\'agence.' : 'Ses coordonnées et votre note seront effacées.'}
         actions={[
-          { label: 'Supprimer', onClick: () => void remove(), tone: 'primary' },
-          { label: 'Annuler', onClick: () => setDialog(null), tone: 'quiet' },
+          { label: 'Supprimer', onClick: () => void remove(), role: 'destructive' },
+          { label: 'Annuler', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
     </div>

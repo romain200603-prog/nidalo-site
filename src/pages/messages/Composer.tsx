@@ -9,7 +9,8 @@ import {
   type DocumentCategory,
 } from '../../lib/messages/content';
 import {
-  DOCUMENT_ACCEPT, MEDIA_ACCEPT, pendingDocument, pendingMedia, releasePending, UNREADABLE, UPLOAD_FAILURE, uploadPending, type PendingFile,
+  DOCUMENT_ACCEPT, MEDIA_ACCEPT, pendingContact, pendingDocument, pendingLocation, pendingMedia, releasePending, UNREADABLE, UPLOAD_FAILURE,
+  uploadPending, type PendingFile,
 } from '../../lib/messages/files';
 import { durationLabel, sizeLabel } from '../../lib/messages/format';
 import { sameId, type Conversation } from '../../lib/messages/inbox';
@@ -17,13 +18,18 @@ import { replyComposerTitle } from '../../lib/messages/interactions';
 import { sendAttachments, sendText } from '../../lib/messages/store';
 import { groupSender, needsFirstName } from '../../lib/messages/thread';
 import { ReplyComposerBar } from './MessageInteractions';
+import { DialogContent } from '../listing/Dialogs';
+import { LocationSheet } from './LocationSheet';
 import { Dialog, Sheet, showIphoneOnly, showNotice } from './parts';
 
-// Zone de saisie (demande de Romain du 14 novembre 2026) : réponses rapides selon le contexte, puis « + » (pièces
-// jointes), « Écrivez votre message… » (jusqu'à 5 lignes), émojis, envoi (grisé tant que le champ est vide). Entrée
-// envoie, Maj + Entrée va à la ligne. Le premier message d'une conversation à deux demande d'abord le prénom (« Votre
-// prénom »), comme l'app. Le « + » ouvre « Joindre » (AttachmentMenuSheet) : les photos, vidéos et documents viennent
-// de l'ordinateur ; l'aperçu (AttachmentPreviewSheet) envoie chaque fichier puis le message.
+// Barre d'écriture, comme l'app (ConversationView.writingBar) : réponses rapides selon le contexte, puis « + » (pièces
+// jointes), « Votre message... » (jusqu'à 4 lignes), l'appareil photo (téléphone) et le rond bleu d'envoi. Le site
+// n'enregistre pas de message vocal : le rond garde la flèche, pâle tant que le champ est vide. Sur ordinateur, un
+// bouton d'émojis remplace l'appareil photo. Entrée envoie, Maj + Entrée va à la ligne. Le premier message d'une
+// conversation à deux demande d'abord le prénom (« Votre prénom »), comme l'app. Le « + » ouvre « Joindre »
+// (AttachmentMenuSheet) : appareil photo et caméra vidéo de l'appareil, photos, vidéos et documents, une adresse ou la
+// position, un contact (là où le navigateur sait en choisir un) ; l'aperçu (AttachmentPreviewSheet) envoie chaque
+// fichier puis le message.
 
 /** Réponse rapide au-dessus du champ : une action, ou `documents` pour choisir des documents à envoyer. */
 export type Suggestion = { key: string; label: string; icon?: IconName; disabled?: boolean; onSelect: (() => void) | 'documents' };
@@ -36,16 +42,32 @@ const EMOJIS = [
   '💪', '👌', '🤝', '🙌', '👋', '✌️', '❤️', '🔥', '🎉', '✅', '❌', '⏰', '🏠', '🔑', '📅', '📍',
 ];
 
-/** Sources du « + », dans l'ordre de l'app (AttachmentSource) ; `null` : seulement dans l'app iPhone. */
-const SOURCES: { key: string; title: string; subtitle: string; icon: IconName; web: 'media' | 'documents' | null }[] = [
-  { key: 'camera', title: 'Appareil photo', subtitle: 'Prendre une photo', icon: 'camera', web: null },
+type SourceAction = 'camera' | 'media' | 'documents' | 'video' | 'location' | 'contact';
+
+/**
+ * Sources du « + », dans l'ordre de l'app (AttachmentSource) ; `null` : seulement dans l'app iPhone (le dossier
+ * immobilier reste sur l'iPhone).
+ */
+const SOURCES: { key: string; title: string; subtitle: string; icon: IconName; web: SourceAction | null }[] = [
+  { key: 'camera', title: 'Appareil photo', subtitle: 'Prendre une photo', icon: 'camera', web: 'camera' },
   { key: 'library', title: 'Photos et vidéos', subtitle: 'Plusieurs photos ou vidéos', icon: 'image', web: 'media' },
   { key: 'documents', title: 'Documents', subtitle: 'PDF, Word, Excel…', icon: 'fileText', web: 'documents' },
-  { key: 'video', title: 'Caméra vidéo', subtitle: 'Enregistrer une vidéo', icon: 'video', web: null },
-  { key: 'location', title: 'Localisation', subtitle: 'Une adresse ou votre position', icon: 'pin', web: null },
-  { key: 'contact', title: 'Contacts', subtitle: 'Les coordonnées d\'un contact', icon: 'contactRound', web: null },
+  { key: 'video', title: 'Caméra vidéo', subtitle: 'Enregistrer une vidéo', icon: 'video', web: 'video' },
+  { key: 'location', title: 'Localisation', subtitle: 'Une adresse ou votre position', icon: 'pin', web: 'location' },
+  { key: 'contact', title: 'Contacts', subtitle: 'Les coordonnées d\'un contact', icon: 'contactRound', web: 'contact' },
   { key: 'dossier', title: 'Mon dossier', subtitle: 'Pièces de votre dossier immobilier, avec filigrane', icon: 'folderCheck', web: null },
 ];
+
+/** Appareil photo et caméra vidéo de l'appareil : un champ de fichier qui ouvre directement la prise de vue. */
+const CAMERA_ACCEPT = 'image/jpeg,image/png,image/heic,image/heif';
+const VIDEO_CAMERA_ACCEPT = 'video/mp4,video/quicktime';
+
+/** Sélecteur de contacts du navigateur (Contact Picker), là où il existe (Chrome sur Android). */
+type ContactsManager = { select: (properties: string[], options?: { multiple?: boolean }) => Promise<{ name?: string[]; tel?: string[] }[]> };
+const contactsManager = (): ContactsManager | null => {
+  const manager = (navigator as Navigator & { contacts?: ContactsManager }).contacts;
+  return manager && typeof manager.select === 'function' ? manager : null;
+};
 
 export function Composer({ conversation, messages, suggestions, onMakeOffer, replyingTo = null, onReplyChange = () => undefined, me = null }: {
   conversation: Conversation;
@@ -64,7 +86,7 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer, rep
   const emojiPanelId = useId();
   const [draft, setDraft] = useState('');
   const [askName, setAskName] = useState(false);
-  const [menu, setMenu] = useState<'closed' | 'sources' | 'categories'>('closed');
+  const [menu, setMenu] = useState<'closed' | 'sources' | 'categories' | 'location'>('closed');
   const [emojis, setEmojis] = useState(false);
   const [pending, setPending] = useState<PendingFile[]>([]);
   const field = useRef<HTMLTextAreaElement>(null);
@@ -72,6 +94,8 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer, rep
   const emojiPanel = useRef<HTMLDivElement>(null);
   const mediaInput = useRef<HTMLInputElement>(null);
   const documentInput = useRef<HTMLInputElement>(null);
+  const cameraInput = useRef<HTMLInputElement>(null);
+  const videoInput = useRef<HTMLInputElement>(null);
   const category = useRef<DocumentCategory | null>(null);
   const pendingRef = useRef<PendingFile[]>([]);
   // Place du curseur après un émoji ajouté, appliquée une fois le champ mis à jour.
@@ -85,12 +109,12 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer, rep
   // Page quittée ou autre conversation : les aperçus locaux sont libérés.
   useEffect(() => () => releasePending(pendingRef.current), []);
 
-  // Champ d'une à cinq lignes, puis il défile.
+  // Champ d'une à quatre lignes, puis il défile (lineLimit(1...4) de l'app).
   useLayoutEffect(() => {
     const el = field.current;
     if (!el) return;
     const style = getComputedStyle(el);
-    const lines = 5 * (parseFloat(style.lineHeight) || 22) + (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+    const lines = 4 * (parseFloat(style.lineHeight) || 22) + (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, lines)}px`;
     if (caret.current !== null) {
@@ -201,13 +225,37 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer, rep
     if (files.length) add(files.map((file) => pendingDocument(file, chosen)));
   };
 
+  /** Contact choisi dans le carnet de l'appareil : son nom et ses numéros (AttachmentImport.contactItem). */
+  const pickContact = async (manager: ContactsManager) => {
+    try {
+      const [contact] = await manager.select(['name', 'tel'], { multiple: false });
+      if (!contact) return;
+      const name = contact.name?.find((value) => value.trim())?.trim() || 'Contact';
+      add([pendingContact(name, (contact.tel ?? []).map((phone) => phone.trim()).filter(Boolean))]);
+    } catch {
+      // Choix annulé, ou refusé par le navigateur : rien n'est ajouté.
+    }
+  };
+
   const choose = (source: (typeof SOURCES)[number]) => {
-    setMenu('closed');
-    if (source.web === 'media') mediaInput.current?.click();
-    else if (source.web === 'documents') {
-      category.current = null;
-      documentInput.current?.click();
-    } else showIphoneOnly(source.title);
+    setMenu(source.web === 'location' ? 'location' : 'closed');
+    switch (source.web) {
+      case 'camera': cameraInput.current?.click(); break;
+      case 'video': videoInput.current?.click(); break;
+      case 'media': mediaInput.current?.click(); break;
+      case 'documents':
+        category.current = null;
+        documentInput.current?.click();
+        break;
+      case 'location': break;
+      case 'contact': {
+        const manager = contactsManager();
+        if (manager) void pickContact(manager);
+        else showIphoneOnly(source.title);
+        break;
+      }
+      default: showIphoneOnly(source.title);
+    }
   };
 
   return (
@@ -247,7 +295,7 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer, rep
             ref={field}
             rows={1}
             value={draft}
-            placeholder="Écrivez votre message…"
+            placeholder="Votre message..."
             aria-label="Votre message"
             onChange={(event) => setDraft(event.currentTarget.value)}
             onKeyDown={(event) => {
@@ -278,12 +326,17 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer, rep
             </div>
           )}
         </div>
+        <button type="button" className="dm-camera" onClick={() => cameraInput.current?.click()} aria-label="Prendre une photo" title="Prendre une photo">
+          <Icon name="camera" />
+        </button>
         <button type="button" className="dm-send" onClick={() => void send()} disabled={!canSend} aria-label="Envoyer" title="Envoyer">
           <Icon name="arrowUp" />
         </button>
 
         <input ref={mediaInput} type="file" accept={MEDIA_ACCEPT} multiple hidden onChange={(event) => void onMedia(event)} data-testid="dm-media-input" />
         <input ref={documentInput} type="file" accept={DOCUMENT_ACCEPT} multiple hidden onChange={onDocuments} data-testid="dm-document-input" />
+        <input ref={cameraInput} type="file" accept={CAMERA_ACCEPT} capture="environment" hidden onChange={(event) => void onMedia(event)} data-testid="dm-camera-input" />
+        <input ref={videoInput} type="file" accept={VIDEO_CAMERA_ACCEPT} capture="environment" hidden onChange={(event) => void onMedia(event)} data-testid="dm-video-input" />
 
         <Sheet open={menu === 'sources'} title="Joindre" onClose={() => setMenu('closed')} className="dm-attach-sheet">
           <div className="dm-sheet-content">
@@ -313,6 +366,15 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer, rep
             )}
           </div>
         </Sheet>
+
+        <LocationSheet
+          open={menu === 'location'}
+          onClose={() => setMenu('closed')}
+          onShare={(address, coordinate) => {
+            setMenu('closed');
+            add([pendingLocation(address, coordinate.latitude, coordinate.longitude)]);
+          }}
+        />
 
         <Sheet open={menu === 'categories'} title="Documents immobiliers" onClose={() => setMenu('closed')} onBack={() => setMenu('sources')} className="dm-categories-sheet">
           <div className="dm-sheet-content">
@@ -408,10 +470,14 @@ function FirstNameDialog({ open, lastName, onClose, onSend }: { open: boolean; l
 function FirstNameForm({ id, lastName, onClose, onSend }: { id: string; lastName: string; onClose: () => void; onSend: (first: string) => void }) {
   const [value, setValue] = useState('');
   return (
-    <form
-      className="alert-body"
-      onSubmit={(event) => {
-        event.preventDefault();
+    <DialogContent
+      titleId={`${id}-titre`}
+      textId={`${id}-texte`}
+      title="Votre prénom"
+      message={`Affiché à votre interlocuteur : ${publicName(value === '' ? 'Prénom' : value, lastName, false)}.`}
+      alert
+      onDismiss={onClose}
+      onSubmit={() => {
         const first = value.trim();
         // Comme l'alerte de l'app : « Envoyer » la referme ; sans prénom, rien n'est envoyé.
         if (!first) {
@@ -420,11 +486,10 @@ function FirstNameForm({ id, lastName, onClose, onSend }: { id: string; lastName
         }
         onSend(first);
       }}
+      actions={[{ label: 'Envoyer', submit: true }, { label: 'Annuler', onClick: onClose, role: 'cancel' }]}
     >
-      <h2 id={`${id}-titre`}>Votre prénom</h2>
-      <p id={`${id}-texte`}>Affiché à votre interlocuteur : {publicName(value === '' ? 'Prénom' : value, lastName, false)}.</p>
       <input
-        className="text-input dm-name-input"
+        className="dialog-field dm-name-input"
         value={value}
         onChange={(event) => setValue(event.currentTarget.value)}
         placeholder="Prénom"
@@ -432,11 +497,7 @@ function FirstNameForm({ id, lastName, onClose, onSend }: { id: string; lastName
         autoComplete="given-name"
         autoFocus
       />
-      <div className="alert-actions">
-        <button type="submit" className="btn btn-primary">Envoyer</button>
-        <button type="button" className="btn btn-quiet" onClick={onClose}>Annuler</button>
-      </div>
-    </form>
+    </DialogContent>
   );
 }
 
@@ -558,6 +619,13 @@ function PendingTile({ item, onRemove, disabled }: { item: PendingFile; onRemove
       <span className="dm-tile-error">
         <Icon name="triangleAlert" />
         <span>{item.error}</span>
+      </span>
+    );
+  } else if (item.kind === 'location' || item.kind === 'contact') {
+    body = (
+      <span className="dm-tile-doc is-ready">
+        <Icon name={item.kind === 'location' ? 'pin' : 'contactRound'} />
+        <span className="dm-tile-name">{item.fileName}</span>
       </span>
     );
   } else if (item.kind === 'document') {

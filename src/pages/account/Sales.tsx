@@ -12,7 +12,7 @@ import { formatPrice } from '../../lib/format';
 import { parisDay } from '../../lib/listing/views';
 import { photoUrl, sortedPhotos, type ListingRow } from '../../lib/listings';
 import { accountPath, conversationPath, listingPath, NEW_SALE_PATH, salePath, SALES_PATH } from '../../lib/paths';
-import { EmptyState, ScreenHeader, Spinner, Toast } from './parts';
+import { EmptyState, LoadFailure, ScreenHeader, Spinner, Toast } from './parts';
 
 // « Mes ventes » de l'espace professionnel : les offres acceptées à suivre, la liste des ventes (en cours, signées,
 // annulées), la fiche d'une vente (ses étapes jusqu'à l'acte) et son formulaire.
@@ -55,8 +55,7 @@ export function Sales({ saleId, screen }: { saleId: string | null; screen: strin
     return (
       <div className="space">
         <ScreenHeader title="Mes ventes" />
-        <p className="signin-error" role="alert">{state.message}</p>
-        <button type="button" className="btn btn-light" onClick={() => void loadSales()}>Réessayer</button>
+        <LoadFailure message={state.message} onRetry={() => void loadSales()} />
       </div>
     );
   }
@@ -128,7 +127,7 @@ function SaleList({ rows, suggestions, listings }: { rows: SaleRow[]; suggestion
   return (
     <div className="space sales">
       <Toast text={toast} />
-      <ScreenHeader title="Mes ventes" action={<a className="save-capsule" href={NEW_SALE_PATH}>Ajouter</a>} />
+      <ScreenHeader title="Mes ventes" action={<a className="nav-text-button" href={NEW_SALE_PATH}>Ajouter</a>} />
       {suggestions.length > 0 && (
         <section className="sale-card sales-suggestions space-card">
           <h2 className="sale-card-title"><Icon name="handshake" />Offres acceptées à suivre</h2>
@@ -228,7 +227,7 @@ function SaleDetail({ row, conversationId, listing }: { row: SaleRow; conversati
   return (
     <div className="space sales sale-page">
       <Toast text={toast} />
-      <ScreenHeader title="Vente" back={SALES_PATH} action={<a className="save-capsule" href={salePath(row.id, true)}>Modifier</a>} />
+      <ScreenHeader title="Vente" back={SALES_PATH} action={<a className="nav-text-button" href={salePath(row.id, true)}>Modifier</a>} />
       <section className="sale-head space-card">
         <SaleThumb listing={listing} size="large" />
         <div className="sale-head-text">
@@ -293,8 +292,8 @@ function SaleDetail({ row, conversationId, listing }: { row: SaleRow; conversati
         title="Annuler cette vente ?"
         message="Elle passera dans « Annulées ». Vous pourrez la reprendre."
         actions={[
-          { label: 'Annuler la vente', onClick: () => void changeCancelled(true), tone: 'primary' },
-          { label: 'Garder la vente', onClick: () => setDialog(false), tone: 'quiet' },
+          { label: 'Annuler la vente', onClick: () => void changeCancelled(true), role: 'destructive' },
+          { label: 'Garder la vente', onClick: () => setDialog(false), role: 'cancel' },
         ]}
       />
     </div>
@@ -413,9 +412,9 @@ function SaleEditor({ row }: { row: SaleRow | null }) {
         title="Quitter sans enregistrer ?"
         message="Vos modifications ne sont pas encore enregistrées."
         actions={[
-          { label: 'Enregistrer', onClick: () => { setDialog(null); void save(); }, tone: 'primary' },
-          { label: 'Quitter sans enregistrer', href: backPath },
-          { label: 'Continuer', onClick: () => setDialog(null), tone: 'quiet' },
+          { label: 'Enregistrer', onClick: () => { setDialog(null); void save(); } },
+          { label: 'Quitter sans enregistrer', href: backPath, role: 'destructive' },
+          { label: 'Continuer', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
       <AlertDialog
@@ -424,8 +423,8 @@ function SaleEditor({ row }: { row: SaleRow | null }) {
         title="Supprimer le suivi de cette vente ?"
         message="Ses dates et votre note seront effacées. L'annonce et les offres ne changent pas."
         actions={[
-          { label: 'Supprimer', onClick: () => void remove(), tone: 'primary' },
-          { label: 'Annuler', onClick: () => setDialog(null), tone: 'quiet' },
+          { label: 'Supprimer', onClick: () => void remove(), role: 'destructive' },
+          { label: 'Annuler', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
     </div>

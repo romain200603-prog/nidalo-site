@@ -16,6 +16,7 @@ import {
   chosenFromSuggestion, filterChips, MODE_PROPERTY_TYPES, OUTDOOR_LABELS, OUTDOOR_SPACES, paramsFromDraft, resetFilters, search,
   searchCenter, switchMode, type SearchDraft,
 } from '../lib/search';
+import '../styles/filtres-app.css';
 
 // « Filtres de recherche », comme Features/Search/SearchFiltersSheet.swift, dans l'ordre de l'app : catégorie (les pavés
 // de l'accueil), localisation et rayon, critères actifs retirables, puis les critères propres à chaque catégorie. Les
@@ -378,13 +379,13 @@ export function FiltersDialog({ open, draft, remembered, onClose, onApply, onSho
                     <CashFlowChoices value={working.minMonthlyCashFlow} onChange={(minMonthlyCashFlow) => update({ minMonthlyCashFlow })} />
                     <AmountField label="Apport (pour le calcul du cash-flow)" value={working.downPayment} onChange={(v) => update({ downPayment: v })} unit="€" decimals />
                     <InfoLine>
-                      Rendement brut : loyers annuels actuels hors charges ÷ prix. Net et cash-flow sont estimés avec un crédit sur 20 ans à
+                      Rendement brut : loyers annuels encaissés hors charges ÷ prix. Net et cash-flow sont estimés avec un crédit sur 20 ans à
                       3,5 % ; sans apport saisi, l'apport couvre les frais de notaire. Une annonce sans loyer connu n'est pas retenue.
                     </InfoLine>
                   </FilterCard>
                   <FilterCard title="Situation locative et charges">
                     <div className="choice-row" role="group" aria-label="Situation locative">
-                      {(['Indifférent', 'Loué', 'Libre'] as const).map((title, index) => (
+                      {(['Indifférent', 'Vendu occupé', 'Libre'] as const).map((title, index) => (
                         // Seule la situation change : type d'actif et immeuble mixte restent.
                         <ChoiceChip key={title} title={title} selected={situation === index} expands
                           onClick={() => update({ leasedOnly: index === 1, vacantOnly: index === 2 })} />
@@ -392,7 +393,7 @@ export function FiltersDialog({ open, draft, remembered, onClose, onApply, onSho
                     </div>
                     <FeatureToggle title="Loyer déclaré par le vendeur uniquement" checked={working.requiresDeclaredRent}
                       onChange={(requiresDeclaredRent) => update({ requiresDeclaredRent })} />
-                    <AmountField label="Loyer actuel minimum (perçu, hors loyer potentiel)" value={working.minCurrentMonthlyRent}
+                    <AmountField label="Loyers encaissés minimum (hors loyer potentiel)" value={working.minCurrentMonthlyRent}
                       onChange={(v) => update({ minCurrentMonthlyRent: v })} unit="€/mois" decimals />
                     <AmountField label="Charges de copropriété maximales" value={working.maxAnnualCharges} onChange={(v) => update({ maxAnnualCharges: v })} unit="€/an" decimals />
                     <AmountField label="Taxe foncière maximale" value={working.maxAnnualPropertyTax} onChange={(v) => update({ maxAnnualPropertyTax: v })} unit="€/an" decimals />

@@ -1,19 +1,20 @@
 /* Nidalo sur ordinateur, à partir de 1024 px : police, couleurs et mesures des maquettes de Romain (spec §4).
-   Tout est dans @media (min-width: 1024px) : en dessous, le site reste exactement comme sur téléphone.
+   Tout est dans @media (min-width: 1024px), sauf la police (toutes les largeurs) : en dessous, le site reste exactement
+   comme sur téléphone.
    Chaque page redessinée ajoute ensuite sa propre section ou son propre fichier dans styles/. */
 
-/* Police Inter (SIL Open Font License 1.1, public/fonts/LICENSE-Inter.txt), déclarée sous un nom à part : la liste de
-   polices du téléphone cite « Inter » (police installée sur l'appareil), elle ne doit jamais recevoir celle-ci. */
+/* Police Inter (SIL Open Font License 1.1, public/fonts/LICENSE-Inter.txt), la police de l'app (Typography.swift), sur
+   toutes les largeurs, sous un nom à part (« Nidalo Inter ») : jamais confondue avec une Inter installée sur l'appareil.
+   Quatre graisses comme l'app (Inter-Regular, Medium, SemiBold, Bold) : « heavy » et « black » de l'app sont Inter Bold,
+   d'où le fichier 700 servi aussi pour 800 et 900. */
 @font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 400; src: url('/fonts/inter-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
 @font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 400; src: url('/fonts/inter-latin-400-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 @font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 500; src: url('/fonts/inter-latin-ext-500-normal.woff2') format('woff2'); unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
 @font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 500; src: url('/fonts/inter-latin-500-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 @font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 600; src: url('/fonts/inter-latin-ext-600-normal.woff2') format('woff2'); unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
 @font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 600; src: url('/fonts/inter-latin-600-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
-@font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 700; src: url('/fonts/inter-latin-ext-700-normal.woff2') format('woff2'); unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
-@font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 700; src: url('/fonts/inter-latin-700-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
-@font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 800; src: url('/fonts/inter-latin-ext-800-normal.woff2') format('woff2'); unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
-@font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 800; src: url('/fonts/inter-latin-800-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 700 900; src: url('/fonts/inter-latin-ext-700-normal.woff2') format('woff2'); unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Nidalo Inter'; font-style: normal; font-display: swap; font-weight: 700 900; src: url('/fonts/inter-latin-700-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 
 @media (min-width: 1024px) {
   /* ——— Valeurs communes de la maquette ——— */

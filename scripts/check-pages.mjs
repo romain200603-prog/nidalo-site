@@ -284,11 +284,11 @@ function pageView(request) {
 
 /**
  * Pastille Messages de la barre d'onglets du téléphone (AppTabBar de l'app, n° 44) : avec un compte, my_conversations
- * sans paramètre, lu à l'ouverture d'une page qui montre la barre (sous 761 px) ; jamais sur la fiche d'une annonce,
+ * sans paramètre, lu à l'ouverture d'une page qui montre la barre (sous 1024 px) ; jamais sur la fiche d'une annonce,
  * qui la masque.
  */
 function tabBarBadgeRead(request, table, body, width, signedIn) {
-  return signedIn && table === 'rpc/my_conversations' && request.method() === 'POST' && width !== null && width < 761
+  return signedIn && table === 'rpc/my_conversations' && request.method() === 'POST' && width !== null && width < 1024
     && pagePath(request) !== '/annonce/' && (body === null || body === '' || (typeof body === 'object' && Object.keys(body).length === 0));
 }
 
@@ -606,7 +606,7 @@ async function checkTabBarBadge(page, state, name) {
   const label = await page.getAttribute('.tabbar a[href="/messages/"]', 'aria-label');
   if (label !== (messages ? `Messages, ${messages} non lus` : null)) problems.push(`${name} : libellé de l'onglet Messages « ${label} »`);
   if (!messages) return;
-  // Capsule rouge (#E5383B) à liseré blanc, en haut à droite de l'icône : dans la largeur de l'onglet, sous le haut de
+  // Capsule rouge (#E5383B) de 12 à liseré blanc, en haut à droite de l'icône : dans la largeur de l'onglet, sous le haut de
   // la barre (elle dépasse le lien, centré dans la barre, comme la pastille de l'app dépasse l'icône).
   const look = await page.evaluate(() => {
     const badge = document.querySelector('.tabbar a[href="/messages/"] .tabbar-badge');
@@ -620,7 +620,7 @@ async function checkTabBarBadge(page, state, name) {
       inside: box.left >= tab.left && box.right <= tab.right && box.top >= bar.top,
     };
   });
-  expectSame(name, 'pastille de la barre d\'onglets', look, { color: 'rgb(229, 56, 59)', height: 16, rightOfCenter: true, aboveCenter: true, inside: true });
+  expectSame(name, 'pastille de la barre d\'onglets', look, { color: 'rgb(229, 56, 59)', height: 12, rightOfCenter: true, aboveCenter: true, inside: true });
 }
 
 /** Pastilles de la barre du haut = données du serveur simulé (archivées exclues, sortes inconnues ignorées). */
@@ -682,7 +682,11 @@ async function open(context, path, name) {
   // Sur téléphone, seule la page Messages ouvre le temps réel (demande de Romain du 14 novembre 2026).
   const onMessages = () => { try { return new URL(page.url()).pathname === '/messages/'; } catch { return false; } };
   page.on('websocket', (socket) => { if (isPhone() && !onMessages()) problems.push(`${name}: temps réel ouvert sur téléphone (${socket.url()})`); });
-  page.on('request', (request) => { if (isPhone() && request.url().includes('/fonts/')) problems.push(`${name}: police chargée sur téléphone (${request.url()})`); });
+  // Polices : seulement Inter, la police de l'app (400, 500, 600 et 700, Nidalo Inter), sur toutes les largeurs.
+  page.on('request', (request) => {
+    const url = request.url();
+    if (url.includes('/fonts/') && !/\/fonts\/inter-latin(-ext)?-(400|500|600|700)-normal\.woff2$/.test(url)) problems.push(`${name}: police inattendue (${url})`);
+  });
   await page.addInitScript(() => {
     document.addEventListener('securitypolicyviolation', (e) => console.error(`CSP bloque ${e.violatedDirective} ${e.blockedURI}`));
   });
@@ -715,6 +719,11 @@ const CHAT_TABLES = [
   'rpc/start_phone_conversation', 'rpc/start_direct_conversation', 'rpc/my_offers', 'rpc/make_offer', 'rpc/accept_offer', 'rpc/decline_offer',
   'rpc/withdraw_offer', 'rpc/counter_offer', 'agenda_visits', 'rpc/my_visit_requests', 'rpc/start_listing_conversation',
   'rpc/accept_visit_request', 'rpc/propose_visit_slots', 'listing_lots',
+  // Groupes et communautés (étape 4b) : les fonctions que l'app appelle, avec ses paramètres.
+  'rpc/create_group', 'rpc/update_group_info', 'rpc/add_group_members', 'rpc/remove_group_member', 'rpc/set_group_role',
+  'rpc/transfer_group_ownership', 'rpc/leave_conversation', 'rpc/set_ephemeral', 'rpc/create_community', 'rpc/add_community_members',
+  'rpc/remove_community_member', 'rpc/set_community_role', 'rpc/update_community_info', 'rpc/leave_community', 'rpc/my_community_invites',
+  'rpc/create_community_invite', 'rpc/revoke_community_invite', 'rpc/pending_community_join_requests', 'rpc/decide_community_join_request',
 ];
 const chatProfile = (userId, publicName, fields = {}) => ({
   user_id: userId, public_name: publicName, avatar_path: null, account_type: 'individual', member_since: '2026-01-15', agency_id: null,
@@ -840,14 +849,52 @@ function chatState() {
     preferences: { [chatId(2)]: { is_favorite: true }, [chatId(3)]: { is_archived: true }, [chatId(4)]: { muted_until: '4001-01-01T00:00:00+00:00' } },
     blocks: [],
     reports: [],
+    /** Communautés du compte (my_communities), liens d'invitation et demandes pour entrer (étape 4b). */
+    communities: [],
+    invites: [],
+    joinRequests: [],
     files: new Map([[AGENT_PHOTOS[0], { type: 'image/jpeg', body: photos['photo1.jpg'] }], [AGENT_PHOTOS[1], { type: 'image/jpeg', body: photos['photo2.jpg'] }],
       [LOAN_PDF, { type: 'application/pdf', body: PDF_BYTES }]]),
     /** Demandes reçues (tables et fonctions), URL signées demandées et fichiers envoyés. */
     calls: [],
     signs: [],
     uploads: [],
+    /** Fichiers effacés du bucket (remove de supabase-js). */
+    removed: [],
     tick: 0,
   };
+}
+
+/** Discussion principale d'une communauté : son identifiant, dernier octet inversé avec 0x5A (Community.mainConversationId). */
+function chatMainConversationId(communityId) {
+  const hex = communityId.replace(/-/g, '').toLowerCase();
+  const bytes = `${hex.slice(0, 30)}${(parseInt(hex.slice(30), 16) ^ 0x5a).toString(16).padStart(2, '0')}`;
+  return `${bytes.slice(0, 8)}-${bytes.slice(8, 12)}-${bytes.slice(12, 16)}-${bytes.slice(16, 20)}-${bytes.slice(20)}`;
+}
+const COMMUNITY_ID = 'c4000000-0000-4000-8000-000000000001';
+const COMMUNITY_CHAT = chatMainConversationId(COMMUNITY_ID);
+
+/**
+ * Étape 4b : une communauté de quartier créée par Camille, dont le compte est administrateur (my_communities), sa
+ * discussion principale et une demande pour entrer (Nina L.) ; le groupe D reçoit une description et un type.
+ */
+function addChatCommunity(chat) {
+  const created = '2026-10-12T09:00:00Z';
+  chat.conversations.push({ id: COMMUNITY_CHAT, kind: 'group', listing: null, buyer: null, seller: null, other: null, name: 'Voisins de la Croix-Rousse', unread: 0, created_at: created, createdBy: CAMILLE_ID });
+  const members = [[CAMILLE_ID, 'owner'], [USER_ID, 'admin'], [MARC_ID, 'member'], [LUCAS_ID, 'member']];
+  for (const [userId, role] of members) chat.participants.push({ conversation_id: COMMUNITY_CHAT, user_id: userId, role, left_at: null, last_read_at: '2026-11-04T18:00:00Z' });
+  chat.messages.push(
+    { id: messageId(61), conversation_id: COMMUNITY_CHAT, sender_id: null, kind: 'system', client_id: messageId(61), content: { system: { _0: 'Camille R. a créé la communauté « Voisins de la Croix-Rousse »' } }, created_at: created, expires_at: null, message_reactions: [], preview: 'Camille R. a créé la communauté « Voisins de la Croix-Rousse »' },
+    { id: messageId(62), conversation_id: COMMUNITY_CHAT, sender_id: CAMILLE_ID, kind: 'text', client_id: messageId(62), content: chatText('Bienvenue à tous ! Présentez-vous en quelques mots.'), created_at: '2026-11-04T17:40:00Z', expires_at: null, message_reactions: [], preview: 'Bienvenue à tous ! Présentez-vous en quelques mots.' },
+  );
+  chat.communities.push({
+    id: COMMUNITY_ID, main_conversation_id: COMMUNITY_CHAT, name: 'Voisins de la Croix-Rousse',
+    details: 'Entraide entre propriétaires et locataires du quartier : travaux, copropriété et bonnes adresses.', category: 'residential', area: 'Lyon 4e',
+    visibility: 'private', cover: 'sky', image_path: null, created_by: CAMILLE_ID, created_at: created,
+    members: members.map(([user_id, role]) => ({ user_id, role, joined_at: created })),
+  });
+  chat.joinRequests.push({ id: 'e5000000-0000-4000-8000-000000000001', community_id: COMMUNITY_ID, user_id: NINA_ID, status: 'pending', created_at: '2026-11-05T20:00:00Z' });
+  Object.assign(chat.conversations.find((item) => item.id === chatId(4)), { details: 'Visite de l\'appartement 3 pièces samedi à 10 h, puis point sur nos dossiers.', purpose: 'project' });
 }
 
 const visitRequestId = (n) => `e2000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -902,7 +949,8 @@ function chatRows(chat) {
     const messages = chat.messages.filter((item) => sameChatId(item.conversation_id, conversation.id)).sort((a, b) => a.created_at.localeCompare(b.created_at));
     const last = messages.at(-1) ?? null;
     const members = chat.participants.filter((item) => sameChatId(item.conversation_id, conversation.id) && item.left_at === null);
-    const mine = members.find((item) => sameChatId(item.user_id, USER_ID));
+    // Ma ligne, même une fois le groupe quitté (left_at : « Vous avez quitté le groupe »).
+    const mine = chat.participants.find((item) => sameChatId(item.conversation_id, conversation.id) && sameChatId(item.user_id, USER_ID));
     const other = conversation.other ? members.find((item) => sameChatId(item.user_id, conversation.other)) : null;
     // Annonces de l'accueil, ou des annonces de test (une location, pour « Discussions liées aux annonces »).
     const listing = [...HOME_LISTINGS, ...listings].find((row) => row.id === conversation.listing) ?? null;
@@ -912,15 +960,18 @@ function chatRows(chat) {
         listingId: listing.id, title: listing.title, price: listing.price, transaction: listing.transaction, city: listing.city,
         coverPath: listing.listing_photos[0]?.storage_path ?? null,
       } : null,
-      buyer_id: conversation.buyer, seller_id: conversation.seller, group_name: conversation.name, group_details: null, group_image_path: null,
-      group_purpose: null, ephemeral_seconds: null, created_by: USER_ID, created_at: conversation.created_at, my_role: mine?.role ?? 'member',
-      joined_at: conversation.created_at, left_at: null, last_read_at: mine?.last_read_at ?? null, ...settings, other_user_id: conversation.other,
+      buyer_id: conversation.buyer, seller_id: conversation.seller, group_name: conversation.name, group_details: conversation.details ?? null,
+      group_image_path: conversation.image ?? null, group_purpose: conversation.purpose ?? null, ephemeral_seconds: conversation.ephemeral ?? null,
+      created_by: conversation.createdBy ?? USER_ID, created_at: conversation.created_at, my_role: mine?.role ?? 'member',
+      joined_at: conversation.created_at, left_at: mine?.left_at ?? null, last_read_at: mine?.last_read_at ?? null, ...settings, other_user_id: conversation.other,
       other_last_read_at: other?.last_read_at ?? null, member_count: members.length, unread_count: conversation.unread,
       last_message_id: last?.id ?? null, last_message_sender_id: last?.sender_id ?? null, last_message_kind: last?.kind ?? null,
       last_message_content: last?.content ?? null, last_message_preview: last?.preview ?? null, last_message_at: last?.created_at ?? null,
     };
   });
-  return rows.sort((a, b) => (b.last_message_at ?? b.created_at).localeCompare(a.last_message_at ?? a.created_at));
+  // Masquée (hidden_at, « Supprimer le groupe ») : absente de la liste jusqu'à un nouveau message.
+  return rows.filter((row) => !row.hidden_at || (row.last_message_at ?? '') > row.hidden_at)
+    .sort((a, b) => (b.last_message_at ?? b.created_at).localeCompare(a.last_message_at ?? a.created_at));
 }
 
 /** Offre telle que my_offers la rend (OfferServerRow) : rôle, auteur et actions permises selon le compte. */
@@ -993,6 +1044,18 @@ function chatRespond(chat, reply, { table, method, params, body, single }) {
     Object.assign(offer, { responded_at: chatClock(chat), ...change });
     return reply(200, [chatOffer(offer)]);
   };
+  const participantOf = (conversationId, userId) => chat.participants.find((item) => sameChatId(item.conversation_id, conversationId) && sameChatId(item.user_id, userId));
+  /** Membre ajouté, ou de retour (left_at effacé). */
+  const join = (conversationId, userId, role) => {
+    const found = participantOf(conversationId, userId);
+    if (found) Object.assign(found, { role, left_at: null });
+    else chat.participants.push({ conversation_id: String(conversationId).toLowerCase(), user_id: String(userId).toLowerCase(), role, left_at: null, last_read_at: null });
+  };
+  /** Créateur et administrateurs encore membres. */
+  const manages = (conversationId) => {
+    const mine = participantOf(conversationId, USER_ID);
+    return !!mine && mine.left_at === null && ['owner', 'admin'].includes(mine.role);
+  };
   const direct = (otherId, n) => {
     let conversation = chat.conversations.find((item) => item.kind === 'direct' && sameChatId(item.other, otherId));
     if (!conversation) {
@@ -1013,8 +1076,6 @@ function chatRespond(chat, reply, { table, method, params, body, single }) {
       const ids = (body?.user_ids ?? []).map((id) => String(id).toLowerCase());
       return reply(200, CHAT_PROFILES.filter((row) => ids.includes(row.user_id)));
     }
-    case 'rpc/my_communities':
-      return reply(200, []);
     case 'rpc/professional_contacts':
       return reply(200, PRO_CONTACTS);
     case 'user_blocks':
@@ -1055,6 +1116,12 @@ function chatRespond(chat, reply, { table, method, params, body, single }) {
         };
         chat.messages.push(row);
         return reply(201, single ? messageColumns(row) : [messageColumns(row)]);
+      }
+      if (method === 'DELETE') {
+        // Règle du serveur : seul l'expéditeur supprime son message ; les lignes supprimées reviennent (select=id).
+        const gone = chatFiltered(chat.messages, params).filter((item) => sameChatId(item.sender_id, USER_ID));
+        chat.messages = chat.messages.filter((item) => !gone.includes(item));
+        return reply(200, gone.map((item) => ({ id: item.id })));
       }
       const rows = chatFiltered(chat.messages, params).sort((a, b) => b.created_at.localeCompare(a.created_at))
         .slice(0, Number(params.get('limit') ?? 1000)).map(messageColumns);
@@ -1161,6 +1228,149 @@ function chatRespond(chat, reply, { table, method, params, body, single }) {
       const conversation = chat.conversations.find((item) => item.listing === body?.p_listing_id);
       return conversation ? reply(200, conversation.id) : refuse('Annonce introuvable.');
     }
+    // Groupes (étape 4b) : comme les fonctions du serveur, sans réponse (204) ; les droits du créateur et des
+    // administrateurs sont vérifiés.
+    case 'rpc/create_group': {
+      const id = String(body?.p_id).toLowerCase();
+      if (!findConversation(id)) {
+        chat.conversations.push({ id, kind: 'group', listing: null, buyer: null, seller: null, other: null, name: body.p_name, details: body.p_details ?? null, purpose: body.p_purpose ?? null, unread: 0, created_at: chatClock(chat), createdBy: USER_ID });
+        join(id, USER_ID, 'owner');
+        for (const userId of body.p_member_ids ?? []) join(id, userId, 'member');
+        addMessage(id, null, { system: { _0: `Claire M. a créé le groupe « ${body.p_name} »` } }, `Claire M. a créé le groupe « ${body.p_name} »`);
+      }
+      return reply(204);
+    }
+    case 'rpc/update_group_info': {
+      const conversation = findConversation(body?.p_conversation_id);
+      if (!conversation || !manages(conversation.id)) return refuse('Seuls le créateur et les administrateurs peuvent modifier le groupe.');
+      Object.assign(conversation, { name: body.p_name, details: body.p_details ?? null, image: body.p_image_path ?? null });
+      const community = chat.communities.find((item) => sameChatId(item.main_conversation_id, conversation.id));
+      if (community) Object.assign(community, { name: body.p_name, image_path: body.p_image_path ?? null });
+      return reply(204);
+    }
+    case 'rpc/add_group_members':
+      if (!manages(body?.p_conversation_id)) return refuse('Seuls le créateur et les administrateurs peuvent ajouter des membres.');
+      for (const userId of body.p_member_ids ?? []) join(String(body.p_conversation_id).toLowerCase(), userId, 'member');
+      return reply(204);
+    case 'rpc/remove_group_member': {
+      const member = participantOf(body?.p_conversation_id, body?.p_member_id);
+      if (!member || !manages(body.p_conversation_id) || member.role === 'owner') return refuse('Ce membre ne peut pas être retiré.');
+      member.left_at = chatClock(chat);
+      return reply(204);
+    }
+    case 'rpc/set_group_role': {
+      const member = participantOf(body?.p_conversation_id, body?.p_member_id);
+      if (!member || participantOf(body.p_conversation_id, USER_ID)?.role !== 'owner') return refuse('Seul le créateur peut nommer les administrateurs.');
+      member.role = body.p_role;
+      return reply(204);
+    }
+    case 'rpc/transfer_group_ownership': {
+      const member = participantOf(body?.p_conversation_id, body?.p_member_id);
+      const mine = participantOf(body?.p_conversation_id, USER_ID);
+      if (!member || mine?.role !== 'owner') return refuse('Seul le créateur peut transférer la propriété.');
+      member.role = 'owner';
+      mine.role = 'admin';
+      return reply(204);
+    }
+    case 'rpc/leave_conversation': {
+      const mine = participantOf(body?.p_conversation_id, USER_ID);
+      if (mine) mine.left_at = chatClock(chat);
+      return reply(204);
+    }
+    case 'rpc/set_ephemeral': {
+      const conversation = findConversation(body?.p_conversation_id);
+      if (!conversation || !manages(conversation.id)) return refuse('Seuls le créateur et les administrateurs peuvent changer ce réglage.');
+      conversation.ephemeral = Number(body.p_seconds) || null;
+      return reply(204);
+    }
+    // Communautés : la communauté à jour revient (une ligne de my_communities).
+    case 'rpc/my_communities':
+      return reply(200, chat.communities.filter((item) => item.members.some((member) => sameChatId(member.user_id, USER_ID))));
+    case 'rpc/create_community': {
+      const id = String(body?.p_id).toLowerCase();
+      let community = chat.communities.find((item) => sameChatId(item.id, id));
+      if (!community) {
+        const created = chatClock(chat);
+        const main = String(body.p_conversation_id).toLowerCase();
+        const members = [[USER_ID, 'owner'], ...(body.p_member_ids ?? []).map((userId) => [String(userId).toLowerCase(), 'member'])];
+        community = {
+          id, main_conversation_id: main, name: body.p_name, details: body.p_details, category: body.p_category, area: body.p_area ?? null,
+          visibility: 'private', cover: body.p_cover ?? null, image_path: null, created_by: USER_ID, created_at: created,
+          members: members.map(([user_id, role]) => ({ user_id, role, joined_at: created })),
+        };
+        chat.communities.push(community);
+        chat.conversations.push({ id: main, kind: 'group', listing: null, buyer: null, seller: null, other: null, name: body.p_name, unread: 0, created_at: created, createdBy: USER_ID });
+        for (const [userId, role] of members) join(main, userId, role);
+      }
+      return reply(200, [community]);
+    }
+    case 'rpc/add_community_members':
+    case 'rpc/remove_community_member':
+    case 'rpc/set_community_role':
+    case 'rpc/update_community_info': {
+      const community = chat.communities.find((item) => sameChatId(item.id, body?.p_community_id));
+      const mine = community?.members.find((member) => sameChatId(member.user_id, USER_ID));
+      if (!community || !['owner', 'admin'].includes(mine?.role)) return refuse('Seuls le créateur et les administrateurs gèrent la communauté.');
+      const target = community.members.find((member) => sameChatId(member.user_id, body.p_member_id));
+      if (table === 'rpc/add_community_members') {
+        for (const userId of body.p_member_ids ?? []) {
+          if (!community.members.some((member) => sameChatId(member.user_id, userId))) community.members.push({ user_id: String(userId).toLowerCase(), role: 'member', joined_at: chatClock(chat) });
+          join(community.main_conversation_id, userId, 'member');
+        }
+      } else if (table === 'rpc/remove_community_member') {
+        if (!target || target.role === 'owner') return refuse('Ce membre ne peut pas être retiré.');
+        community.members = community.members.filter((member) => member !== target);
+        const participant = participantOf(community.main_conversation_id, target.user_id);
+        if (participant) participant.left_at = chatClock(chat);
+      } else if (table === 'rpc/set_community_role') {
+        if (!target || mine.role !== 'owner') return refuse('Seul le créateur nomme les administrateurs.');
+        target.role = body.p_role;
+      } else {
+        Object.assign(community, { name: body.p_name, image_path: body.p_image_path });
+        Object.assign(findConversation(community.main_conversation_id) ?? {}, { name: body.p_name, image: body.p_image_path });
+      }
+      return reply(200, [community]);
+    }
+    case 'rpc/leave_community': {
+      const community = chat.communities.find((item) => sameChatId(item.id, body?.p_community_id));
+      if (community) {
+        community.members = community.members.filter((member) => !sameChatId(member.user_id, USER_ID));
+        const mine = participantOf(community.main_conversation_id, USER_ID);
+        if (mine) mine.left_at = chatClock(chat);
+      }
+      return reply(204);
+    }
+    // Invitations : lien actif (plus récent d'abord), nouveau lien, lien annulé ; demandes pour entrer.
+    case 'rpc/my_community_invites':
+      return reply(200, chat.invites.filter((item) => sameChatId(item.community_id, body?.p_community_id) && !item.revoked).sort((a, b) => b.created_at.localeCompare(a.created_at)));
+    case 'rpc/create_community_invite': {
+      const created = chatClock(chat);
+      const invite = {
+        id: crypto.randomUUID(), community_id: String(body?.p_community_id).toLowerCase(), token: `jeton-invitation-${chat.invites.length + 1}`,
+        requires_approval: body?.p_requires_approval ?? true, created_at: created, expires_at: new Date(Date.parse(created) + (body?.p_days ?? 7) * 86_400_000).toISOString(),
+      };
+      chat.invites.push(invite);
+      return reply(200, [invite]);
+    }
+    case 'rpc/revoke_community_invite': {
+      const invite = chat.invites.find((item) => sameChatId(item.id, body?.p_invite_id));
+      if (invite) invite.revoked = true;
+      return reply(204);
+    }
+    case 'rpc/pending_community_join_requests':
+      return reply(200, chat.joinRequests.filter((item) => sameChatId(item.community_id, body?.p_community_id) && item.status === 'pending')
+        .map(({ id, user_id, created_at }) => ({ id, user_id, created_at })));
+    case 'rpc/decide_community_join_request': {
+      const request = chat.joinRequests.find((item) => sameChatId(item.id, body?.p_request_id));
+      if (!request || request.status !== 'pending') return refuse('Cette demande a déjà été traitée.');
+      request.status = body.p_accept ? 'accepted' : 'declined';
+      const community = chat.communities.find((item) => sameChatId(item.id, request.community_id));
+      if (body.p_accept && community) {
+        community.members.push({ user_id: request.user_id, role: 'member', joined_at: chatClock(chat) });
+        join(community.main_conversation_id, request.user_id, 'member');
+      }
+      return reply(204);
+    }
     default:
       return reply(200, []);
   }
@@ -1231,6 +1441,17 @@ async function mockMessaging(context, chat, { signedIn = true } = {}) {
     const file = parts.find((part) => part.filename !== null);
     if (file) chat.files.set(path, { type: file.type ?? 'application/octet-stream', body: Buffer.from(file.body) });
     return reply(200, { Id: crypto.randomUUID(), Key: `message-attachments/${path}` });
+  });
+  // remove() de supabase-js : DELETE sur le bucket avec { prefixes } ; les fichiers effacés reviennent.
+  await context.route('https://izzsoitqtzzswkpvdozd.supabase.co/storage/v1/object/message-attachments', async (route) => {
+    const request = route.request();
+    if (request.method() !== 'DELETE') return route.fallback();
+    let body = null;
+    try { body = request.postDataJSON(); } catch { body = null; }
+    const paths = Array.isArray(body?.prefixes) ? body.prefixes : [];
+    chat.removed.push(...paths);
+    for (const path of paths) chat.files.delete(path);
+    return route.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify(paths.map((name) => ({ name }))) });
   });
 }
 
@@ -1521,6 +1742,18 @@ async function phoneFavorites() {
   await page.locator('.favorite-card', { has: page.locator('.favorite-title', { hasText: FAV_HOTEL }) }).locator('.favorite-heart').click();
   await waitForRemovalNotice(page, `${P} : cœur de l'hôtel`);
   await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${favId(4)}` }, null]], `${P} : fin du message`);
+  // Comparer (CompareButton de l'app) : le rond de l'en-tête, « Comparer vos favoris » sans pastille, et un bouton
+  // Comparer par carte ; celui de la première carte ajoute son bien (« Comparer, 1 bien », pastille 1), sans rien
+  // envoyer au serveur.
+  mark = writes.length;
+  const compareHead = () => page.evaluate(() => [document.querySelector('.favorites-head .compare-button')?.getAttribute('aria-label'),
+    document.querySelector('.favorites-head .compare-button-count')?.textContent ?? null]);
+  expectSame(P, 'Comparer [en-tête, boutons des cartes]', [await compareHead(), await page.locator('.favorite-card .favorite-compare').count()], [['Comparer vos favoris', null], 3]);
+  const firstCompared = await page.$eval('.favorite-card a.stretched', (link) => new URL(link.href).searchParams.get('id'));
+  await page.locator('.favorite-card .favorite-compare').first().click();
+  await page.waitForSelector('.favorites-head .compare-button-count', { timeout: 4000 }).catch(() => undefined);
+  expectSame(P, 'un bien comparé [en-tête, comparaison, envois]', [await compareHead(), await page.evaluate(() => JSON.parse(sessionStorage.getItem('nidalo.comparer') ?? 'null')),
+    writes.slice(mark)], [['Comparer, 1 bien', '1'], { ids: [firstCompared], referenceId: firstCompared }, []]);
   // Onglet Recherches : la pastille glisse sous l'onglet, le contenu change.
   await page.click('.favorites-wrap .fav-tab >> nth=1');
   await page.waitForSelector('.favorites-searches .saved-search');
@@ -1530,6 +1763,11 @@ async function phoneFavorites() {
   [['false', 'true'], 195, 0]);
   await waitForSearchCountsIn(page, '.favorites-searches', P);
   await page.screenshot({ path: join(out, 'favoris-onglet-recherches-telephone.png'), fullPage: true });
+  // Le rond de l'en-tête ouvre Comparer (l'écran de l'app sur téléphone), avec le bien ajouté.
+  await Promise.all([page.waitForURL(`${base}/comparer/`, { timeout: 8000 }).catch(() => problems.push(`${P} : le rond de l'en-tête n'ouvre pas Comparer (${page.url()})`)),
+    page.click('.favorites-head .compare-button')]);
+  await page.waitForSelector('.cmpm-column', { timeout: 8000 }).catch(() => undefined);
+  expectSame(P, 'Comparer ouvert depuis les favoris', [await textOf(page, '.cmpm h1'), await page.locator('.cmpm-column').count()], ['Comparer', 1]);
   await page.close();
   await context.close();
 
@@ -1790,10 +2028,21 @@ async function mockSpace(context, space) {
         // Upsert sur user_id : la ligne envoyée devient le projet du compte.
         space.project = body;
         return reply(route, 201);
-      case 'agenda_visits':
+      case 'agenda_visits': {
         if (request.method() === 'GET') return reply(route, 200, space.visits);
+        // Annuler (PATCH) et supprimer (DELETE) : la ligne de l'identifiant demandé, majuscules ou minuscules (Postgres).
+        const target = url.searchParams.get('id')?.replace(/^eq\./, '').toLowerCase() ?? null;
+        if (request.method() === 'PATCH') {
+          space.visits = space.visits.map((row) => (row.id.toLowerCase() === target ? { ...row, ...body } : row));
+          return reply(route, 204);
+        }
+        if (request.method() === 'DELETE') {
+          space.visits = space.visits.filter((row) => row.id.toLowerCase() !== target);
+          return reply(route, 204);
+        }
         space.visits.push(body);
         return reply(route, 201);
+      }
       case 'rpc/my_visit_requests':
         return reply(route, 200, space.requests);
       case 'rpc/my_visit_sessions':
@@ -1811,6 +2060,15 @@ async function mockSpace(context, space) {
   await context.route(/^https:\/\/izzsoitqtzzswkpvdozd\.supabase\.co\/auth\/v1\/logout/, (route) => {
     space.logouts.push({ method: route.request().method(), search: new URL(route.request().url()).search });
     return route.fallback();
+  });
+  // Photos du compte rendu d'une visite (visit-reports) : la liste de son dossier (space.reportFiles) et leur suppression.
+  await context.route(/^https:\/\/izzsoitqtzzswkpvdozd\.supabase\.co\/storage\/v1\/object\/(list\/)?visit-reports(\/|$)/, (route) => {
+    const request = route.request();
+    let body = null;
+    try { body = request.postDataJSON(); } catch { body = request.postData(); }
+    const table = `storage ${new URL(request.url()).pathname.replace('/storage/v1/object/', '')}`;
+    space.calls.push({ table, method: request.method(), search: '', body, prefer: '', path: pagePath(request) });
+    return reply(route, 200, table === 'storage list/visit-reports' ? (space.reportFiles ?? []) : []);
   });
 }
 
@@ -2076,7 +2334,7 @@ try {
   page = await open(desktop, '/recherche/?mode=invest', 'investir-ordinateur');
   await page.waitForSelector('.listing-card');
   const investCard = (await page.textContent('.listing-card'))?.replace(/\s/g, ' ') ?? '';
-  for (const expected of [/Rendement brut\s*5,5 %/, /Loyer actuel\s*850 €\/mois/, /Cash-flow estimé\s*−474 €\/mois/]) {
+  for (const expected of [/Rendement brut\s*5,5 %/, /Loyer encaissé\s*850 €\/mois/, /Cash-flow estimé\s*−474 €\/mois/]) {
     if (!expected.test(investCard)) problems.push(`investir : ${expected} absent de la fiche (« ${investCard.slice(0, 200)} »)`);
   }
   await page.screenshot({ path: join(out, 'investir-ordinateur.png') });
@@ -2432,9 +2690,9 @@ try {
   }
 
   // Accueil sur ordinateur (maquette 1), à 1440 × 900 et 1024 × 768, avec les annonces inventées : bonjour, ordre
-  // des sections de l'app (vide = absente), une seule ligne par section (4 grandes cartes, 3 sous 1280 px ; 3 petites)
-  // alors que les annonces lues en remplissent davantage, projet du compte, fiche ouverte dans l'onglet puis
-  // « Consultés récemment », « Plus de critères ». Captures pour Romain : 1-accueil-*.png.
+  // des sections de l'app (vide = absente), une seule ligne par section (4 cartes, 3 sous 1280 px) alors que les
+  // annonces lues en remplissent davantage, projet du compte, fiche ouverte dans l'onglet puis « Vus récemment »,
+  // « Plus de critères ». Captures pour Romain : 1-accueil-*.png.
   const HOME_PROJECT = {
     real_estate_projects: [{ ...ACCOUNT.real_estate_projects[0], criteria: { residential: { maxBudget: 300000, propertyTypes: ['apartment'], location: { place: 'Lyon' } } } }],
   };
@@ -2449,14 +2707,20 @@ try {
     const shown = cards.filter((card) => card.getClientRects().length > 0);
     return { total: cards.length, shown: shown.length, rows: new Set(shown.map((card) => Math.round(card.getBoundingClientRect().top))).size };
   }, id);
+  // Même carte dans toutes les sections (HomeListingCard, étape 2 du site comme l'app) : 4 par ligne, 3 sous 1280 px ;
+  // une section qui lit moins de biens remplit sa ligne avec ce qu'elle a ; au moins une section en lit plus qu'elle
+  // n'en affiche.
   const checkOneRow = async (p, width, label, ids) => {
+    let hidden = false;
     for (const id of ids) {
       const { total, shown, rows } = await sectionRow(p, id);
-      const wanted = ['opportunites', 'similaires'].includes(id) ? (width >= 1280 ? 4 : 3) : 3;
-      if (rows !== 1 || shown !== wanted || total <= shown) {
-        problems.push(`accueil ${width} ${label} : ${id} affiche ${shown} carte(s) sur ${rows} ligne(s), ${total} dans la page, au lieu d'une ligne de ${wanted} (et des biens en plus non affichés)`);
+      const wanted = Math.min(width >= 1280 ? 4 : 3, total);
+      if (total > shown) hidden = true;
+      if (rows !== 1 || shown !== wanted) {
+        problems.push(`accueil ${width} ${label} : ${id} affiche ${shown} carte(s) sur ${rows} ligne(s), ${total} dans la page, au lieu d'une ligne de ${wanted}`);
       }
     }
+    if (!hidden) problems.push(`accueil ${width} ${label} : aucune section ne lit plus de biens qu'elle n'en affiche`);
   };
   for (const [width, height] of [[1440, 900], [1024, 768]]) {
     const guest = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR' });
@@ -2467,7 +2731,7 @@ try {
     const welcome = await page.textContent('h1');
     if (welcome !== 'Bienvenue sur Nidalo') problems.push(`accueil ${width} sans compte : « ${welcome} » au lieu de « Bienvenue sur Nidalo »`);
     const guestSections = await homeSections(page);
-    const guestWanted = ['Opportunités du moment', 'Biens similaires à vos recherches', 'Nouveautés', 'Baisses de prix'];
+    const guestWanted = ['Opportunités du moment', 'Selon votre recherche', 'Nouvelles annonces', 'Baisses de prix'];
     if (JSON.stringify(guestSections) !== JSON.stringify(guestWanted)) problems.push(`accueil ${width} sans compte : sections ${JSON.stringify(guestSections)} au lieu de ${JSON.stringify(guestWanted)}`);
     await checkOneRow(page, width, 'sans compte', ['opportunites', 'similaires', 'nouveautes', 'baisses']);
     const noPhoto = await page.locator('section:has(#opportunites) .home-no-photo').count();
@@ -2531,8 +2795,8 @@ try {
     const similar = await sectionCards(page, 'similaires');
     const similarWanted = [HOME_LISTINGS[0], HOME_LISTINGS[3], HOME_LISTINGS[5], HOME_LISTINGS[6], HOME_LISTINGS[7]].map((row) => row.id);
     if (JSON.stringify(similar) !== JSON.stringify(similarWanted)) problems.push(`accueil ${width} : biens similaires ${JSON.stringify(similar)} au lieu de ${JSON.stringify(similarWanted)}`);
-    if (await page.locator('#consultes').count()) problems.push(`accueil ${width} : « Consultés récemment » affiché sans fiche ouverte`);
-    // Fiche ouverte dans le même onglet, puis retour : elle passe en tête de « Consultés récemment ».
+    if (await page.locator('#consultes').count()) problems.push(`accueil ${width} : « Vus récemment » affiché sans fiche ouverte`);
+    // Fiche ouverte dans le même onglet, puis retour : elle passe en tête de « Vus récemment ».
     await Promise.all([page.waitForURL(/\/annonce\/\?id=/), page.click('.opportunity-card h3 a >> nth=0')]);
     await page.waitForLoadState('networkidle');
     await page.goBack({ waitUntil: 'networkidle' });
@@ -2549,21 +2813,18 @@ try {
     await page.mouse.move(0, 0);
     await page.waitForTimeout(300);
     const memberSections = await homeSections(page);
-    if (JSON.stringify(memberSections) !== JSON.stringify(['Opportunités du moment', 'Consultés récemment', 'Biens similaires à vos recherches', 'Nouveautés', 'Baisses de prix'])) {
+    if (JSON.stringify(memberSections) !== JSON.stringify(['Opportunités du moment', 'Vus récemment', 'Selon votre recherche', 'Nouvelles annonces', 'Baisses de prix'])) {
       problems.push(`accueil ${width} connecté : sections ${JSON.stringify(memberSections)}`);
     }
     const viewed = await sectionCards(page, 'consultes');
     const viewedWanted = [HOME_LISTINGS[2], HOME_LISTINGS[5], HOME_LISTINGS[6], HOME_LISTINGS[0]].map((row) => row.id);
     if (JSON.stringify(viewed) !== JSON.stringify(viewedWanted)) problems.push(`accueil ${width} : consultés ${JSON.stringify(viewed)} au lieu de ${JSON.stringify(viewedWanted)}`);
     await checkOneRow(page, width, 'connecté', ['opportunites', 'consultes', 'similaires', 'nouveautes', 'baisses']);
-    // Listes (Consultés récemment, Nouveautés, Baisses de prix) : la carte compacte de l'app, la même qu'au téléphone,
-    // de la largeur de sa colonne (112 de haut, photo de 88 × 80).
-    expectSame(`accueil ${width} connecté`, 'cartes des listes', await page.$$eval('.dhome-list > article', (articles) => [...new Set(articles
-      .filter((article) => article.getClientRects().length > 0)
-      .map((article) => {
-        const photo = article.querySelector('.clc-photo')?.getBoundingClientRect();
-        return `${article.classList[0]} ${Math.round(article.getBoundingClientRect().height)} ${photo ? `${Math.round(photo.width)}×${Math.round(photo.height)}` : '-'}`;
-      }))]), ['compact-card 112 88×80']);
+    // Toutes les sections : la grande carte de l'accueil de l'app (HomeListingCard), la même qu'au téléphone, de la
+    // largeur de sa colonne, en grille ; plus de petite carte en liste.
+    expectSame(`accueil ${width} connecté`, 'cartes des sections', [await page.$$eval('.dhome-section article', (articles) => [...new Set(articles
+      .filter((article) => article.getClientRects().length > 0).map((article) => `${article.classList[0]} ${article.parentElement.className}`))]),
+    await page.locator('.dhome-list, .compact-card').count()], [['home-listing-card dhome-grid'], 0]);
     await checkChrome(page, `accueil maquette ${width} connecté`, { signedIn: true, margin: width >= 1280 ? 48 : 32 });
     await page.mouse.move(0, 0);
     await page.waitForTimeout(300);
@@ -2608,12 +2869,12 @@ try {
   await samePhone.close();
   if (desktopSearch !== phoneSearch || !desktopSearch.includes('mode=invest')) problems.push(`accueil : recherche ${desktopSearch} sur ordinateur, ${phoneSearch} sur téléphone`);
 
-  // Téléphone : l'accueil de l'app (novembre 2026). Ses sections dans l'ordre de l'app, chacune avec la carte de l'app
-  // (HomeView.swift) : Opportunités du moment, la carte de 248 px (photo de 156) ; Consultés récemment, Nouveautés et
-  // Baisses de prix, la carte compacte de 296 × 112 (photo de 88 × 80 à gauche ; « Nouveau » et le cœur, ou la baisse
-  // et l'ancien prix barré) ; Biens similaires, la carte de 170 px (photo de 100, rendement brut si l'annonce a ses
-  // chiffres, cœur). Avec les lectures de l'ordinateur (projet du compte, fiches consultées, biens similaires) ; avec le
-  // compte, la cloche (point rouge des non lues) et « Reprendre ma recherche ». Pas d'en-tête bleu sous 761 px.
+  // Téléphone : l'accueil de l'app (version 1.0.1, HomeView.swift). Ses sections dans l'ordre de l'app, toutes avec la
+  // même carte de 248 (photo de 248 × 186) et la pastille et le cœur de leur section : rendement brut et cœur pour
+  // Opportunités du moment et Selon votre recherche (le rendement si l'annonce a ses chiffres), rien pour Vus
+  // récemment, « Nouveau » et cœur pour Nouvelles annonces, baisse et ancien prix barré sans cœur pour Baisses de prix.
+  // Avec les lectures de l'ordinateur (projet du compte, fiches consultées, biens similaires) ; avec le compte, la
+  // cloche (point rouge des non lues) et « Reprendre ma recherche ». Pas d'en-tête bleu sous 1024 px.
   // Captures : accueil-telephone-app-*.png.
   for (const signedIn of [false, true]) {
     const H = `accueil téléphone ${signedIn ? 'connecté' : 'sans compte'}`;
@@ -2633,8 +2894,9 @@ try {
     if (signedIn) await page.waitForSelector('.home-resume', { timeout: 8000 }).catch(() => undefined);
     await page.waitForTimeout(600);
     expectSame(H, 'sections', await page.locator('.home-app h2').allTextContents(), ['Opportunités du moment', 'Explorer par ville',
-      ...(signedIn ? ['Consultés récemment'] : []), 'Biens similaires à vos recherches', 'Nouveautés', 'Baisses de prix']);
-    // Par section, les cartes telles qu'affichées : [classe, taille, photo, pastille, cœurs, ancien prix barré].
+      ...(signedIn ? ['Vus récemment'] : []), 'Selon votre recherche', 'Nouvelles annonces', 'Baisses de prix']);
+    // Par section, les cartes telles qu'affichées : [classe, largeur, photo, pastille, cœurs, ancien prix barré] (le
+    // rendement brut est vérifié plus bas, annonce par annonce).
     const sectionKinds = await page.evaluate(() => Object.fromEntries(['opportunites', 'consultes', 'similaires', 'nouveautes', 'baisses'].map((id) => {
       const size = (el) => {
         const box = el?.getBoundingClientRect();
@@ -2642,58 +2904,65 @@ try {
       };
       const articles = [...(document.getElementById(id)?.closest('section')?.querySelectorAll('article') ?? [])];
       return [id, [...new Set(articles.map((article) => [
-        article.classList[0], article.classList[0] === 'compact-card' ? size(article) : Math.round(article.getBoundingClientRect().width),
-        size(article.querySelector('.hlc-photo, .clc-photo, .slc-photo')),
-        article.classList[0] === 'compact-card' ? (article.querySelector('.hlc-new, .hlc-drop')?.className ?? '-') : '',
-        article.querySelectorAll('.heart-button').length, article.querySelector('.home-card-price s') ? 'barré' : '-',
+        article.classList[0], Math.round(article.getBoundingClientRect().width), size(article.querySelector('.hlc-photo')),
+        article.querySelector('.hlc-new, .hlc-drop')?.className ?? '-',
+        article.querySelectorAll('.heart-button').length, article.querySelector('.hlc-price s') ? 'barré' : '-',
       ].join(' ')))]];
     })));
     expectSame(H, 'cartes des sections', sectionKinds, {
-      opportunites: ['home-listing-card 248 248×156  1 -'],
-      consultes: signedIn ? ['compact-card 296×112 88×80 - 0 -'] : [],
-      similaires: ['similar-card 170 170×100  1 -'],
-      nouveautes: ['compact-card 296×112 88×80 hlc-new 1 -'],
-      baisses: ['compact-card 296×112 88×80 hlc-drop 0 barré'],
+      opportunites: ['home-listing-card 248 248×186 - 1 -'],
+      consultes: signedIn ? ['home-listing-card 248 248×186 - 0 -'] : [],
+      similaires: ['home-listing-card 248 248×186 - 1 -'],
+      nouveautes: ['home-listing-card 248 248×186 hlc-new 1 -'],
+      baisses: ['home-listing-card 248 248×186 hlc-drop 0 barré'],
     });
-    // Carte compacte : la photo à 8 du bord, au milieu de la hauteur ; les quatre lignes tiennent dans la carte.
-    const compactLayout = await page.$$eval('.compact-card', (articles) => [...new Set(articles.map((article) => {
+    // Carte : la photo en haut, sur toute la largeur ; les quatre lignes (prix, petits faits, type, ville) sous la
+    // photo, à 16 des bords, dans la carte.
+    const cardLayout = await page.$$eval('.home-app .home-listing-card', (articles) => [...new Set(articles.map((article) => {
       const card = article.getBoundingClientRect();
-      const photo = article.querySelector('.clc-photo').getBoundingClientRect();
-      const body = article.querySelector('.clc-body');
-      const lines = [...body.children].map((line) => line.getBoundingClientRect());
+      const photo = article.querySelector('.hlc-photo').getBoundingClientRect();
+      const lines = [...article.querySelector('.hlc-body').children].map((line) => line.getBoundingClientRect());
       return [Math.round(photo.left - card.left), Math.round(photo.top - card.top), lines.length,
-        lines.every((line) => line.top >= card.top + 8 && line.bottom <= card.bottom - 8 && line.right <= card.right - 8)].join(' ');
+        lines.every((line) => line.top >= photo.bottom && line.bottom <= card.bottom - 8 && line.left >= card.left + 16 && line.right <= card.right - 16)].join(' ');
     }))]);
-    expectSame(H, 'carte compacte [photo à gauche, en haut, lignes, lignes dans la carte]', compactLayout, ['8 16 4 true']);
+    expectSame(H, 'carte [photo à gauche, en haut, lignes, lignes dans la carte]', cardLayout, ['0 0 4 true']);
+    // Rendement brut : sur toutes les Opportunités du moment, nulle part dans Vus récemment, Nouvelles annonces et
+    // Baisses de prix.
+    expectSame(H, 'rendement des sections', await page.evaluate(() => ['opportunites', 'consultes', 'nouveautes', 'baisses'].map((id) => {
+      const articles = [...(document.getElementById(id)?.closest('section')?.querySelectorAll('article') ?? [])];
+      return articles.filter((article) => article.querySelector('.hlc-yield')).length === (id === 'opportunites' ? articles.length : 0);
+    })), [true, true, true, true]);
     const viewedIds = await page.locator('section:has(#consultes) article a.stretched').evaluateAll((links) => links.map((link) => new URL(link.href).searchParams.get('id')));
     expectSame(H, 'consultés', viewedIds, signedIn ? [homeId(7)] : []);
     if (signedIn) {
-      expectSame(H, 'consultés [titre, lieu, prix]', await page.$eval('section:has(#consultes) article', (article) => ['.home-card-title', '.home-card-location', '.home-card-price']
-        .map((selector) => article.querySelector(selector)?.textContent?.replace(/\s/g, ' '))), ['Appartement 2 pièces', 'Lyon 6e · 45 m²', '265 000 €']);
+      expectSame(H, 'consultés [type, ville, prix]', await page.$eval('section:has(#consultes) article', (article) => ['.hlc-type', '.hlc-city', '.hlc-price']
+        .map((selector) => article.querySelector(selector)?.textContent?.replace(/\s/g, ' ').trim())), ['Appartement 2 pièces · 45 m²', 'Lyon 6e', '265 000 €']);
     }
     expectSame(H, 'ancienne liste de l\'onglet effacée', await page.evaluate(() => sessionStorage.getItem('nidalo.consultes')), null);
-    // Baisses de prix : la baisse et l'ancien prix de l'annonce. Biens similaires : le rendement brut seulement sur les
-    // annonces qui ont un loyer (les seules à avoir leurs chiffres).
+    // Baisses de prix : la baisse et l'ancien prix de l'annonce. Selon votre recherche : le rendement brut seulement sur
+    // les annonces qui ont un loyer (les seules à avoir leurs chiffres).
     const euros = (value) => `${new Intl.NumberFormat('fr-FR').format(value)} €`.replace(/\s/g, ' ');
     for (const [id, drop, previous] of await page.locator('section:has(#baisses) article').evaluateAll((articles) => articles.map((article) => [
       new URL(article.querySelector('a.stretched').href).searchParams.get('id'), article.querySelector('.hlc-drop')?.textContent?.replace(/\s/g, ' '),
-      article.querySelector('.home-card-price s')?.textContent?.replace(/\s/g, ' '),
+      article.querySelector('.hlc-price s')?.getAttribute('aria-label')?.replace(/\s/g, ' '),
     ]))) {
       const row = HOME_LISTINGS.find((listing) => listing.id === id);
       expectSame(H, `baisse de prix ${id}`, [drop, previous], [`${Math.round(((row.price - row.previous_price) / row.previous_price) * 100)} %`, `Ancien prix ${euros(row.previous_price)}`]);
     }
     const withRent = HOME_LISTINGS.filter((row) => row.rental_info?.potentialMonthlyRent || row.rental_info?.currentMonthlyRent).map((row) => row.id);
     const similarYields = await page.locator('section:has(#similaires) article').evaluateAll((articles) => articles.map((article) => [
-      new URL(article.querySelector('a.stretched').href).searchParams.get('id'), article.querySelector('.slc-yield') !== null,
+      new URL(article.querySelector('a.stretched').href).searchParams.get('id'), article.querySelector('.hlc-yield') !== null,
     ]));
     expectSame(H, 'rendement des biens similaires', similarYields, similarYields.map(([id]) => [id, withRent.includes(id)]));
     const projectRead = phoneServer.requests.some((request) => request.path === '/' && request.table === 'real_estate_projects');
     if (projectRead !== signedIn) problems.push(`${H} : projet du compte ${projectRead ? 'lu' : 'non lu'}`);
     const unread = signedIn ? expectedBadges(phoneServer.state).notifications : 0;
-    expectSame(H, 'barre du haut [titre, cloche, point rouge, en-tête bleu, accueil de l\'ordinateur]', [
-      (await page.textContent('h1'))?.trim(), await page.getAttribute('.home-app-bell', 'aria-label'), await page.locator('.home-app-dot').count(),
+    // Titre : la marque de l'app en texte (« NIDΛLO », cachée aux lecteurs d'écran) et « Nidalo » pour eux.
+    expectSame(H, 'barre du haut [marque, titre lu, cloche, point rouge, en-tête bleu, accueil de l\'ordinateur]', [
+      await page.textContent('h1 .home-app-word'), await page.getAttribute('h1 .home-app-word', 'aria-hidden'), await page.textContent('h1 .visually-hidden'),
+      await page.getAttribute('.home-app-bell', 'aria-label'), await page.locator('.home-app-dot').count(),
       await page.locator('.topbar').isVisible(), await page.locator('.dhome').count(),
-    ], ['Nidalo', unread > 0 ? `Notifications, ${unread} non lues` : 'Notifications', unread > 0 ? 1 : 0, false, 0]);
+    ], ['NIDΛLO', 'true', 'Nidalo', unread > 0 ? `Notifications, ${unread} non lues` : 'Notifications', unread > 0 ? 1 : 0, false, 0]);
     if (signedIn) {
       expectSame(H, '« Reprendre ma recherche »', [
         await page.textContent('.home-resume-title'), (await page.textContent('.home-resume-summary'))?.replace(/\s/g, ' '),
@@ -2737,10 +3006,10 @@ try {
   const INITIAL_ROWS = [
     { name: 'Agence Démo Lyon', time: '10:45', listing: 'Appartement 3 pièces · Lyon 2e', preview: 'Bien reçu, je transmets votre offre au propriétaire.', unread: '1', greyPill: false },
     { name: 'Visite groupée Lyon 2e', time: '09:12', listing: '3 membres', preview: 'Merci, à samedi !', unread: '3', greyPill: true },
-    // La demande de visite de Julien, plus récente que son dernier message, en tient lieu.
-    { name: 'Julien M.', time: 'Hier', listing: 'Appartement 2 pièces · Lyon 6e', preview: 'Demande de visite · sam. 7 nov. à 10:00', unread: '2', greyPill: false },
+    // Le dernier message, comme la ligne de l'app (la demande de visite de Julien n'en tient plus lieu).
+    { name: 'Julien M.', time: 'Hier', listing: 'Appartement 2 pièces · Lyon 6e', preview: 'Je peux signer rapidement si l\'offre vous convient.', unread: '2', greyPill: false },
     { name: 'Lucas G.', time: 'Mar.', listing: 'Maison familiale 5 pièces · Écully', preview: 'Nouvelle conversation', unread: null, greyPill: false },
-    { name: 'Compte supprimé', time: '27 oct.', listing: 'Studio rénové', preview: 'Vous : Merci, je reviens vers vous rapidement.', unread: null, greyPill: false },
+    { name: 'Compte supprimé', time: '27 octobre', listing: 'Studio rénové', preview: 'Vous : Merci, je reviens vers vous rapidement.', unread: null, greyPill: false },
   ];
   const ALL_NAMES = INITIAL_ROWS.map((row) => row.name);
   const flat = (text) => text?.replace(/\s+/g, ' ').trim() ?? null;
@@ -2784,48 +3053,57 @@ try {
       };
     });
     expectSame(M, 'mise en page', layout, {
-      side: 360, main: width - 360, top: 72, bottom: height, pageScroll: 0, overflowX: 0, footer: false, active: 'page', search: 44, tabs: [38, 38, 38],
+      side: 360, main: width - 360, top: 72, bottom: height, pageScroll: 0, overflowX: 0, footer: false, active: 'page', search: 44, tabs: [38, 38, 38, 38, 38],
       font: 'Nidalo Inter', rowAvatar: 46,
     });
     expectSame(M, 'en-tête de la colonne', [await textOf(page, '.dm-side-head h1'), await page.getAttribute('.dm-compose', 'aria-label'),
-      await page.getAttribute('.dm-search input', 'placeholder')], ['Messages', 'Nouveau message', 'Rechercher une conversation']);
+      await page.getAttribute('.dm-search-open', 'aria-label'), await textOf(page, '.dm-search-open')],
+    ['Messages', 'Nouveau message', 'Rechercher un contact ou une annonce', 'Rechercher un contact ou un bien']);
     expectSame(M, 'conversations', await inboxRows(page), INITIAL_ROWS);
     expectSame(M, 'filtres', await page.$$eval('.dm-tab', (els) => els.map((el) => [el.getAttribute('aria-label'), el.getAttribute('aria-pressed')])),
-      [['Toutes, 5', 'true'], ['Non lues, 3', 'false'], ['Archivées, 1', 'false']]);
+      [['Tous, 5', 'true'], ['Non lus, 3', 'false'], ['Favoris, 1', 'false'], ['Visites, 1', 'false'], ['Archivés, 1', 'false']]);
     // Aucune conversation n'est ouverte d'elle-même : aucune ligne n'est sélectionnée.
     if (await page.locator('.dm-row[aria-current="true"]').count()) problems.push(`${M} : une conversation est sélectionnée sans ?c=`);
     await chatShot(page, `3-messages-vide-${width}.png`);
 
     if (width === 1440) {
-      // Filtres : non lues (sans les archivées), archivées, toutes.
-      for (const [label, names] of [['Non lues, 3', ['Agence Démo Lyon', 'Visite groupée Lyon 2e', 'Julien M.']], ['Archivées, 1', ['Marc P.']], ['Toutes, 5', ALL_NAMES]]) {
+      // Filtres (capsules de l'app) : non lus, favoris, visites à venir (sans les archivées), archivés, tous.
+      for (const [label, names] of [['Non lus, 3', ['Agence Démo Lyon', 'Visite groupée Lyon 2e', 'Julien M.']], ['Favoris, 1', ['Julien M.']],
+        ['Visites, 1', ['Agence Démo Lyon']], ['Archivés, 1', ['Marc P.']], ['Tous, 5', ALL_NAMES]]) {
         await page.click(`.dm-tab[aria-label="${label}"]`);
         await waitForRows(page, names, `${M} : filtre ${label}`);
         if ((await page.getAttribute(`.dm-tab[aria-label="${label}"]`, 'aria-pressed')) !== 'true') problems.push(`${M} : filtre ${label} non enfoncé`);
       }
-      // Recherche par nom ou par titre d'annonce (pas dans le texte des messages) ; la croix et Échap la vident.
-      await page.fill('.dm-search input', 'lyon');
-      await waitForRows(page, ['Agence Démo Lyon', 'Visite groupée Lyon 2e'], `${M} : recherche « lyon »`);
-      await page.fill('.dm-search input', 'maison');
-      await waitForRows(page, ['Lucas G.'], `${M} : recherche « maison »`);
-      await page.click('.dm-search-clear');
-      await waitForRows(page, ALL_NAMES, `${M} : recherche effacée`);
-      await page.fill('.dm-search input', 'bonjour');
-      await page.waitForSelector('.dm-inbox-empty h3');
-      expectSame(M, 'recherche sans résultat', await textOf(page, '.dm-inbox-empty'), 'Aucune conversation trouvée Essayez un autre nom ou un autre titre d\'annonce.');
-      await page.press('.dm-search input', 'Escape');
-      await waitForRows(page, ALL_NAMES, `${M} : recherche vidée par Échap`);
-      // Clavier : de la recherche, Tab va à « Annuler » (la recherche ouverte, comme l'app), puis aux filtres, avec un
-      // contour bleu visible.
-      await page.focus('.dm-search input');
-      await page.keyboard.press('Tab');
-      expectSame(M, 'focus au clavier sur « Annuler »', await page.evaluate(() => document.activeElement?.textContent ?? null), 'Annuler');
+      // Recherche (MessagingSearchView de l'app) : la ligne ouvre l'écran de recherche, avec son champ et « Annuler » ; les
+      // résultats sont rangés par sorte (conversations par nom ou par titre d'annonce) ; la croix vide le champ.
+      await page.click('.dm-search-open');
+      await page.waitForSelector('.dm-msearch-field input', { timeout: 8000 });
+      expectSame(M, 'écran de recherche', [await page.getAttribute('.dm-msearch-field input', 'placeholder'), await textOf(page, '.dm-msearch-cancel')],
+        ['Rechercher un contact ou une annonce…', 'Annuler']);
+      const found = () => page.$$eval('.dm-found-conversation .dm-contact-name', (els) => els.map((el) => el.textContent));
+      await page.fill('.dm-msearch-field input', 'lyon');
+      await page.waitForSelector('.dm-found-conversation', { timeout: 8000 }).catch(() => problems.push(`${M} : recherche « lyon » sans conversation`));
+      // Par le nom, le bien ou sa ville (MessagingSearchView) : Julien et le compte supprimé ont un bien à Lyon.
+      expectSame(M, 'recherche « lyon »', await found(), ['Agence Démo Lyon', 'Visite groupée Lyon 2e', 'Julien M.', 'Compte supprimé']);
+      await page.fill('.dm-msearch-field input', 'maison');
+      await page.waitForFunction(() => [...document.querySelectorAll('.dm-found-conversation .dm-contact-name')].map((el) => el.textContent).join() === 'Lucas G.,Marc P.', null, { timeout: 8000 })
+        .catch(() => undefined);
+      expectSame(M, 'recherche « maison »', await found(), ['Lucas G.', 'Marc P.']);
+      await page.click('.dm-msearch-clear');
+      expectSame(M, 'recherche effacée', await page.inputValue('.dm-msearch-field input'), '');
+      await page.fill('.dm-msearch-field input', 'zzz');
+      await page.waitForSelector('.dm-results-empty h3', { timeout: 8000 }).catch(() => problems.push(`${M} : recherche sans résultat sans message`));
+      expectSame(M, 'recherche sans résultat', await textOf(page, '.dm-results-empty h3'), 'Aucun résultat pour « zzz »');
+      await page.click('.dm-msearch-cancel');
+      await waitForRows(page, ALL_NAMES, `${M} : recherche refermée par « Annuler »`);
+      // Clavier : de la ligne de recherche, Tab va aux filtres, avec un contour bleu visible.
+      await page.focus('.dm-search-open');
       await page.keyboard.press('Tab');
       expectSame(M, 'focus au clavier', await page.evaluate(() => {
         const el = document.activeElement;
         const style = getComputedStyle(el);
         return [el.getAttribute('aria-label'), style.outlineStyle, style.outlineWidth, style.outlineColor];
-      }), ['Toutes, 5', 'solid', '3px', 'rgb(60, 92, 176)']);
+      }), ['Tous, 5', 'solid', '3px', 'rgb(60, 92, 176)']);
     }
 
     // Ouvrir la conversation de l'agence : elle s'ouvre à droite sans recharger la page, est lue puis marquée lue une fois.
@@ -2864,14 +3142,17 @@ try {
     expectSame(M, 'conversation ouverte', opened, {
       row: 'Agence Démo Lyon', rowBackground: 'rgb(238, 242, 250)', unread: null,
       sent: ['rgb(60, 92, 176)', 'rgb(255, 255, 255)', '16px 16px 4px'], received: ['rgb(255, 255, 255)', 'rgb(36, 45, 56)', '16px 16px 16px 4px'],
-      receivedLeft: [pad + 36], sentRight: [pad], gaps: ['14px', '4px'], avatars: opened.avatars.map(() => 28), fresh: 0,
+      receivedLeft: [pad + 31], sentRight: [pad], gaps: ['14px', '4px'], avatars: opened.avatars.map(() => 23), fresh: 0,
     });
     expectSame(M, 'en-tête', [await textOf(page, '.dm-head-title'), await textOf(page, '.dm-head-sub'), await page.getAttribute('.dm-head-who', 'href'),
       await page.$$eval('.dm-head-tools button', (els) => els.map((el) => el.getAttribute('aria-label')))],
-    ['Agence Démo Lyon', 'Vu il y a 5 min', `/messages/?c=${chatId(1)}&vue=details`, ['Proposer une visite', 'Appeler', 'Plus d\'options']]);
-    expectSame(M, 'barre de l\'annonce', [await textOf(page, '.dm-banner-title'), await textOf(page, '.dm-banner-line'), await textOf(page, '.dm-banner-link'),
-      await page.getAttribute('a.dm-banner', 'href')], ['Appartement 3 pièces', 'Lyon 2e · 238 000 € · 7,8 % brut', 'Voir l\'annonce', `/annonce/?id=${homeId(1)}`]);
-    expectSame(M, 'jours', await page.$$eval('.dm-day-label', (els) => els.map((el) => el.textContent)), ['Hier', 'Aujourd\'hui']);
+    ['Agence Démo Lyon', 'Appartement 3 pièces · Lyon 2e', `/messages/?c=${chatId(1)}&vue=details`, ['Proposer une visite', 'Appeler', 'Plus d\'options']]);
+    // Carte de l'annonce de l'app : la ville et la surface (le rendement en plus sur ordinateur), le prix à droite et « Voir ›».
+    expectSame(M, 'barre de l\'annonce', [await textOf(page, '.dm-banner-title'), await textOf(page, '.dm-banner-line'), await textOf(page, '.dm-banner-price'),
+      await textOf(page, '.dm-banner-link'), await page.getAttribute('a.dm-banner', 'href')],
+    ['Appartement 3 pièces', 'Lyon 2e · 62 m² · 7,8 % brut', '238 000 €', 'Voir', `/annonce/?id=${homeId(1)}`]);
+    // Séparateurs de l'app : le jour et l'heure du premier message (« Aujourd'hui · 09:58 »).
+    expectSame(M, 'jours', await page.$$eval('.dm-day-label', (els) => els.map((el) => el.textContent)), ['Hier · 18:02', 'Aujourd\'hui · 09:58']);
     // Coches dans les bulles : l'agence a tout lu jusqu'à 10:45.
     expectSame(M, 'coches', await page.$$eval('.dm-msg.is-out .dm-status .dm-check', (els) => els.map((el) => el.getAttribute('aria-label'))), ['Lu', 'Lu', 'Lu']);
     expectSame(M, 'demande de visite confirmée', await visitCard(page), {
@@ -2880,7 +3161,7 @@ try {
     });
     expectSame(M, 'carte d\'offre', [await textOf(page, '.dm-offer-head'), await textOf(page, '.dm-offer-amount'), await textOf(page, '.dm-offer-gap'),
       await textOf(page, '.dm-offer-conditions'), await textOf(page, '.dm-offer-expiry'), await page.$$eval('.dm-offer-actions button', (els) => els.map((el) => el.textContent))],
-    ['Offre En attente', '228 000 €', '4,2 % sous le prix affiché', 'Sous réserve d\'obtention du prêt', 'Valable jusqu\'au 13 novembre', ['Retirer']]);
+    ['OFFRE En attente', '228 000 €', '4,2 % sous le prix affiché', 'Sous réserve d\'obtention du prêt', 'Valable jusqu\'au 13 novembre', ['Retirer']]);
     // Les photos plus haut dans le fil se chargent à l'approche (loading="lazy") : on y va, puis on revient en bas.
     await page.locator('.dm-media-tile img').first().scrollIntoViewIfNeeded();
     await imagesLoaded(page, '.dm-media-tile img', 2, `${M} : photos`);
@@ -2892,7 +3173,7 @@ try {
       [[AGENT_PHOTOS[0], { expiresIn: 600 }], [AGENT_PHOTOS[1], { expiresIn: 600 }], [LOAN_PDF, { expiresIn: 600 }]]);
     expectSame(M, 'fichier', [await textOf(page, '.dm-file-name'), await textOf(page, '.dm-file-line'), await textOf(page, '.dm-file-badge'),
       await page.$eval('.dm-file-badge', (el) => getComputedStyle(el).color), await page.getAttribute('a.dm-file', 'href'), await page.getAttribute('a.dm-file', 'target')],
-    ['Simulation_pret.pdf', 'PDF · 245 Ko', 'PDF', 'rgb(229, 72, 77)', `https://izzsoitqtzzswkpvdozd.supabase.co/storage/v1/object/sign/message-attachments/${LOAN_PDF}?token=jeton-de-test`, '_blank']);
+    ['Simulation_pret.pdf', 'PDF · 245 Ko', 'PDF', 'rgb(192, 57, 43)', `https://izzsoitqtzzswkpvdozd.supabase.co/storage/v1/object/sign/message-attachments/${LOAN_PDF}?token=jeton-de-test`, '_blank']);
     // Zone de saisie : bande blanche (12 / 24 / 16 px), « + » de 44 px, champ de 52 px, envoi de 52 px grisé tant que
     // le champ est vide ; une conversation sur une annonce propose « Envoyer le dossier complet ».
     expectSame(M, 'réponses rapides', await quickReplies(page), ['Envoyer le dossier complet']);
@@ -2909,7 +3190,7 @@ try {
     });
     expectSame(M, 'zone de saisie', await composer(), {
       band: ['12px', '24px', '16px', 'rgb(236, 234, 230)', 'rgb(255, 255, 255)'], plus: [44, 44], field: 52, send: [52, 52], sendColor: 'rgb(201, 206, 214)',
-      disabled: true, placeholder: 'Écrivez votre message…', labels: ['Ajouter une pièce jointe', 'Ajouter un émoji', 'Envoyer'], chip: 34,
+      disabled: true, placeholder: 'Votre message...', labels: ['Ajouter une pièce jointe', 'Ajouter un émoji', 'Envoyer'], chip: 34,
     });
     const atBottom = await page.evaluate(() => { const el = document.querySelector('.dm-thread'); return el.scrollHeight - el.scrollTop - el.clientHeight; });
     if (atBottom > 2) problems.push(`${M} : la conversation ne s'ouvre pas en bas (${atBottom} px plus bas)`);
@@ -2924,7 +3205,9 @@ try {
       chatServer.pushPresence(chatId(1), [AGENT_ID]);
       await page.waitForFunction(() => document.querySelector('.dm-head-sub')?.textContent === 'En ligne', null, { timeout: 8000 })
         .catch(async () => problems.push(`${M} : « En ligne » non affiché (${await textOf(page, '.dm-head-sub')})`));
-      expectSame(M, 'point vert', await page.$eval('.dm-head-sub .dm-online-dot', (el) => getComputedStyle(el).backgroundColor).catch(() => null), 'rgb(43, 182, 115)');
+      // « En ligne » en vert demi-gras et le point vert sur l'avatar, comme l'en-tête de l'app.
+      expectSame(M, 'point vert', await page.evaluate(() => [getComputedStyle(document.querySelector('.dm-head-sub.is-online')).color,
+        getComputedStyle(document.querySelector('.dm-head .dm-presence')).backgroundColor]).catch(() => null), ['rgb(87, 121, 101)', 'rgb(87, 121, 101)']);
 
       // Cœur (message_reactions, comme setReaction) : un double clic sur la bulle (le double toucher de l'app) le pose,
       // ❤️ comme l'app ; un autre double clic le retire (demande du 17/11).
@@ -2945,7 +3228,7 @@ try {
       const unliked = await oneCall(chat, 'message_reactions', mark, `${M} : cœur retiré`);
       if (unliked) expectSame(M, 'cœur retiré', [unliked.method, unliked.search], ['DELETE', `?message_id=eq.${messageId(7).toUpperCase()}&user_id=eq.${USER_ID.toUpperCase()}`]);
 
-      // Écrire : le champ grandit jusqu'à 5 lignes ; un émoji choisi dans le panneau se place au curseur ; Maj + Entrée
+      // Écrire : le champ grandit jusqu'à 4 lignes (lineLimit(1...4) de l'app) ; un émoji choisi dans le panneau se place au curseur ; Maj + Entrée
       // va à la ligne ; Entrée envoie, avec exactement les colonnes de l'app (MessageInsert) ; le message arrive en fondu.
       const checkInsert = (call, what, content, preview) => {
         if (!call) return;
@@ -2959,7 +3242,7 @@ try {
       await page.fill('.dm-composer textarea', 'Une\ndeux');
       expectSame(M, 'champ de 2 lignes', await fieldHeight(), 72);
       await page.fill('.dm-composer textarea', 'Un\ndeux\ntrois\nquatre\ncinq\nsix\nsept');
-      expectSame(M, 'champ de 7 lignes (5 affichées)', await fieldHeight(), 138);
+      expectSame(M, 'champ de 7 lignes (4 affichées)', await fieldHeight(), 116);
       await page.fill('.dm-composer textarea', '');
       expectSame(M, 'champ vide', await fieldHeight(), 50);
       mark = chat.calls.length;
@@ -3044,6 +3327,35 @@ try {
       }
       await page.waitForFunction(() => [...document.querySelectorAll('.dm-file-name')].some((el) => el.textContent === 'dpe.pdf'), null, { timeout: 8000 })
         .catch(() => problems.push(`${M} : le document envoyé n'apparaît pas`));
+      // Localisation (LocationShareSheet de l'app) : l'adresse choisie parmi les suggestions de la Géoplateforme, puis
+      // « Joindre cette adresse » ; le message porte l'adresse et sa position, sans fichier, comme celui de l'app.
+      await page.context().route('https://data.geopf.fr/geocodage/search**', (route) => route.fulfill({ status: 200, contentType: 'application/json',
+        headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ type: 'FeatureCollection', features: [{ type: 'Feature',
+          geometry: { type: 'Point', coordinates: [4.8325, 45.7552] }, properties: { id: '69382_0000_00012', type: 'housenumber', name: '12 Rue de l\'Exemple',
+            label: '12 Rue de l\'Exemple 69002 Lyon', postcode: '69002', city: 'Lyon', citycode: '69382', context: '69, Rhône, Auvergne-Rhône-Alpes' } }] }) }));
+      mark = chat.calls.length;
+      uploads = chat.uploads.length;
+      await page.click('.dm-plus');
+      await page.click('dialog[open] .dm-sources button[aria-label="Localisation"]');
+      await page.waitForSelector('dialog.dm-location-sheet[open]', { timeout: 8000 }).catch(() => problems.push(`${M} : « Localisation » ne s'ouvre pas`));
+      expectSame(M, 'localisation', [await dialogTitle(page, 'sheet'), await textOf(page, 'dialog[open] .dm-location-current'),
+        await page.getAttribute('dialog[open] .dm-location-place input', 'placeholder'), await page.isDisabled('dialog[open] .dm-location-share')],
+      ['Localisation', 'Position actuelle', 'Adresse du bien', true]);
+      await page.fill('dialog[open] .dm-location-place input', '12 rue de l\'Exemple');
+      await page.click('dialog[open] .place-list [role="option"]');
+      await page.waitForFunction(() => document.querySelector('dialog[open] .dm-location-share')?.disabled === false, null, { timeout: 8000 })
+        .catch(() => problems.push(`${M} : « Joindre cette adresse » reste grisé`));
+      await page.click('dialog[open] .dm-location-share');
+      await page.waitForSelector('dialog.dm-preview-sheet[open] .dm-tile-doc', { timeout: 8000 }).catch(() => problems.push(`${M} : la localisation n'est pas dans l'aperçu`));
+      await page.click('dialog.dm-preview-sheet[open] .dm-pill');
+      const placeMessage = await oneCall(chat, 'messages', mark, `${M} : localisation`, (call) => call.method === 'POST');
+      if (chat.uploads.length !== uploads) problems.push(`${M} : fichier envoyé pour une localisation`);
+      if (placeMessage) {
+        const item = placeMessage.body?.content?.attachments?._0?.[0] ?? {};
+        if (!UPPER_UUID.test(item.id ?? '')) problems.push(`${M} : identifiant de la localisation ${item.id}`);
+        expectSame(M, 'message de la localisation', [placeMessage.body?.content, placeMessage.body?.preview],
+          [{ attachments: { _0: [{ id: item.id, kind: 'location', fileName: '12 Rue de l\'Exemple, 69002 Lyon', byteCount: 0, latitude: 45.7552, longitude: 4.8325 }] } }, '📍 Localisation']);
+      }
 
       // Temps réel : l'agence lit (coches « Lu »), puis écrit ; tout arrive sans recharger, le nouveau message en fondu,
       // et la conversation est relue puis marquée lue une fois de plus.
@@ -3067,8 +3379,9 @@ try {
       if ((await page.evaluate(() => window.nidaloMarker)) !== 'même page') problems.push(`${M} : la page s'est rechargée`);
       expectSame(M, 'temps réel suivi', ['messages', 'conversation_participants', 'message_reactions', 'offers', 'visit_requests'].filter((table) => !chatServer.followed().includes(table)), []);
 
-      // Menu « … » : Archiver, Signaler, Bloquer. Archiver relit la conversation puis enregistre tous ses réglages.
-      expectSame(M, 'menu « … »', await headerMenu(page), ['Archiver', 'Signaler', 'Bloquer']);
+      // Menu « … » de l'app (DirectConversationMenuItems) : Archiver, Mettre en sourdine, Ajouter aux favoris, Bloquer,
+      // Signaler. Chaque réglage relit la conversation puis enregistre tous ses réglages.
+      expectSame(M, 'menu « … »', await headerMenu(page), ['Archiver', 'Mettre en sourdine', 'Ajouter aux favoris', 'Bloquer', 'Signaler']);
       const settings = { is_archived: false, is_favorite: false, muted_until: null, saves_photos: false, cleared_at: null };
       const setting = async (label, change) => {
         const before = chat.calls.length;
@@ -3086,6 +3399,14 @@ try {
       await waitForRows(page, ALL_NAMES.slice(1), `${M} : après « Archiver »`);
       await setting('Désarchiver', { is_archived: false });
       await waitForRows(page, ALL_NAMES, `${M} : après « Désarchiver »`);
+      // Sourdine « toujours » (la date lointaine de l'app), puis réactivée.
+      await setting('Mettre en sourdine', { muted_until: '4001-01-01T00:00:00.000Z' });
+      await setting('Réactiver les notifications', { muted_until: null });
+      // Favori : l'avis de l'app seulement après l'enregistrement.
+      await setting('Ajouter aux favoris', { is_favorite: true });
+      expectSame(M, 'avis du favori', await noticeText(page, M), 'Conversation ajoutée aux favoris.');
+      await setting('Retirer des favoris', { is_favorite: false });
+      expectSame(M, 'avis du favori retiré', await noticeText(page, M), 'Conversation retirée des favoris.');
       // Bloquer (user_blocks), puis débloquer depuis la barre qui remplace la saisie.
       mark = chat.calls.length;
       await headerMenu(page, 'Bloquer');
@@ -3094,7 +3415,7 @@ try {
       expectSame(M, 'avis du blocage', await noticeText(page, M), 'Compte bloqué.');
       const blocked = await oneCall(chat, 'user_blocks', mark, `${M} : bloquer`, (call) => call.method !== 'GET');
       if (blocked) expectSame(M, 'blocage', [blocked.method, blocked.body], ['POST', { blocked_id: AGENT_ID.toUpperCase() }]);
-      expectSame(M, 'compte bloqué', [await textOf(page, '.dm-bottom-line'), await page.locator('.dm-composer').count(), (await headerMenu(page))[2],
+      expectSame(M, 'compte bloqué', [await textOf(page, '.dm-bottom-line'), await page.locator('.dm-composer').count(), (await headerMenu(page))[3],
         await page.locator('.dm-head-tools button[aria-label="Proposer une visite"]').count()], ['Vous avez bloqué ce compte Débloquer', 0, 'Débloquer', 0]);
       mark = chat.calls.length;
       await page.click('.dm-bottom-line .dm-link-button');
@@ -3163,10 +3484,13 @@ try {
       const readB = await oneCall(chat, 'rpc/mark_conversation_read', mark, `${M} : ouverture de B`);
       if (readB) expectSame(M, 'B marquée lue', readB.body, { p_conversation_id: chatId(2).toUpperCase() });
       await waitForMessagesBadge(page, '3', `${M} : après l'ouverture de B`);
-      expectSame(M, 'en-tête de B (numéro non partagé : pas d\'appel)', [await textOf(page, '.dm-head-sub'), await page.$$eval('.dm-head-tools button', (els) => els.map((el) => el.getAttribute('aria-label'))),
-        await textOf(page, '.dm-banner-line')], ['Vu le 4 nov.', ['Proposer une visite', 'Plus d\'options'], 'Lyon 6e · 265 000 € · 3 lots dont 2 loués']);
+      // Numéro non partagé : le téléphone reste, en gris, et l'avis de l'app l'explique.
+      expectSame(M, 'en-tête de B (numéro non partagé)', [await textOf(page, '.dm-head-sub'), await page.$$eval('.dm-head-tools button', (els) => els.map((el) => el.getAttribute('aria-label'))),
+        await textOf(page, '.dm-banner-line')], ['Appartement 2 pièces · Lyon 6e', ['Proposer une visite', 'Appeler, numéro non partagé', 'Plus d\'options'], 'Lyon 6e · 45 m² · 3 lots dont 2 loués']);
+      await page.click('.dm-head button[aria-label="Appeler, numéro non partagé"]');
+      expectSame(M, 'appel sans numéro', await noticeText(page, M), 'Julien M. n\'a pas partagé son numéro. Vous pouvez lui écrire ici.');
       expectSame(M, 'offre reçue', [await textOf(page, '.dm-offer-head'), await textOf(page, '.dm-offer-gap'), await page.$$eval('.dm-offer-actions button', (els) => els.map((el) => el.textContent))],
-        ['Offre En attente', '3,8 % sous le prix affiché', ['Accepter', 'Contre-offre', 'Refuser']]);
+        ['OFFRE En attente', '3,8 % sous le prix affiché', ['Accepter', 'Contre-offre', 'Refuser']]);
       const pendingVisit = {
         kind: 'Demande de visite', when: 'Samedi 7 novembre · 10:00', where: 'Appartement 2 pièces · sur place',
         slots: [['sam. 7 nov. à 10:00', 'true'], ['dim. 8 nov. à 14:00', 'false']], state: null, actions: [['Accepter', 38], ['Autre créneau', 38]],
@@ -3190,11 +3514,12 @@ try {
       };
       mark = chat.calls.length;
       await page.click('.dm-visit-actions button:text-is("Autre créneau")');
-      expectSame(M, 'autre créneau', await textOf(page, 'dialog.dm-decline[open] h2'), 'Proposer un autre créneau');
-      expectSame(M, 'créneau proposé par défaut', [await page.inputValue('dialog.dm-decline[open] input[aria-label="Jour du créneau 1"]'),
-        await page.inputValue('dialog.dm-decline[open] select[aria-label="Heure du créneau 1"]')], ['2026-11-07', '600']);
-      await page.selectOption('dialog.dm-decline[open] select[aria-label="Heure du créneau 1"]', '900');
-      await page.click('dialog.dm-decline[open] button[type="submit"]');
+      // Feuille de l'app (ProposeSlotsSheet) : « Proposer d'autres créneaux » pour une demande en attente.
+      expectSame(M, 'autre créneau', await textOf(page, 'dialog.dm-slots-sheet[open] h2'), 'Proposer d\'autres créneaux');
+      expectSame(M, 'créneau proposé par défaut', [await page.inputValue('dialog.dm-slots-sheet[open] input[aria-label="Jour du créneau 1"]'),
+        await page.inputValue('dialog.dm-slots-sheet[open] select[aria-label="Heure du créneau 1"]')], ['2026-11-07', '600']);
+      await page.selectOption('dialog.dm-slots-sheet[open] select[aria-label="Heure du créneau 1"]', '900');
+      await page.click('dialog.dm-slots-sheet[open] button[type="submit"]');
       const proposed = await oneCall(chat, 'rpc/propose_visit_slots', mark, `${M} : autre créneau`);
       if (proposed) {
         const slot = proposed.body?.p_slots?.[0] ?? {};
@@ -3276,7 +3601,8 @@ try {
       }, null, { timeout: 8000 }).catch(async () => problems.push(`${M} : cartes après la contre-offre ${JSON.stringify(await page.$$eval('.dm-offer', (els) => els.map((el) => el.textContent)))}`));
     }
 
-    // D : groupe en sourdine, marqué lu à l'ouverture ; ses infos et l'ajout de membres restent dans l'app iPhone.
+    // D : groupe en sourdine, marqué lu à l'ouverture ; l'en-tête ouvre « Infos du groupe » (&vue=groupe), le + la feuille
+    // « Ajouter des membres » (étape 4b : vérifiés en détail plus bas, « messages groupes »).
     mark = chat.calls.length;
     await page.click(rowLink(4));
     await page.waitForURL(`${base}/messages/?c=${chatId(4)}`);
@@ -3291,9 +3617,20 @@ try {
     await chatShot(page, `3-messages-groupe-${width}.png`);
     if (width === 1440) {
       await page.click('.dm-head-who');
-      await iphoneOnly(page, `${M} : groupe`, 'Infos du groupe');
+      await page.waitForURL(`${base}/messages/?c=${chatId(4)}&vue=groupe`);
+      await page.waitForSelector('.dmg-hero');
+      expectSame(M, 'infos du groupe', [await textOf(page, '.dmg-bar h2'), await textOf(page, '.dmg-hero-name'), await textOf(page, '.dmg-hero-sub')],
+        ['Infos du groupe', 'Visite groupée Lyon 2e', 'Groupe · 3 membres']);
+      await page.click('.dmg-bar button[aria-label="Retour"]');
+      await page.waitForURL(`${base}/messages/?c=${chatId(4)}`);
+      await page.waitForSelector('.dm-thread-inner .dm-day');
       await page.click('.dm-head button[aria-label="Ajouter des membres"]');
-      await iphoneOnly(page, `${M} : groupe`, 'Ajouter des membres');
+      // Les contacts qui ne sont pas déjà membres, par ordre alphabétique (pas le compte supprimé : aucun compte).
+      await page.waitForSelector('dialog[open] .dmg-picker-row');
+      expectSame(M, 'ajouter des membres', [await dialogTitle(page, 'sheet'), await texts(page, 'dialog[open] .dmg-picker-name'), await textOf(page, 'dialog[open] .dmg-step-button')],
+        ['Ajouter des membres', ['Immo Démo Croix-Rousse', 'Julien M.', 'Lucas G.', 'Marc P.'], 'Ajouter au groupe']);
+      await page.click('dialog[open] .dm-sheet-close');
+      await page.waitForSelector('dialog.dm-sheet[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${M} : « Ajouter des membres » reste ouverte`));
       expectSame(M, 'menu « … » du groupe', await headerMenu(page), ['Infos du groupe', 'Ajouter aux favoris', 'Réactiver les notifications', 'Archiver', 'Signaler le groupe']);
       mark = chat.calls.length;
       await headerMenu(page, 'Réactiver les notifications');
@@ -3330,7 +3667,8 @@ try {
       await extra.close();
     }
 
-    // « Nouvelle discussion » : actions rapides, contacts ; groupes, communautés et diffusions dans l'app iPhone.
+    // « Nouvelle discussion » : actions rapides, contacts ; « Nouveau groupe », « Nouvelle communauté » et « Nouvelle
+    // diffusion » poussent leur écran dans la feuille (étape 4b), « Retour » revient.
     await page.click('.dm-compose');
     expectSame(M, 'nouvelle discussion', [await dialogTitle(page, 'sheet'), await page.$$eval('dialog[open] .dm-quick-actions .dm-action-text', (els) => els.map((el) => el.textContent)),
       await page.$$eval('dialog[open] .dm-results-title', (els) => els.map((el) => el.textContent))],
@@ -3340,7 +3678,12 @@ try {
     if (width === 1440) {
       for (const title of ['Nouveau groupe', 'Nouvelle communauté', 'Nouvelle diffusion']) {
         await page.click(`dialog[open] .dm-quick-actions .dm-action-row:has-text("${title}")`);
-        await iphoneOnly(page, `${M} : nouvelle discussion`, title);
+        await page.waitForFunction((wanted) => document.querySelector('dialog.dm-sheet[open] h2')?.textContent === wanted, title, { timeout: 8000 })
+          .catch(() => problems.push(`${M} : « ${title} » ne s'ouvre pas`));
+        expectSame(M, `écran « ${title} »`, [await page.locator('dialog.alert-dialog[open]').count(), await page.locator('dialog[open] .dm-sheet-back').count(),
+          await page.locator('dialog[open] .dm-sheet-close').count(), await page.locator('dialog[open] .dmg-step-button').count()], [0, 1, 0, 1]);
+        await page.click('dialog[open] .dm-sheet-back');
+        await page.waitForSelector('dialog[open] .dm-quick-actions');
       }
       // « Nouveau contact » : le compte Nidalo d'un numéro (find_account_by_phone), puis « Écrire » (start_phone_conversation).
       await page.click('dialog[open] .dm-quick-actions .dm-action-row:has-text("Nouveau contact")');
@@ -3377,25 +3720,27 @@ try {
     await chatDesk.close();
   }
 
-  // Chargement : la liste et la conversation de l'adresse en formes grises (squelettes), pendant la lecture.
+  // Chargement : la roue de l'app (ProgressView) dans la liste et dans la conversation de l'adresse, pendant la lecture ;
+  // plus de formes grises.
   {
     const M = 'messages chargement';
     const { context: slowDesk, chat } = await chatContext({ width: 1440, height: 960 });
-    // La liste arrive au bout de 1,5 s, les messages au bout de 3 s : d'abord tout en gris, puis le fil seul.
+    // La liste arrive au bout de 1,5 s, les messages au bout de 3 s : d'abord deux roues, puis celle du fil seule.
     chat.slow = { 'rpc/my_conversations': 1500, messages: 3000 };
     page = await slowDesk.newPage();
     page.on('pageerror', (error) => problems.push(`${M}: erreur ${error.message}`));
     await page.goto(`${base}/messages/?c=${chatId(1)}`);
-    await page.waitForSelector('.dm-skel-list[role="status"]', { timeout: 8000 }).catch(() => problems.push(`${M} : pas de squelette dans la liste`));
-    expectSame(M, 'squelettes', [await page.locator('.dm-skel-row').count(), await page.locator('.dm-main .dm-skel-head').count(),
-      await page.getAttribute('.dm-skel-list', 'aria-label'), await page.locator('.dm-main .dm-thread.is-skeleton[role="status"]').count()],
-    [6, 1, 'Chargement des conversations', 1]);
+    await page.waitForSelector('.dm-side .spinner[role="status"]', { timeout: 8000 }).catch(() => problems.push(`${M} : pas de roue dans la liste`));
+    expectSame(M, 'roues', [await page.getAttribute('.dm-side .spinner', 'aria-label'),
+      await page.$$eval('.dm-main .dm-thread.is-loading .spinner[role="status"]', (els) => els.map((el) => el.getAttribute('aria-label'))),
+      await page.locator('.dm-main .dm-back').count(), await page.locator('[class*="dm-skel"]').count()],
+    ['Chargement des conversations', ['Chargement des messages'], 1, 0]);
     await page.waitForTimeout(300);
     await page.screenshot({ path: join(out, '3-messages-chargement-1440.png') });
     await page.waitForSelector('.dm-head-title', { timeout: 8000 });
-    expectSame(M, 'fil en cours de lecture', [await page.locator('.dm-thread.is-skeleton .dm-skel-bubble').count(), await page.locator('.dm-skel-list').count()], [5, 0]);
-    await page.waitForSelector('.dm-thread-inner .dm-day', { timeout: 8000 }).catch(() => problems.push(`${M} : le fil ne remplace pas le squelette`));
-    if (await page.locator('.dm-skel').count()) problems.push(`${M} : des squelettes restent affichés`);
+    expectSame(M, 'fil en cours de lecture', [await page.locator('.dm-main .dm-thread.is-loading .spinner').count(), await page.locator('.dm-side .spinner').count()], [1, 0]);
+    await page.waitForSelector('.dm-thread-inner .dm-day', { timeout: 8000 }).catch(() => problems.push(`${M} : le fil ne remplace pas la roue`));
+    if (await page.locator('.dm-thread.is-loading').count()) problems.push(`${M} : la roue reste affichée`);
     await page.close();
     await slowDesk.close();
   }
@@ -3450,7 +3795,9 @@ try {
         };
       });
       expectSame(M, 'fil', shape, {
-        days: ['Dim. 1 nov.', 'Lun. 2 nov.', 'Mar. 3 nov.', 'Mer. 4 nov.', 'Hier'], bottom: 0, overflowX: 0, pageScroll: 0,
+        // Séparateurs de l'app : le jour en toutes lettres et l'heure du premier message du jour.
+        days: ['Dimanche 1 novembre · 09:00', 'Lundi 2 novembre · 00:00', 'Mardi 3 novembre · 00:00', 'Mercredi 4 novembre · 00:00', 'Hier · 20:10'],
+        bottom: 0, overflowX: 0, pageScroll: 0,
         visit: label === '390' ? shape.visit : 340, file: 'Diagnostics_appartement.pdf', fileLine: 'PDF · 1,2 Mo', scrolls: true,
       });
       if (label === '390' && !(shape.visit > 260 && shape.visit <= 340)) problems.push(`${M} : carte de visite de ${shape.visit} px sur téléphone`);
@@ -3502,7 +3849,7 @@ try {
       const voiceReads = [];
       voicePage.on('request', (request) => { if (request.method() === 'GET' && request.url().includes(`/object/sign/message-attachments/${VOICE_PATH}`)) voiceReads.push(request.url()); });
       await voicePage.waitForSelector('.dm-list .dm-row');
-      await voicePage.click('.dm-tab[aria-label="Archivées, 1"]');
+      await voicePage.click('.dm-tab[aria-label="Archivés, 1"]');
       await waitForRows(voicePage, ['Marc P.'], `${V} : archivées`);
       expectSame(V, 'aperçu du vocal dans la liste', (await inboxRows(voicePage))[0]?.preview, '🎤 Message vocal (0:03)');
       await voicePage.click(rowLink(3));
@@ -3521,8 +3868,9 @@ try {
           unsupported: [...document.querySelectorAll('.dm-caption.is-unsupported')].map((el) => el.textContent),
         };
       });
+      // Bulle vocale de l'app (VoiceBubble) : 236 de large.
       expectSame(V, 'bulle vocale et GIF', voiceShape, {
-        received: true, bars: 28, time: '0:03', button: 'Écouter le message vocal', label: 'Message vocal, 0:03', width: 250,
+        received: true, bars: 28, time: '0:03', button: 'Écouter le message vocal', label: 'Message vocal, 0:03', width: 236,
         gifMine: true, gifSize: [240, 135], gifStatus: 1, gifOuterStatus: 0, unsupported: ['Ce contenu n\'est pas pris en charge par cette version de Nidalo.'],
       });
       if (!reduced) {
@@ -3575,7 +3923,8 @@ try {
   }
 
   // Premier message sans prénom : « Votre prénom » (comme l'app), enregistré comme updateUser, puis le message part.
-  // Aussi « Faire une offre » proposé à l'acheteur, et les sources du « + » qui restent dans l'app iPhone.
+  // Aussi « Faire une offre » proposé à l'acheteur, et les sources du « + » qui restent dans l'app iPhone (le dossier ;
+  // les contacts sans sélecteur de contacts).
   {
     const M = 'messages prénom';
     const { context: nameDesk, chat } = await chatContext({ account: { profile_details: [{ ...ACCOUNT.profile_details[0], first_name: null }] } });
@@ -3585,11 +3934,12 @@ try {
     expectSame(M, 'réponses rapides', await quickReplies(page), ['Envoyer le dossier complet']);
     await page.click('.dm-plus');
     expectSame(M, '« + » de l\'acheteur', await page.$$eval('dialog[open] .dm-wide-title', (els) => els.map((el) => el.textContent)), ['Documents immobiliers', 'Faire une offre']);
-    await page.click('dialog[open] .dm-sources button[aria-label="Localisation"]');
-    await iphoneOnly(page, M, 'Localisation');
-    await page.click('.dm-plus');
+    // Le dossier reste dans l'app iPhone, comme les contacts sans sélecteur de contacts dans ce navigateur.
     await page.click('dialog[open] .dm-sources button[aria-label="Depuis mon dossier"]');
     await iphoneOnly(page, M, 'Mon dossier');
+    await page.click('.dm-plus');
+    await page.click('dialog[open] .dm-sources button[aria-label="Contacts"]');
+    await iphoneOnly(page, M, 'Contacts');
     const writesMark = writes.length;
     let mark = chat.calls.length;
     await page.fill('.dm-composer textarea', 'Bonjour, la maison est-elle toujours disponible ?');
@@ -3749,11 +4099,11 @@ try {
       .catch(() => problems.push(`${M} : l'original cité reste éclairé`));
 
     // Clic droit : la barre d'emojis et le menu ; Échap referme ; « … » au survol ouvre le même.
-    expectSame(M, 'menu du clic droit', await messageMenu(page, 4), { emojis: ['❤️', '👍', '😂', '😮', '😢', '🙏'], pressed: [], items: ['Répondre', 'Transférer', 'Copier'] });
+    expectSame(M, 'menu du clic droit', await messageMenu(page, 4), { emojis: ['❤️', '👍', '😂', '😮', '😢', '🙏'], pressed: [], items: ['Répondre', 'Transférer', 'Copier', 'Signaler'] });
     await chatShot(page, '3-messages-menu-1440.png');
     await page.keyboard.press('Escape');
     await menuClosed(page, `${M} : Échap`);
-    expectSame(M, 'menu du bouton « … »', (await messageMenu(page, 4, '« … »')).items, ['Répondre', 'Transférer', 'Copier']);
+    expectSame(M, 'menu du bouton « … »', (await messageMenu(page, 4, '« … »')).items, ['Répondre', 'Transférer', 'Copier', 'Signaler']);
     // 👍 posé (message_reactions, comme setReaction), puis retiré depuis la barre, où il est enfoncé.
     let mark = chat.calls.length;
     await menuEmoji(page, '[aria-label="👍"]', `${M} : 👍`);
@@ -3862,7 +4212,7 @@ try {
       [['Julien M.', `Vous : ${FORWARDED_TEXT}`], ['Visite groupée Lyon 2e', `Vous : ${FORWARDED_TEXT}`]]);
     // Des photos : recopiées dans le dossier de la conversation d'arrivée (même nom, en JPEG, comme l'app), puis le
     // message qui les cite, transféré.
-    await messageMenu(page, 2).then((menu) => expectSame(M, 'menu des photos', menu.items, ['Répondre', 'Transférer']));
+    await messageMenu(page, 2).then((menu) => expectSame(M, 'menu des photos', menu.items, ['Répondre', 'Transférer', 'Signaler']));
     await menuChoice(page, 'Transférer', `${M} : transférer les photos`);
     await page.click('dialog.dm-forward-sheet[open] .dm-forward-target:has-text("Lucas G.")');
     mark = chat.calls.length;
@@ -3882,6 +4232,64 @@ try {
         })) } },
       });
     }
+
+    // « + » de la barre : la page d'émojis de l'app (Immobilier, Visages, Gestes, Cœurs) ; 🏠 posé sur le message.
+    await messageMenu(page, 7);
+    await page.click('dialog.dm-focus[open] .dm-focus-more');
+    await page.waitForSelector('dialog.dm-emoji-sheet[open] .dm-emoji-choice', { timeout: 8000 }).catch(() => problems.push(`${M} : « Plus d'emojis » ne s'ouvre pas`));
+    expectSame(M, 'plus d\'emojis', [await dialogTitle(page, 'sheet'), await page.$$eval('dialog.dm-emoji-sheet[open] .dm-emoji-title', (els) => els.map((el) => el.textContent))],
+      ['Plus d\'emojis', ['Immobilier', 'Visages', 'Gestes', 'Cœurs']]);
+    mark = chat.calls.length;
+    await page.click('dialog.dm-emoji-sheet[open] .dm-emoji-choice[aria-label="🏠"]');
+    const house = await oneCall(chat, 'message_reactions', mark, `${M} : 🏠`);
+    if (house) expectSame(M, '🏠 posé', [house.method, house.body], ['POST', { message_id: messageId(7).toUpperCase(), emoji: '🏠' }]);
+    await waitForPill(page, 7, 'Réactions : 🏠, 1', `${M} : 🏠`);
+    // « Signaler » (message reçu) : la feuille de l'app, puis le signalement du message lui-même (target_type message).
+    await messageMenu(page, 7);
+    await menuChoice(page, 'Signaler', `${M} : signaler le message`);
+    expectSame(M, 'signaler le message', await dialogTitle(page, 'sheet'), 'Signaler le message');
+    await page.click('dialog[open] .dm-choice:has-text("Spam")');
+    mark = chat.calls.length;
+    await page.click('dialog[open] button:text-is("Enregistrer le signalement")');
+    expectSame(M, 'avis du signalement du message', await noticeText(page, M), 'Signalement envoyé à l\'équipe Nidalo.');
+    const messageReport = await oneCall(chat, 'reports', mark, `${M} : signaler le message`);
+    if (messageReport) {
+      expectSame(M, 'message signalé', [messageReport.method, messageReport.body],
+        ['POST', { id: messageReport.body?.id, target_type: 'message', target_id: messageId(7).toUpperCase(), reason: 'spam' }]);
+    }
+    // « Supprimer » (message envoyé, avec un fichier) : « Supprimer ce message ? », pour tout le monde avec ses fichiers ;
+    // la ligne est supprimée (demandée en retour), puis son fichier dans message-attachments, comme l'app.
+    expectSame(M, 'menu d\'un document envoyé', (await messageMenu(page, 5)).items, ['Répondre', 'Transférer', 'Supprimer']);
+    await menuChoice(page, 'Supprimer', `${M} : supprimer`);
+    expectSame(M, 'confirmation de la suppression', [await dialogTitle(page), await textOf(page, 'dialog.alert-dialog[open] .alert-body p')],
+      ['Supprimer ce message ?', 'Ce message sera supprimé pour tout le monde, avec ses fichiers.']);
+    mark = chat.calls.length;
+    await alertButton(page, 'Supprimer');
+    await msgRow(page, 5).waitFor({ state: 'detached', timeout: 8000 }).catch(() => problems.push(`${M} : le message supprimé reste dans le fil`));
+    expectSame(M, 'suppression', chatCalls(chat, 'messages', mark).filter((call) => call.method === 'DELETE' || call.search.startsWith('?select=content'))
+      .map((call) => `${call.method} ${call.search}`), [`GET ?select=content&id=eq.${messageId(5).toUpperCase()}`, `DELETE ?id=eq.${messageId(5).toUpperCase()}&select=id`]);
+    await waitFor(() => chat.removed.length > 0, `${M} : fichier du message supprimé`);
+    expectSame(M, 'fichier supprimé', chat.removed, [LOAN_PDF]);
+    // Refus du serveur : l'avis de l'app, et le message reste ; un texte se supprime sans parler de fichiers. Chrome note
+    // le refus simulé (503) dans la console.
+    const deleteRefusal = /status of 503/;
+    expectedConsole.add(deleteRefusal);
+    chat.fail = ({ table, method }) => (table === 'messages' && method === 'DELETE' ? { status: 503 } : null);
+    expectSame(M, 'menu d\'un texte envoyé', (await messageMenu(page, 3)).items, ['Répondre', 'Transférer', 'Copier', 'Supprimer']);
+    await menuChoice(page, 'Supprimer', `${M} : suppression refusée`);
+    expectSame(M, 'confirmation sans fichier', [await dialogTitle(page), await page.locator('dialog.alert-dialog[open] .alert-body p').count()], ['Supprimer ce message ?', 0]);
+    await alertButton(page, 'Supprimer');
+    expectSame(M, 'suppression refusée', await noticeText(page, M), 'Ce message n\'a pas pu être supprimé.');
+    chat.fail = null;
+    expectedConsole.delete(deleteRefusal);
+    if (!(await msgRow(page, 3).count())) problems.push(`${M} : le message dont la suppression est refusée a disparu`);
+    // Visionneuse : « Télécharger » pour une photo reçue ; « Supprimer » est réservé à l'auteur.
+    await msgRow(page, 2).locator('.dm-media-tile').first().click();
+    await page.waitForSelector('dialog.dm-viewer[open]', { timeout: 8000 }).catch(() => problems.push(`${M} : la visionneuse ne s'ouvre pas`));
+    await page.click('dialog.dm-viewer[open] button[aria-label="Plus d\'actions"]');
+    expectSame(M, 'actions de la visionneuse', await page.$$eval('dialog.dm-viewer[open] .dm-menu-list [role="menuitem"]', (els) => els.map((el) => el.textContent.trim())), ['Télécharger']);
+    await page.click('dialog.dm-viewer[open] button[aria-label="Fermer"]');
+    await page.waitForSelector('dialog.dm-viewer[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${M} : la visionneuse reste ouverte`));
 
     // Dans le groupe : la réponse de Camille cite un message supprimé depuis ; l'original est relu une fois par son
     // identifiant (comme message(id:) de l'app), puis « Message supprimé », qui ne mène nulle part.
@@ -3939,7 +4347,7 @@ try {
     await body.dispatchEvent('pointerdown', touch);
     await page.waitForSelector('dialog.dm-focus[open] .dm-focus-menu', { timeout: 4000 }).catch(() => problems.push(`${M} : l'appui long n'ouvre pas le menu`));
     await body.dispatchEvent('pointerup', touch).catch(() => undefined);
-    expectSame(M, 'menu de l\'appui long', await page.$$eval('dialog.dm-focus[open] [role="menuitem"]', (els) => els.map((el) => el.textContent.trim())), ['Répondre', 'Transférer', 'Copier']);
+    expectSame(M, 'menu de l\'appui long', await page.$$eval('dialog.dm-focus[open] [role="menuitem"]', (els) => els.map((el) => el.textContent.trim())), ['Répondre', 'Transférer', 'Copier', 'Signaler']);
     await chatShot(page, '3-messages-menu-telephone.png');
     await menuChoice(page, 'Répondre', `${M} : répondre`);
     expectSame(M, 'barre de réponse', await textOf(page, '.dm-reply-bar-title'), 'Réponse à Agence Démo Lyon');
@@ -3963,22 +4371,25 @@ try {
     chat.messages.push(chatLine(91, chatId(9), PRO_ID, '2026-11-04T10:05:00Z', 'Le studio est libre à partir du 1er décembre.'));
     page = await open(searchDesk, '/messages/', 'messages-recherche');
     await page.waitForSelector('.dm-list .dm-row');
-    if (await page.locator('.dm-activity, .dm-search-cancel').count()) problems.push(`${M} : recherche ouverte d'elle-même`);
-    await page.focus('.dm-search input');
+    if (await page.locator('.dm-activity, .dm-msearch-cancel').count()) problems.push(`${M} : recherche ouverte d'elle-même`);
+    await page.click('.dm-search-open');
     await page.waitForSelector('.dm-activity', { timeout: 8000 }).catch(() => problems.push(`${M} : « Votre activité immobilière » absente`));
     const activity = () => page.$$eval('.dm-activity-row', (els) => els.map((el) => [el.querySelector('.dm-activity-title')?.textContent ?? null,
       el.querySelector('.dm-activity-count')?.textContent ?? null, el.getAttribute('href')]));
     await page.waitForFunction(() => document.querySelectorAll('.dm-activity-count').length >= 3, null, { timeout: 8000 }).catch(() => undefined);
-    // « Toutes les conversations » n'est écrit que sur téléphone (sur ordinateur, la colonne est déjà la liste).
-    expectSame(M, 'activité immobilière', [await textOf(page, '.dm-activity h2'), await activity(), await textOf(page, '.dm-search-cancel'),
-      await page.locator('.dm-list-title').isVisible()], ['Votre activité immobilière', [['Annonces consultées récemment', null, '/compte/?vue=consultes'],
-      ['Biens favoris', '3', '/favoris/'], ['Mes recherches immobilières', '2', '/compte/?vue=recherches'], ['Discussions liées aux annonces', '6', null]], 'Annuler', false]);
+    // La recherche ouverte prend toute la colonne, à la place de la liste (MessagingSearchView plein écran).
+    expectSame(M, 'activité immobilière', [await textOf(page, '.dm-activity h2'), await activity(), await textOf(page, '.dm-msearch-cancel'),
+      await page.locator('.dm-list').count()], ['Votre activité immobilière', [['Annonces consultées récemment', null, '/compte/?vue=consultes'],
+      ['Biens favoris', '3', '/favoris/'], ['Mes recherches immobilières', '2', '/compte/?vue=recherches'], ['Discussions liées aux annonces', '6', null]], 'Annuler', 0]);
     await chatShot(page, '3-messages-recherche-1440.png');
-    // Une recherche saisie remplace l'activité ; vidée, l'activité revient.
-    await page.fill('.dm-search input', 'studio');
-    await waitForRows(page, ['Immo Démo Croix-Rousse', 'Compte supprimé'], `${M} : recherche « studio »`);
+    // Une recherche saisie remplace l'activité (conversations trouvées par le bien ou le dernier message) ; vidée,
+    // l'activité revient.
+    await page.fill('.dm-msearch-field input', 'studio');
+    await page.waitForSelector('.dm-found-conversation', { timeout: 8000 }).catch(() => problems.push(`${M} : recherche « studio » sans conversation`));
+    expectSame(M, 'recherche « studio »', await page.$$eval('.dm-found-conversation .dm-contact-name', (els) => els.map((el) => el.textContent)),
+      ['Immo Démo Croix-Rousse', 'Compte supprimé']);
     if (await page.locator('.dm-activity').count()) problems.push(`${M} : l'activité reste affichée pendant une recherche`);
-    await page.fill('.dm-search input', '');
+    await page.fill('.dm-msearch-field input', '');
     await page.waitForSelector('.dm-activity', { timeout: 8000 }).catch(() => problems.push(`${M} : l'activité ne revient pas`));
     const listingMark = searchServer.requests.length;
     await page.click('.dm-activity-row:has-text("Discussions liées aux annonces")');
@@ -3994,7 +4405,7 @@ try {
       ['Maison 4 pièces avec jardin', 'Caluire-et-Cuire · Marc P.', '420 000 €', '2', `/messages/?c=${chatId(3)}`],
       ['Studio rénové', 'Lyon 8e · Compte supprimé', '98 000 €', null, `/messages/?c=${chatId(6)}`],
     ];
-    expectSame(M, 'discussions pendant la lecture des fiches', [await textOf(page, '.dm-linked-head h2'), await linkedRows()], ['Discussions liées aux annonces', LINKED]);
+    expectSame(M, 'discussions pendant la lecture des fiches', [await textOf(page, '.dm-linked .app-page-header-title'), await linkedRows()], ['Discussions liées aux annonces', LINKED]);
     await page.waitForFunction(() => document.querySelectorAll('.dm-linked-price').length === 6, null, { timeout: 8000 })
       .catch(() => problems.push(`${M} : prix de la location absent après la lecture`));
     // La location : loyer charges comprises (640 € + 50 € de charges), comme les cartes de l'app.
@@ -4003,13 +4414,13 @@ try {
       .map((request) => /[?&]id=eq\.([^&]+)/.exec(request.search)?.[1] ?? request.search).sort(), [homeId(1), homeId(7), RENT.id, homeId(5), homeId(3), homeId(4)].sort());
     await chatShot(page, '3-messages-discussions-1440.png');
     // Retour à l'activité, puis « Annuler » referme la recherche.
-    await page.click('.dm-linked-back');
+    await page.click('.dm-linked .app-page-header button[aria-label="Retour"]');
     await page.waitForSelector('.dm-activity', { timeout: 8000 }).catch(() => problems.push(`${M} : « Retour » ne revient pas à l'activité`));
-    await page.click('.dm-search-cancel');
+    await page.click('.dm-msearch-cancel');
     await page.waitForSelector('.dm-activity', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${M} : « Annuler » ne referme pas la recherche`));
-    expectSame(M, 'recherche refermée', [await page.locator('.dm-search-cancel').count(), await page.inputValue('.dm-search input')], [0, '']);
+    expectSame(M, 'recherche refermée', [await page.locator('.dm-msearch-cancel').count(), await page.locator('.dm-list .dm-row').count() > 0], [0, true]);
     // Une discussion liée ouvre sa conversation.
-    await page.focus('.dm-search input');
+    await page.click('.dm-search-open');
     await page.click('.dm-activity-row:has-text("Discussions liées aux annonces")');
     await page.click(`.dm-linked-row[href="/messages/?c=${chatId(9)}"]`);
     await page.waitForURL(`${base}/messages/?c=${chatId(9)}`);
@@ -4023,11 +4434,11 @@ try {
     emptyChat.conversations = emptyChat.conversations.filter((conversation) => conversation.kind === 'group');
     page = await open(emptyDesk, '/messages/', 'messages-recherche-vide');
     await page.waitForSelector('.dm-list .dm-row');
-    await page.focus('.dm-search input');
+    await page.click('.dm-search-open');
     await page.waitForSelector('.dm-activity');
     expectSame(M, 'aucune discussion liée : compte', (await activity()).at(-1), ['Discussions liées aux annonces', null, null]);
     await page.click('.dm-activity-row:has-text("Discussions liées aux annonces")');
-    expectSame(M, 'aucune discussion liée', await textOf(page, '.dm-linked .dm-inbox-empty'),
+    expectSame(M, 'aucune discussion liée', await textOf(page, '.dm-linked .dm-list-empty'),
       'Aucune discussion liée à un bien Touchez « Message » sur une annonce pour poser vos questions à l\'annonceur.');
     await chatShot(page, '3-messages-discussions-vide-1440.png');
     await page.close();
@@ -4182,7 +4593,7 @@ try {
     await headerMenu(page, 'Bloquer');
     await alertButton(page, 'Bloquer');
     expectSame(M, 'blocage refusé', await noticeText(page, M), 'Le blocage n\'a pas pu être enregistré. Vérifiez votre connexion.');
-    expectSame(M, 'menu après le blocage refusé', await headerMenu(page), ['Archiver', 'Signaler', 'Bloquer']);
+    expectSame(M, 'menu après le blocage refusé', await headerMenu(page), ['Archiver', 'Mettre en sourdine', 'Ajouter aux favoris', 'Bloquer', 'Signaler']);
     chat.fail = null;
     await headerMenu(page, 'Bloquer');
     await alertButton(page, 'Bloquer');
@@ -4190,7 +4601,7 @@ try {
     chat.fail = ({ table, method }) => (table === 'user_blocks' && method !== 'GET' ? unavailable : null);
     await headerMenu(page, 'Débloquer');
     expectSame(M, 'déblocage refusé', await noticeText(page, M), 'Le déblocage n\'a pas pu être enregistré. Vérifiez votre connexion.');
-    expectSame(M, 'menu après le déblocage refusé', await headerMenu(page), ['Archiver', 'Signaler', 'Débloquer']);
+    expectSame(M, 'menu après le déblocage refusé', await headerMenu(page), ['Archiver', 'Mettre en sourdine', 'Ajouter aux favoris', 'Débloquer', 'Signaler']);
     chat.fail = null;
     await headerMenu(page, 'Débloquer');
     expectSame(M, 'déblocage', await noticeText(page, M), 'Compte débloqué.');
@@ -4199,7 +4610,7 @@ try {
     chat.fail = ({ table, method }) => (table === 'conversation_preferences' && method === 'POST' ? unavailable : null);
     await headerMenu(page, 'Archiver');
     expectSame(M, 'archive refusée', await noticeText(page, M), 'La modification n\'a pas pu être enregistrée.');
-    expectSame(M, 'après l\'archive refusée', [await headerMenu(page), (await rowNames(page)).includes('Agence Démo Lyon')], [['Archiver', 'Signaler', 'Bloquer'], true]);
+    expectSame(M, 'après l\'archive refusée', [await headerMenu(page), (await rowNames(page)).includes('Agence Démo Lyon')], [['Archiver', 'Mettre en sourdine', 'Ajouter aux favoris', 'Bloquer', 'Signaler'], true]);
     chat.fail = null;
 
     // Une photo envoyée au dossier, puis le message qui ne part pas : « Réessayer » ne renvoie pas la photo, et le
@@ -4256,15 +4667,25 @@ try {
     const M = `messages hors ligne ${label}`;
     const { context: offlineContext, chat } = await chatContext(size);
     chat.fail = ({ table, body }) => (table === 'rpc/my_conversations' && !body?.p_conversation_id ? { status: 503 } : null);
-    // La lecture refusée exprès (503) est notée par Chrome dans la console.
-    const refusal = /status of 503/;
+    // La lecture refusée exprès (503) et la coupure simulée sont notées par Chrome dans la console.
+    const refusal = /status of 503|ERR_INTERNET_DISCONNECTED/;
     expectedConsole.add(refusal);
+    const offlineScreen = async () => [await textOf(page, '.dm-side .app-offline h2'), await textOf(page, '.dm-side .app-offline p'), await textOf(page, '.dm-side .app-offline button')];
     page = await open(offlineContext, '/messages/', `messages-hors-ligne-${label}`);
-    await page.waitForSelector('.dm-side .app-offline', { timeout: 8000 }).catch(() => problems.push(`${M} : l'écran hors ligne n'apparaît pas`));
-    expectSame(M, 'écran hors ligne', [await textOf(page, '.dm-side .app-offline h2'), await textOf(page, '.dm-side .app-offline p'), await textOf(page, '.dm-side .app-offline button')],
-      ['Pas de connexion Internet', 'Vérifiez votre connexion, puis réessayez.', 'Réessayer']);
-    await chatShot(page, `3-messages-hors-ligne-${label}.png`);
+    // Refus du serveur : « Conversations indisponibles » (LoadErrorState de l'app).
+    await page.waitForSelector('.dm-side .app-offline', { timeout: 8000 }).catch(() => problems.push(`${M} : l'écran d'erreur n'apparaît pas`));
+    expectSame(M, 'écran d\'erreur', await offlineScreen(),
+      ['Conversations indisponibles', 'Vos conversations n\'ont pas pu être chargées. Vérifiez votre connexion, puis réessayez.', 'Réessayer']);
+    // Coupure du réseau, puis « Réessayer » : « Pas de connexion Internet » (OfflineState de l'app).
     chat.fail = null;
+    const conversationsUrl = 'https://izzsoitqtzzswkpvdozd.supabase.co/rest/v1/rpc/my_conversations';
+    await offlineContext.route(conversationsUrl, (route) => route.abort('internetdisconnected'));
+    await page.click('.dm-side .app-offline button');
+    await page.waitForFunction(() => document.querySelector('.dm-side .app-offline h2')?.textContent === 'Pas de connexion Internet', null, { timeout: 8000 })
+      .catch(() => problems.push(`${M} : la coupure ne montre pas « Pas de connexion Internet »`));
+    expectSame(M, 'écran hors ligne', await offlineScreen(), ['Pas de connexion Internet', 'Vérifiez votre connexion, puis réessayez.', 'Réessayer']);
+    await chatShot(page, `3-messages-hors-ligne-${label}.png`);
+    await offlineContext.unroute(conversationsUrl);
     await page.click('.dm-side .app-offline button');
     await page.waitForSelector('.dm-list .dm-row', { timeout: 8000 }).catch(() => problems.push(`${M} : « Réessayer » ne relit pas les conversations`));
     if (label === '1440') {
@@ -4281,9 +4702,9 @@ try {
     expectedConsole.delete(refusal);
   }
 
-  // Sous 1024 px (iPhone 13, 390 px) : une seule colonne, comme dans l'app, avec la police du téléphone. La liste
-  // au-dessus de la barre du bas, puis la conversation en plein écran (barre cachée, saisie tout en bas) ; « Retour
-  // aux conversations » revient à la liste. Captures : 3-messages-telephone-*.png.
+  // Sous 1024 px (iPhone 13, 390 px) : une seule colonne, comme dans l'app, avec sa police (Inter). La liste
+  // au-dessus de la barre du bas, puis la conversation en plein écran (barre cachée, saisie tout en bas) ; le retour
+  // rond de l'en-tête revient à la liste. Captures : 3-messages-telephone-*.png.
   {
     const M = 'messages téléphone';
     const { context: chatPhone, chat } = await chatContext({ phone: true });
@@ -4299,7 +4720,7 @@ try {
         composerGap: bottom ? Math.round(innerHeight - bottom.bottom) : null,
       };
     });
-    expectSame(M, 'liste', await phoneShape(), { list: true, pane: false, tabbar: true, overflowX: 0, pageScroll: 0, font: '-apple-system', composerGap: null });
+    expectSame(M, 'liste', await phoneShape(), { list: true, pane: false, tabbar: true, overflowX: 0, pageScroll: 0, font: 'Nidalo Inter', composerGap: null });
     expectSame(M, 'conversations', await inboxRows(page), INITIAL_ROWS);
     await chatShot(page, '3-messages-telephone-liste.png');
     const mark = chat.calls.length;
@@ -4308,9 +4729,11 @@ try {
     await page.waitForSelector('.dm-visit-actions');
     const readB = await oneCall(chat, 'rpc/mark_conversation_read', mark, `${M} : ouverture de B`);
     if (readB) expectSame(M, 'B marquée lue', readB.body, { p_conversation_id: chatId(2).toUpperCase() });
-    expectSame(M, 'conversation', await phoneShape(), { list: false, pane: true, tabbar: false, overflowX: 0, pageScroll: 0, font: '-apple-system', composerGap: 0 });
-    expectSame(M, 'boutons de l\'en-tête', await page.$$eval('.dm-head button', (els) => els.map((el) => el.getAttribute('aria-label'))),
-      ['Retour aux conversations', 'Proposer une visite', 'Plus d\'options']);
+    expectSame(M, 'conversation', await phoneShape(), { list: false, pane: true, tabbar: false, overflowX: 0, pageScroll: 0, font: 'Nidalo Inter', composerGap: 0 });
+    // En-tête de l'app : retour, puis la capsule (téléphone, gris sans numéro partagé, et « … ») ; « Proposer une visite »
+    // passe par « Détails » et la fiche, comme dans l'app.
+    expectSame(M, 'boutons de l\'en-tête', await page.$$eval('.dm-head button', (els) => els.filter((el) => el.getClientRects().length).map((el) => el.getAttribute('aria-label'))),
+      ['Retour', 'Appeler, numéro non partagé', 'Plus d\'options']);
     expectSame(M, 'réponses rapides', await quickReplies(page), ['Oui, samedi 10 h', 'Proposer un autre créneau', 'Envoyer le dossier complet']);
     expectSame(M, 'boutons et champs sans nom', await unnamedControls(page), []);
     await chatShot(page, '3-messages-telephone-conversation.png');
@@ -4318,6 +4741,386 @@ try {
     await page.waitForURL(`${base}/messages/`);
     await page.waitForSelector('.dm-list .dm-row');
     expectSame(M, 'retour à la liste', [(await phoneShape()).tabbar, (await phoneShape()).pane], [true, false]);
+    await page.close();
+    await chatPhone.close();
+  }
+  // Groupes et communautés (étape 4b), comme l'app (GroupInfoView, NewGroupView, CommunityViews, CommunityInviteViews,
+  // BroadcastView) : chaque action envoie au serveur simulé la fonction et les paramètres de l'app ; une communauté de
+  // quartier (le compte en est administrateur, une demande pour entrer) s'ajoute aux conversations de test.
+  {
+    const M = 'messages groupes';
+    const { context: chatDesk, chat } = await chatContext({ width: 1440, height: 960 });
+    addChatCommunity(chat);
+    await chatDesk.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base });
+    page = await open(chatDesk, `/messages/?c=${chatId(4)}`, M);
+    await page.waitForSelector('.dm-thread-inner .dm-day');
+    const D = chatId(4).toUpperCase();
+    /** Bandeau bleu du bas (2 s). */
+    const toast = async (wanted, what) => {
+      await page.waitForFunction((text) => [...document.querySelectorAll('.dmg-toast')].some((el) => el.textContent === text), wanted, { timeout: 8000 })
+        .catch(async () => problems.push(`${M} : ${what} : bandeau ${JSON.stringify(await texts(page, '.dmg-toast'))} au lieu de « ${wanted} »`));
+    };
+    const members = () => page.$$eval('.dmg-members > li', (els) => els.map((el) => [el.querySelector('.dmg-member-name')?.textContent ?? null, el.querySelector('.dmg-role')?.textContent ?? null]));
+    const waitForMembers = async (wanted, what) => {
+      await page.waitForFunction((list) => JSON.stringify([...document.querySelectorAll('.dmg-members > li')]
+        .map((el) => [el.querySelector('.dmg-member-name')?.textContent ?? null, el.querySelector('.dmg-role')?.textContent ?? null])) === JSON.stringify(list), wanted, { timeout: 8000 })
+        .catch(async () => problems.push(`${M} : ${what} : membres ${JSON.stringify(await members())} au lieu de ${JSON.stringify(wanted)}`));
+    };
+    /** Menu d'un membre : ses actions, ou l'action choisie. */
+    const memberMenu = async (name, choose = null) => {
+      await page.click(`.dmg-members button.dmg-member-line[aria-label="${name}"]`);
+      await page.waitForSelector('.dmg-members .dm-menu-list');
+      const items = await texts(page, '.dmg-members .dm-menu-list [role="menuitem"]');
+      if (choose) await page.locator('.dmg-members .dm-menu-list').getByRole('menuitem', { name: choose, exact: true }).click();
+      else await page.keyboard.press('Escape');
+      return items;
+    };
+    const sheetTitle = (wanted) => page.waitForFunction((text) => document.querySelector('dialog.dm-sheet[open] h2')?.textContent === text, wanted, { timeout: 8000 })
+      .catch(async () => problems.push(`${M} : feuille « ${await dialogTitle(page, 'sheet')} » au lieu de « ${wanted} »`));
+
+    // « Infos du groupe » : en-tête, À propos, Médias, réglages, actions, membres et date de création.
+    await page.click('.dm-head-who');
+    await page.waitForURL(`${base}/messages/?c=${chatId(4)}&vue=groupe`);
+    await page.waitForSelector('.dmg-hero');
+    expectSame(M, 'infos du groupe', {
+      bar: [await textOf(page, '.dmg-bar h2'), await textOf(page, '.dmg-bar-action')],
+      hero: [await textOf(page, '.dmg-hero-name'), await textOf(page, '.dmg-hero-sub'), await page.textContent('.dmg-tag')],
+      tiles: await texts(page, '.dmg-tile'), sections: await texts(page, '.dmg-section-title'),
+      about: [await textOf(page, '.dmg-about'), await textOf(page, '.dmg-about-by')], media: await textOf(page, '.dmg-media-empty'),
+      settings: await page.$$eval('.dmg-section-card .dm-action-row', (els) => els.map((el) => el.innerText.replace(/\s+/g, ' ').trim())),
+      foot: await textOf(page, '.dmg-foot'), leave: await textOf(page, '.dmg-destructive:has-text("Quitter")'),
+    }, {
+      bar: ['Infos du groupe', 'Modifier'], hero: ['Visite groupée Lyon 2e', 'Groupe · 3 membres', 'Projet immobilier'], tiles: ['Ajouter', 'Rechercher'],
+      sections: ['À propos', 'Médias', 'Paramètres de la conversation', 'Actions du groupe', '3 membres'],
+      about: ['Visite de l\'appartement 3 pièces samedi à 10 h, puis point sur nos dossiers.', 'Créé par vous · hier'],
+      media: 'Les photos et documents partagés dans ce groupe apparaîtront ici.',
+      settings: ['Notifications En sourdine', 'Messages éphémères Désactivés', 'Ajouter aux favoris Retrouvez ce groupe avec le filtre Favoris de Messages',
+        'Exporter la discussion', 'Effacer la discussion Seulement pour vous'],
+      foot: 'Groupe créé le 5 novembre 2026', leave: 'Quitter le groupe',
+    });
+    await waitForMembers([['Vous', 'Créateur'], ['Camille R.', null], ['Agence Démo Lyon', 'Administrateur']], 'liste');
+    expectSame(M, 'boutons et champs sans nom (infos)', await unnamedControls(page), []);
+    await chatShot(page, '3-messages-infos-groupe-1440.png');
+
+    // Favori : tous les réglages relus puis enregistrés (conversation_preferences), et le bandeau.
+    let mark = chat.calls.length;
+    await page.click('.dm-action-row:has-text("Ajouter aux favoris")');
+    const favorite = await oneCall(chat, 'conversation_preferences', mark, `${M} : favori`, (call) => call.method === 'POST');
+    if (favorite) expectSame(M, 'favori', [favorite.body.conversation_id, favorite.body.is_favorite, favorite.body.is_archived, 'hidden_at' in favorite.body], [D, true, false, false]);
+    await toast('Ajouté aux favoris', 'favori');
+
+    // Messages éphémères : 24 heures, après confirmation (set_ephemeral, la durée en texte).
+    await page.click('.dm-action-row:has-text("Messages éphémères")');
+    await page.waitForURL(`${base}/messages/?c=${chatId(4)}&vue=ephemeres`);
+    await page.click('.dmg-radio-row:has-text("24 heures")');
+    expectSame(M, 'confirmation des messages éphémères', [await dialogTitle(page), await textOf(page, 'dialog.alert-dialog[open] .alert-body p')],
+      ['Activer les messages éphémères ?', 'Les nouveaux messages de ce groupe disparaîtront de la conversation, pour tous les membres, 24 heures après leur envoi.']);
+    mark = chat.calls.length;
+    await alertButton(page, 'Activer : 24 heures');
+    const ephemeral = await oneCall(chat, 'rpc/set_ephemeral', mark, `${M} : messages éphémères`);
+    if (ephemeral) expectSame(M, 'messages éphémères envoyés', ephemeral.body, { p_conversation_id: D, p_seconds: '86400' });
+    await page.waitForSelector('.dmg-radio-row[aria-checked="true"]:has-text("24 heures")', { timeout: 8000 }).catch(() => problems.push(`${M} : « 24 heures » n'est pas cochée`));
+    await page.click('.dmg-bar button[aria-label="Retour"]');
+    await page.waitForURL(`${base}/messages/?c=${chatId(4)}&vue=groupe`);
+    expectSame(M, 'durée affichée', await textOf(page, '.dm-action-row:has-text("Messages éphémères") .dmg-value'), '24 heures');
+
+    // Membres : le créateur nomme un administrateur (set_group_role), retire un membre après confirmation (remove_group_member).
+    expectSame(M, 'actions sur un membre', await memberMenu('Camille R.'), ['Envoyer un message', 'Nommer administrateur', 'Transférer la propriété', 'Retirer du groupe']);
+    mark = chat.calls.length;
+    await memberMenu('Camille R.', 'Nommer administrateur');
+    const promoted = await oneCall(chat, 'rpc/set_group_role', mark, `${M} : administrateur`);
+    if (promoted) expectSame(M, 'administrateur nommé', promoted.body, { p_conversation_id: D, p_member_id: CAMILLE_ID.toUpperCase(), p_role: 'admin' });
+    await toast('Camille R. est administrateur', 'administrateur');
+    await waitForMembers([['Vous', 'Créateur'], ['Camille R.', 'Administrateur'], ['Agence Démo Lyon', 'Administrateur']], 'administrateur');
+    await memberMenu('Agence Démo Lyon', 'Retirer du groupe');
+    expectSame(M, 'confirmation du retrait', await dialogTitle(page), 'Retirer Agence Démo Lyon ?');
+    mark = chat.calls.length;
+    await alertButton(page, 'Retirer du groupe');
+    const removed = await oneCall(chat, 'rpc/remove_group_member', mark, `${M} : retrait`);
+    if (removed) expectSame(M, 'membre retiré', removed.body, { p_conversation_id: D, p_member_id: AGENT_ID.toUpperCase() });
+    await toast('Agence Démo Lyon retiré du groupe', 'retrait');
+    await waitForMembers([['Vous', 'Créateur'], ['Camille R.', 'Administrateur']], 'retrait');
+
+    // « Modifier le groupe » : le nom et la description tels que saisis, sans photo (la clé ne part pas).
+    await page.click('.dmg-bar-action');
+    await sheetTitle('Modifier le groupe');
+    await page.fill('dialog[open] input.dmg-input', 'Visite groupée Lyon 2e et 3e');
+    mark = chat.calls.length;
+    await page.click('dialog[open] .dmg-step-button');
+    const edited = await oneCall(chat, 'rpc/update_group_info', mark, `${M} : modifier`);
+    if (edited) {
+      expectSame(M, 'infos modifiées', edited.body, {
+        p_conversation_id: D, p_name: 'Visite groupée Lyon 2e et 3e', p_details: 'Visite de l\'appartement 3 pièces samedi à 10 h, puis point sur nos dossiers.',
+      });
+    }
+    await toast('Infos du groupe mises à jour', 'modifier');
+    await page.waitForFunction(() => document.querySelector('.dmg-hero-name')?.textContent === 'Visite groupée Lyon 2e et 3e', null, { timeout: 8000 })
+      .catch(() => problems.push(`${M} : le nouveau nom n'est pas affiché`));
+
+    // « Exporter la discussion » : un fichier texte de ce que l'on voit, une ligne par message.
+    await page.click('.dm-action-row:has-text("Exporter la discussion")');
+    await sheetTitle('Exporter la discussion');
+    expectSame(M, 'export', [await textOf(page, 'dialog[open] .dmg-export-count'), await texts(page, 'dialog[open] .choice-chip')],
+      ['4 messages · fichier texte (.txt)', ['Toute la discussion', '30 derniers jours', '7 derniers jours']]);
+    // Le nom que le site donne au fichier (sans langue UTF-8 dans l'environnement, Chromium sous Linux le remplace par
+    // « download » dès qu'il a un accent).
+    await page.evaluate(() => {
+      const click = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = function () { if (this.download) window.savedFileName = this.download; return click.call(this); };
+    });
+    const [download] = await Promise.all([page.waitForEvent('download', { timeout: 8000 }), page.click('dialog[open] button:has-text("Exporter")')]);
+    const exported = (await readFile(await download.path(), 'utf8')).split('\n');
+    expectSame(M, 'fichier exporté', [await page.evaluate(() => window.savedFileName), exported.slice(0, 3), exported.at(-1), exported.length],
+      ['Discussion-Visite-groupée-Lyon-2e-et-3e.txt', ['Discussion « Visite groupée Lyon 2e et 3e » exportée depuis Nidalo', '', '05/11/2026 17:30 · Claire M. a créé le groupe « Visite groupée Lyon 2e »'],
+        '06/11/2026 09:12 · Camille R. : Merci, à samedi !', 6]);
+    await page.click('dialog[open] .dm-sheet-close');
+
+    // « Signaler le groupe » (reports), « Quitter aussi le groupe » laissé désactivé : l'avis dans le bandeau.
+    mark = chat.calls.length;
+    await page.click('.dmg-destructive:has-text("Signaler le groupe")');
+    await sheetTitle('Signaler le groupe');
+    expectSame(M, 'quitter aussi le groupe', [await textOf(page, 'dialog[open] .dm-report-leave'), await page.isChecked('dialog[open] .dm-report-leave input')], ['Quitter aussi le groupe', false]);
+    await page.click('dialog[open] .dm-choice:has-text("Spam")');
+    await page.click('dialog[open] button:text-is("Enregistrer le signalement")');
+    await toast('Signalement envoyé à l\'équipe Nidalo.', 'signalement');
+    const groupReport = await oneCall(chat, 'reports', mark, `${M} : signaler le groupe`);
+    if (groupReport) expectSame(M, 'signalement du groupe', [groupReport.method, groupReport.body?.target_type, groupReport.body?.target_id, groupReport.body?.reason], ['POST', 'conversation', D, 'spam']);
+    if (chatCalls(chat, 'rpc/leave_conversation', mark).length) problems.push(`${M} : le signalement seul quitte le groupe`);
+
+    // « Quitter le groupe » (leave_conversation), puis « Supprimer le groupe » : il quitte la liste (hidden_at).
+    await page.click('.dmg-destructive:has-text("Quitter le groupe")');
+    expectSame(M, 'confirmation du départ', await dialogTitle(page), 'Quitter le groupe ?');
+    mark = chat.calls.length;
+    await alertButton(page, 'Quitter le groupe');
+    const left = await oneCall(chat, 'rpc/leave_conversation', mark, `${M} : quitter`);
+    if (left) expectSame(M, 'groupe quitté', left.body, { p_conversation_id: D });
+    await page.waitForURL(`${base}/messages/`);
+    await page.goto(`${base}/messages/?c=${chatId(4)}&vue=groupe`);
+    await page.waitForSelector('.dmg-destructive:has-text("Supprimer le groupe")');
+    expectSame(M, 'après le départ', [await page.locator('.dmg-bar-action').count(), await page.locator('.dmg-tile:has-text("Ajouter")').isDisabled()], [0, true]);
+    await page.click('.dmg-destructive:has-text("Supprimer le groupe")');
+    expectSame(M, 'confirmation de la suppression', await dialogTitle(page), 'Supprimer le groupe ?');
+    mark = chat.calls.length;
+    await alertButton(page, 'Supprimer le groupe');
+    const hidden = await oneCall(chat, 'conversation_preferences', mark, `${M} : supprimer`, (call) => call.method === 'POST');
+    if (hidden) expectSame(M, 'groupe masqué', [hidden.body.conversation_id, typeof hidden.body.hidden_at, hidden.body.is_favorite], [D, 'string', true]);
+    await page.waitForURL(`${base}/messages/`);
+    await page.waitForFunction((id) => !document.querySelector(`.dm-list .dm-row[href="/messages/?c=${id}"]`), chatId(4), { timeout: 8000 })
+      .catch(() => problems.push(`${M} : le groupe supprimé reste dans la liste`));
+
+    // « Nouveau groupe » : au moins deux personnes, puis le nom ; create_group, puis le groupe s'ouvre.
+    await page.click('.dm-compose');
+    await page.click('dialog[open] .dm-quick-actions .dm-action-row:has-text("Nouveau groupe")');
+    await sheetTitle('Nouveau groupe');
+    await page.click('dialog[open] .dmg-step-button');
+    expectSame(M, 'participants manquants', await textOf(page, 'dialog[open] .dmg-step-error'), 'Choisissez au moins 2 personnes.');
+    await page.click('dialog[open] .dmg-picker-row:has-text("Julien M.")');
+    await page.click('dialog[open] .dmg-picker-row:has-text("Lucas G.")');
+    expectSame(M, 'participants choisis', [await page.$$eval('dialog[open] .dmg-chip', (els) => els.map((el) => el.getAttribute('aria-label'))),
+      await textOf(page, 'dialog[open] .dmg-picker-count strong')], [['Retirer Julien M.', 'Retirer Lucas G.'], '2 personnes choisies']);
+    await page.click('dialog[open] .dmg-step-button');
+    await sheetTitle('Infos du groupe');
+    await page.click('dialog[open] .dmg-step-button');
+    expectSame(M, 'nom manquant', await textOf(page, 'dialog[open] .dmg-error'), 'Donnez un nom au groupe.');
+    await page.fill('dialog[open] input.dmg-input', '  Achat à plusieurs  ');
+    await page.click('dialog[open] .choice-chip:has-text("Achat entre particuliers")');
+    expectSame(M, 'participants du groupe', [await textOf(page, 'dialog[open] .dmg-card-head .dmg-label'), await texts(page, 'dialog[open] .dmg-member-name')],
+      ['Participants · 3 avec vous', ['Vous', 'Julien M.', 'Lucas G.']]);
+    mark = chat.calls.length;
+    await page.click('dialog[open] .dmg-step-button');
+    const createdGroup = await oneCall(chat, 'rpc/create_group', mark, `${M} : nouveau groupe`);
+    if (createdGroup) {
+      if (!UPPER_UUID.test(createdGroup.body?.p_id ?? '')) problems.push(`${M} : identifiant du groupe ${createdGroup.body?.p_id}`);
+      expectSame(M, 'groupe créé', createdGroup.body, {
+        p_id: createdGroup.body?.p_id, p_name: 'Achat à plusieurs', p_member_ids: [OTHER_ID.toUpperCase(), LUCAS_ID.toUpperCase()], p_purpose: 'privateSale',
+      });
+      await page.waitForURL(`${base}/messages/?c=${String(createdGroup.body?.p_id).toLowerCase()}`).catch(() => problems.push(`${M} : le nouveau groupe ne s'ouvre pas (${page.url()})`));
+      await page.waitForFunction(() => document.querySelector('.dm-head-title')?.textContent === 'Achat à plusieurs', null, { timeout: 8000 })
+        .catch(() => problems.push(`${M} : en-tête du nouveau groupe`));
+      if (await page.locator('dialog.dm-sheet[open]').count()) problems.push(`${M} : « Nouveau groupe » reste ouverte`);
+    }
+
+    // « Nouvelle communauté » : nom, description, catégorie et couverture, puis « Passer » (sans premiers membres) ;
+    // create_community, puis la discussion principale s'ouvre.
+    await page.click('.dm-compose');
+    await page.click('dialog[open] .dm-quick-actions .dm-action-row:has-text("Nouvelle communauté")');
+    await sheetTitle('Nouvelle communauté');
+    expectSame(M, 'étape 1', [await textOf(page, 'dialog[open] .dmg-steps-title'), await page.locator('dialog[open] .dmg-category.is-on').innerText()],
+      ['Étape 1 sur 2 · Informations', 'Communauté immobilière générale']);
+    await page.click('dialog[open] .dmg-step-button');
+    expectSame(M, 'champs manquants', await texts(page, 'dialog[open] .dmg-error'), ['Donnez un nom à la communauté.', 'Expliquez en quelques mots le but de la communauté.']);
+    await page.fill('dialog[open] input.dmg-input >> nth=0', 'Locataires Lyon 7e');
+    await page.fill('dialog[open] textarea.dmg-editor', 'Entraide entre locataires : dossiers, visites et bons plans.');
+    await page.click('dialog[open] .dmg-category:has-text("Location")');
+    await page.click('dialog[open] .dmg-cover-choice[aria-label="Couverture Ciel"]');
+    expectSame(M, 'aperçu', await textOf(page, 'dialog[open] .dmg-preview-text'), 'Locataires Lyon 7e Location · Privée');
+    await page.click('dialog[open] .dmg-step-button');
+    await sheetTitle('Premiers membres');
+    expectSame(M, 'étape 2', [await textOf(page, 'dialog[open] .dmg-steps-title'), await textOf(page, 'dialog[open] .dm-sheet-trailing')], ['Étape 2 sur 2 · Membres', 'Passer']);
+    mark = chat.calls.length;
+    await page.click('dialog[open] .dm-sheet-trailing');
+    const createdCommunity = await oneCall(chat, 'rpc/create_community', mark, `${M} : nouvelle communauté`);
+    if (createdCommunity) {
+      const id = createdCommunity.body?.p_id ?? '';
+      if (!UPPER_UUID.test(id)) problems.push(`${M} : identifiant de la communauté ${id}`);
+      expectSame(M, 'communauté créée', createdCommunity.body, {
+        p_id: id, p_conversation_id: chatMainConversationId(id).toUpperCase(), p_name: 'Locataires Lyon 7e', p_details: 'Entraide entre locataires : dossiers, visites et bons plans.',
+        p_category: 'rental', p_cover: 'sky', p_member_ids: [],
+      });
+      await page.waitForURL(`${base}/messages/?c=${chatMainConversationId(id)}`).catch(() => problems.push(`${M} : la communauté ne s'ouvre pas (${page.url()})`));
+      await page.waitForFunction(() => document.querySelector('.dm-head-title')?.textContent === 'Locataires Lyon 7e', null, { timeout: 8000 })
+        .catch(() => problems.push(`${M} : en-tête de la nouvelle communauté`));
+      await page.click('.dm-head-who');
+      await page.waitForSelector('.dmg-hero.is-community');
+      expectSame(M, 'nouvelle communauté', [await textOf(page, '.dmg-hero-name'), await textOf(page, '.dmg-hero-sub'), await textOf(page, '.dmg-hero-line'), await members()],
+        ['Locataires Lyon 7e', 'Communauté · 1 membre', 'Privée · Location', [['Vous', 'Créateur']]]);
+    }
+
+    // La communauté de quartier : page, invitation (lien, QR code, copie, annulation), demandes, membres, départ.
+    const C = COMMUNITY_ID.toUpperCase();
+    await page.click(rowLink(9).replace(chatId(9), COMMUNITY_CHAT));
+    await page.waitForURL(`${base}/messages/?c=${COMMUNITY_CHAT}`);
+    await page.click('.dm-head-who');
+    await page.waitForURL(`${base}/messages/?c=${COMMUNITY_CHAT}&vue=communaute`);
+    await page.waitForSelector('.dm-action-row:has-text("Demandes")');
+    expectSame(M, 'communauté', {
+      bar: [await textOf(page, '.dmg-bar h2'), await textOf(page, '.dmg-bar-action')],
+      hero: [await textOf(page, '.dmg-hero-name'), await textOf(page, '.dmg-hero-sub'), await textOf(page, '.dmg-hero-line')],
+      tiles: await texts(page, '.dmg-tile'), sections: await texts(page, '.dmg-section-title'), by: await textOf(page, '.dmg-about-button'),
+      requests: await textOf(page, '.dm-action-row:has-text("Demandes") .dmg-badge'), main: await textOf(page, '.dm-action-row:has-text("Discussion principale")'),
+      foot: await textOf(page, '.dmg-foot'),
+    }, {
+      bar: ['Communauté', 'Modifier'], hero: ['Voisins de la Croix-Rousse', 'Communauté · 4 membres', 'Privée · Résidentiel · Lyon 4e'],
+      tiles: ['Ajouter', 'Rechercher', 'Inviter'], sections: ['À propos', 'Demandes', 'Discussions', '4 membres'], by: 'Créée par Camille R. · 12 octobre',
+      requests: '1', main: 'Discussion principale Bienvenue à tous ! Présentez-vous en quelques mots. Mer.', foot: 'Communauté privée · créée le 12 octobre 2026',
+    });
+    await waitForMembers([['Camille R.', 'Créateur'], ['Vous', 'Administrateur'], ['Marc P.', null], ['Lucas G.', null]], 'communauté');
+    expectSame(M, 'boutons et champs sans nom (communauté)', await unnamedControls(page), []);
+    await chatShot(page, '3-messages-communaute-1440.png');
+    mark = chat.calls.length;
+    await page.click('.dmg-tile:has-text("Inviter")');
+    await sheetTitle('Inviter');
+    await page.waitForSelector('dialog[open] .dmg-invite-qr svg');
+    const listed = await oneCall(chat, 'rpc/my_community_invites', mark, `${M} : liens actifs`);
+    if (listed) expectSame(M, 'liens actifs', listed.body, { p_community_id: C });
+    const invited = await oneCall(chat, 'rpc/create_community_invite', mark, `${M} : nouveau lien`);
+    if (invited) expectSame(M, 'nouveau lien', invited.body, { p_community_id: C, p_days: 7, p_requires_approval: true });
+    expectSame(M, 'invitation', [await textOf(page, 'dialog[open] .dmg-invite h3'), await textOf(page, 'dialog[open] .dmg-invite-link'), await textOf(page, 'dialog[open] .dmg-invite-validity'),
+      await page.getAttribute('dialog[open] .dmg-invite-qr svg', 'aria-label')],
+    ['Voisins de la Croix-Rousse', 'nidalo://invite/jeton-invitation-1', 'Valable jusqu\'au 13/11/2026', 'QR code d\'invitation']);
+    await page.click('dialog[open] button:has-text("Copier le lien")');
+    await page.waitForSelector('dialog[open] button:has-text("Lien copié")', { timeout: 8000 }).catch(() => problems.push(`${M} : « Lien copié » absent`));
+    expectSame(M, 'lien copié', await page.evaluate(() => navigator.clipboard.readText()), 'nidalo://invite/jeton-invitation-1');
+    await page.click('dialog[open] .dmg-text-danger');
+    expectSame(M, 'annuler le lien', [await dialogTitle(page), await texts(page, 'dialog.alert-dialog[open] .alert-actions button')], ['Annuler ce lien ?', ['Annuler ce lien', 'Garder le lien']]);
+    mark = chat.calls.length;
+    await alertButton(page, 'Annuler ce lien');
+    const revoked = await oneCall(chat, 'rpc/revoke_community_invite', mark, `${M} : lien annulé`);
+    if (revoked) expectSame(M, 'lien annulé', revoked.body, { p_invite_id: String(chat.invites[0]?.id).toUpperCase() });
+    await page.waitForSelector('dialog[open] button:has-text("Créer un nouveau lien")', { timeout: 8000 }).catch(() => problems.push(`${M} : « Créer un nouveau lien » absent`));
+    await page.click('dialog[open] .dm-sheet-close');
+    // Demandes : « Accepter » (decide_community_join_request), la personne rejoint les membres.
+    mark = chat.calls.length;
+    await page.click('.dm-action-row:has-text("Demandes")');
+    await page.waitForURL(`${base}/messages/?c=${COMMUNITY_CHAT}&vue=demandes`);
+    await page.waitForSelector('.dmg-request');
+    expectSame(M, 'demandes', [await textOf(page, '.dmg-section-title'), await texts(page, '.dmg-request-name'), await texts(page, '.dmg-request button')],
+      ['1 demande', ['Nina L.'], ['Refuser', 'Accepter']]);
+    await page.click('.dmg-accept');
+    const decided = await oneCall(chat, 'rpc/decide_community_join_request', mark, `${M} : demande acceptée`);
+    if (decided) expectSame(M, 'demande acceptée', decided.body, { p_request_id: 'E5000000-0000-4000-8000-000000000001', p_accept: true });
+    await page.waitForFunction(() => !document.querySelector('.dmg-request') && document.querySelector('.dmg-section-title')?.textContent === '0 demande', null, { timeout: 8000 })
+      .catch(() => problems.push(`${M} : la demande acceptée reste affichée`));
+    await page.click('.dmg-bar button[aria-label="Retour"]');
+    await page.waitForURL(`${base}/messages/?c=${COMMUNITY_CHAT}&vue=communaute`);
+    await waitForMembers([['Camille R.', 'Créateur'], ['Vous', 'Administrateur'], ['Marc P.', null], ['Lucas G.', null], ['Nina L.', null]], 'demande acceptée');
+    expectSame(M, 'section « Demandes » après la réponse', await page.locator('.dm-action-row:has-text("Demandes")').count(), 0);
+    // Un administrateur retire un simple membre ; ni le créateur ni lui-même n'ont de menu.
+    expectSame(M, 'menus des membres', [await page.locator('.dmg-members button.dmg-member-line').count(), await memberMenu('Marc P.')], [3, ['Retirer de la communauté']]);
+    mark = chat.calls.length;
+    await memberMenu('Marc P.', 'Retirer de la communauté');
+    const kicked = await oneCall(chat, 'rpc/remove_community_member', mark, `${M} : retrait de la communauté`);
+    if (kicked) expectSame(M, 'retiré de la communauté', kicked.body, { p_community_id: C, p_member_id: MARC_ID.toUpperCase() });
+    await waitForMembers([['Camille R.', 'Créateur'], ['Vous', 'Administrateur'], ['Lucas G.', null], ['Nina L.', null]], 'retrait de la communauté');
+    await page.click('.dmg-destructive:has-text("Quitter la communauté")');
+    expectSame(M, 'quitter la communauté', await dialogTitle(page), 'Quitter la communauté ?');
+    mark = chat.calls.length;
+    await alertButton(page, 'Quitter la communauté');
+    const leftCommunity = await oneCall(chat, 'rpc/leave_community', mark, `${M} : départ de la communauté`);
+    if (leftCommunity) expectSame(M, 'communauté quittée', leftCommunity.body, { p_community_id: C });
+    await page.waitForURL(`${base}/messages/`);
+
+    // « Nouvelle diffusion » : un message, deux destinataires (dont une agence pas encore contactée : sa conversation
+    // est créée), envoyé dans chaque conversation à deux ; « OK » referme l'écran.
+    await page.click('.dm-compose');
+    await page.click('dialog[open] .dm-quick-actions .dm-action-row:has-text("Nouvelle diffusion")');
+    await sheetTitle('Nouvelle diffusion');
+    expectSame(M, 'diffusion vide', [await textOf(page, 'dialog[open] .dmg-step-button'), await page.locator('dialog[open] .dmg-step-button').isDisabled()],
+      ['Choisissez des destinataires', true]);
+    await page.fill('dialog[open] textarea.dmg-broadcast-text', 'Bonjour, je serai absente la semaine prochaine.');
+    await page.click('dialog[open] .dmg-picker-row:has-text("Julien M.")');
+    await page.click('dialog[open] .dmg-picker-row:has-text("Immo Démo Croix-Rousse")');
+    expectSame(M, 'diffusion prête', [await textOf(page, 'dialog[open] .dm-results-title >> nth=1'), await textOf(page, 'dialog[open] .dmg-step-button')],
+      ['Destinataires · 2', 'Envoyer à 2 destinataires']);
+    mark = chat.calls.length;
+    await page.click('dialog[open] .dmg-step-button');
+    expectSame(M, 'diffusion envoyée', await dialogTitle(page), 'Message envoyé dans 2 conversations.');
+    const started = await oneCall(chat, 'rpc/start_direct_conversation', mark, `${M} : diffusion à l'agence`);
+    if (started) expectSame(M, 'conversation avec l\'agence', started.body, { p_user_id: PRO_ID.toUpperCase() });
+    const sent = chatCalls(chat, 'messages', mark).filter((call) => call.method === 'POST')
+      .map((call) => [String(call.body?.conversation_id).toLowerCase(), call.body?.content?.text?._0 ?? null]);
+    expectSame(M, 'messages diffusés', sent, [[chatId(8), 'Bonjour, je serai absente la semaine prochaine.'], [chatId(2), 'Bonjour, je serai absente la semaine prochaine.']]);
+    await alertButton(page, 'OK');
+    await page.waitForSelector('dialog.dm-sheet[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${M} : « Nouvelle diffusion » reste ouverte`));
+    await page.close();
+    await chatDesk.close();
+  }
+
+  // Sur téléphone : les mêmes écrans en plein écran, sans défilement de côté ; « Passer » dans la barre du titre.
+  {
+    const M = 'messages groupes téléphone';
+    const { context: chatPhone, chat } = await chatContext({ phone: true });
+    addChatCommunity(chat);
+    page = await open(chatPhone, `/messages/?c=${chatId(4)}`, M);
+    await page.waitForSelector('.dm-thread-inner .dm-day');
+    const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    expectSame(M, 'en-tête du groupe', await page.$$eval('.dm-head button', (els) => els.filter((el) => el.getClientRects().length).map((el) => el.getAttribute('aria-label'))),
+      ['Retour', 'Infos du groupe', 'Ajouter des membres', 'Plus d\'options']);
+    await page.click('.dm-head-who');
+    await page.waitForSelector('.dmg-hero');
+    expectSame(M, 'infos du groupe', [await overflow(), await page.locator('.dm-side').isVisible(), await unnamedControls(page)], [0, false, []]);
+    await chatShot(page, '3-messages-telephone-infos-groupe.png');
+    // « Signaler le groupe » avec « Quitter aussi le groupe » : le signalement, puis leave_conversation et son avis.
+    const mark = chat.calls.length;
+    await page.click('.dmg-destructive:has-text("Signaler le groupe")');
+    await page.click('dialog[open] .dm-choice:has-text("Spam")');
+    await page.click('dialog[open] .dm-report-leave input');
+    await page.click('dialog[open] button:text-is("Enregistrer le signalement")');
+    await page.waitForSelector('.dmg-destructive:has-text("Supprimer le groupe")', { timeout: 8000 }).catch(() => problems.push(`${M} : signaler et quitter : « Supprimer le groupe » absent`));
+    await page.waitForFunction(() => document.querySelector('.dmg-toast')?.textContent === 'Vous avez quitté le groupe', null, { timeout: 8000 })
+      .catch(() => problems.push(`${M} : signaler et quitter : pas d'avis « Vous avez quitté le groupe »`));
+    expectSame(M, 'signaler et quitter', [chatCalls(chat, 'reports', mark).length, chatCalls(chat, 'rpc/leave_conversation', mark).map((call) => call.body)],
+      [1, [{ p_conversation_id: chatId(4).toUpperCase() }]]);
+    await page.click('.dmg-bar button[aria-label="Retour"]');
+    await page.waitForURL(`${base}/messages/?c=${chatId(4)}`);
+    await page.goto(`${base}/messages/?c=${COMMUNITY_CHAT}&vue=communaute`);
+    await page.waitForSelector('.dmg-hero.is-community');
+    expectSame(M, 'communauté', [await overflow(), await unnamedControls(page)], [0, []]);
+    await page.goto(`${base}/messages/`);
+    await page.waitForSelector('.dm-list .dm-row');
+    await page.click('.dm-compose');
+    await page.click('dialog[open] .dm-quick-actions .dm-action-row:has-text("Nouvelle communauté")');
+    await page.fill('dialog[open] input.dmg-input >> nth=0', 'Voisins');
+    await page.fill('dialog[open] textarea.dmg-editor', 'Entraide.');
+    await page.click('dialog[open] .dmg-step-button');
+    await page.waitForSelector('dialog[open] .dm-sheet-trailing');
+    const bar = await page.evaluate(() => {
+      const box = (selector) => document.querySelector(selector)?.getBoundingClientRect();
+      const title = box('dialog[open] .dm-sheet-head h2');
+      const skip = box('dialog[open] .dm-sheet-trailing');
+      return { sameLine: !!title && !!skip && Math.abs((title.top + title.bottom) / 2 - (skip.top + skip.bottom) / 2) < 4, right: skip ? Math.round(innerWidth - skip.right) : null };
+    });
+    expectSame(M, '« Passer »', [bar.sameLine, bar.right <= 16, await overflow()], [true, true, 0]);
     await page.close();
     await chatPhone.close();
   }
@@ -4644,8 +5447,8 @@ try {
       expectSame(B, 'menu d\'une recherche', await openMenu(0), ['Modifier les critères', 'Renommer', 'Désactiver les alertes', 'Supprimer']);
       mark = writes.length;
       await choose(0, 'Renommer');
-      expectSame(B, 'renommer', [await dialogTitle(page), await page.inputValue('dialog[open] .text-input')], ['Renommer la recherche', lyon.name]);
-      await page.fill('dialog[open] .text-input', 'Lyon centre');
+      expectSame(B, 'renommer', [await dialogTitle(page), await page.inputValue('dialog[open] .dialog-field')], ['Renommer la recherche', lyon.name]);
+      await page.fill('dialog[open] .dialog-field', 'Lyon centre');
       await page.locator('dialog[open]').getByRole('button', { name: 'Renommer', exact: true }).click();
       await expectWrites(mark, saved({ name: 'Lyon centre', query: lyon.query, alerts_enabled: true }), `${B} : renommer`);
       await page.waitForFunction(() => document.querySelector('.dfav-searches .saved-search h3')?.textContent === 'Lyon centre', null, { timeout: 8000 })
@@ -4857,8 +5660,8 @@ try {
           ['Type de compte', 'Particulier', null]]);
       // Dans l'ordre de l'app ; « Notifications » est la ligne du site, gardée.
       expectSame(E, 'paramètres et assistance', await spaceRows(page, '#parametres-et-assistance'),
-        [['Notifications', null, '/compte/?vue=notifications'], ['Alertes sur cet iPhone', null, null], ['Préférences', null, null],
-          ['Aide et assistance', null, '/aide/'], ['Informations légales', null, '/compte/?vue=legal']]);
+        [['Notifications', null, '/compte/?vue=notifications'], ['Alertes sur cet iPhone', null, null], ['Préférences', null, '/compte/?vue=preferences'],
+          ['Aide et assistance', null, '/compte/?vue=aide'], ['Informations légales', null, '/compte/?vue=legal']]);
       expectSame(E, 'bas de la colonne', [await textOf(page, '.dsp-logout'), await textOf(page, '.dsp-delete'), await page.getAttribute('.dsp-delete', 'href')],
         ['Se déconnecter', 'Supprimer mon compte', '/compte/?vue=supprimer']);
       // Ce que l'app garde sur l'iPhone : « Dans l'app iPhone pour l'instant », sans rien envoyer.
@@ -4866,7 +5669,7 @@ try {
       const spaceMark = space.calls.length;
       await page.click('.dsp-dossier-button');
       await iphoneOnly(page, E, 'Mon dossier immobilier');
-      for (const title of ['Mon bail de location', 'Quittances de loyer', 'États des lieux', 'Offres et compromis', 'Documents à signer', 'Alertes sur cet iPhone', 'Préférences']) {
+      for (const title of ['Mon bail de location', 'Quittances de loyer', 'États des lieux', 'Offres et compromis', 'Documents à signer', 'Alertes sur cet iPhone']) {
         await page.locator('.dsp .app-row', { hasText: title }).click();
         await iphoneOnly(page, E, title);
       }
@@ -4941,8 +5744,17 @@ try {
       };
       expectSame(A, 'menu d\'une visite à venir', await visitMenu(0),
         ['Modifier la visite', 'Reprogrammer', 'Ajouter une note', 'Ajouter à mon calendrier', 'Annuler la visite', 'Supprimer']);
+      // « Ajouter à mon calendrier » : sur le site, le fichier .ics de la visite (événement de l'app : « Visite : <bien> »,
+      // début et fin, adresse), que le calendrier de l'appareil ouvre.
+      const calendarDownload = page.waitForEvent('download', { timeout: 8000 }).catch(() => null);
       await page.locator('.dsc-menu-list').getByRole('menuitem', { name: 'Ajouter à mon calendrier', exact: true }).click();
-      await iphoneOnly(page, A, 'Ajouter à mon calendrier');
+      const calendarFile = await calendarDownload;
+      const calendarLines = calendarFile
+        ? (await readFile(await calendarFile.path(), 'utf8')).split('\r\n').filter((line) => /^(BEGIN|UID|DTSTART|DTEND|SUMMARY|LOCATION|END):/.test(line))
+        : null;
+      expectSame(A, 'fichier du calendrier', [calendarFile?.suggestedFilename() ?? null, calendarLines], ['visite.ics', ['BEGIN:VCALENDAR', 'BEGIN:VEVENT',
+        `UID:${spaceVisitId(1).toLowerCase()}@nidalo.fr`, 'DTSTART:20261106T133000Z', 'DTEND:20261106T141500Z', 'SUMMARY:Visite : Appartement lumineux avec balcon',
+        'LOCATION:Lyon 3e (69003)', 'END:VEVENT', 'END:VCALENDAR']]);
       // Message : la conversation liée à la visite.
       await page.route(new RegExp(`^${base}/messages/`), (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Messages</title>' }));
       await page.locator('.app-visit').nth(0).getByRole('button', { name: 'Message' }).click();
@@ -4987,6 +5799,76 @@ try {
       space.visits[0].visit.contactName = 'Agence du Parc';
       await page.reload({ waitUntil: 'networkidle' });
       await page.waitForSelector('.app-visit');
+
+      // Détail d'une visite (VisitDetailView, étape 3) : toute la carte d'une visite enregistrée l'ouvre (&visite=…), pas
+      // celle d'une demande ; photo, état, titre, ville et prix, informations, puis les actions de l'app. « Partager la
+      // visite » donne le texte de l'app ; Modifier reste dans l'app iPhone ; Annuler réécrit la ligne avec le statut
+      // « cancelled » (VisitStore.cancel) ; Supprimer retire les photos du compte rendu puis la ligne (VisitStore.delete)
+      // et ramène à l'agenda. Une visite absente : « Visite supprimée ».
+      {
+        const D = 'Détail de la visite';
+        const detailPath = (n) => `/compte/?vue=agenda&visite=${spaceVisitId(n)}`;
+        expectSame(D, 'liens des cartes À venir', await page.$$eval('.app-visit', (cards) => cards.map((card) => card.querySelector('a.app-visit-detail')?.getAttribute('href') ?? null)),
+          [detailPath(1), detailPath(2), null]);
+        const detail = () => page.evaluate(() => {
+          const text = (element) => (element ? element.textContent.replace(/\s+/g, ' ').trim() : null);
+          return [text(document.querySelector('.dsc-head h1')), text(document.querySelector('.app-detail-badge')), text(document.querySelector('.app-detail-title')),
+            text(document.querySelector('.app-detail-place')),
+            [...document.querySelectorAll('.app-detail-row')].map((row) => `${text(row.querySelector('.app-detail-row-title'))} : ${text(row.querySelector('.app-detail-row-value'))}`),
+            [...document.querySelectorAll('.app-detail-button')].map(text)];
+        });
+        const dialogTexts = async () => [await dialogTitle(page), await textOf(page, 'dialog.alert-dialog[open] .alert-body p'),
+          await page.$$eval('dialog.alert-dialog[open] button', (buttons) => buttons.map((button) => button.textContent.trim()).filter(Boolean))];
+        await page.locator('.app-visit').nth(0).locator('a.app-visit-detail').click();
+        await page.waitForURL(`${base}${detailPath(1)}`, { timeout: 8000 }).catch(() => problems.push(`${D} : la carte ouvre ${page.url()}`));
+        await page.waitForSelector('.app-detail-title', { timeout: 8000 }).catch(() => problems.push(`${D} : le détail ne s'affiche pas`));
+        expectSame(D, 'visite à venir', await detail(), ['Détail de la visite', 'Visite confirmée', 'Appartement lumineux avec balcon', 'Lyon 3e · 238 000 €',
+          ['Date : Vendredi 6 novembre · 14h30 · 45 min', 'Adresse : Lyon 3e (69003)', 'Contact : Agence du Parc'],
+          ['Itinéraire', 'Contacter', 'Partager la visite', 'Ajouter à mon calendrier', 'Modifier ou reprogrammer', 'Annuler la visite', 'Supprimer']]);
+        await favShot(page, '5-mon-espace-visite-1440.png');
+        await page.evaluate(() => {
+          window.sharedVisits = [];
+          Object.defineProperty(navigator, 'share', { configurable: true, value: async (data) => { window.sharedVisits.push(data); } });
+        });
+        await page.getByRole('button', { name: 'Partager la visite', exact: true }).click();
+        await page.waitForFunction(() => window.sharedVisits.length > 0, null, { timeout: 4000 }).catch(() => undefined);
+        expectSame(D, 'texte partagé', await page.evaluate(() => window.sharedVisits), [{
+          text: 'Visite : Appartement lumineux avec balcon\nVendredi 6 novembre · 14h30 (45 min)\nAdresse : Lyon 3e (69003)\nContact : Agence du Parc' }]);
+        await page.getByRole('button', { name: 'Modifier ou reprogrammer', exact: true }).click();
+        await iphoneOnly(page, D, 'Modifier ou reprogrammer');
+        const cancelMark = space.calls.length;
+        await page.getByRole('button', { name: 'Annuler la visite', exact: true }).click();
+        expectSame(D, 'confirmation de l\'annulation', await dialogTexts(),
+          ['Annuler cette visite ?', 'Vendredi 6 novembre · 14h30 avec Agence du Parc.', ['Annuler la visite', 'Garder la visite']]);
+        await alertButton(page, 'Annuler la visite');
+        const cancelled = await oneSpaceCall(space, 'agenda_visits', 'PATCH', cancelMark, `${D} : annulation`);
+        expectSame(D, 'ligne annulée [filtre, début, statut, demande envoyée, annonce, statut de la visite, sa date]', [cancelled?.search ?? null,
+          cancelled?.body?.start_at ?? null, cancelled?.body?.status ?? null, Boolean(cancelled?.body && 'request_id' in cancelled.body), cancelled?.body?.listing_id ?? null,
+          cancelled?.body?.visit?.status ?? null, cancelled?.body?.visit?.start ?? null],
+        [`?id=eq.${spaceVisitId(1).toLowerCase()}`, '2026-11-06T13:30:00.000', 'cancelled', false, SPACE_L1.listingId, 'cancelled', '2026-11-06T13:30:00.000']);
+        await page.waitForFunction(() => document.querySelector('.app-detail-badge')?.textContent.includes('Annulée'), null, { timeout: 8000 }).catch(() => undefined);
+        expectSame(D, 'après l\'annulation [état, boutons]', (await detail()).filter((_, index) => index === 1 || index === 5),
+          ['Annulée', ['Itinéraire', 'Contacter', 'Partager la visite', 'Ajouter à mon calendrier', 'Reprogrammer', 'Supprimer']]);
+        space.reportFiles = [{ name: 'photo-1.jpg' }];
+        const deleteMark = space.calls.length;
+        await page.getByRole('button', { name: 'Supprimer', exact: true }).click();
+        expectSame(D, 'confirmation de la suppression', await dialogTexts(), ['Supprimer cette visite ?', 'Elle disparaîtra définitivement de votre agenda.', ['Supprimer', 'Garder']]);
+        await alertButton(page, 'Supprimer');
+        const removed = await oneSpaceCall(space, 'agenda_visits', 'DELETE', deleteMark, `${D} : suppression`);
+        const folder = `${USER_ID.toLowerCase()}/${spaceVisitId(1).toLowerCase()}`;
+        expectSame(D, 'suppression [photos du compte rendu, ligne]', [space.calls.slice(deleteMark).filter((call) => call.table.startsWith('storage '))
+          .map((call) => `${call.method} ${call.table} ${JSON.stringify(call.body?.prefix ?? call.body?.prefixes ?? null)}`), removed?.search ?? null],
+        [[`POST storage list/visit-reports "${folder}"`, `DELETE storage visit-reports ["${folder}/photo-1.jpg"]`], `?id=eq.${spaceVisitId(1).toLowerCase()}`]);
+        await page.waitForURL(`${base}/compte/?vue=agenda`, { timeout: 8000 }).catch(() => problems.push(`${D} : après la suppression, ${page.url()} au lieu de Mon agenda`));
+        await page.goto(`${base}/compte/?vue=agenda&visite=D0000000-0000-4000-8000-000000000009`, { waitUntil: 'networkidle' });
+        await page.waitForSelector('.app-detail .app-unavailable', { timeout: 8000 }).catch(() => undefined);
+        expectSame(D, 'visite absente', [await textOf(page, '.app-detail .app-unavailable h2'), await textOf(page, '.app-detail .app-unavailable p')],
+          ['Visite supprimée', 'Cette visite n\'est plus dans votre agenda.']);
+        space.visits = structuredClone(SPACE_VISITS);
+        space.reportFiles = null;
+        await page.goto(`${base}/compte/?vue=agenda`, { waitUntil: 'networkidle' });
+        await page.waitForSelector('.app-visit');
+      }
 
       // Créneaux ouverts (VisitSessionStore.upcoming, n° 13) : les séances ouvertes et pas finies du compte, la plus proche
       // d'abord, en tête des visites à venir (my_visit_sessions sans paramètre, comme l'app) ; leur page reste dans l'app
@@ -5056,7 +5938,7 @@ try {
       expectSame(V, 'rappels par défaut', await page.$$eval('.dsc-toggle', (toggles) => toggles.map((toggle) => [toggle.querySelector('.dsc-toggle-title')?.textContent ?? null,
         toggle.querySelector('input')?.checked ?? null, toggle.querySelector('.dsc-toggle-note')?.textContent ?? null])),
       [['La veille, à 18 h', true, null], ['2 heures avant', true, null], ['Rappel personnalisé', false, null], ['Confirmée par le contact', false, null],
-        ['Ajouter à mon calendrier', null, IPHONE]]);
+        ['Ajouter à mon calendrier', false, null]]);
       await page.click('.dsc-prepare');
       await iphoneOnly(page, V, 'Préparer ma visite');
       // Bien concerné : Mes annonces, Mes favoris, Biens de mes conversations ; le bien de la conversation avec l'agence.
@@ -5096,11 +5978,20 @@ try {
       await page.getByRole('switch', { name: 'Rappel personnalisé' }).check();
       await page.selectOption('.dsc-select select', '60');
       await page.getByRole('switch', { name: 'Confirmée par le contact' }).check();
+      // « Ajouter à mon calendrier » : une fois la visite enregistrée, son fichier .ics (VisitActions.addToCalendar).
+      await page.getByRole('switch', { name: 'Ajouter à mon calendrier' }).check();
       await page.waitForTimeout(200);
       await favShot(page, '5-mon-espace-ajouter-visite-1440.png');
       mark = space.calls.length;
+      const formCalendar = page.waitForEvent('download', { timeout: 8000 }).catch(() => null);
       await page.click('.dsc-head-action .dsc-button-primary');
       const inserted = await oneSpaceCall(space, 'agenda_visits', 'POST', mark, V);
+      const formCalendarFile = await formCalendar;
+      expectSame(V, 'fichier du calendrier', formCalendarFile
+        ? [formCalendarFile.suggestedFilename(), (await readFile(await formCalendarFile.path(), 'utf8')).split('\r\n').filter((line) => /^(UID|DTSTART|DTEND|SUMMARY|LOCATION):/.test(line))]
+        : null,
+      ['visite.ics', [`UID:${String(inserted?.body?.id ?? '').toLowerCase()}@nidalo.fr`, 'DTSTART:20261110T133000Z', 'DTEND:20261110T143000Z',
+        'SUMMARY:Visite : Appartement lumineux avec balcon', 'LOCATION:Lyon 3e (69003)']]);
       if (inserted) {
         const row = inserted.body ?? {};
         const visitId = row.id;
@@ -5247,7 +6138,7 @@ try {
       await page.click('.dsp-delete');
       await page.waitForURL(`${base}/compte/?vue=supprimer`, { timeout: 8000 }).catch(() => problems.push(`Supprimer mon compte : ouvre ${page.url()}`));
       await page.waitForSelector('.delete-card');
-      expectSame('Supprimer mon compte', 'écran', [await textOf(page, '.delete-card h2'), await textOf(page, '.delete-card .danger-button')],
+      expectSame('Supprimer mon compte', 'écran', [await textOf(page, '.delete-card h2'), await textOf(page, '.delete-card .app-button-danger')],
         ['Supprimer mon compte ?', 'Supprimer définitivement']);
       // Les textes de l'app (n° 31, 125, 32), les fichiers de l'iPhone devenus ce que ce navigateur garde.
       expectSame('Supprimer mon compte', 'textes', [await textOf(page, '.delete-card p:not(.delete-note)'), await textsOf(page, '.delete-card .delete-note')], [
@@ -5258,12 +6149,12 @@ try {
       ]);
       // Connexion et sécurité, Confidentialité et données : les textes de l'app (n° 33, 123, et la carte de l'app).
       await page.goto(`${base}/compte/?vue=securite`, { waitUntil: 'networkidle' });
-      await page.waitForSelector('.soon-card');
-      expectSame('Connexion et sécurité', 'texte', await textOf(page, '.soon-card p'), 'Compte créé avec une adresse e-mail : pour changer de mot de passe, '
+      await page.waitForSelector('.placeholder-state');
+      expectSame('Connexion et sécurité', 'texte', await textOf(page, '.placeholder-state p'), 'Compte créé avec une adresse e-mail : pour changer de mot de passe, '
         + 'déconnectez-vous, puis touchez « Mot de passe oublié » sur l\'écran de connexion. Compte Apple ou Google : votre mot de passe se gère chez Apple ou Google.');
       await page.goto(`${base}/compte/?vue=confidentialite`, { waitUntil: 'networkidle' });
-      await page.waitForSelector('.privacy-card');
-      expectSame('Confidentialité et données', 'carte', [await textOf(page, '.privacy-card h2'), await textOf(page, '.privacy-card p')], ['Aucun suivi publicitaire',
+      await page.waitForSelector('.info-tile-card');
+      expectSame('Confidentialité et données', 'carte', [await textOf(page, '.info-tile-card h2'), await textOf(page, '.info-tile-card p')], ['Aucun suivi publicitaire',
         'Nidalo n\'affiche aucune publicité et n\'utilise aucun outil de mesure d\'audience ni aucun traceur. Nidalo ne vend ni ne loue vos données.']);
 
       // Se déconnecter : la confirmation de l'app ; « Annuler » ne fait rien, « Se déconnecter » ferme la session.
@@ -5273,7 +6164,7 @@ try {
       await page.click('.dsp-logout');
       expectSame(D, 'confirmation', [await dialogTitle(page), await textOf(page, 'dialog.alert-dialog[open] .alert-body p'),
         await page.$$eval('dialog.alert-dialog[open] .alert-actions button', (buttons) => buttons.map((button) => [button.textContent, button.className]))],
-      ['Se déconnecter ?', 'Vous pourrez vous reconnecter à tout moment.', [['Se déconnecter', 'btn dsc-btn-danger'], ['Annuler', 'btn dsc-btn-quiet']]]);
+      ['Se déconnecter ?', 'Vous pourrez vous reconnecter à tout moment. Les données de ce navigateur restent enregistrées.', [['Se déconnecter', 'btn btn-danger'], ['Annuler', 'btn btn-light']]]);
       await alertButton(page, 'Annuler');
       await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${D} : la confirmation reste ouverte`));
       await page.waitForTimeout(300);
@@ -5325,8 +6216,8 @@ try {
       await context.close();
     }
 
-    // À 1023 px : la page du téléphone ; Mon projet et Biens consultés y sont « bientôt » (Mon agenda et Ajouter une
-    // visite y ont leur écran : vérifiés plus bas, sur téléphone).
+    // À 1023 px : la page du téléphone ; Mon projet et Biens consultés y ont la page de l'app (étape 5), comme Mon agenda
+    // et Ajouter une visite (vérifiés plus bas, sur téléphone).
     {
       const context = await browser.newContext({ viewport: { width: 1023, height: 768 }, locale: 'fr-FR' });
       await mock(context, { signedIn: true });
@@ -5336,10 +6227,14 @@ try {
       expectSame('Mon espace 1023', 'lien Mon agenda', await page.$$eval('a.app-row', (rows) => rows.filter((row) => row.querySelector('.app-row-title')?.textContent === 'Mon agenda')
         .map((row) => row.getAttribute('href'))), ['/compte/?vue=agenda']);
       await page.close();
-      for (const [view, title] of [['projet', 'Mon projet immobilier'], ['consultes', 'Biens consultés']]) {
+      // Mon projet masque la barre d'onglets, comme dans l'app (hidesTabBar) ; Biens consultés la garde. L'en-tête de
+      // l'app, sans celui de l'ordinateur ; plus d'écran « bientôt ».
+      for (const [view, title, tabBar, selector] of [['projet', 'Mon projet immobilier', false, '.dsc-project-screen.is-phone .project-intro'],
+        ['consultes', 'Biens consultés', true, '.viewed-screen .app-unavailable']]) {
         page = await open(context, `/compte/?vue=${view}`, `${view} 1023`);
-        await page.waitForSelector('.soon-card');
-        expectSame(`${view} 1023`, 'écran « bientôt »', [await textOf(page, '.soon-card h2'), await page.locator('.dsc').count()], [title, 0]);
+        await page.waitForSelector(selector, { timeout: 8000 }).catch(() => problems.push(`${view} 1023 : page de l'app absente`));
+        expectSame(`${view} 1023`, 'page de l\'app', [await textOf(page, '.screen-header h1'), await page.locator('.soon-state').count(), await page.locator('.dsc-head').count(),
+          await page.locator('.tabbar').isVisible()], [title, 0, 0, tabBar]);
         await page.close();
       }
       await context.close();
@@ -5421,24 +6316,37 @@ try {
         await phoneFits(page, `${A}, ${tab}`);
       }
       await page.click('.app-agenda-tab >> nth=0');
+      // Détail d'une visite : l'écran de l'app (retour rond, titre centré, « Note »), dans l'écran.
+      await page.locator('.app-visit').nth(0).locator('a.app-visit-detail').click();
+      await page.waitForSelector('.app-detail-title', { timeout: 8000 }).catch(() => problems.push(`${A} : le détail d'une visite ne s'affiche pas`));
+      expectSame(A, 'détail d\'une visite [titre, « Note », boutons]', [await textOf(page, '.app-page-header-title'), await textOf(page, '.app-page-header .app-detail-note'),
+        await textsOf(page, '.app-detail-button')],
+      ['Détail de la visite', 'Note', ['Itinéraire', 'Contacter', 'Partager la visite', 'Ajouter à mon calendrier', 'Modifier ou reprogrammer', 'Annuler la visite', 'Supprimer']]);
+      await phoneFits(page, `${A}, détail d'une visite`);
+      await tallShot(page, `visite-telephone${suffix}.png`);
+      await page.goBack({ waitUntil: 'networkidle' });
+      await page.waitForSelector('.app-agenda .app-visit');
 
       // Ajouter une visite, depuis l'agenda.
       await page.click('.app-agenda-add-link');
       await page.waitForURL(`${base}/compte/?vue=ajouter-visite&depuis=agenda`, { timeout: 8000 }).catch(() => problems.push(`${V} : ouvert à ${page.url()}`));
       await page.waitForSelector('.dsc-form-screen .dsc-choose');
-      expectSame(V, 'formulaire vide', [await textOf(page, '.dsc-head h1'), await page.isDisabled('.dsc-head-action .dsc-button-primary'),
+      // En-tête de l'app sur téléphone (VisitFormView) : retour rond, titre centré, « Enregistrer » en capsule bleue.
+      expectSame(V, 'formulaire vide', [await textOf(page, '.app-page-header-title'), await page.isDisabled('.app-page-header .app-visit-save'),
         await page.$$eval('.dsc-form-screen .dsc-card-title', (titles) => titles.map((title) => title.textContent))],
       ['Nouvelle visite', true, ['Bien concerné', 'Date et heure', 'Rendez-vous', 'Rappels et suivi']]);
       await phoneFits(page, V);
       await tallShot(page, `ajouter-visite-telephone${suffix}.png`);
       await page.click('.dsc-choose');
       await page.waitForSelector('dialog.dsc-picker[open] .dsc-picker-section', { timeout: 8000 });
-      await page.waitForTimeout(300);
-      expectSame(V, 'feuille Bien concerné [gauche, droite, dans la hauteur, sections]', await page.evaluate(() => {
+      // Feuille de l'app (domiaSheet, étape 5) : posée en bas sur toute la largeur, une fois montée.
+      await page.waitForFunction(() => document.querySelector('dialog.dsc-picker[open]')?.getAnimations().every((animation) => animation.playState === 'finished'),
+        null, { timeout: 8000 }).catch(() => undefined);
+      expectSame(V, 'feuille Bien concerné [gauche, droite, dans la hauteur, collée en bas, sections]', await page.evaluate(() => {
         const box = document.querySelector('dialog.dsc-picker[open]').getBoundingClientRect();
-        return [Math.round(box.left), Math.round(box.right), box.top >= 0 && box.bottom <= window.innerHeight,
+        return [Math.round(box.left), Math.round(box.right), box.top >= 0 && box.bottom <= window.innerHeight + 0.5, Math.abs(box.bottom - window.innerHeight) < 1,
           [...document.querySelectorAll('dialog.dsc-picker[open] .dsc-picker-section h3')].map((title) => title.textContent)];
-      }), [16, screenWidth - 16, true, ['Mes annonces', 'Mes favoris', 'Biens de mes conversations']]);
+      }), [0, screenWidth, true, true, ['Mes annonces', 'Mes favoris', 'Biens de mes conversations']]);
       await phoneFits(page, `${V}, feuille Bien concerné`);
       await page.screenshot({ path: join(out, `ajouter-visite-feuille-telephone${suffix}.png`) });
       await page.click('dialog.dsc-picker[open] .dsc-picker-section[aria-label="Biens de mes conversations"] .dsc-picker-row');
@@ -5451,7 +6359,7 @@ try {
       await page.getByLabel('Date', { exact: true }).fill('2026-11-10');
       await page.getByLabel('Heure de début', { exact: true }).fill('14:30');
       const phoneMark = space.calls.length;
-      await page.click('.dsc-head-action .dsc-button-primary');
+      await page.click('.app-page-header .app-visit-save');
       const inserted = await oneSpaceCall(space, 'agenda_visits', 'POST', phoneMark, V);
       expectSame(V, 'visite insérée [début, annonce, adresse, contact]', [inserted?.body?.start_at ?? null, inserted?.body?.listing_id ?? null,
         inserted?.body?.visit?.address ?? null, inserted?.body?.visit?.contactName ?? null],
@@ -5579,9 +6487,26 @@ try {
   await page.click('.map-open');
   await page.waitForSelector('.map-marker', { timeout: 15000 });
   await page.waitForTimeout(400);
-  await page.tap('.map-marker');
-  await page.waitForSelector('.map-preview');
+  // Panneau du bas de l'app (MapResultsPanel) en hauteur moyenne, la vignette au-dessus (cadrage de l'app : entre la
+  // ligne du haut et le panneau). Premier toucher de la vignette (MapTabView.tap) : le bien est choisi, sa carte au
+  // centre du panneau ; plus d'aperçu flottant. Toucher le fond de la carte le désélectionne.
+  const markerAbovePanel = await page.evaluate(() => document.querySelector('.map-marker-button').getBoundingClientRect().bottom
+    <= document.querySelector('.map-panel').getBoundingClientRect().top);
+  await page.tap('.map-marker-button');
+  await page.waitForSelector('.map-marker.is-selected', { timeout: 4000 }).catch(() => problems.push('carte téléphone : le toucher ne choisit pas le bien'));
+  // La carte se centre sur le bien (0,35 s).
+  await page.waitForTimeout(600);
+  expectSame('carte téléphone', 'premier toucher d\'une vignette [au-dessus du panneau, panneau, titre, carte choisie, encore au-dessus du panneau, aperçu]', [markerAbovePanel,
+    await page.$eval('.map-panel', (panel) => panel.classList.contains('is-medium')), (await page.textContent('.map-panel-titles h2'))?.replace(/\s/g, ' '),
+    await page.locator('.map-panel .map-card.is-selected').count(),
+    await page.evaluate(() => document.querySelector('.map-marker.is-selected .map-marker-button').getBoundingClientRect().bottom
+      <= document.querySelector('.map-panel').getBoundingClientRect().top),
+    await page.locator('.map-preview').count()], [true, true, '1 bien sur la carte', 1, true, 0]);
   await page.screenshot({ path: join(out, 'carte-telephone-apercu.png') });
+  // À gauche, loin du zoom : après la capture pleine page, Chrome remontre le zoom (en haut à droite) sur cette page.
+  await page.tap('.map-canvas', { position: { x: 40, y: 200 } });
+  await page.waitForSelector('.map-marker.is-selected', { state: 'detached', timeout: 4000 })
+    .catch(() => problems.push('carte téléphone : toucher le fond ne désélectionne pas le bien'));
   // Les filtres s'ouvrent depuis la carte, sans « Voir sur la carte » ; Échap les referme sans fermer la carte ;
   // « Retour » rend la liste.
   await page.click('.map-app-top .filters-button');
@@ -5684,6 +6609,23 @@ try {
   page = await open(phone, '/compte/', 'compte-connexion-telephone');
   await page.waitForSelector('.signin-card');
   await page.screenshot({ path: join(out, 'compte-connexion-telephone.png') });
+  // Conditions d'utilisation (LegalPageView de l'app, en feuille ; étape 2 du site comme l'app) : un clic ouvre la
+  // feuille par-dessus la connexion, 24 sous le haut de l'écran, avec l'en-tête « Conditions » et le texte de la page
+  // /conditions/ ; l'adresse ne change pas ; Échap la referme.
+  await page.click('.signin-card .auth-mentions a[href="/conditions/"]');
+  await page.waitForSelector('dialog.legal-sheet[open] .legal-sheet-doc h1', { timeout: 8000 })
+    .catch(() => problems.push('connexion téléphone : la feuille des conditions ne s\'ouvre pas'));
+  await page.waitForTimeout(600);
+  expectSame('connexion téléphone', 'feuille des conditions [adresse, en-tête, titre du texte, haut, bas]', await page.evaluate(() => {
+    const sheet = document.querySelector('dialog.legal-sheet[open]');
+    const box = sheet?.getBoundingClientRect();
+    return [location.pathname, sheet?.querySelector('.app-page-header-title')?.textContent ?? null, sheet?.querySelector('.legal-sheet-doc h1')?.textContent ?? null,
+      box ? Math.round(box.top) : null, box ? Math.round(innerHeight - box.bottom) : null];
+  }), ['/compte/', 'Conditions', 'Conditions d’utilisation', 24, 0]);
+  await page.screenshot({ path: join(out, 'connexion-conditions-telephone.png') });
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('dialog.legal-sheet[open]', { state: 'detached', timeout: 4000 })
+    .catch(() => problems.push('connexion téléphone : Échap ne referme pas la feuille des conditions'));
   await phone.close();
 
   // Téléphone, avec le compte de test.
@@ -5715,9 +6657,11 @@ try {
         ['États des lieux', null, soon('etats'), 'teal'], ['Offres et compromis', null, soon('offres'), 'amber'], ['Documents à signer', null, soon('signature'), 'amber'],
         ['Mon dossier immobilier', null, soon('dossier'), 'teal']]],
       ['Compte et sécurité', [['Connexion et sécurité', null, '/compte/?vue=securite', 'gray'], ['Confidentialité et données', null, '/compte/?vue=confidentialite', 'gray'],
-        ['Type de compte', 'Particulier', null, 'gray']]],
-      ['Paramètres et assistance', [['Notifications', null, '/compte/?vue=notifications', 'gray'], ['Préférences', null, soon('preferences'), 'gray'],
-        ['Aide et assistance', null, '/aide/', 'gray'], ['Informations légales', null, '/compte/?vue=legal', 'gray']]],
+        ['Type de compte', 'Particulier', '/compte/?vue=type', 'gray']]],
+      // Comme l'app : la cloche de l'en-tête remplace la ligne « Notifications » ; « Alertes sur cet iPhone » reste dans
+      // l'app ; Préférences, Aide et assistance et les textes légaux s'ouvrent dans Mon compte.
+      ['Paramètres et assistance', [['Préférences', null, '/compte/?vue=preferences', 'gray'],
+        ['Aide et assistance', null, '/compte/?vue=aide', 'gray'], ['Informations légales', null, '/compte/?vue=legal', 'gray']]],
     ]);
     // Mesures de l'app : lignes de 64 px au moins, carré d'icône de 40, carte du profil de 105 (nom, e-mail et pastille,
     // plus hauts que la photo de 64, marges de 16 et bord), « Se déconnecter » de 52, rien ne dépasse de l'écran.
@@ -5739,6 +6683,28 @@ try {
   await phoneFavorites();
   await page.waitForSelector('input[autocomplete="tel"]');
   await page.screenshot({ path: join(out, 'mes-informations-telephone-long.png'), fullPage: true });
+  // « Enregistrer » sur téléphone (feuille de l'app à mi-hauteur, étape 2 du site comme l'app) : de toute la largeur,
+  // posée en bas, la moitié de l'écran au moins, coins de 32 en haut, poignée de 36 × 5, le contenu au milieu (autant
+  // de place au-dessus du titre que sous « Enregistrer ») ; Échap la referme.
+  page = await open(signedPhone, '/recherche/?mode=buy&lieu=Lyon', 'enregistrer-telephone');
+  await page.waitForSelector('.save-search-button');
+  await page.click('.save-search-button');
+  await page.waitForSelector('dialog.save-search-sheet[open] .save-search-name');
+  await page.waitForTimeout(700);
+  expectSame('enregistrer téléphone', 'feuille [gauche, largeur, bas, moitié de l\'écran, coins, poignée, contenu au milieu]', await page.evaluate(() => {
+    const sheet = document.querySelector('dialog.save-search-sheet[open]');
+    const box = sheet.getBoundingClientRect();
+    const grabber = sheet.querySelector('.save-search-grabber')?.getBoundingClientRect();
+    const above = sheet.querySelector('.save-search-titles').getBoundingClientRect().top - box.top;
+    const below = box.bottom - sheet.querySelector('.save-search-submit').getBoundingClientRect().bottom;
+    return [Math.round(box.left), Math.round(box.width) === innerWidth, Math.round(innerHeight - box.bottom), box.height >= innerHeight / 2 - 1,
+      getComputedStyle(sheet).borderTopLeftRadius, grabber ? `${Math.round(grabber.width)}×${Math.round(grabber.height)}` : null,
+      above > 20 && Math.abs(above - below) <= 2];
+  }), [0, true, 0, true, '32px', '36×5', true]);
+  await page.screenshot({ path: join(out, 'enregistrer-recherche-telephone.png') });
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('dialog.save-search-sheet[open]', { state: 'detached', timeout: 4000 })
+    .catch(() => problems.push('enregistrer téléphone : Échap ne referme pas la feuille'));
   await signedPhone.close();
 
   // « Quel est votre profil ? » comme l'app (étape 3), pour un compte tout neuf : « Étape 2 sur 2 » et sa barre, les deux
@@ -5844,12 +6810,13 @@ try {
     await context.close();
   }
 
-  // Haut des pages du téléphone (étape 3) : plus d'en-tête bleu sous 761 px. Chaque page commence comme son écran de
+  // Haut des pages du téléphone (étape 3) : plus d'en-tête bleu sous 1024 px. Chaque page commence comme son écran de
   // l'app : grand titre d'un onglet (Favoris, Messages, Mon compte), retour et titre d'un écran poussé ; les pages que
   // l'app n'a pas (aide, pages légales, 404, « bientôt », annonce introuvable) ont le retour rond et le titre, leur h1
   // restant pour les lecteurs d'écran ; le retour ramène à la page précédente du site, sinon à sa page. Une conversation
   // ouverte garde sa barre et toute la hauteur. Fond de page et barre du navigateur aux couleurs de l'app. Entre 761 et
-  // 1023 px, l'en-tête bleu reste (seul menu de ces largeurs). Captures : haut-telephone-*.png.
+  // 1023 px (l'iPhone couché), c'est aussi la page du téléphone, avec la barre d'onglets en bas. Captures :
+  // haut-telephone-*.png.
   {
     const T = 'haut du téléphone';
     const context = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
@@ -5868,12 +6835,12 @@ try {
     });
     page = await open(context, '/aide/', `${T} aide`);
     expectSame(T, 'couleur de la barre du navigateur', await page.$$eval('meta[name="theme-color"]', (metas) => metas.map((meta) => [meta.getAttribute('content'), meta.getAttribute('media')])),
-      [['#FAF9F6', '(max-width: 760px)'], ['#1F5BC6', '(min-width: 761px)']]);
+      [['#FAF9F6', '(max-width: 1023px)'], ['#FFFFFF', '(min-width: 1024px)']]);
     await page.close();
     const unknownListing = '6b0f6c1e-1d1a-4c55-9a51-0c3d7c2f1aff';
     for (const [path, title, back, file] of [['/aide/', 'Aide', '/', 'aide'], ['/conditions/', 'Conditions d’utilisation', '/', 'conditions'],
       ['/confidentialite/', 'Politique de confidentialité', '/', 'confidentialite'], ['/mentions-legales/', 'Mentions légales', '/', 'mentions-legales'],
-      ['/page-inexistante/', 'Page introuvable', '/', '404'], ['/publier/', 'Publier une annonce', '/', 'publier'], ['/comparer/', 'Comparer', '/favoris/', 'comparer'],
+      ['/page-inexistante/', 'Page introuvable', '/', '404'],
       [`/annonce/?id=${unknownListing}`, 'Annonce introuvable', '/recherche/', 'annonce-introuvable']]) {
       // La page 404 répond avec le code 404 (signalé par Chrome, voir open()).
       const name = file === '404' ? `404 ${T}` : `${T} ${file}`;
@@ -5884,6 +6851,30 @@ try {
       await page.screenshot({ path: join(out, `haut-telephone-${file}.png`) });
       await page.close();
     }
+    // Publier (étape 6) : l'assistant plein écran de l'app (PublishFlowView), son propre en-tête en haut (le rond qui
+    // ferme, « Publier une annonce » visible), sans en-tête bleu, sans retour du site ni barre d'onglets.
+    page = await open(context, '/publier/', `${T} publier`);
+    await page.waitForSelector('.ppub-head h1', { timeout: 8000 }).catch(() => problems.push(`${T} publier : en-tête de l'assistant absent`));
+    expectSame(`${T} publier`, 'haut de la page', [await topOf(page), await page.evaluate(() => [Math.round(document.querySelector('.ppub-head').getBoundingClientRect().top),
+      document.querySelector('.ppub-back')?.getAttribute('aria-label') ?? null, [...document.querySelectorAll('.tabbar')].every((bar) => getComputedStyle(bar).display === 'none')])],
+    [{ band: true, background: 'rgb(250, 249, 246)', header: null, h1: [['Publier une annonce', false]] }, [0, 'Fermer la publication', true]]);
+    await phoneFits(page, `${T} publier`);
+    await page.screenshot({ path: join(out, 'haut-telephone-publier.png') });
+    await page.close();
+    // Comparer (CompareView de l'app, en plein écran, étape 2 du site comme l'app) : grand titre et « Fermer » en haut,
+    // sans retour rond ni barre d'onglets ; ouvert seul, « Fermer » mène à la recherche.
+    page = await open(context, '/comparer/', `${T} comparer`);
+    await page.waitForSelector('.cmpm h1', { timeout: 8000 }).catch(() => problems.push(`${T} comparer : grand titre absent`));
+    expectSame(`${T} comparer`, '[sans en-tête bleu, fond, titre, titre en haut, Fermer, retour rond, barre d\'onglets]', await page.evaluate(() => [
+      [...document.querySelectorAll('.topbar')].every((bar) => getComputedStyle(bar).display === 'none'), getComputedStyle(document.body).backgroundColor,
+      document.querySelector('.cmpm h1').textContent, Math.round(document.querySelector('.cmpm h1').getBoundingClientRect().top) <= 24,
+      document.querySelector('.cmpm-close')?.textContent.trim(), document.querySelectorAll('.phone-page-head').length, getComputedStyle(document.querySelector('.tabbar')).display]),
+    [true, 'rgb(250, 249, 246)', 'Comparer', true, 'Fermer', 0, 'none']);
+    await phoneFits(page, `${T} comparer`);
+    await page.screenshot({ path: join(out, 'haut-telephone-comparer.png') });
+    await Promise.all([page.waitForURL(`${base}/recherche/`, { timeout: 8000 }).catch(() => problems.push(`${T} : « Fermer » de Comparer ouvert seul mène à ${page.url()}`)),
+      page.click('.cmpm-close')]);
+    await page.close();
     // Onglets : leur grand titre en haut, sans en-tête bleu ; conversation ouverte : sa barre en haut, toute la hauteur.
     // Messages avec ses conversations simulées (chatContext).
     const { context: chatPhone } = await chatContext({ phone: true });
@@ -5908,9 +6899,21 @@ try {
       await page.screenshot({ path: join(out, 'haut-telephone-conversation.png') });
       await chatPhone.close();
     }
-    // Retour d'une page que l'app n'a pas : la page précédente du site (Informations légales), sinon l'accueil.
+    // Informations légales (étape 5) : les textes s'ouvrent dans Mon compte, comme dans l'app, avec le retour vers la liste.
     page = await open(context, '/compte/?vue=legal', `${T} retour`);
-    await page.click('a[href="/conditions/"]');
+    expectSame(`${T} textes légaux`, 'liste', await page.$$eval('.app-menu-group', (groups) => groups.map((group) => [group.querySelector('.app-section-label')?.textContent ?? null,
+      [...group.querySelectorAll('.app-row')].map((row) => [row.querySelector('.app-row-title')?.textContent ?? null, row.getAttribute('href')])])),
+    [['Textes', [['Conditions d’utilisation', '/compte/?vue=legal&texte=conditions'], ['Politique de confidentialité', '/compte/?vue=legal&texte=confidentialite'],
+      ['Mentions légales', '/compte/?vue=legal&texte=mentions']]]]);
+    await page.click('a.app-row[href="/compte/?vue=legal&texte=conditions"]');
+    await page.waitForSelector('.legal-text-screen .legal-section', { timeout: 8000 }).catch(() => problems.push(`${T} : le texte des conditions ne s'ouvre pas`));
+    expectSame(`${T} textes légaux`, 'texte ouvert', [await textOf(page, '.screen-header h1'), await page.getAttribute('.screen-header > .app-round', 'href'),
+      await textOf(page, '.legal-text-head h2'), await textOf(page, '.legal-toc .legal-card-title'), (await textOf(page, '.legal-section h3'))?.startsWith('1. ') ?? false,
+      await textOf(page, '.legal-contact .app-button-primary'), await page.locator('.legal-others a').count()],
+    ['Conditions', '/compte/?vue=legal', 'Conditions d’utilisation', 'Sommaire', true, 'Écrire à l\'éditeur', 2]);
+    // Retour d'une page que l'app n'a pas : la page précédente du site (Informations légales), sinon l'accueil.
+    await page.goto(`${base}/compte/?vue=legal`, { waitUntil: 'networkidle' });
+    await page.evaluate(() => window.location.assign('/conditions/'));
     await page.waitForURL(`${base}/conditions/`, { timeout: 8000 }).catch(() => problems.push(`${T} : « Conditions » ne s'ouvre pas`));
     await page.click('.phone-page-head .app-round');
     await page.waitForURL(`${base}/compte/?vue=legal`, { timeout: 8000 }).catch(() => problems.push(`${T} : le retour des conditions mène à ${page.url()}`));
@@ -5920,7 +6923,9 @@ try {
     await page.waitForURL(`${base}/`, { timeout: 8000 }).catch(() => problems.push(`${T} : le retour de l'aide ouverte seule mène à ${page.url()}`));
     await page.close();
     await context.close();
-    // Entre 761 et 1023 px : l'en-tête bleu reste, sans le retour ni le titre du téléphone ; le titre de la page est visible.
+    // Entre 761 et 1023 px : la page du téléphone (retour et titre en haut, h1 lu par les lecteurs d'écran), sans en-tête
+    // bleu ; la barre d'onglets de l'app en bas (42 de haut, au-dessus de la zone du bas de 4 au moins), ses cinq onglets.
+    // Publier (étape 6) : l'assistant de l'app, sans retour du site ; son titre (ou celui de la connexion) reste visible.
     const tablet = await browser.newContext({ viewport: { width: 800, height: 1000 }, locale: 'fr-FR' });
     await mock(tablet);
     for (const path of ['/aide/', '/publier/', '/page-inexistante/']) {
@@ -5928,7 +6933,14 @@ try {
       page = await open(tablet, path, name);
       await page.waitForSelector('main h1');
       expectSame(name, '[en-tête bleu, retour du téléphone, h1 visible]', [await page.locator('.topbar').isVisible(), await page.locator('.phone-page-head').isVisible(),
-        await page.locator('main h1').first().isVisible()], [true, false, true]);
+        await page.locator('main h1').first().evaluate((heading) => heading.getBoundingClientRect().width > 1)], path === '/publier/' ? [false, false, true] : [false, true, false]);
+      if (path === '/aide/') {
+        expectSame(name, 'barre d\'onglets [haut, hauteur, onglets]', await page.evaluate(() => {
+          const bar = document.querySelector('.tabbar');
+          const box = bar.getBoundingClientRect();
+          return [Math.round(innerHeight - box.top), Math.round(box.height), [...bar.querySelectorAll('.tabbar-label')].map((label) => label.textContent)];
+        }), [46, 46, ['Accueil', 'Favoris', 'Publier', 'Messages', 'Mon compte']]);
+      }
       await page.close();
     }
     await tablet.close();
@@ -5967,8 +6979,9 @@ try {
     page = await open(member, '/compte/', N);
     await page.waitForSelector('.app-space .app-row');
     await checkTabBarBadge(page, live.state, N);
-    await page.click('a.app-row[href="/compte/?vue=notifications"]');
-    await page.waitForURL(`${base}/compte/?vue=notifications`, { timeout: 8000 }).catch(() => problems.push(`${N} : la ligne Notifications ouvre ${page.url()}`));
+    // La cloche de l'en-tête (la ligne « Notifications » de l'app est remplacée par elle).
+    await page.click('.app-space-header .app-round[href="/compte/?vue=notifications"]');
+    await page.waitForURL(`${base}/compte/?vue=notifications`, { timeout: 8000 }).catch(() => problems.push(`${N} : la cloche ouvre ${page.url()}`));
     await page.waitForSelector('.notification-row');
     const rowsOf = () => page.$$eval('.notification-row', (links) => links.map((link) => [link.getAttribute('href'), Boolean(link.querySelector('.notification-dot'))]));
     const rows = await rowsOf();

@@ -5,7 +5,6 @@ import { avatarUrl } from '../../lib/account/profile';
 import { useStore } from '../../lib/account/session';
 import { formatPerMonth, formatPrice } from '../../lib/format';
 import { memberSince } from '../../lib/listing/publisher';
-import { visitDateLong } from '../../lib/listing/visits';
 import { fetchProfiles, upcomingVisits, type ConversationVisit, type Message } from '../../lib/messages/api';
 import { CATEGORY_LABELS, documentIcon } from '../../lib/messages/content';
 import { durationLabel, muteLabel, shortDateWithYear, sizeLabel } from '../../lib/messages/format';
@@ -21,13 +20,14 @@ import {
 } from './actions';
 import { listingStore, loadListingRow, type ListingRowState } from './listingRow';
 import { ActionMenu, CounterpartAvatar, PublisherBadge, showIphoneOnly, showNotice, useSignedUrl } from './parts';
+import { VisitEventCard } from './VisitEventCard';
 import { navigate, type MediaTab } from './route';
 import { MediaViewer } from './Thread';
 
 // « Détails » d'une conversation à deux (ConversationDetailsView.swift), ouvert en cliquant sur l'en-tête :
 // l'interlocuteur, cinq actions (Appeler, Vidéo, Visite, Profil, Silencieux), le bien concerné, la prochaine visite,
 // les médias et fichiers, les paramètres et la confidentialité ; puis « Médias » (SharedMediaView,
-// GroupInfoView.swift:892) avec ses trois onglets.
+// GroupInfoView.swift:892) avec ses trois onglets, aussi ouvert depuis « Infos du groupe ».
 
 type DetailsProps = {
   conversation: Conversation;
@@ -163,7 +163,12 @@ export function DetailsView({ conversation, messages, visits, blocked, me }: Det
 
           {nextVisit && (
             <DetailsSection title="Prochaine visite" link={{ title: 'Voir l\'agenda', href: accountPath('agenda') }}>
-              <VisitCard start={nextVisit.start} address={nextVisit.address ?? nextVisit.listing?.city ?? listing?.city ?? ''} />
+              <VisitEventCard
+                id={nextVisit.id}
+                slot={nextVisit.start}
+                address={nextVisit.address ?? nextVisit.listing?.city ?? listing?.city ?? ''}
+                className="dm-card"
+              />
             </DetailsSection>
           )}
 
@@ -309,27 +314,8 @@ function DetailsSection({ title, link, children }: { title: string; link?: Secti
   );
 }
 
-/** Carte de la prochaine visite (VisitEventCard) ; l'ajout au calendrier se fait dans l'app iPhone. */
-function VisitCard({ start, address }: { start: Date; address: string }) {
-  return (
-    <div className="dm-card dm-visit-card">
-      <p className="dm-visit-label"><Icon name="calendarCheck" />VISITE CONFIRMÉE</p>
-      <p className="dm-visit-date">{visitDateLong(start)}</p>
-      <p className="dm-visit-place"><Icon name="pin" />{address}</p>
-      <div className="dm-visit-actions">
-        <button type="button" className="btn btn-primary" onClick={() => showIphoneOnly('Ajouter à l\'agenda')}>
-          <Icon name="calendarPlus" />Ajouter à l'agenda
-        </button>
-        <a className="btn btn-light" href={`https://maps.apple.com/?${new URLSearchParams({ daddr: address })}`} target="_blank" rel="noopener noreferrer">
-          <Icon name="navigation" />Itinéraire
-        </a>
-      </div>
-    </div>
-  );
-}
-
 /** Vignette carrée d'un média partagé (SharedMediaTile) : photo, ou vignette d'une vidéo avec sa durée. */
-function MediaTile({ item, onOpen }: { item: SharedItem; onOpen: () => void }) {
+export function MediaTile({ item, onOpen }: { item: SharedItem; onOpen: () => void }) {
   const attachment = item.attachment;
   const url = useSignedUrl(attachment?.kind === 'video' ? attachment.thumbnailPath : attachment?.storagePath);
   return (
@@ -374,7 +360,7 @@ export function MediaView({ conversation, messages, tab, me }: { conversation: C
         <button
           type="button"
           className="dm-round is-plain"
-          onClick={() => navigate({ conversationId: conversation.id, view: 'details' })}
+          onClick={() => navigate({ conversationId: conversation.id, view: conversation.isGroup ? 'groupe' : 'details' })}
           aria-label="Retour"
           title="Retour"
         >

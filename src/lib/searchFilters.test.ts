@@ -191,7 +191,7 @@ describe('adresse de la page et pastilles', () => {
     expect(labels({
       ...defaultDraft('invest'), minNetYieldPercent: 5, maxAnnualPropertyTax: 1_200, leasedOnly: true, requiresDeclaredRent: true,
       minCurrentMonthlyRent: 650, maxAnnualCharges: 20_000,
-    })).toEqual(['Net : 5 %', 'Taxe foncière : 1 200 € max', 'Vendu loué', 'Loyer déclaré', 'Loyer actuel : 650 € min', 'Charges : 20 k€/an max']);
+    })).toEqual(['Net : 5 %', 'Taxe foncière : 1 200 € max', 'Vendu occupé', 'Loyer déclaré', 'Loyers encaissés : 650 € min', 'Charges : 20 k€/an max']);
     expect(labels({
       ...defaultDraft('hotel'), roomsMin: 12, minHotelStars: 1, hotelScope: 'wallsOnly', minAnnualRevenue: 1_000_000,
       minEbitda: 150_000, minOperatingIncome: 90_000, minOccupancyRatePercent: 70,

@@ -1,3 +1,4 @@
+import { CompareButton } from './CompareButton';
 import { Icon } from './Icon';
 import { PhotoPager } from './PhotoPager';
 import { HeartButton } from './account/HeartButton';
@@ -62,7 +63,10 @@ type Props = {
   alreadySeen?: boolean;
 };
 
-/** Fiche d'une annonce dans les résultats : photo sur toute la largeur, puis étiquette, titre, lieu, prix, indicateurs. */
+/**
+ * Fiche d'une annonce dans les résultats (ListingResultCard de l'app) : photo sur toute la largeur (rendement, cœur,
+ * Comparer), puis étiquette, titre, lieu, prix, indicateurs.
+ */
 export function ListingCard({ row, content, selected = false, onHover, headingLevel = 'h2', showsBadge = false, alreadySeen = false }: Props) {
   const photos = sortedPhotos(row).slice(0, 10);
   const price = formatCardPrice(content.price);
@@ -102,6 +106,8 @@ export function ListingCard({ row, content, selected = false, onHover, headingLe
           <span className="already-seen-tag"><Icon name="eye" />Déjà vue</span>
         )}
         <HeartButton listingId={row.id} />
+        {/* En bas à droite : Comparer (pastille ronde de 28, CompareButton de l'app). */}
+        <CompareButton listingId={row.id} mode={content.kind === 'investment' ? 'invest' : null} />
       </div>
       <div className="listing-card-body">
         <div className="listing-card-top">

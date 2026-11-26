@@ -1,7 +1,6 @@
-/* Messagerie avec les morceaux de l'app iPhone (demande du 17/11) : réponses, transferts et réactions
-   (MessageInteractionViews.swift), liste des conversations (MessagesView.swift) et « Votre activité immobilière »
-   (MessagingSearchView.swift). Sur téléphone, la liste copie l'app ; sur ordinateur, les deux colonnes restent, avec
-   ces morceaux. La police reste celle de la page : celle du téléphone sur téléphone. */
+/* Messagerie avec les morceaux de l'app iPhone : réponses, transferts et réactions (MessageInteractionViews.swift),
+   liste des conversations (MessagesView.swift), recherche (MessagingSearchView.swift). Sur téléphone, chaque écran
+   copie l'app ; sur ordinateur, les deux colonnes restent, avec ces morceaux. Police de l'app (Inter) partout. */
 
 /* ——— Liste ——— */
 .dm-side-title { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -177,7 +176,7 @@
   .dm-side-top { gap: 0; padding: 8px 16px 10px; }
   .dm-side-head { align-items: center; }
   .dm-side-title { gap: 4px; }
-  .dm-side-head h1 { font-size: 30px; font-weight: 800; line-height: 36px; letter-spacing: -0.01em; }
+  .dm-side-head h1 { font-size: 30px; font-weight: 700; line-height: 36px; letter-spacing: -0.01em; }
   .dm-side-sub { font-size: 15px; line-height: 20px; }
   .dm-search-line { margin-top: 15px; }
   .dm-search { height: 52px; padding-left: 13px; }
@@ -185,7 +184,7 @@
   .dm-tabs { gap: 8px; margin-top: 13px; }
   .dm-tab { padding: 0 15px; }
   .dm-list-scroll { padding: 0 16px 20px; }
-  .dm-list-title { display: block; margin: 12px 0 10px; font-size: 18px; font-weight: 800; line-height: 24px; }
+  .dm-list-title { display: block; margin: 12px 0 10px; font-size: 18px; font-weight: 700; line-height: 24px; }
   .dm-list { gap: 0; padding: 4px 0; border: 1px solid var(--m-line); border-radius: 22px; background: #FFFFFF; box-shadow: 0 2px 8px rgba(36, 45, 56, 0.05); }
   .dm-list > li { position: relative; }
   /* Trait fin entre deux discussions, aligné sur le nom. */
@@ -203,5 +202,789 @@
   .dm-msg.starts-group { margin-top: 8px; }
   .dm-bubble { padding: 7px 12px; font-size: 16px; line-height: 21px; }
   .dm-media-caption, .dm-caption { font-size: 16px; }
+  /* Photos de l'app (AttachmentBubble) : 3 px entre les vignettes, légende de 14, « +N » de 22. */
+  .dm-media-grid { gap: 3px; }
+  .dm-media-caption { font-size: 14px; line-height: 19px; }
+  .dm-more { font-size: 22px; }
   .dm-reply-bar { margin-bottom: 6px; }
 }
+
+/* ——— Étape 4 : liste des conversations comme l'app (MessagesView.swift) ———
+   Toute la colonne défile (titre, recherche, filtres, prochaine visite, liste), comme le ScrollView de l'app. */
+.dm-side > .dm-list-scroll { padding-top: 0; }
+.dm-list-scroll > .dm-side-top { padding: 20px 10px 12px; }
+.dm-search-open { width: 100%; font: inherit; text-align: left; }
+.dm-search-open > span { flex: 1; min-width: 0; overflow: hidden; color: var(--app-text-muted); font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.dm-search-open:hover { border-color: #DAD7D1; }
+.dm-search-open:focus-visible { outline: 2px solid var(--app-brand); outline-offset: 2px; }
+/* Filtres : une seule ligne qui défile à l'horizontale, jusqu'aux bords (scrollClipDisabled). */
+.dm-tabs { flex-wrap: nowrap; gap: 8px; margin: 0 -10px; padding: 0 10px; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+.dm-tabs::-webkit-scrollbar { display: none; }
+.dm-tab { padding: 0 15px; }
+.dm-tab:hover { background: #FFFFFF; border-color: #DAD7D1; }
+.dm-tab[aria-pressed="true"]:hover { background: var(--app-brand); border-color: var(--app-brand); }
+
+/* « Prochaine visite » : titre de 18, « Voir l'agenda › » en bleu, puis la carte blanche (photo de 64, pastille, date). */
+.dm-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.dm-section-head h2 { margin: 0; color: var(--app-navy); font-size: 18px; font-weight: 700; line-height: 24px; }
+.dm-section-link { flex: none; display: inline-flex; align-items: center; gap: 3px; color: var(--app-brand); font-size: 14px; font-weight: 700; text-decoration: none; }
+.dm-section-link .icon { width: 14px; height: 14px; }
+.dm-section-link:hover { text-decoration: underline; }
+.dm-next-visit { margin-top: 22px; }
+.dm-next-card { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding: 12px; border: 1px solid var(--app-border); border-radius: 22px; background: #FFFFFF; box-shadow: var(--shadow); color: inherit; text-decoration: none; }
+.dm-next-card:hover { border-color: #DAD7D1; }
+.dm-next-card:focus-visible { outline: 2px solid var(--app-brand); outline-offset: 2px; }
+.dm-next-photo { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; overflow: hidden; border-radius: 14px; background: var(--app-segment); color: var(--app-text-muted); }
+.dm-next-photo img { width: 100%; height: 100%; object-fit: cover; }
+.dm-next-photo .icon { width: 26px; height: 26px; }
+.dm-next-text { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.dm-next-date { max-width: 100%; overflow: hidden; color: var(--app-navy); font-size: 16px; font-weight: 700; line-height: 21px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.dm-next-meta { max-width: 100%; overflow: hidden; color: var(--app-text-secondary); font-size: 12.5px; line-height: 17px; text-overflow: ellipsis; white-space: nowrap; }
+.dm-next-card > .dm-chevron { color: #A7AEB5; }
+/* Pastille de l'app (NidaloPill) : 22 de haut, 11,5 gras. */
+.dm-pill { flex: none; display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; line-height: 1; white-space: nowrap; }
+.dm-pill.is-green { background: #E3F2E8; color: #2F7A4E; }
+.dm-pill.is-amber { background: #FBF0D9; color: #946B1E; }
+.dm-pill.is-blue { background: #EFF2F9; color: #435BAA; }
+.dm-pill.is-gray { background: #F1F0EC; color: #5D6470; }
+
+/* Avatar et point vert « en ligne » (yieldGreen, 17 % de l'avatar, anneau blanc de 1,5). */
+.dm-avatar { font-weight: 600; letter-spacing: 0; }
+.dm-avatar-wrap { position: relative; flex: none; display: inline-flex; }
+.dm-presence { position: absolute; box-sizing: content-box; border: 1.5px solid #FFFFFF; border-radius: 50%; background: var(--app-yield-green); transform: translate(1.5px, 1.5px); }
+
+/* Aperçus de la ligne : visite confirmée en vert, fichier avec son icône. */
+.dm-row-preview.is-visit { gap: 5px; color: #2F7A4E; font-weight: 600; }
+.dm-row-preview.is-visit .icon { flex: none; width: 13px; height: 13px; }
+.dm-row-preview.is-file { gap: 5px; color: var(--app-navy); font-size: 14px; }
+.dm-row-preview.is-file .icon { flex: none; width: 15px; height: 15px; }
+.dm-row-preview.is-empty { color: var(--app-text-secondary); font-size: 14px; }
+/* État vide de la liste (ContentUnavailableView) : titre de 15 gras, texte de 12. */
+.dm-list-empty { padding: 24px 16px; }
+.dm-list-empty :is(h1, h2) { font-size: 15px; line-height: 20px; }
+.dm-list-empty p { font-size: 12px; line-height: 16px; }
+.dm-side .account-spinner { padding: 24px 0; }
+.dm-side .app-offline { padding: 24px 16px; }
+
+/* ——— Recherche ouverte (MessagingSearchView.swift) : barre de 46 qui monte de 64 en 0,3 s, contenu en fondu ——— */
+.dm-side.is-searching { background: var(--app-page); }
+.dm-msearch, .dm-msearch-page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.dm-msearch-bar { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 16px 10px; background: var(--app-page); transform: translateY(64px); transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.dm-msearch.is-shown .dm-msearch-bar { transform: none; }
+.dm-msearch > .dm-msearch-scroll { opacity: 0; transition: opacity 0.3s ease; }
+.dm-msearch.is-shown > .dm-msearch-scroll { opacity: 1; }
+.dm-msearch-field { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 4px 0 14px; border: 1px solid var(--app-border); border-radius: 999px; background: #FFFFFF; color: var(--app-text-secondary); }
+.dm-msearch-field:focus-within { border-color: var(--app-brand); }
+.dm-msearch-field > .icon { flex: none; width: 17px; height: 17px; }
+.dm-msearch-field input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; color: var(--app-navy); font: inherit; font-size: 15px; outline: none; }
+.dm-msearch-field input::placeholder { color: var(--app-text-muted); opacity: 1; }
+.dm-msearch-field input::-webkit-search-cancel-button { display: none; }
+.dm .dm-msearch-field input:focus-visible { outline: none; }
+.dm-msearch-clear { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: none; color: #FFFFFF; cursor: pointer; }
+.dm-msearch-clear::before { content: ''; position: absolute; width: 17px; height: 17px; border-radius: 50%; background: var(--app-text-muted); }
+.dm-msearch-clear { position: relative; }
+.dm-msearch-clear .icon { position: relative; width: 11px; height: 11px; stroke-width: 3; }
+.dm-msearch-cancel { flex: none; padding: 6px 0; border: 0; background: none; color: var(--app-brand); font-size: 15px; font-weight: 600; cursor: pointer; }
+.dm-msearch-scroll { padding: 0 16px 24px; }
+.dm-msearch-section.is-first { margin-top: 14px; }
+.dm-msearch-section.is-contacts { margin-top: 26px; }
+.dm-msearch-scroll .dm-activity { margin: 28px 0 0; }
+.dm-msearch-scroll .dm-activity h2 { padding: 0; }
+.dm-clear-all { flex: none; height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--app-brand-soft); color: var(--app-brand); font-size: 13px; font-weight: 600; cursor: pointer; }
+.dm-see-all { flex: none; padding: 0; border: 0; background: none; color: var(--app-brand); font-size: 13px; font-weight: 600; cursor: pointer; }
+.dm-msearch-note { margin: 6px 0 0; color: var(--app-text-secondary); font-size: 13px; line-height: 18px; }
+.dm-msearch-ideas { margin: 14px 0 0; color: var(--app-text-secondary); font-size: 13px; font-weight: 600; line-height: 18px; }
+.dm-chip-row { display: flex; gap: 8px; margin: 8px -16px 0; padding: 0 16px; overflow-x: auto; scrollbar-width: none; }
+.dm-chip-row.is-recent { margin-top: 10px; }
+.dm-chip-row::-webkit-scrollbar { display: none; }
+.dm-search-chip { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 14px; border: 1px solid var(--app-border); border-radius: 999px; background: #FFFFFF; color: var(--app-navy); font-size: 13.5px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.dm-search-chip .icon { flex: none; width: 15px; height: 15px; color: var(--app-brand); }
+.dm-search-chip:hover { border-color: #DAD7D1; }
+.dm-recent-contacts { display: flex; align-items: flex-start; gap: 14px; margin: 12px -16px 0; padding: 0 16px; overflow-x: auto; scrollbar-width: none; }
+.dm-recent-contacts::-webkit-scrollbar { display: none; }
+.dm-recent-contact { flex: none; display: flex; flex-direction: column; align-items: center; gap: 7px; width: 76px; padding: 0; border: 0; background: none; color: var(--app-navy); cursor: pointer; }
+.dm-recent-contact > span:last-child { display: -webkit-box; overflow: hidden; font-size: 12.5px; font-weight: 600; line-height: 16px; text-align: center; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.dm-contact-preview { color: rgba(36, 45, 56, 0.75); font-size: 12.5px; line-height: 17px; }
+.dm-msearch-page .dm-msearch-scroll { padding-top: 0; }
+.dm-page-header { flex: none; background: var(--app-page); }
+@media (prefers-reduced-motion: reduce) {
+  .dm-msearch-bar { transform: none; transition: none; }
+  .dm-msearch > .dm-msearch-scroll { transition-duration: 0.2s; transition-timing-function: ease-in-out; }
+}
+
+/* Titres et cartes des résultats (ContactSectionTitle, ContactsCard, ActionRow) : 15 gras gris, cartes blanches de 18,
+   lignes de 64 (contacts) et 58 (actions), traits décalés sous le texte. */
+.dm-results-title { margin: 22px 0 8px; padding-left: 6px; color: var(--app-text-secondary); font-size: 15px; font-weight: 700; line-height: 20px; }
+.dm-results-empty { padding: 40px 12px 0; }
+.dm-results-empty h3 { margin: 0 0 6px; color: var(--app-navy); font-size: 15px; font-weight: 700; }
+.dm-results-empty p { margin: 0; color: var(--app-text-secondary); font-size: 13px; line-height: 18px; }
+/* Sans rétrécir dans une colonne flexible (fenêtre « Nouvelle discussion ») : `overflow: hidden` l'y écrasait. */
+.dm-card-list { flex: none; padding: 0; overflow: hidden; border: 0; border-radius: 18px; }
+.dm-card-list > li { position: relative; }
+.dm-card-list > li + li::before { content: ''; position: absolute; z-index: 1; top: 0; left: 70px; right: 0; height: 1px; background: rgba(236, 234, 230, 0.8); }
+.dm-card-list.dm-quick-actions > li + li::before { left: 62px; }
+.dm-contact { min-height: 64px; padding: 8px 14px; border-radius: 0; }
+@media (hover: hover) { .dm-contact:hover, .dm-action-row:hover { background: rgba(238, 242, 250, 0.6); } }
+.dm-contact-name { color: var(--app-navy); font-size: 15px; font-weight: 600; }
+.dm-contact-detail { color: var(--app-text-secondary); font-size: 12.5px; line-height: 17px; }
+.dm-action-row { gap: 14px; min-height: 58px; padding: 8px 16px; border-radius: 0; }
+.dm-action-row > .icon:first-child { width: 21px; height: 21px; margin: 0 5.5px; color: var(--app-brand); }
+.dm-action-text > span { color: var(--app-navy); font-size: 15.5px; font-weight: 600; }
+.dm-action-text small { color: var(--app-text-secondary); font-size: 12.5px; line-height: 17px; }
+.dm-action-row .dm-chevron { color: var(--app-text-muted); }
+/* « Votre activité immobilière » : lignes d'action de l'app (icône bleue de 21 sans fond). */
+.dm-activity-card { border: 0; }
+.dm-activity-row { gap: 14px; min-height: 58px; padding: 8px 16px; }
+.dm-activity-row:hover { background: rgba(238, 242, 250, 0.6); }
+.dm-activity-icon { width: 32px; height: auto; border-radius: 0; background: none; }
+.dm-activity-icon .icon { width: 21px; height: 21px; }
+.dm-activity-title { font-size: 15.5px; font-weight: 600; }
+.dm-activity-card > li + li { border-top-color: rgba(236, 234, 230, 0.8); }
+.dm-activity-row .dm-chevron { color: var(--app-text-muted); }
+
+/* « Discussions liées aux annonces » : cartes blanches de 18, photo de 72 × 64, pastille ronde de 20. */
+.dm-linked-list { display: flex; flex-direction: column; gap: 10px; }
+.dm-linked-row { padding: 10px; border: 0; border-radius: 18px; }
+.dm-linked-photo { width: 72px; height: 64px; border-radius: 9px; }
+.dm-linked-title { font-size: 14.5px; font-weight: 700; }
+.dm-linked-line { font-size: 12.5px; }
+.dm-linked-unread { min-width: 20px; height: 20px; padding: 0; border-radius: 50%; font-size: 11px; line-height: 20px; }
+
+@media (max-width: 1023.98px) {
+  .dm-side > .dm-list-scroll { padding: 0 16px 20px; }
+  .dm-list-scroll > .dm-side-top { padding: 8px 0 10px; }
+  .dm-search-open { margin-top: 15px; height: 52px; padding-left: 13px; }
+  .dm-tabs { margin: 13px -16px 0; padding: 0 16px; }
+  .dm-list { box-shadow: var(--shadow); }
+}
+
+/* ——— Étape 4 : conversation à deux comme l'app (ConversationView.swift) ———
+   En-tête : retour rond « en verre », avatar de 38, nom de 16 et pastille PRO ou Particulier, « En ligne » en vert,
+   capsule téléphone | ⋯ ; carte flottante de l'annonce ; fil de 18,5 px de marge ; barre d'écriture de l'app. */
+.dm-badge.is-compact { height: auto; padding: 1.5px 5px; border-radius: 999px; font-size: 10px; font-weight: 700; line-height: 13px; letter-spacing: 0; }
+.dm-badge.is-compact:not(.is-pro) { border-color: var(--app-border); background: var(--app-page); color: var(--app-text-secondary); }
+.dm-badge.is-compact.is-pro { border-color: var(--app-brand); background: var(--app-brand); color: #FFFFFF; }
+.dm-head-sub.is-online { color: var(--app-yield-green); font-weight: 600; }
+.dm-capsule { flex: none; display: inline-flex; align-items: center; height: 40px; border: 1px solid var(--app-border); border-radius: 999px; background: rgba(255, 255, 255, 0.86); box-shadow: 0 2px 8px rgba(36, 45, 56, 0.06); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.dm-capsule .dm-menu { display: inline-flex; }
+.dm-capsule-button { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 38px; padding: 0; border: 0; border-radius: 999px; background: none; color: var(--app-navy); cursor: pointer; }
+.dm-capsule-button:hover { background: rgba(36, 45, 56, 0.05); }
+.dm-capsule-button:focus-visible { outline: 2px solid var(--app-brand); outline-offset: -2px; }
+.dm-capsule-button .icon { width: 18px; height: 18px; }
+.dm-capsule-button.is-call { color: var(--app-brand); }
+.dm-capsule-button.is-off { color: var(--app-text-muted); }
+.dm-capsule-button.is-off .icon { opacity: 0.7; }
+.dm-capsule-line { flex: none; width: 1px; height: 18px; background: rgba(36, 45, 56, 0.12); }
+.dm-banner-end { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.dm-banner-price { color: var(--app-navy); font-size: 14.5px; font-weight: 700; line-height: 19px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dm-banner-link { gap: 1px; color: var(--app-brand); font-size: 12px; font-weight: 700; line-height: 16px; }
+.dm-banner-link .icon { width: 12px; height: 12px; stroke-width: 2.6; }
+a.dm-banner:hover .dm-banner-title { text-decoration: underline; }
+
+/* Conversation introuvable : la flèche seule en haut, la ligne blanche en bas. */
+.dm-missing-top { flex: none; display: flex; align-items: center; min-height: 52px; padding: 6px 16px; background: #FFFFFF; }
+.dm-missing-top .dm-back { display: inline-flex; }
+.dm-pane-missing .dm-thread { -webkit-mask-image: none; mask-image: none; }
+@media (min-width: 1024px) {
+  .dm-missing-top { display: none; }
+}
+
+/* Fil : séparateur « Aujourd'hui · 10:42 » en texte gris, sans cadre ; pastille du jour en haut pendant le défilement. */
+.dm-thread-box { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; isolation: isolate; }
+/* L'en-tête reste au-dessus du fil : ses menus s'ouvrent par-dessus les messages. */
+.dm-pane-top { position: relative; z-index: 2; }
+.dm-thread-box > .dm-thread { flex: 1; }
+.dm-day-label { align-self: center; margin: 0; padding: 22px 0 7px; border: 0; border-radius: 0; background: none; color: var(--app-text-muted); font-size: 12px; font-weight: 400; line-height: 16px; font-variant-numeric: tabular-nums; }
+.dm-day:first-child .dm-day-label { margin-top: 0; }
+.dm-day-pill { position: absolute; top: 8px; left: 0; right: 0; z-index: 3; display: flex; justify-content: center; margin: 0; pointer-events: none; }
+.dm-day-pill span { padding: 5px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.85); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); color: var(--app-text-secondary); font-size: 12px; font-weight: 500; line-height: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; opacity: 0; transition: opacity 0.3s ease-out; }
+.dm-day-pill.is-shown span { opacity: 1; transition-duration: 0.15s; }
+.dm-thread.is-loading { -webkit-mask-image: none; mask-image: none; }
+.dm-thread.is-loading .account-spinner { display: flex; justify-content: center; padding: 40px 0 0; }
+.dm-thread-empty { margin: 40px 30px 0; color: var(--app-text-muted); font-size: 12px; line-height: 16px; }
+.dm-system span { padding: 6px 12px; color: var(--app-text-secondary); font-size: 12px; font-weight: 600; line-height: 16px; }
+.dm-sender { margin-left: 31px; color: var(--app-text-secondary); font-size: 10.5px; font-weight: 600; line-height: 14px; }
+.dm-msg-avatar.is-empty { width: 23px; }
+.dm-msg-context { margin-left: 31px; }
+.dm-msg-status { margin-left: 31px; }
+
+/* Cartes du fil (visite confirmée, offre) : décalées de 31 px (reçues) ou 40 px (envoyées), l'heure dessous. */
+.dm-msg.is-card { align-items: flex-start; }
+.dm-msg.is-card.is-out { align-items: flex-end; }
+.dm-card-in-thread { width: fit-content; max-width: calc(100% - 31px); margin-left: 31px; }
+.dm-card-foot { display: flex; align-items: center; gap: 8px; margin: 9px 0 0; color: var(--app-text-muted); font-size: 11px; line-height: 14px; font-variant-numeric: tabular-nums; }
+.dm-msg.is-card .dm-msg-status { margin: 6px 0 0 31px; }
+.dm-msg.is-card.is-out .dm-msg-status { margin-left: 0; }
+
+/* Visite confirmée (VisitEventCard) : fil et « Détails ». */
+.dm-event { padding: 12px; border: 1px solid var(--app-border); border-radius: 18px; background: #FFFFFF; color: var(--app-navy); }
+.dm-event-kind { display: flex; align-items: center; gap: 5px; margin: 0; color: var(--app-yield-green); font-size: 9.5px; font-weight: 600; line-height: 13px; letter-spacing: 0.3px; text-transform: uppercase; }
+.dm-event-kind .icon { flex: none; width: 14px; height: 14px; }
+.dm-event-date { margin: 8px 0 0; color: var(--app-navy); font-size: 15px; font-weight: 600; line-height: 20px; font-variant-numeric: tabular-nums; }
+.dm-event-place { display: flex; align-items: center; gap: 6px; margin: 4.5px 0 0; color: var(--app-text-secondary); font-size: 11.5px; line-height: 15px; }
+.dm-event-place .icon { flex: none; width: 13px; height: 13px; }
+.dm-event-actions { display: flex; flex-wrap: wrap; gap: 0 8px; margin-top: 6px; }
+.dm-event-button, .dm-event-added { display: inline-flex; align-items: center; gap: 6px; height: 36px; margin: 4px 0; padding: 0 13px; border: 0; border-radius: 8px; background: var(--app-brand-soft); color: var(--app-brand); font: inherit; font-size: 12px; font-weight: 600; line-height: 1; text-decoration: none; white-space: nowrap; cursor: pointer; }
+.dm-event-button:hover { background: #E2E8F6; }
+.dm-event-button.is-filled { background: var(--app-brand); color: #FFFFFF; }
+.dm-event-button.is-filled:hover { background: var(--app-brand-pressed); }
+.dm-event-button:focus-visible { outline: 2px solid var(--app-brand); outline-offset: 2px; }
+.dm-event-button .icon { flex: none; width: 15px; height: 15px; }
+.dm-event-button:not(.is-filled) .icon { width: 14px; height: 14px; }
+.dm-event-added { background: #E3F2E8; color: #2F7A4E; cursor: default; }
+.dm-event-added .icon { flex: none; width: 14px; height: 14px; }
+.dm-details .dm-event { padding: 12px; }
+
+/* Offre (OfferCard) : carte blanche de 300 px au plus, titre en capitales bleues, boutons de 36 px. */
+.dm-offer { width: auto; min-width: 240px; max-width: min(300px, 100% - 71px); padding: 12px; border: 1px solid var(--app-border); border-radius: 18px; background: #FFFFFF; box-shadow: none; }
+.dm-msg.is-out .dm-offer { border-radius: 18px; }
+.dm-msg.is-card .dm-offer { margin: 0 40px 0 31px; }
+.dm-msg.is-card.is-out .dm-offer { margin: 0 0 0 40px; }
+.dm-offer-head { gap: 6px; color: var(--app-brand); font-size: 9.5px; font-weight: 600; line-height: 13px; letter-spacing: 0.3px; text-transform: uppercase; }
+.dm-offer-head > .icon { flex: none; width: 14px; height: 14px; }
+.dm-offer-kind { flex: 1; min-width: 0; }
+.dm-offer-status { flex: none; height: 20px; margin-left: 6px; padding: 0 8px; font-size: 10.5px; font-weight: 700; line-height: 20px; letter-spacing: 0; text-transform: none; white-space: nowrap; }
+.dm-offer-status.is-accepted { background: var(--green-soft); color: var(--green); }
+.dm-offer-status.is-closed { color: var(--app-text-secondary); }
+.dm-offer-amount { margin: 8px 0 0; color: var(--app-navy); font-size: 20px; font-weight: 800; line-height: 25px; }
+.dm-offer-gap { margin: 0; color: var(--app-text-secondary); font-size: 12px; font-weight: 500; line-height: 16px; }
+.dm-offer-conditions { margin: 6px 0 0; color: var(--app-navy); font-size: 12.5px; line-height: 17px; }
+.dm-offer-reason { margin: 4px 0 0; color: var(--app-text-secondary); font-size: 12px; font-weight: 500; line-height: 16px; }
+.dm-offer-expiry { margin: 6px 0 0; color: var(--app-text-muted); font-size: 11.5px; font-weight: 500; line-height: 15px; }
+.dm-offer-actions { gap: 8px; margin-top: 8px; }
+.dm-offer-actions button { flex: 1 1 auto; height: 36px; padding: 0 10px; border: 0; border-radius: 8px; background: var(--app-brand-soft); color: var(--app-brand); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.dm-offer-actions button:hover { background: #E2E8F6; }
+.dm-offer-actions button.is-filled { border: 0; background: var(--app-brand); color: #FFFFFF; }
+.dm-offer-actions button.is-filled:hover { background: var(--app-brand-pressed); }
+
+/* Message vocal : 236 px, rond de 36, barres de 2,5 px sur 24, durée dessous. */
+/* VoiceBubble de l'app : 236 de large, le rond de 36 au milieu de sa zone de 44, 10 avant les barres. */
+.dm-voice { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 0 10px; width: 236px; padding: 5px 13px 5px 4px; border: 0; border-radius: 16px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(36, 45, 56, 0.05); }
+.dm-voice.is-out { background: var(--app-brand); box-shadow: none; }
+.dm-voice-play { grid-row: 1 / span 2; justify-self: center; background: var(--app-brand); }
+.dm-voice-bars { grid-column: 2; height: 24px; }
+.dm-voice-bars > span { width: 2.5px; border-radius: 1.25px; }
+.dm-voice-time { grid-column: 2; min-width: 0; color: var(--app-text-secondary); font-size: 11.5px; font-weight: 600; line-height: 15px; text-align: left; opacity: 0.75; }
+.dm-voice.is-out .dm-voice-time { color: #FFFFFF; }
+.dm-voice-error { grid-column: 1 / -1; margin-top: 4px; font-size: 12.5px; }
+
+/* Fiche d'un contact partagé (ContactCardScreen). */
+.dm-contact-sheet-body { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 18px 16px calc(20px + env(safe-area-inset-bottom)); background: var(--app-page); }
+.dm-contact-sheet-close { align-self: flex-start; padding: 4px 0; border: 0; background: none; color: var(--app-brand); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+.dm-contact-sheet-name { margin: 0; color: var(--app-navy); font-size: 20px; font-weight: 700; line-height: 25px; text-align: center; overflow-wrap: anywhere; }
+.dm-contact-sheet-phones { display: flex; flex-direction: column; width: 100%; overflow: hidden; border-radius: 18px; background: #FFFFFF; }
+.dm-contact-sheet-row { display: flex; align-items: center; gap: 14px; min-height: 58px; padding: 8px 16px; color: inherit; text-decoration: none; }
+.dm-contact-sheet-row + .dm-contact-sheet-row { box-shadow: inset 62px 1px 0 #FFFFFF, inset 0 1px 0 rgba(236, 234, 230, 0.8); }
+.dm-contact-sheet-row:hover { background: rgba(238, 242, 250, 0.6); }
+.dm-contact-sheet-icon { flex: none; display: inline-flex; width: 32px; justify-content: center; color: var(--app-brand); }
+.dm-contact-sheet-icon .icon { width: 21px; height: 21px; }
+.dm-contact-sheet-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.dm-contact-sheet-phone { color: var(--app-navy); font-size: 15.5px; font-weight: 600; line-height: 20px; font-variant-numeric: tabular-nums; }
+.dm-contact-sheet-call { color: var(--app-text-secondary); font-size: 12.5px; line-height: 17px; }
+.dm-contact-sheet-row .dm-chevron { color: var(--app-text-muted); }
+.dm-contact-sheet-empty { margin: 0; color: var(--app-text-secondary); font-size: 13.5px; }
+.dm-contact-sheet-body .dm-wide-button { margin-top: 4px; }
+
+/* Appui long : « + » (plus d'emojis), bande grise, « Signaler » ou « Supprimer » en rouge. */
+.dm-focus-more { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 44px; padding: 0; border: 0; background: none; color: var(--app-text-secondary); cursor: pointer; }
+.dm-focus-more .icon { box-sizing: content-box; width: 16px; height: 16px; padding: 8px; border-radius: 50%; background: var(--app-page); stroke-width: 2.4; }
+.dm-focus-more:hover .icon { background: var(--app-segment); }
+.dm-focus-band { flex: none; display: block; height: 6px; background: var(--app-page); }
+.dm-focus-menu button.is-destructive { color: var(--red); }
+
+/* Plus d'emojis (EmojiPickerPage) : sections en capitales grises, 7 par ligne, le mien sur un rond bleu clair. */
+.dm-emoji-page { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 18px; overflow-y: auto; padding: 8px 16px calc(30px + env(safe-area-inset-bottom)); }
+.dm-emoji-title { margin: 0 0 8px; padding-left: 4px; color: var(--app-text-muted); font-size: 12px; font-weight: 700; line-height: 16px; letter-spacing: 0.6px; text-transform: uppercase; }
+.dm-emoji-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; justify-items: center; }
+.dm-emoji-choice { display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; padding: 0; border: 0; border-radius: 50%; background: none; font-size: 30px; line-height: 1; cursor: pointer; }
+.dm-emoji-choice:hover { background: var(--app-page); }
+.dm-emoji-choice.is-mine { background: var(--app-brand-soft); }
+
+/* Glisser pour répondre : la bulle suit le doigt, la flèche apparaît derrière (bleue au-delà du seuil). */
+.dm-interactive-body { z-index: 1; transition: transform 0.3s cubic-bezier(0.34, 1.25, 0.64, 1); }
+.dm-interactive-body.is-swiping { transition: none; }
+.dm-swipe-reply { position: absolute; top: 50%; left: -4px; z-index: 0; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; margin-top: -15px; border-radius: 50%; background: #FFFFFF; box-shadow: 0 1px 2px rgba(36, 45, 56, 0.12); color: var(--app-text-secondary); pointer-events: none; }
+.dm-swipe-reply.is-reached { background: var(--app-brand); color: #FFFFFF; }
+.dm-swipe-reply .icon { width: 13px; height: 13px; stroke-width: 2.6; }
+@media (hover: none) {
+  .dm-interactive { touch-action: pan-y; }
+}
+
+/* Barre « Réponse à Sophie » : une ligne simple de 44 px au-dessus du champ. */
+.dm-reply-bar { margin: -4px 0 4px; padding-left: 4px; border-radius: 0; background: none; }
+.dm-reply-bar-cancel .icon { background: var(--app-page); }
+
+/* Barre d'écriture : l'appareil photo seulement sur téléphone, les émojis seulement sur ordinateur. */
+.dm-camera { display: none; }
+
+/* Localisation (LocationShareSheet) */
+.dm-location { gap: 14px; }
+.dm-location-current { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; border: 0; border-radius: 18px; background: #FFFFFF; color: var(--app-navy); font: inherit; text-align: left; cursor: pointer; }
+.dm-location-current:disabled { cursor: progress; }
+.dm-location-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 50%; background: var(--app-brand-soft); color: var(--app-brand); }
+.dm-location-icon .icon { width: 20px; height: 20px; }
+.dm-location-title { flex: 1; min-width: 0; font-size: 15px; font-weight: 700; }
+.dm-location-current .spinner { flex: none; width: 18px; height: 18px; }
+.dm-location-field { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.dm-location-field > :first-child { align-self: stretch; }
+.dm-location-share { margin-top: 8px; }
+.dm-location-share:disabled { opacity: 0.45; }
+
+/* Feuilles du site sur téléphone : coins de 32 et poignée, comme les feuilles de l'app. */
+.dm-sheet-grabber { display: none; }
+@media (max-width: 1023.98px) {
+  .dm-sheet { width: 100%; max-width: 600px; margin: auto auto 0; border-radius: 32px 32px 0 0; box-shadow: none; transition: translate 0.3s cubic-bezier(0.32, 0.72, 0, 1); }
+  .dm-sheet[open] { animation: alert-sheet-up 0.45s cubic-bezier(0.32, 0.72, 0, 1); }
+  .dm-sheet[open]::backdrop { animation: alert-fade-in 0.3s ease-out; }
+  .dm-sheet-body { position: relative; }
+  .dm-sheet-grabber { display: block; position: absolute; top: 5px; left: 50%; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px; background: rgba(60, 60, 67, 0.3); }
+  .dm-sheet-head { position: relative; min-height: 0; padding: 22px 20px 10px; border-bottom: 0; background: transparent; touch-action: none; }
+  .dm-sheet-head h2 { font-size: 20px; line-height: 25px; }
+  .dm-sheet-close { width: 34px; height: 34px; background: var(--app-brand-soft); color: var(--app-navy); }
+  .dm-sheet-close .icon { width: 14px; height: 14px; stroke-width: 2.8; }
+  .dm-sheet-back { width: 34px; height: 34px; margin-left: -6px; }
+  .dm-sheet-content, .dm-new-body { padding: 10px 20px calc(20px + env(safe-area-inset-bottom)); }
+  .dm-sheet.is-plain .dm-sheet-body { padding-top: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dm-sheet[open] { animation: alert-fade-in 0.25s ease-out; }
+  .dm-sheet { transition: none; }
+  .dm-interactive-body, .dm-day-pill span { transition: none; }
+}
+
+/* Joindre (AttachmentMenuSheet) : feuille blanche, cases de 56 et légendes de 11,5 sur deux lignes, lignes larges. */
+.dm-attach-sheet { background: #FFFFFF; }
+.dm-attach-sheet .dm-sheet-content { gap: 16px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+.dm-sources { gap: 16px 10px; }
+.dm-sources button { gap: 7px; }
+.dm-source-icon { width: 56px; height: 56px; }
+.dm-source-title { display: -webkit-box; overflow: hidden; color: var(--app-navy); font-size: 11.5px; font-weight: 600; line-height: 14px; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.dm-wide-row { padding: 12px; border-radius: 18px; background: var(--app-page); color: var(--app-navy); }
+.dm-wide-row:hover { background: var(--app-segment); }
+.dm-wide-row.is-green { background: var(--app-page); }
+.dm-wide-icon { background: var(--app-brand-soft); color: var(--app-brand); }
+.dm-wide-row.is-green .dm-wide-icon { background: var(--green-soft); color: var(--green); }
+.dm-wide-title { font-size: 15px; font-weight: 700; }
+.dm-wide-sub { color: var(--app-text-secondary); font-size: 12.5px; line-height: 17px; }
+.dm-wide-row .dm-chevron { color: var(--app-text-muted); }
+.dm-tile-doc.is-ready > .icon { color: var(--app-navy); width: 22px; height: 22px; }
+
+/* Refuser l'offre (sheet de 300 px de l'app) : titre de 19, champ blanc, Annuler et Refuser côte à côte. */
+.dm-decline .dm-sheet-body { background: var(--app-page); }
+.dm-decline-body { display: flex; flex-direction: column; gap: 14px; padding: 20px 20px calc(20px + env(safe-area-inset-bottom)); }
+.dm-decline-body h2 { margin: 0; color: var(--app-navy); font-size: 19px; font-weight: 700; line-height: 24px; }
+.dm-decline-body .dm-textarea { min-height: 72px; padding: 12px; border: 1px solid var(--app-border); border-radius: 14px; background: #FFFFFF; }
+.dm-decline-body .dm-error { color: var(--red); font-size: 13px; font-weight: 600; }
+.dm-decline-actions { gap: 10px; margin-top: 0; }
+.dm-decline-actions .btn { min-height: 48px; border-radius: 14px; font-size: 15px; font-weight: 700; }
+.dm-decline-actions .btn-light { background: var(--app-brand-soft); color: var(--app-brand); }
+
+/* Proposer d'autres créneaux (ProposeSlotsSheet) : carte « Créneaux », trois choix, bouton en bas. */
+.dm-sheet-form { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.dm-slots-sheet .dm-sheet-body { background: var(--app-page); }
+.dm-slots-card { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 18px; background: #FFFFFF; }
+.dm-card-title { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--app-navy); font-size: 15px; font-weight: 700; line-height: 20px; }
+.dm-card-title .icon { flex: none; width: 17px; height: 17px; color: var(--app-brand); }
+.dm-slot-row { flex-direction: column; gap: 6px; }
+.dm-slot-title { color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; line-height: 16px; }
+.dm-slot-fields { display: flex; gap: 8px; }
+.dm-slot-fields input, .dm-slot-fields select { flex: 1; min-width: 0; height: 44px; padding: 0 12px; border: 1px solid var(--app-border); border-radius: 12px; background: var(--app-page); color: var(--app-navy); font: inherit; font-size: 15px; }
+.dm-slot-fields select { flex: 0 0 116px; }
+.dm-slot-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.dm-slot-links .dm-link-button { color: var(--app-brand); font-size: 13.5px; font-weight: 700; }
+.dm-sheet-foot { flex: none; padding: 12px 20px calc(16px + env(safe-area-inset-bottom)); background: var(--app-page); }
+.dm-sheet-foot .btn { width: 100%; min-height: 52px; border-radius: 12px; font-size: 15px; font-weight: 700; }
+
+/* Lignes du bas (bloqué, compte supprimé, groupe quitté) : 13,5 semi-gras, 18 px de marge. */
+.dm-bottom-line { min-height: 0; padding: 18px 16px; padding-bottom: calc(18px + env(safe-area-inset-bottom)); color: var(--app-text-secondary); font-size: 13.5px; font-weight: 600; line-height: 18px; }
+.dm-bottom-line .dm-link-button { color: var(--app-brand); font-size: 13.5px; font-weight: 700; }
+
+/* ——— Téléphone : en-tête, carte de l'annonce, fil et barre d'écriture de l'app ——— */
+@media (max-width: 1023.98px) {
+  .dm-pane { background: var(--app-page); }
+  .dm-pane-top { margin-bottom: -16px; padding-bottom: 16px; background: linear-gradient(to bottom, #FFFFFF 0, #FFFFFF 72%, rgba(255, 255, 255, 0) 100%); pointer-events: none; }
+  .dm-pane-top > * { pointer-events: auto; }
+  .dm-head { gap: 10px; height: auto; min-height: 46px; padding: 6px 16px 0; border-bottom: 0; background: transparent; }
+  .dm-back { width: 40px; height: 40px; border: 1px solid var(--app-border); background: rgba(255, 255, 255, 0.86); box-shadow: 0 2px 8px rgba(36, 45, 56, 0.06); color: var(--app-navy); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+  .dm-back:hover { background: #FFFFFF; }
+  .dm-back .icon { width: 20px; height: 20px; }
+  .dm-head-who { gap: 10px; }
+  .dm-head-text { gap: 0; }
+  .dm-head-name { gap: 6px; }
+  .dm-head-title { color: var(--app-navy); font-size: 16px; line-height: 21px; }
+  .dm-head-sub { color: var(--app-text-muted); font-size: 12px; line-height: 16px; }
+  .dm-head-sub.is-online { color: var(--app-yield-green); }
+  /* « Proposer une visite » : pas dans l'en-tête de l'app (la visite passe par « Détails » et la fiche). */
+  .dm-outline { display: none; }
+  .dm-missing-top { min-height: 46px; padding: 6px 16px; }
+  .dm-missing-top .dm-back { border: 0; background: none; box-shadow: none; }
+  .dm-missing-top .dm-back .icon { width: 24px; height: 24px; }
+
+  .dm-banner-wrap { padding: 10px 16px 0; }
+  .dm-banner { gap: 10px; height: auto; padding: 8px 10px; border: 0; border-radius: 16px; background: #FFFFFF; box-shadow: 0 3px 10px rgba(36, 45, 56, 0.08); }
+  .dm-banner-photo { width: 40px; height: 40px; border-radius: 11px; }
+  .dm-banner-title { color: var(--app-navy); font-size: 14.5px; line-height: 19px; }
+  .dm-banner-line { color: var(--app-text-secondary); font-size: 12px; line-height: 16px; }
+  .dm-banner-extra { display: none; }
+
+  /* 16 px du haut : le fondu de l'en-tête, sous lequel les messages passent en défilant (zone sûre de l'app). */
+  .dm-thread-inner { padding: 16px 18.5px 14px; }
+  .dm-thread-inner > .dm-thread-empty:first-child { margin-top: 40px; }
+  .dm-msg-line { max-width: calc(100% - 40px); }
+  .dm-interactive, .dm-msg.is-out .dm-interactive { max-width: 289px; }
+  .dm-msg-context { max-width: calc(100% - 40px); }
+  /* Sous l'en-tête et son fondu (16 px), comme la pastille posée dans la zone sûre de l'app. */
+  .dm-day-pill { top: 24px; }
+
+  .dm-bottom { padding: 8px 9px 8px 14px; padding-bottom: calc(8px + env(safe-area-inset-bottom)); border-top: 1px solid var(--app-border); }
+  .dm-composer { gap: 10px; }
+  .dm-plus { width: 30px; height: 44px; margin: 0; border-radius: 0; background: none; color: var(--app-text-secondary); }
+  .dm-plus:hover { background: none; color: var(--app-navy); }
+  .dm-plus .icon { width: 22px; height: 22px; stroke-width: 1.4; }
+  .dm-field { min-height: 36px; margin: 4px 0; padding: 0 12px 0 14px; border: 1px solid var(--app-border); border-radius: 18px; background: var(--app-page); }
+  .dm-field:focus-within { border-color: var(--app-border); }
+  .dm-field textarea { height: 34px; max-height: 100px; padding: 6px 0; color: var(--app-navy); font-size: 16px; line-height: 22px; }
+  .dm-field textarea::placeholder { color: var(--app-text-muted); }
+  .dm-emoji, .dm-emoji-panel { display: none; }
+  .dm-camera { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 44px; padding: 0; border: 0; background: none; color: var(--app-text-secondary); cursor: pointer; }
+  .dm-camera .icon { width: 21px; height: 21px; }
+  .dm-send { width: 34px; height: 34px; margin: 5px 0; background: var(--app-brand); box-shadow: none; }
+  .dm-send:disabled { background: var(--app-brand); opacity: 0.45; }
+  .dm-send .icon { width: 17px; height: 17px; }
+
+  /* Détails : barre de 52, « Détails » centré, retour de 44 sans fond. */
+  .dm-details-bar { height: 52px; padding: 0 6px; border-bottom: 0; background: var(--app-page); }
+  .dm-details-bar .dm-round { width: 44px; height: 44px; }
+  .dm-details-bar .dm-round .icon { width: 22px; height: 22px; }
+  .dm-details-bar h2 { font-size: 17px; font-weight: 600; }
+
+  /* Nouvelle discussion (NewConversationView) : plein écran, titre centré de 17, croix ronde blanche bordée. */
+  .dm-sheet.dm-new { height: 100dvh; max-height: 100dvh; border-radius: 0; }
+  .dm-sheet.dm-new .dm-sheet-body { height: 100%; max-height: 100dvh; background: var(--app-page); }
+  .dm-sheet.dm-new .dm-sheet-grabber { display: none; }
+  .dm-sheet.dm-new .dm-sheet-head { justify-content: center; padding: 10px 16px; }
+  .dm-sheet.dm-new .dm-sheet-head h2 { flex: none; font-size: 17px; font-weight: 700; text-align: center; }
+  .dm-sheet.dm-new .dm-sheet-close { position: absolute; right: 16px; top: 50%; width: 36px; height: 36px; margin-top: -18px; border: 1px solid var(--app-border); background: #FFFFFF; }
+  .dm-sheet.dm-new .dm-sheet-back { position: absolute; left: 16px; top: 50%; margin-top: -17px; }
+  .dm-new .dm-search { height: 48px; border-radius: 999px; }
+}
+
+/* ——— Groupes et communautés (GroupInfoView.swift, NewGroupView.swift, CommunityViews.swift,
+   CommunityInviteViews.swift, BroadcastView.swift) : mêmes mesures à toutes les largeurs ; sur ordinateur, les écrans
+   poussés restent dans la colonne de droite (640 au plus, comme l'app) et les feuilles au centre. ——— */
+
+/* En-tête d'un groupe : sur téléphone, la ligne blanche de l'app (chevron de 24, avatar de 36, + bleu, ⋮ gris). */
+.dm-head.is-group .dm-head-who:active { opacity: 0.55; transition: opacity 0.15s ease-out; }
+
+/* Barre d'un écran poussé : titre centré, « Modifier » à droite. */
+.dmg-bar { display: grid; grid-template-columns: minmax(44px, 1fr) minmax(0, auto) minmax(44px, 1fr); }
+.dmg-bar > :first-child { justify-self: start; }
+.dmg-bar > :last-child { justify-self: end; }
+.dmg-bar h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dmg-bar-action { flex: none; min-height: 44px; padding: 0 10px; border: 0; border-radius: 10px; background: none; color: var(--app-brand); font-size: 17px; font-weight: 600; cursor: pointer; }
+.dmg-bar-action:disabled { opacity: 0.4; cursor: default; }
+
+/* Écran poussé : le bandeau du bas s'y pose. */
+.dmg-page { position: relative; background: var(--app-page); }
+.dmg-inner { gap: 12px; padding: 16px 0 40px; }
+.dmg-inner.is-tight { gap: 14px; }
+
+/* Bandeau bleu de 40 (toast des infos) : 2 s, il monte du bas puis s'efface. */
+.dmg-toast-host { position: absolute; left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 30; display: flex; justify-content: center; pointer-events: none; }
+.dmg-toast { display: inline-flex; align-items: center; max-width: 100%; height: 40px; margin: 0; padding: 0 16px; overflow: hidden; border-radius: 999px; background: var(--app-brand); color: #FFFFFF; font-size: 13.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; animation: dmg-toast-in 0.3s cubic-bezier(0.25, 1, 0.5, 1); }
+.dmg-toast.is-leaving { opacity: 0; transform: translateY(16px); transition: opacity 0.25s ease-out, transform 0.25s ease-out; }
+@keyframes dmg-toast-in { from { opacity: 0; transform: translateY(56px); } to { opacity: 1; transform: none; } }
+
+/* En-tête des infos : avatar de 92 et son appareil photo, nom de 21, membres, type. */
+.dmg-hero { display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 4px; text-align: center; }
+.dmg-hero-avatar { position: relative; display: inline-flex; }
+.dmg-hero-camera { position: absolute; right: -4px; bottom: -4px; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: #FFFFFF; box-shadow: 0 1px 3px rgba(36, 45, 56, 0.15); color: var(--app-navy); cursor: pointer; }
+.dmg-hero-camera::before { content: ''; position: absolute; inset: -7px; }
+.dmg-hero-camera .icon { width: 15px; height: 15px; }
+.dmg-hero-name { margin: 0; color: var(--app-navy); font-size: 21px; font-weight: 700; line-height: 26px; overflow-wrap: anywhere; }
+.dmg-hero-sub { margin: 0; color: var(--app-text-secondary); font-size: 13px; line-height: 18px; }
+.dmg-hero.is-community .dmg-hero-name { font-size: 22px; line-height: 28px; }
+.dmg-hero.is-community .dmg-hero-sub { font-size: 14px; line-height: 19px; }
+.dmg-hero-cover { display: block; width: 104px; height: 104px; overflow: hidden; border-radius: 26px; }
+.dmg-hero-line { display: inline-flex; align-items: center; gap: 5px; margin: 0; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; line-height: 17px; }
+.dmg-hero-line .icon { flex: none; width: 12px; height: 12px; }
+.dmg-tag { display: inline-flex; align-items: center; height: 24px; color: var(--app-text-secondary); font-size: 11px; font-weight: 600; letter-spacing: 0.44px; text-transform: uppercase; }
+
+/* Ajouter, Rechercher, Inviter : tuiles blanches de 72, coins de 18. */
+.dmg-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.dmg-tiles.is-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.dmg-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 72px; padding: 8px; border: 0; border-radius: 18px; background: #FFFFFF; color: var(--app-navy); font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.2s ease-out; }
+.dmg-tile .icon { width: 22px; height: 22px; color: var(--app-brand); }
+.dmg-tile:disabled { opacity: 0.45; cursor: default; }
+
+/* Rubrique : titre de 18 en gras, carte blanche bordée de 16 (pas rognée : les menus des membres en débordent). */
+.dmg-section { display: flex; flex-direction: column; gap: 8px; }
+.dmg-section-title { margin: 0; padding: 10px 6px 0; color: var(--app-navy); font-size: 18px; font-weight: 700; line-height: 23px; }
+.dmg-section-card { display: flex; flex-direction: column; padding: 4px 0; border: 1px solid var(--app-border); border-radius: 16px; background: #FFFFFF; }
+.dmg-section-card .dm-menu { display: block; }
+.dmg-section-card .dm-action-row, .dmg-section-card .dmg-destructive, .dmg-section-card .dmg-add-row, .dmg-section-card .dmg-member-line,
+.dmg-section-card .dmg-more, .dmg-section-card .dmg-about-button { border-radius: 12px; }
+.dmg-section-card .dm-action-row { width: 100%; }
+/* Titres et sous-titres sur plusieurs lignes plutôt que coupés (Text de l'app ; sous-titre : deux lignes au plus), avec
+   l'écart minimal du Spacer de l'app avant la valeur. */
+.dmg-section-card .dm-action-text { margin-right: 22px; }
+.dmg-section-card .dm-action-text > span { white-space: normal; }
+.dmg-section-card .dm-action-text small { display: -webkit-box; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.dmg-divider { flex: none; display: block; height: 1px; margin-left: 16px; background: rgba(236, 234, 230, 0.8); }
+.dmg-divider.is-62 { margin-left: 62px; }
+.dmg-divider.is-64 { margin-left: 64px; }
+.dmg-divider.is-70 { margin-left: 70px; }
+.dmg-value { flex: none; color: var(--app-text-secondary); font-size: 13px; font-weight: 600; }
+.dmg-count-value { flex: none; color: var(--app-brand); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dmg-count-value.is-none { color: var(--app-text-muted); }
+.dmg-time { flex: none; color: var(--app-text-secondary); font-size: 13px; font-variant-numeric: tabular-nums; }
+.dmg-badge { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; padding: 0 8px; border-radius: 999px; background: var(--app-brand); color: #FFFFFF; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.dm-action-row.dmg-tall { min-height: 66px; }
+
+/* À propos. */
+.dmg-about { margin: 0; padding: 12px 16px; color: var(--app-navy); font-size: 15px; line-height: 21px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dmg-about-by { margin: 0; padding: 12px 16px; color: var(--app-text-secondary); font-size: 13px; line-height: 18px; }
+.dmg-about-button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 44px; padding: 0 16px; border: 0; background: none; color: var(--app-text-secondary); font-size: 13px; text-align: left; font-variant-numeric: tabular-nums; cursor: pointer; }
+.dmg-about-button .icon { flex: none; width: 17px; height: 17px; color: var(--app-brand); }
+
+/* Médias : nombre et « Tout voir », six vignettes de 12, puis Documents et Liens. */
+.dmg-media-head { display: flex; align-items: baseline; gap: 8px; padding: 12px 16px 10px; color: var(--app-text-secondary); font-size: 13px; }
+.dmg-media-head .dm-link-button { margin-left: auto; color: var(--app-brand); font-size: 13.5px; font-weight: 600; }
+.dmg-media-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 6px 24px 14px; color: var(--app-text-secondary); font-size: 13px; line-height: 18px; text-align: center; }
+.dmg-media-empty .icon { width: 24px; height: 24px; color: var(--app-brand); }
+.dmg-media-empty p { margin: 0; }
+.dmg-media-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 0 16px 8px; }
+.dmg-media-tile { aspect-ratio: 1; overflow: hidden; border-radius: 12px; }
+
+/* Lignes rouges, « Ajouter des membres », membres, « Voir les 4 autres membres ». */
+.dmg-destructive { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 54px; padding: 0 16px; border: 0; background: none; color: var(--red); font-size: 15.5px; font-weight: 600; text-align: left; cursor: pointer; }
+.dmg-destructive .icon { flex: none; width: 21px; height: 21px; margin: 0 5.5px; }
+.dmg-add-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 0 16px; border: 0; background: none; color: var(--app-brand); font-size: 15.5px; font-weight: 600; text-align: left; cursor: pointer; }
+.dmg-add-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%; background: var(--app-brand-soft); }
+.dmg-add-icon .icon { width: 19px; height: 19px; }
+.dmg-members, .dmg-requests { margin: 0; padding: 0; list-style: none; }
+.dmg-members > li, .dmg-requests > li { position: relative; }
+.dmg-members > li + li::before, .dmg-requests > li + li::before { content: ''; position: absolute; z-index: 1; top: 0; left: 64px; right: 0; height: 1px; background: rgba(236, 234, 230, 0.8); }
+.dmg-member-line { display: flex; align-items: center; width: 100%; min-height: 54px; padding: 0 16px; border: 0; background: none; color: inherit; text-align: left; }
+button.dmg-member-line { cursor: pointer; }
+.dmg-member { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
+.dmg-member-name { flex: 1; min-width: 0; overflow: hidden; color: var(--app-navy); font-size: 14.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.dmg-role { flex: none; display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; background: var(--app-brand-soft); color: var(--app-brand); font-size: 11.5px; font-weight: 600; }
+.dmg-none { margin: 0; padding: 16px; color: var(--app-text-secondary); font-size: 13px; }
+.dmg-more { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 46px; padding: 0 16px; border: 0; background: none; color: var(--app-brand); font-size: 14px; font-weight: 600; cursor: pointer; }
+.dmg-more .icon { width: 15px; height: 15px; transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1); }
+.dmg-more.is-open .icon { transform: rotate(180deg); }
+.dmg-foot { margin: 0; padding-top: 4px; color: var(--app-text-secondary); font-size: 12.5px; line-height: 17px; text-align: center; font-variant-numeric: tabular-nums; }
+.dmg-search-anchor { scroll-margin-top: 8px; }
+.dmg-search-room { flex: none; height: 70dvh; }
+.dmg-member-search { display: flex; align-items: center; gap: 8px; height: 40px; margin: 0 16px 8px; padding: 0 12px; border-radius: 999px; background: var(--app-page); color: var(--app-text-secondary); }
+.dmg-search-anchor.is-community .dmg-member-search { margin-top: 8px; }
+.dmg-member-search > .icon { flex: none; width: 15px; height: 15px; }
+.dmg-member-search input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: none; color: var(--app-navy); font: inherit; font-size: 14.5px; outline: none; }
+.dmg-member-search input::placeholder { color: var(--app-text-muted); opacity: 1; }
+.dmg-member-search input::-webkit-search-cancel-button { display: none; }
+.dmg-search-close { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: var(--app-text-muted); color: #FFFFFF; cursor: pointer; }
+.dmg-search-close .icon { width: 11px; height: 11px; stroke-width: 3; }
+/* Survol à la souris seulement : sur un écran tactile, rien ne reste en surbrillance après un appui. */
+@media (hover: hover) {
+  :is(.dmg-destructive, .dmg-add-row, button.dmg-member-line, .dmg-more, .dmg-about-button, .dmg-radio-row, .dmg-picker-row):hover { background: rgba(238, 242, 250, 0.6); }
+  .dmg-bar-action:hover { background: var(--m-hover); }
+  .dmg-tile:hover:not(:disabled) { background: #F7F8FC; }
+  .dmg-link:hover { text-decoration: underline; }
+  .dmg-accept:hover { background: var(--app-brand-pressed); }
+}
+
+/* Carte de formulaire (FormCard), libellé, champs avec compteur, erreur. */
+.dmg-card { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 18px; background: #FFFFFF; }
+.dmg-label { color: var(--app-text-secondary); font-size: 13px; font-weight: 600; line-height: 18px; }
+.dmg-error { margin: 0; color: var(--red); font-size: 12px; font-weight: 500; line-height: 16px; }
+.dmg-field { display: flex; flex-direction: column; gap: 6px; }
+.dmg-field-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.dmg-count { color: var(--app-text-muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.dmg-count.is-over { color: var(--red); }
+.dmg-input { width: 100%; min-height: 46px; padding: 0 14px; border: 1px solid var(--app-border); border-radius: 12px; background: var(--app-page); color: var(--app-navy); font: inherit; font-size: 15px; outline: none; }
+.dmg-input::placeholder { color: var(--app-text-muted); opacity: 1; }
+.dmg-input:focus { border-color: var(--app-brand); }
+.dmg-input.is-error:not(:focus) { border-color: var(--red); }
+.dmg-editor { display: block; min-height: 100px; padding: 14px 13px; line-height: 21px; resize: none; }
+.dmg-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.dmg-link { padding: 0; border: 0; background: none; color: var(--app-brand); font-size: 13px; font-weight: 600; cursor: pointer; }
+.dmg-note { margin: 0; color: var(--app-text-secondary); font-size: 12px; line-height: 16px; }
+.dmg-intro { margin: 0 0 14px; color: var(--app-text-secondary); font-size: 14px; line-height: 19px; }
+.dmg-body.is-members .dmg-intro { margin: 0; }
+.dmg-step-error { margin-bottom: 10px; scroll-margin: 80px; }
+.dmg-purposes { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+/* Une ligne, coupée par « … » quand le libellé est trop long pour sa case (lineLimit(1) de ChoiceChip). */
+.dmg-purposes .choice-chip { display: block; min-width: 0; line-height: 38px; text-overflow: ellipsis; }
+.dmg-purposes .choice-chip[aria-pressed="true"] { line-height: 37px; }
+.dmg-wide { width: 100%; gap: 8px; }
+.dmg-wide .icon { flex: none; width: 17px; height: 17px; }
+
+/* Photo facultative : rond de 96, pastille appareil photo bleue cerclée de blanc. */
+.dmg-photo { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.dmg-photo-pick { position: relative; width: 96px; height: 96px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; }
+.dmg-photo-preview { display: flex; align-items: center; justify-content: center; width: 96px; height: 96px; overflow: hidden; border-radius: 50%; background: var(--app-brand-soft); color: var(--app-brand); }
+.dmg-photo-preview .icon { width: 34px; height: 34px; }
+.dmg-photo-preview img { width: 100%; height: 100%; object-fit: cover; }
+.dmg-photo-badge { position: absolute; right: 0; bottom: 0; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 2px solid #FFFFFF; border-radius: 50%; background: var(--app-brand); color: #FFFFFF; }
+.dmg-photo-badge .icon { width: 15px; height: 15px; }
+.dmg-photo-remove { padding: 2px 8px; border: 0; background: none; color: var(--red); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.dmg-photo-note { color: var(--app-text-secondary); font-size: 12px; }
+
+/* Bouton d'étape fixé en bas (StepButton), l'erreur juste au-dessus. */
+.dmg-step { flex: none; display: flex; flex-direction: column; gap: 10px; padding: 10px 16px calc(8px + env(safe-area-inset-bottom)); background: var(--app-page); }
+.btn.dmg-step-button { width: 100%; transition: opacity 0.2s ease-out; }
+.btn.dmg-step-button.is-dim, .btn.dmg-step-button[disabled] { opacity: 0.45; }
+.btn.dmg-step-button[aria-busy="true"] { opacity: 1; }
+.dmg-page .dmg-step { padding-left: max(16px, calc((100% - 640px) / 2)); padding-right: max(16px, calc((100% - 640px) / 2)); }
+
+/* Feuilles et écrans de création : fond de page, cartes espacées de 16. */
+.dmg-sheet .dm-sheet-body, .dm-new .dm-sheet-body { background: var(--app-page); }
+.dmg-body { gap: 16px; }
+.dmg-body.is-picker { gap: 0; }
+.dmg-body.is-members { gap: 12px; }
+.dmg-page > .dmg-body { flex: 1 1 auto; width: min(672px, 100%); margin: 0 auto; padding: 16px; }
+
+/* Choix des participants (ParticipantPicker). */
+.dmg-picker { display: flex; flex-direction: column; }
+.dm-search.dmg-picker-search { height: 46px; padding: 0 6px 0 14px; border-radius: 999px; }
+.dm-search.dmg-picker-search > .icon { width: 17px; height: 17px; color: var(--app-text-secondary); }
+.dmg-chips { display: flex; gap: 8px; margin-top: 12px; overflow-x: auto; scrollbar-width: none; }
+.dmg-chips::-webkit-scrollbar { display: none; }
+.dmg-chip { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px 0 5px; border: 0; border-radius: 999px; background: var(--app-brand-soft); color: var(--app-navy); font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; animation: dmg-chip-in 0.25s cubic-bezier(0.25, 1, 0.5, 1); }
+.dmg-chip > .icon { width: 10px; height: 10px; stroke-width: 3.2; color: var(--app-text-secondary); }
+@keyframes dmg-chip-in { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: none; } }
+.dmg-picker-count { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 16px 6px 8px; }
+.dmg-picker-count strong { color: var(--app-navy); font-size: 13px; font-weight: 700; }
+.dmg-picker-count span { color: var(--app-text-secondary); font-size: 12px; }
+.dmg-picker-empty { margin: 0; padding: 24px 0; color: var(--app-text-secondary); font-size: 13px; text-align: center; }
+.dmg-picker-title { margin: 0; padding: 0 6px 8px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+.dmg-picker-title.is-second { padding-top: 10px; }
+.dmg-picker-list, .dmg-plain-card { flex: none; margin: 0; padding: 0; overflow: hidden; border-radius: 18px; background: #FFFFFF; list-style: none; }
+.dmg-picker-list > li, .dmg-plain-card > li { position: relative; }
+.dmg-picker-list > li + li::before, .dmg-plain-card > li + li::before { content: ''; position: absolute; z-index: 1; top: 0; left: 70px; right: 0; height: 1px; background: rgba(236, 234, 230, 0.8); }
+.dmg-plain-card > li + li::before { left: 16px; }
+.dmg-picker-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 0 14px; border: 0; background: none; text-align: left; cursor: pointer; }
+.dmg-picker-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.dmg-picker-name { overflow: hidden; color: var(--app-navy); font-size: 15px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.dmg-picker-detail { overflow: hidden; color: var(--app-text-secondary); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+.dmg-check { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 23px; height: 23px; margin-left: 8px; border: 1.5px solid var(--app-border); border-radius: 50%; color: #FFFFFF; transition: background-color 0.2s, border-color 0.2s; }
+.dmg-check.is-22 { width: 22px; height: 22px; }
+.dmg-check.is-on { border-color: var(--app-brand); background: var(--app-brand); }
+.dmg-check .icon { width: 13px; height: 13px; stroke-width: 3; }
+.dmg-radio-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 54px; padding: 0 16px; border: 0; background: none; color: var(--app-navy); font-size: 15.5px; font-weight: 600; text-align: left; cursor: pointer; }
+.dmg-broadcast-text { display: block; width: 100%; min-height: 116px; padding: 18px 15px; border: 0; border-radius: 18px; background: #FFFFFF; color: var(--app-navy); font: inherit; font-size: 15px; line-height: 21px; resize: none; outline: none; }
+.dmg-broadcast-text::placeholder { color: var(--app-text-muted); opacity: 1; }
+.dmg-broadcast-text:focus-visible { box-shadow: 0 0 0 2px var(--app-brand); }
+.dmg-body .dm-results-title:first-of-type { margin-top: 22px; }
+
+/* Exporter, signaler. */
+.dmg-export-count { margin: 0; color: var(--app-navy); font-size: 14px; font-weight: 600; }
+.dmg-export-note { margin: 0; color: var(--app-text-secondary); font-size: 12.5px; line-height: 17px; }
+.dm-report-leave { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 0; border-radius: 18px; color: var(--app-navy); font-size: 15px; font-weight: 600; cursor: pointer; }
+
+/* Nouvelle communauté : étapes, aperçu, couvertures, catégories, visibilité. */
+.dmg-steps { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 4px 16px 10px; background: var(--app-page); }
+.dmg-steps-title { margin: 0; color: var(--app-text-secondary); font-size: 13px; font-weight: 500; }
+.dmg-steps-bar { display: flex; gap: 4px; height: 44px; margin: -10px 0; }
+.dmg-steps-bar > button { flex: 1; display: flex; align-items: center; height: 44px; padding: 0; border: 0; background: none; cursor: pointer; }
+.dmg-steps-bar > button:disabled { cursor: default; }
+.dmg-steps-bar > button > span { display: block; width: 100%; height: 4px; border-radius: 999px; background: var(--app-segment); transition: background-color var(--app-duration) var(--app-ease), height var(--app-duration) var(--app-ease); }
+.dmg-steps-bar > button.is-done > span { background: var(--app-brand); }
+.dmg-steps-bar > button.is-current > span { height: 6px; }
+.dmg-cover { position: relative; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; overflow: hidden; background: var(--app-brand); }
+.dmg-cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.dmg-cover-mark { position: absolute; display: block; color: rgba(255, 255, 255, 0.14); }
+.dmg-cover-mark .icon { display: block; width: 100%; height: 100%; }
+.dmg-cover-letter { position: relative; color: #FFFFFF; font-size: 44px; font-weight: 700; line-height: 1; }
+.dmg-preview { flex: none; overflow: hidden; border-radius: 18px; background: #FFFFFF; }
+.dmg-preview-cover { position: relative; height: 104px; }
+.dm-avatar.dmg-preview-avatar { position: absolute; left: 14px; bottom: -24px; box-shadow: inset 0 0 0 3px #FFFFFF; }
+.dmg-preview-text { display: flex; flex-direction: column; gap: 4px; padding: 32px 14px 14px; }
+.dmg-preview-text strong { overflow: hidden; color: var(--app-navy); font-size: 17px; font-weight: 700; line-height: 22px; text-overflow: ellipsis; white-space: nowrap; }
+.dmg-preview-text strong.is-empty { color: var(--app-text-muted); }
+.dmg-preview-text span { display: -webkit-box; overflow: hidden; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; line-height: 17px; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.dmg-covers { display: flex; gap: 8px; }
+.dmg-cover-choice { position: relative; flex: 1; min-width: 0; height: 52px; padding: 0; overflow: hidden; border: 0; border-radius: 12px; background: none; cursor: pointer; }
+.dmg-cover-photo { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 100%; height: 100%; background: var(--app-brand-soft); color: var(--app-brand); font-size: 11.5px; font-weight: 600; }
+.dmg-cover-photo .icon { width: 18px; height: 18px; }
+.dmg-cover-ring { position: absolute; inset: 0; border: 1px solid var(--app-border); border-radius: 12px; pointer-events: none; }
+.dmg-cover-ring.is-on { border: 2.5px solid var(--app-brand); }
+.dmg-cover-tick { position: absolute; top: 1.5px; right: 1.5px; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: var(--app-brand); color: #FFFFFF; box-shadow: 0 0 0 1px #FFFFFF; }
+.dmg-cover-tick .icon { width: 9px; height: 9px; stroke-width: 3.5; }
+.dmg-categories { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.dmg-category { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-height: 82px; padding: 12px; border: 1px solid var(--app-border); border-radius: 16px; background: #FFFFFF; color: var(--app-navy); text-align: left; cursor: pointer; }
+.dmg-category.is-wide { flex-direction: row; align-items: center; gap: 12px; min-height: 58px; padding-right: 40px; }
+.dmg-category.is-on { padding: 11.5px; border: 1.5px solid var(--app-brand); background: var(--app-brand-soft); }
+.dmg-category.is-wide.is-on { padding-right: 39.5px; }
+.dmg-category-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; color: var(--app-text-dark); }
+.dmg-category-icon .icon { width: 20px; height: 20px; }
+.dmg-category-label { display: -webkit-box; overflow: hidden; font-size: 13.5px; font-weight: 700; line-height: 18px; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.dmg-category:not(.is-wide) .dmg-category-label { min-height: 36px; }
+.dmg-category-check { position: absolute; top: 7px; right: 7px; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--app-brand); color: #FFFFFF; animation: dmg-chip-in 0.25s cubic-bezier(0.25, 1, 0.5, 1); }
+.dmg-category.is-on .dmg-category-check { top: 6.5px; right: 6.5px; }
+.dmg-category-check .icon { width: 11px; height: 11px; stroke-width: 3.2; }
+.dmg-visibility { display: flex; align-items: flex-start; gap: 12px; }
+.dmg-visibility-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; color: var(--app-text-dark); }
+.dmg-visibility-icon .icon { width: 22px; height: 22px; }
+.dmg-visibility-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.dmg-visibility-text strong { color: var(--app-navy); font-size: 15px; font-weight: 700; }
+.dmg-visibility-text span { color: var(--app-text-secondary); font-size: 12.5px; line-height: 17px; }
+.dmg-unavailable { padding: 60px 24px; }
+
+/* Infos de la communauté, invitation, demandes. */
+.dmg-info-details { margin: 0; color: var(--app-navy); font-size: 14px; line-height: 20px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dmg-pair { display: flex; justify-content: space-between; gap: 12px; margin: 0; font-size: 13.5px; line-height: 19px; }
+.dmg-pair span { color: var(--app-text-secondary); }
+.dmg-pair strong { color: var(--app-navy); font-weight: 600; text-align: right; }
+.dmg-invite { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 18px; border-radius: 18px; background: #FFFFFF; text-align: center; }
+.dmg-invite h3 { margin: 0; color: var(--app-navy); font-size: 18px; font-weight: 700; line-height: 23px; overflow-wrap: anywhere; }
+.dmg-invite-qr { display: block; padding: 12px; border-radius: 18px; background: #FFFFFF; }
+.dmg-invite-qr svg { display: block; width: 220px; height: 220px; }
+.dmg-invite-link { margin: 0; color: var(--app-text-secondary); font-size: 12.5px; line-height: 17px; overflow-wrap: anywhere; user-select: text; }
+.dmg-invite-validity { margin: 0; color: var(--app-navy); font-size: 13.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dmg-invite-note { margin: 0; color: var(--app-text-secondary); font-size: 13px; line-height: 18px; }
+.dmg-text-danger { min-height: 44px; padding: 0 12px; border: 0; border-radius: 10px; background: none; color: var(--red); font-size: 15px; font-weight: 600; cursor: pointer; }
+.dmg-loading { display: flex; justify-content: center; padding: 60px 0; }
+.dmg-notice { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 22px; text-align: center; }
+.dmg-notice > .icon { width: 26px; height: 26px; color: var(--app-brand); }
+.dmg-notice p { margin: 0; color: var(--app-navy); font-size: 15px; line-height: 21px; }
+.dmg-request { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 0 16px; }
+.dmg-request-name { flex: 1; min-width: 0; overflow: hidden; color: var(--app-navy); font-size: 15.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.dmg-refuse { min-width: 44px; min-height: 44px; padding: 0 4px; border: 0; background: none; color: var(--red); font-size: 14px; font-weight: 600; cursor: pointer; }
+.dmg-accept { min-height: 36px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--app-brand); color: #FFFFFF; font-size: 14px; font-weight: 700; cursor: pointer; }
+.dmg-refuse:disabled, .dmg-accept:disabled { opacity: 0.5; cursor: default; }
+.dmg-request-spinner { width: 20px; height: 20px; }
+
+@media (max-width: 1023.98px) {
+  .dm-pane-top .dm-head.is-group { gap: 12px; min-height: 52px; padding: 6px 14px 6px 12px; background: #FFFFFF; }
+  .dm-head.is-group .dm-back { width: 30px; height: 40px; border: 0; border-radius: 8px; background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .dm-head.is-group .dm-back .icon { width: 24px; height: 24px; }
+  .dm-head.is-group .dm-head-who { gap: 12px; min-height: 44px; }
+  .dm-head.is-group .dm-head-text { gap: 3px; }
+  .dm-head.is-group .dm-head-title { font-size: 16px; line-height: 20px; }
+  .dm-head.is-group .dm-head-sub { color: var(--app-text-muted); font-size: 12px; line-height: 16px; }
+  .dm-head.is-group .dm-head-tools { gap: 12px; }
+  .dm-head.is-group .dm-round { width: 28px; height: 40px; border: 0; border-radius: 8px; background: none; color: var(--app-text-secondary); }
+  .dm-head.is-group .dm-round.dm-head-add { width: 36px; color: var(--app-brand); }
+  .dm-head.is-group .dm-round .icon { width: 21px; height: 21px; }
+  /* Écrans poussés dans « Nouvelle discussion » : marges de 16, « Passer » à droite du titre centré. */
+  .dm-new .dmg-body { padding: 8px 16px 24px; }
+  .dm-new .dmg-body.is-form { padding-top: 4px; }
+  .dm-new .dm-sheet-trailing { position: absolute; right: 8px; top: 50%; margin-top: -22px; }
+  .dmg-page > .dmg-body { padding: 8px 16px 24px; }
+  .dmg-inner { padding-top: 16px; }
+}
+@media (min-width: 1024px) {
+  .dm-new .dmg-steps { padding: 14px 22px 10px; }
+  .dmg-step { padding-bottom: 16px; }
+  .dmg-sheet .dmg-step, .dm-new .dmg-step { padding: 12px 22px 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dmg-toast { animation: dmg-fade-in 0.2s ease-in-out; }
+  .dmg-toast.is-leaving { transform: none; }
+  .dmg-chip, .dmg-category-check { animation: none; }
+  .dmg-more .icon { transition: none; }
+  .dmg-steps-bar > button > span { transition: background-color 0.2s ease-in-out; }
+}
+@keyframes dmg-fade-in { from { opacity: 0; } to { opacity: 1; } }

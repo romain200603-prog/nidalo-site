@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
+import { ContentUnavailable } from '../../components/ContentUnavailable';
 import { Icon } from '../../components/Icon';
+import { PageHeader } from '../../components/PageHeader';
 import type { IconName } from '../../components/iconPaths';
 import { favoritesStore, loadFavorites } from '../../lib/account/favorites';
 import { loadSavedSearches, savedSearchesStore } from '../../lib/account/savedSearches';
@@ -13,10 +15,8 @@ import { recentlyViewedIds } from '../../lib/recentlyViewed';
 import { listingStore, loadListingRow, type ListingRowState } from './listingRow';
 import { openOnClick, routePath } from './route';
 
-// Recherche de la messagerie, comme l'app (MessagingSearchView.swift ; demande du 17/11) : tant que rien n'est saisi,
-// « Votre activité immobilière » ; « Discussions liées aux annonces » ouvre les conversations sur un bien, avec leur
-// prix comme sur les cartes (ListingConversationsList). La recherche elle-même reste celle du site : nom ou titre
-// d'annonce.
+// « Votre activité immobilière » de la recherche de la messagerie (MessagingSearchView.swift) ; « Discussions liées aux
+// annonces » ouvre les conversations sur un bien, avec leur prix comme sur les cartes (ListingConversationsList).
 
 type ActivityRow = { icon: IconName; title: string; subtitle: string; count: number; href?: string; onSelect?: () => void };
 
@@ -98,19 +98,11 @@ export function ListingConversations({ conversations, onBack }: { conversations:
   }, [key]);
   return (
     <div className="dm-linked">
-      <header className="dm-linked-head">
-        <button type="button" className="dm-linked-back" onClick={onBack} aria-label="Retour" title="Retour">
-          <Icon name="chevronLeft" />
-        </button>
-        <h2>Discussions liées aux annonces</h2>
-      </header>
+      <PageHeader title="Discussions liées aux annonces" onBack={onBack} className="dm-page-header" />
       <div className="dm-list-scroll dm-linked-scroll">
         {linked.length === 0 ? (
-          <div className="dm-inbox-empty">
-            <Icon name="messagesSquare" />
-            <h3>Aucune discussion liée à un bien</h3>
-            <p>Touchez « Message » sur une annonce pour poser vos questions à l'annonceur.</p>
-          </div>
+          <ContentUnavailable className="dm-list-empty" icon="messagesSquare" title="Aucune discussion liée à un bien"
+            text="Touchez « Message » sur une annonce pour poser vos questions à l'annonceur." />
         ) : (
           <ul className="dm-linked-list">
             {linked.map((conversation) => {

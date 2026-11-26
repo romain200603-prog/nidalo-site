@@ -16,7 +16,7 @@ import { formatPrice } from '../../lib/format';
 import { parisDay } from '../../lib/listing/views';
 import { photoUrl, sortedPhotos, type ListingRow } from '../../lib/listings';
 import { accountPath, listingPath, MANDATES_PATH, mandatePath, NEW_MANDATE_PATH } from '../../lib/paths';
-import { AuthorLine, EmptyState, ScreenHeader, Spinner, TeamViewSwitch, Toast } from './parts';
+import { AuthorLine, EmptyState, LoadFailure, ScreenHeader, Spinner, TeamViewSwitch, Toast } from './parts';
 
 // « Mes mandats » de l'espace professionnel : le registre des mandats (en cours, terminés), la fiche d'un mandat
 // (ses informations, le PDF signé, la note) et son formulaire. Mêmes styles que Mes ventes (classes sale-*). Avec une
@@ -68,8 +68,7 @@ export function Mandates({ mandateId, screen }: { mandateId: string | null; scre
     return (
       <div className="space">
         <ScreenHeader title="Mes mandats" />
-        <p className="signin-error" role="alert">{state.message}</p>
-        <button type="button" className="btn btn-light" onClick={() => void loadMandates()}>Réessayer</button>
+        <LoadFailure message={state.message} onRetry={() => void loadMandates()} />
       </div>
     );
   }
@@ -131,7 +130,7 @@ function MandateList({ rows: all, listings, scope }: { rows: MandateRow[]; listi
   return (
     <div className="space sales">
       <Toast text={toast} />
-      <ScreenHeader title="Mes mandats" action={<a className="save-capsule" href={NEW_MANDATE_PATH}>Ajouter</a>} />
+      <ScreenHeader title="Mes mandats" action={<a className="nav-text-button" href={NEW_MANDATE_PATH}>Ajouter</a>} />
       {scope && <TeamViewSwitch value={view} onChange={chooseView} mine="Les miens" />}
       {rows.length === 0 ? (
         <EmptyState
@@ -231,7 +230,7 @@ function MandateDetail({ row, listing, scope }: { row: MandateRow; listing: List
   return (
     <div className="space sales sale-page">
       <Toast text={toast} />
-      <ScreenHeader title="Mandat" back={MANDATES_PATH} action={editable ? <a className="save-capsule" href={mandatePath(row.id, true)}>Modifier</a> : undefined} />
+      <ScreenHeader title="Mandat" back={MANDATES_PATH} action={editable ? <a className="nav-text-button" href={mandatePath(row.id, true)}>Modifier</a> : undefined} />
       <section className="sale-head space-card">
         <MandateThumb listing={listing} size="large" />
         <div className="sale-head-text">
@@ -301,8 +300,8 @@ function MandateDetail({ row, listing, scope }: { row: MandateRow; listing: List
         title="Terminer ce mandat ?"
         message="Il passera dans « Terminés », daté d'aujourd'hui. Vous pourrez le reprendre."
         actions={[
-          { label: 'Terminer le mandat', onClick: () => void changeEnded(true), tone: 'primary' },
-          { label: 'Garder le mandat', onClick: () => setDialog(false), tone: 'quiet' },
+          { label: 'Terminer le mandat', onClick: () => void changeEnded(true), role: 'destructive' },
+          { label: 'Garder le mandat', onClick: () => setDialog(false), role: 'cancel' },
         ]}
       />
     </div>
@@ -502,9 +501,9 @@ function MandateEditor({ row, listings, scope }: { row: MandateRow | null; listi
         title="Quitter sans enregistrer ?"
         message="Vos modifications ne sont pas encore enregistrées."
         actions={[
-          { label: 'Enregistrer', onClick: () => { setDialog(null); void save(); }, tone: 'primary' },
-          { label: 'Quitter sans enregistrer', href: backPath },
-          { label: 'Continuer', onClick: () => setDialog(null), tone: 'quiet' },
+          { label: 'Enregistrer', onClick: () => { setDialog(null); void save(); } },
+          { label: 'Quitter sans enregistrer', href: backPath, role: 'destructive' },
+          { label: 'Continuer', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
       <AlertDialog
@@ -515,8 +514,8 @@ function MandateEditor({ row, listings, scope }: { row: MandateRow | null; listi
           ? 'Ses informations, son PDF et sa note seront effacés pour toute l\'agence. L\'annonce ne change pas.'
           : 'Ses informations, son PDF et votre note seront effacés. L\'annonce ne change pas.'}
         actions={[
-          { label: 'Supprimer', onClick: () => void remove(), tone: 'primary' },
-          { label: 'Annuler', onClick: () => setDialog(null), tone: 'quiet' },
+          { label: 'Supprimer', onClick: () => void remove(), role: 'destructive' },
+          { label: 'Annuler', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
     </div>

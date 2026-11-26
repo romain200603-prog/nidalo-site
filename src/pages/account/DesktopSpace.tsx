@@ -11,7 +11,7 @@ import { editableProjectStore, loadEditableProject, projectSubtitle } from '../.
 import { loadSavedSearches, savedSearchesStore } from '../../lib/account/savedSearches';
 import { currentUserId, useStore } from '../../lib/account/session';
 import { agendaSubtitle, onlineSubtitle, savedSearchesSubtitle, viewedSubtitle } from '../../lib/account/spaceSubtitles';
-import { accountPath, AGENCY_FORM_PATH, PATHS } from '../../lib/paths';
+import { accountPath, AGENCY_FORM_PATH } from '../../lib/paths';
 import { recentlyViewedIds } from '../../lib/recentlyViewed';
 import { ChoiceDialog, IPHONE_ONLY, IphoneOnlyDialog } from './DesktopParts';
 import { Avatar } from './parts';
@@ -209,8 +209,8 @@ export function DesktopSpace({ account }: { account: Account }) {
           <MenuRows rows={[
             { icon: 'bell', title: 'Notifications', href: accountPath('notifications') },
             { icon: 'bell', title: 'Alertes sur cet iPhone', onClick: iphone('Alertes sur cet iPhone') },
-            { icon: 'gear', title: 'Préférences', onClick: iphone('Préférences') },
-            { icon: 'circleHelp', title: 'Aide et assistance', href: PATHS.help },
+            { icon: 'gear', title: 'Préférences', href: accountPath('preferences') },
+            { icon: 'circleHelp', title: 'Aide et assistance', href: accountPath('aide') },
             { icon: 'info', title: 'Informations légales', href: accountPath('legal') },
           ]} />
         </section>
@@ -220,10 +220,10 @@ export function DesktopSpace({ account }: { account: Account }) {
         open={dialog === 'logout'}
         onClose={() => setDialog(null)}
         title="Se déconnecter ?"
-        message="Vous pourrez vous reconnecter à tout moment."
+        message="Vous pourrez vous reconnecter à tout moment. Les données de ce navigateur restent enregistrées."
         actions={[
-          { label: 'Se déconnecter', onClick: () => { setDialog(null); void signOut(); }, tone: 'danger' },
-          { label: 'Annuler', onClick: () => setDialog(null) },
+          { label: 'Se déconnecter', onClick: () => { setDialog(null); void signOut(); }, role: 'destructive' },
+          { label: 'Annuler', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
       <ChoiceDialog
@@ -233,8 +233,8 @@ export function DesktopSpace({ account }: { account: Account }) {
         message="Vous pourrez revenir en arrière à tout moment depuis Type de compte."
         actions={[
           // Sans fiche agence, l'app ouvre d'abord le parcours professionnel : le site aussi (Profil agence, comme Hub).
-          { label: 'Passer en professionnel', onClick: () => (account.profile.professional_profile_id ? void switchType() : window.location.assign(AGENCY_FORM_PATH)), tone: 'primary' },
-          { label: 'Annuler', onClick: () => setDialog(null) },
+          { label: 'Passer en professionnel', onClick: () => (account.profile.professional_profile_id ? void switchType() : window.location.assign(AGENCY_FORM_PATH)) },
+          { label: 'Annuler', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
       <IphoneOnlyDialog title={iphoneOnly} onClose={() => setIphoneOnly(null)} />

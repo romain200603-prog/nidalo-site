@@ -6,18 +6,20 @@ import {
 } from '../badges';
 import { supabase } from '../supabase';
 import { fetchOffers, type OfferRow } from '../listing/offers';
+import { isOfflineFailure } from '../loadFailure';
 import {
-  blockUser, fetchBlockedIds, fetchCommunities, fetchConversationVisits, fetchMessage, fetchMessages, fetchParticipants,
+  blockUser, deleteMessageRow, fetchBlockedIds, fetchCommunities, fetchConversationVisits, fetchMessage, fetchMessages, fetchParticipants,
   fetchProfessionalContacts, fetchProfiles, insertMessage, markConversationRead, MESSAGE_PAGE, messageInsert, savePreferences, setReaction,
   unblockUser, type ConversationVisit, type Message, type Preferences,
 } from './api';
 import { attachmentsContent, attachmentsPreview, contentPreview, decodeContent, textContent, type Attachment } from './content';
-import { copyAttachments } from './files';
+import { copyAttachments, removeFiles, serverPaths } from './files';
 import { canForward, HEART, interactionRefusal, MAX_FORWARD_TARGETS, myReaction, toggledReactions } from './interactions';
 import {
   conversationFrom, sameId, upper, type CommunityRow, type Conversation, type ParticipantRow, type ProfessionalContactRow,
   type ProfileRow, type ServerInboxRow,
 } from './inbox';
+import { sendPendingReports } from './reportQueue';
 import { RetryClientIds } from './retry';
 import { fetchConversationVisitRequests, type ConversationVisitRequest } from './visitRequests';
 
@@ -29,7 +31,7 @@ import { fetchConversationVisitRequests, type ConversationVisitRequest } from '.
 
 export type InboxState =
   | { status: 'loading' }
-  | { status: 'error' }
+  | { status: 'error'; offline: boolean }
   | { status: 'ready'; conversations: Conversation[] };
 
 export const inboxStore = createStore<InboxState>({ status: 'loading' });
@@ -39,6 +41,8 @@ type Extras = { participants: ParticipantRow[]; profiles: Map<string, ProfileRow
 let extras: Extras = { participants: [], profiles: new Map(), communities: [] };
 let lastRows: ServerInboxRow[] | null = null;
 let build = 0;
+/** Lecture en cours des membres, profils et communautés des dernières lignes (reloadConversations l'attend). */
+let extrasReady: Promise<void> = Promise.resolve();
 
 function publish(rows: ServerInboxRow[]) {
   const me = currentUserId();
@@ -54,13 +58,17 @@ async function loadExtras(rows: ServerInboxRow[]): Promise<Extras> {
     fetchProfiles([...others, ...participants.map((member) => member.user_id)]),
     groups.length ? fetchCommunities().catch(() => extras.communities) : Promise.resolve<CommunityRow[]>([]),
   ]);
+  // Membres d'une communauté absents des groupes lus : leurs noms aussi (communities(from:) de l'app).
+  const missing = communities.flatMap((community) => community.members.map((member) => member.user_id))
+    .filter((id) => !profiles.has(id.toLowerCase()));
+  if (missing.length) for (const [id, profile] of await fetchProfiles(missing)) profiles.set(id, profile);
   return { participants, profiles, communities };
 }
 
 function onRows(value: ConversationRows) {
   if (!value.rows) {
     lastRows = null;
-    inboxStore.set(value.failed ? { status: 'error' } : { status: 'loading' });
+    inboxStore.set(value.failed ? { status: 'error', offline: value.offline === true } : { status: 'loading' });
     return;
   }
   const rows = value.rows as unknown as ServerInboxRow[];
@@ -69,13 +77,26 @@ function onRows(value: ConversationRows) {
     publish(rows);
   } else {
     const token = ++build;
-    void loadExtras(rows).then((next) => {
+    extrasReady = loadExtras(rows).then((next) => {
       if (token !== build) return;
       extras = next;
       if (lastRows) publish(lastRows);
-    });
+    }).catch(() => undefined);
   }
   markOpenConversationRead();
+}
+
+/**
+ * Relit les conversations, puis attend leurs membres, profils et communautés (reloadConversations de l'app) : après une
+ * création, un ajout ou un départ, la liste et la conversation ouverte sont à jour.
+ */
+export async function reloadConversations(): Promise<void> {
+  await liveReload();
+  let pending: Promise<void>;
+  do {
+    pending = extrasReady;
+    await pending;
+  } while (pending !== extrasReady);
 }
 
 conversationRowsStore.subscribe(() => onRows(conversationRowsStore.get()));
@@ -100,6 +121,8 @@ export type ThreadState = {
   messages: Message[];
   /** Tout l'historique est lu (la dernière page lue était incomplète) : rien de plus ancien à chercher (n° 19). */
   complete: boolean;
+  /** Lecture ratée faute de connexion : « Pas de connexion Internet » plutôt que l'erreur. */
+  offline?: boolean;
 };
 
 export const threadStore = createStore<ThreadState>({ conversationId: null, status: 'idle', messages: [], complete: false });
@@ -128,11 +151,13 @@ async function loadThread(conversationId: string, quiet: boolean) {
       complete = older.length > 0 && current.complete;
     }
     threadStore.set({ conversationId, status: 'ready', messages, complete });
-  } catch {
+  } catch (error) {
     if (token !== threadToken) return;
     const current = threadStore.get();
     // Une relecture qui échoue garde les messages déjà affichés (refreshFromServer, `try?`).
-    if (!quiet || current.status !== 'ready') threadStore.set({ conversationId, status: 'error', messages: [], complete: false });
+    if (!quiet || current.status !== 'ready') {
+      threadStore.set({ conversationId, status: 'error', messages: [], complete: false, offline: isOfflineFailure(error) });
+    }
   }
 }
 
@@ -392,6 +417,33 @@ export async function loadQuotedOriginal(id: string, messages: Message[]) {
   }
 }
 
+// MARK: - Suppression d'un message (MessagingStore.deleteMessage)
+
+/**
+ * Supprime un de mes messages pour tout le monde, puis ses fichiers ; il quitte le fil, ses citations passent à
+ * « Message supprimé », et la liste relit sa dernière ligne. `false` si le serveur refuse ou ne répond pas (l'écran
+ * dit « Ce message n'a pas pu être supprimé. »).
+ */
+export async function deleteMessage(messageId: string): Promise<boolean> {
+  let content: unknown;
+  try {
+    content = await deleteMessageRow(messageId);
+  } catch {
+    return false;
+  }
+  if (content !== null && content !== undefined) {
+    const decoded = decodeContent(content);
+    if (decoded.kind === 'attachments') void removeFiles(serverPaths(decoded.items));
+  }
+  const current = threadStore.get();
+  threadStore.set({ ...current, messages: current.messages.filter((message) => !sameId(message.id, messageId)) });
+  const quoted = new Map(quotedStore.get());
+  quoted.set(messageId.toLowerCase(), { status: 'deleted' });
+  quotedStore.set(quoted);
+  void liveReload();
+  return true;
+}
+
 // MARK: - Réglages (conversation_preferences), blocage
 
 /**
@@ -539,7 +591,12 @@ export function useMessaging(userId: string | null) {
     void loadVisits();
     void loadVisitRequests();
     void fetchBlockedIds().then((ids) => blockedStore.set(ids));
+    // Signalements gardés faute de réseau : transmis à l'ouverture, puis au retour de la connexion.
+    void sendPendingReports(userId);
+    const online = () => void sendPendingReports(userId);
+    window.addEventListener('online', online);
     return () => {
+      window.removeEventListener('online', online);
       stopListening();
       stopBadges();
       void supabase.removeChannel(channel);

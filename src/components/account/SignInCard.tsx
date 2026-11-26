@@ -5,6 +5,7 @@ import { Icon } from '../Icon';
 import type { IconName } from '../iconPaths';
 import { cameFromSite } from '../PageHeader';
 import { AuthLaunchLoop } from './AuthLaunchLoop';
+import { LegalSheet, openLegalOnClick, type LegalPage } from './LegalSheet';
 import { ScreenMotion, shake, type MotionElements } from './authMotion';
 import {
   ACCOUNT_EXISTS_MESSAGE, authMessage, canSubmitSignUp, cleanEmail, emailError, INVALID_CREDENTIALS_MESSAGE, isNetworkError,
@@ -522,7 +523,6 @@ export function SignInCard({ onClose, onSignedIn, linkError = null, providerErro
             <>Nous avons envoyé un lien à <strong>{sent.email}</strong>. Ouvrez-le dans ce navigateur pour activer votre compte : dans <Keep>l&apos;e-mail</Keep>, cliquez sur <Keep>« Confirmer mon adresse e-mail »</Keep>.</>
           )}
         </p>
-        <p className="auth-note auth-g10">L&apos;e-mail peut mettre une minute à arriver. Regardez aussi dans les courriers indésirables.</p>
         {message && <ErrorLine className="auth-g12" message={message} />}
         {info && <p className="auth-info auth-g12" role="status">{info}</p>}
         <div className="auth-resend auth-g18">
@@ -746,11 +746,17 @@ function BackToSignIn({ onClick, className }: { onClick: () => void; className: 
   return <button type="button" className={`auth-back-link ${className}`} onClick={onClick}>Retour à la connexion</button>;
 }
 
+/** Conditions et confidentialité : elles s'ouvrent dans une feuille par-dessus l'écran (LegalSheet), comme dans l'app. */
 function Mentions({ prefix, className }: { prefix: string; className: string }) {
+  const [legal, setLegal] = useState<LegalPage | null>(null);
   return (
-    <p className={`auth-mentions ${className}`}>
-      {prefix} <a href={PATHS.terms}>Conditions d&apos;utilisation</a> et notre <a href={PATHS.privacy}>Politique de confidentialité</a>.
-    </p>
+    <>
+      <p className={`auth-mentions ${className}`}>
+        {prefix} <a href={PATHS.terms} onClick={(event) => openLegalOnClick(event, 'terms', setLegal)}>Conditions d&apos;utilisation</a> et
+        notre <a href={PATHS.privacy} onClick={(event) => openLegalOnClick(event, 'privacy', setLegal)}>Politique de confidentialité</a>.
+      </p>
+      <LegalSheet page={legal} onClose={() => setLegal(null)} />
+    </>
   );
 }
 

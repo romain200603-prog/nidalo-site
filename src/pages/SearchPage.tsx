@@ -5,6 +5,8 @@ import { Page } from '../components/Layout';
 import { cardTag, ListingCard } from '../components/ListingCard';
 import { CriterionChipsRow, FiltersButton } from '../components/CriterionChips';
 import { ModeTabs } from '../components/ModeTabs';
+import { MapBottomPanel } from '../components/MapBottomPanel';
+import { LoadErrorState, OfflineState } from '../components/OfflineState';
 import { PlaceField } from '../components/PlaceField';
 import { ListingPhoto } from '../components/PhotoPager';
 import { SearchNoResults } from '../components/SearchNoResults';
@@ -26,8 +28,10 @@ import { highlightsFor } from '../lib/highlights';
 import type { SearchMode } from '../lib/labels';
 import { sortedPhotos } from '../lib/listings';
 import { listingPath, PATHS } from '../lib/paths';
-import { circle, distanceMeters, isUsable as isUsableZone, largestLoop, rounded, scaled, SCALE_STEP, simplified, smoothed } from '../lib/drawnZone';
+import { canGrow, circle, distanceMeters, isUsable as isUsableZone, largestLoop, rounded, scaled, SCALE_STEP, simplified, smoothed } from '../lib/drawnZone';
+import { sortedForMap, type MapPanelHeight, type MapSort } from '../lib/mapPanel';
 import type { Coordinate, PlaceSuggestion } from '../lib/places';
+import { isOfflineFailure, SEARCH_LOAD_ERROR } from '../lib/loadFailure';
 import { recentlyViewedIds } from '../lib/recentlyViewed';
 import {
   activeFilterCount, boxAround, chosenFromSuggestion, defaultDraft, draftFromParams, drawnZoneOf, effectiveSort, filterChips,
@@ -37,7 +41,8 @@ import {
 import { GOOD_YIELD, grossYieldText } from '../lib/cardContent';
 import '../styles/recherche-app.css';
 
-type Status = { kind: 'loading' } | { kind: 'ready'; results: Result[] } | { kind: 'error' };
+/** `offline` : la demande n'a pas pu partir (LoadFailure.isOffline de l'app) : « Pas de connexion Internet ». */
+type Failure = { offline: boolean };
 
 /**
  * Zone dessinée en cours (MapTabView de l'app) : tracé, ou zone proposée à ajuster puis valider ; elle ne remplace le
@@ -155,7 +160,16 @@ export function SearchPage() {
   const desktop = useDesktop();
   const [draft, setDraft] = useState<SearchDraft>(readDraft);
   const [placeText, setPlaceText] = useState(draft.place);
-  const [status, setStatus] = useState<Status>({ kind: 'loading' });
+  /**
+   * Biens de la dernière recherche réussie (SearchViewModel de l'app) : ils restent affichés pendant la recherche
+   * suivante et ne changent qu'à son succès ; un échec les retire.
+   */
+  const [results, setResults] = useState<Result[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [failure, setFailure] = useState<Failure | null>(null);
+  /** Panneau du bas de la carte du téléphone : sa hauteur et son tri (MapTabView de l'app, moyen au départ). */
+  const [panelHeight, setPanelHeight] = useState<MapPanelHeight>('medium');
+  const [mapSort, setMapSort] = useState<MapSort>('relevance');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [mapOpen, setMapOpen] = useState(readMapOpen);
@@ -215,21 +229,30 @@ export function SearchPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setStatus({ kind: 'loading' });
-    setSelectedId(null);
-    setListCount(LIST_PAGE);
+    setLoading(true);
     search(draft, (row) => highlightsFor(row, draft.mode === 'invest' ? draft.downPayment : null))
-      .then((results) => {
+      .then((found) => {
         if (cancelled) return;
-        setStatus({ kind: 'ready', results });
+        setResults(found);
+        setFailure(null);
+        setLoading(false);
+        setListCount(LIST_PAGE);
+        // Un bien sélectionné qui n'est plus dans les résultats ne l'est plus (MapTabView.load).
+        setSelectedId((id) => (id !== null && found.some(({ row }) => row.id === id) ? id : null));
         const location = locationFor(draft);
         const box = location.kind === 'area' ? location.box
           : location.kind === 'around' ? boxAround(location.center, location.radiusMeters) : null;
-        const points = results.flatMap(({ row }) => (row.public_latitude === null || row.public_longitude === null ? []
+        const points = found.flatMap(({ row }) => (row.public_latitude === null || row.public_longitude === null ? []
           : [{ latitude: Number(row.public_latitude), longitude: Number(row.public_longitude) }]));
         setFrame((f) => ({ token: f.token + 1, box: points.length || box ? box : null, points, zone: drawnZoneOf(draft) !== null }));
       })
-      .catch(() => { if (!cancelled) setStatus({ kind: 'error' }); });
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setResults([]);
+        setSelectedId(null);
+        setFailure({ offline: isOfflineFailure(error) });
+        setLoading(false);
+      });
     return () => { cancelled = true; };
   }, [key, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -299,14 +322,15 @@ export function SearchPage() {
 
   useEffect(() => () => window.clearTimeout(drawHintTimer.current), []);
 
-  const results = status.kind === 'ready' ? status.results : [];
   const selected = useMemo(() => results.find((r) => r.row.id === selectedId) ?? null, [results, selectedId]);
   const chips = filterChips(draft);
   const filterCount = activeFilterCount(draft);
   const sort = effectiveSort(draft);
   /** En-tête des résultats (nombre, tri, « Enregistrer ») : pendant la recherche et avec des annonces, comme l'app. */
-  const showsHeader = status.kind === 'loading' || results.length > 0;
-  const statusText = status.kind === 'loading' ? 'Recherche…' : status.kind === 'error' ? 'Recherche impossible' : countLabel(results.length, draft.mode);
+  // Comme l'app : l'en-tête des résultats (nombre, tri) seulement quand il y a des annonces.
+  const showsHeader = results.length > 0;
+  const countText = countLabel(results.length, draft.mode);
+  const statusText = loading ? 'Recherche…' : failure ? 'Recherche impossible' : countText;
   /** Bouton « Carte » : avec des annonces, hors saisie du lieu et sans message en bas de l'écran. */
   const showsMapButton = results.length > 0 && !editingPlace && !toastShown;
 
@@ -337,6 +361,7 @@ export function SearchPage() {
       return;
     }
     setSelectedId(null);
+    if (panelHeight === 'large') setPanelHeight('medium');
     setZoneEditing({ step: 'drawing' });
   }
 
@@ -381,6 +406,21 @@ export function SearchPage() {
 
   function clearZone() {
     apply({ ...draft, drawnZone: null });
+  }
+
+  /**
+   * Toucher d'un marqueur sur le téléphone (MapTabView.tap) : il sélectionne le bien, centre la carte sur lui et ramène
+   * le panneau en hauteur moyenne sur sa fiche ; un second toucher sur le même marqueur ouvre l'annonce.
+   */
+  function tapMarker(id: string, center: () => void) {
+    if (id === selectedId && panelHeight !== 'compact') {
+      const result = results.find(({ row }) => row.id === id);
+      if (result) window.location.assign(listingPath(id, cardContent(result.row, draft.mode, result.highlights).kind === 'investment' ? 'invest' : null));
+      return;
+    }
+    setSelectedId(id);
+    if (panelHeight !== 'medium') setPanelHeight('medium');
+    center();
   }
 
   /** « Activer l'alerte » : un échec (pas de réseau…) donne son message en bas de l'écran (n° 167). */
@@ -471,7 +511,7 @@ export function SearchPage() {
           {showsHeader && (
             <div className="results-head">
               <div className="results-count">
-                <h2>{statusText}</h2>
+                <h2>{countText}</h2>
                 {/* « Triées par pertinence » et son chevron ; le menu natif, transparent, les couvre. */}
                 <label className="sort-select">
                   <span aria-hidden="true">Triées par {SORT_LABELS[sort].toLowerCase()}</span>
@@ -495,20 +535,14 @@ export function SearchPage() {
             </div>
           )}
 
-          {status.kind === 'loading' && (
-            <div className="results-list" aria-hidden="true">
-              {[0, 1].map((i) => <div key={i} className="card listing-card skeleton-card"><div className="skeleton photo-skeleton" /><div className="skeleton line" /><div className="skeleton line short" /></div>)}
-            </div>
-          )}
-          {status.kind === 'error' && (
-            <div className="card state">
-              <Icon name="triangleAlert" />
-              <h3>La recherche n’a pas pu se faire</h3>
-              <p>Vérifiez votre connexion à internet, puis réessayez.</p>
-              <button type="button" className="btn btn-primary" onClick={() => setAttempt((a) => a + 1)}>Réessayer</button>
-            </div>
-          )}
-          {status.kind === 'ready' && results.length === 0 && (
+          {/* Chargement sans bien à montrer : la roue grise de l'app (ProgressView), 32 sous les critères ; avec des biens,
+              ils restent jusqu'aux suivants. « Recherche… » pour les lecteurs d'écran (ligne cachée au-dessus). */}
+          {loading && results.length === 0 && <div className="search-loading" aria-hidden="true"><span className="spinner" /></div>}
+          {/* Échec : « Pas de connexion Internet » sans réseau, sinon « Erreur » et le texte de l'app (SearchViewModel). */}
+          {!loading && failure && (failure.offline
+            ? <OfflineState onRetry={() => setAttempt((a) => a + 1)} className="search-failure" />
+            : <LoadErrorState title="Erreur" message={SEARCH_LOAD_ERROR} onRetry={() => setAttempt((a) => a + 1)} className="search-failure" />)}
+          {!loading && !failure && results.length === 0 && (
             <SearchNoResults
               draft={draft}
               savedSearch={savedSearch}
@@ -518,7 +552,7 @@ export function SearchPage() {
               onClear={() => apply(defaultDraft(draft.mode))}
             />
           )}
-          {status.kind === 'ready' && results.length > 0 && (
+          {results.length > 0 && (
             <>
               <div className="results-list">
                 {results.slice(0, listCount).map(({ row, highlights }) => (
@@ -531,7 +565,7 @@ export function SearchPage() {
           )}
         </div>
 
-        <div className={`map-column${mapOpen ? ' is-open' : ''}${zoneEditing ? ` is-editing-zone is-zone-${zoneEditing.step}` : postedZone ? ' has-zone' : ''}`}
+        <div className={`map-column${mapOpen ? ' is-open' : ''}${zoneEditing ? ` is-editing-zone is-zone-${zoneEditing.step}` : postedZone ? ' has-zone' : ''}${!desktop && panelHeight === 'large' && !zoneEditing ? ' is-panel-large' : ''}${editingPlace ? ' is-editing-place' : ''}`}
           aria-hidden={undefined}>
           {/* Téléphone : la ligne du haut de la carte de l'app (MapTabView), sans catégories ni critères : retour (vers la
               liste), lieu, filtres et leur nombre. Pendant le tracé ou l'ajustement, le bandeau de la zone la remplace. */}
@@ -562,6 +596,7 @@ export function SearchPage() {
               onDrawTooSmall={showTooSmall}
               onVisibleArea={(box) => { visibleArea.current = box; }}
               tools={<ZonePencil menu={zoneMenu} editing={zoneEditing !== null} onStart={startDrawing} />}
+              onMarkerTap={desktop ? undefined : tapMarker}
             />
           </Suspense>
           {/* Bandeau du tracé, en haut de l'écran mais après la carte dans la page : depuis le crayon, Tab mène à « Zone
@@ -574,8 +609,28 @@ export function SearchPage() {
               onZoneAroundCenter={zoneEditing.step === 'drawing' ? zoneAroundMapCenter : undefined}
             />
           )}
-          {/* Pendant le tracé et l'ajustement, ni aperçu ni « Liste » (le panneau de l'app glisse hors de l'écran). */}
-          {selected && !zoneEditing && <MapPreview result={selected} mode={draft.mode} onClose={() => setSelectedId(null)} />}
+          {/* Téléphone : le panneau du bas de l'app (MapBottomPanel), qui glisse hors de l'écran pendant le tracé et
+              l'ajustement d'une zone. Ordinateur : l'aperçu du bien choisi, ni aperçu ni « Liste » pendant le tracé. */}
+          {!desktop && mapOpen && (
+            <MapBottomPanel
+              results={sortedForMap(mapResults, mapSort)}
+              mode={draft.mode}
+              place={placeLabel(draft)}
+              drawnZone={postedZone !== null}
+              loading={loading}
+              offline={failure?.offline === true}
+              onRetry={() => setAttempt((a) => a + 1)}
+              onGrowZone={loading || !postedZone || !canGrow(postedZone) ? null : () => proposeZone(scaled(postedZone, SCALE_STEP), 'Ajustez votre zone')}
+              sort={mapSort}
+              onSortChange={setMapSort}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              height={panelHeight}
+              onHeightChange={setPanelHeight}
+              hidden={zoneEditing !== null}
+            />
+          )}
+          {desktop && selected && !zoneEditing && <MapPreview result={selected} mode={draft.mode} onClose={() => setSelectedId(null)} />}
           {desktop && !zoneEditing && (
             <button type="button" className="map-close btn btn-primary" onClick={() => setMapOpen(false)}>
               <Icon name="list" />

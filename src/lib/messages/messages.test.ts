@@ -489,7 +489,7 @@ describe('Conversation ouverte (ConversationView, ConversationDetails)', () => {
       message({ id: 'c', createdAt: new Date(2026, 10, 6, 10, 0) }),
       message({ id: 'd', senderId: ME, createdAt: new Date(2026, 10, 6, 10, 5) }),
     ], [], NOW);
-    expect(days.map((day) => day.label)).toEqual(['Hier', 'Aujourd\'hui']);
+    expect(days.map((day) => day.label)).toEqual(['Hier · 18:02', 'Aujourd\'hui · 09:58']);
     expect(days[1].rows.map((row) => `${row.item.key}${row.startsGroup ? '<' : ''}${row.endsGroup ? '>' : ''}`)).toEqual(['b<', 'c>', 'd<>']);
   });
 

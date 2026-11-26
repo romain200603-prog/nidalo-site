@@ -366,7 +366,9 @@ const noZoneInUrl = () => !new URLSearchParams(location.search).has('dessin');
     await page.waitForSelector('.zone-banner');
     const banner = await box(page, '.zone-banner');
     const tools = await box(page, '.zone-tools');
-    const attribution = await box(page, '.maplibregl-ctrl-attrib');
+    // La mention des sources quitte le haut du panneau du bas (0,36 s) pour se poser au-dessus de l'outil.
+    await page.waitForTimeout(450);
+    const attribution = await box(page, '.map-column .results-map-attribution');
     expectSame(N, 'tracé : bandeau, ligne du haut, outils', {
       banner, text: tidy(await page.textContent('.zone-banner-text')), cancel: tidy(await page.textContent('.zone-banner-cancel')),
       top: await page.locator('.map-app-top').count(),
@@ -409,7 +411,7 @@ const noZoneInUrl = () => !new URLSearchParams(location.search).has('dessin');
     await page.waitForSelector('.zone-card', { timeout: 4000 }).catch(() => problems.push(`${N} : pas de carte de validation après le tracé`));
     const count = await expectCard(page, N);
     const card = await box(page, '.zone-card');
-    const attributionNow = await box(page, '.maplibregl-ctrl-attrib');
+    const attributionNow = await box(page, '.map-column .results-map-attribution');
     expectSame(N, 'validation : bandeau, carte, mention des sources', [tidy(await page.textContent('.zone-banner-text')), card[0], card[2],
       card[1] + card[3], card[3], card[1] - (attributionNow[1] + attributionNow[3]), await page.locator('.zone-tools, .map-preview').count()],
     ['Votre zone est tracée', 14, 362, 836, 142, 12, 0]);

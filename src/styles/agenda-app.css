@@ -74,9 +74,9 @@
   position: relative; display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--app-border);
   border-radius: 22px; background: #FFFFFF; box-shadow: 0 2px 16px rgba(36, 45, 56, 0.04);
 }
-/* Demande : toute la carte ouvre son écran ; les boutons restent au-dessus. */
-.app-visit-open { position: absolute; inset: 0; z-index: 0; border-radius: 22px; -webkit-tap-highlight-color: transparent; }
-.app-visit-open:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+/* Demande ou visite : toute la carte ouvre son écran ; les boutons restent au-dessus. */
+.app-visit-open, .app-visit-detail { position: absolute; inset: 0; z-index: 0; border-radius: 22px; -webkit-tap-highlight-color: transparent; }
+.app-visit-open:focus-visible, .app-visit-detail:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
 .app-visit-actions { position: relative; z-index: 1; }
 /* Menu « … » ouvert : sa carte passe au-dessus des suivantes (leurs boutons ne couvrent pas le menu). */
 .app-visit:has(.dsc-menu-list), .app-visit:focus-within { z-index: 2; }
@@ -85,7 +85,7 @@
 /* Bloc date de 52 × 60 (coins 14) : jour abrégé, numéro en grand, mois, très gras, aux couleurs de l'état. */
 .app-visit-date {
   display: flex; flex: none; flex-direction: column; align-items: center; justify-content: center; width: 52px; height: 60px;
-  border-radius: 14px; background: var(--tone-bg); color: var(--tone-ink); font-weight: 800;
+  border-radius: 14px; background: var(--tone-bg); color: var(--tone-ink); font-weight: 700;
 }
 .app-visit-weekday { font-size: 11px; line-height: 14px; }
 .app-visit-day { font-size: 22px; line-height: 27px; font-variant-numeric: tabular-nums; }
@@ -95,7 +95,7 @@
 /* L'horaire, puis l'état à droite ; quand la place manque (téléphone étroit), l'état passe dessous, à gauche. */
 .app-visit-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 16px; }
 .app-visit-time {
-  min-width: 0; overflow: hidden; color: var(--app-navy); font-size: 15.5px; font-weight: 800; line-height: 20px; font-variant-numeric: tabular-nums;
+  min-width: 0; overflow: hidden; color: var(--app-navy); font-size: 15.5px; font-weight: 700; line-height: 20px; font-variant-numeric: tabular-nums;
   text-overflow: ellipsis; white-space: nowrap;
 }
 .app-visit-time.is-cancelled { text-decoration: line-through; text-decoration-color: rgba(36, 45, 56, 0.6); }
@@ -158,6 +158,266 @@
   .app-session:hover { background: #FBFAF8; }
 }
 
+/* ——— Demande de visite (VisitRequestDetailView) et « Demandes de visite » d'une annonce (MyVisitsView) ———
+   En-tête de l'app (retour rond, titre de 17 centré), contenu en colonne : 14 entre les blocs, 8 au-dessus, 28
+   dessous ; cartes blanches (contour de 1, coins 16) ; boutons de 52 (coins 12), le principal bleu, les autres bleu
+   clair, « Annuler » en rouge sur fond de page. */
+.app-request { display: flex; flex-direction: column; min-height: calc(100dvh - 8px); color: var(--app-navy); font-family: var(--app-font); }
+.app-request.is-desktop { min-height: 0; padding-bottom: 48px; }
+.app-request :where(h1, h2, h3, p, ol) { margin: 0; }
+.app-request-body { display: flex; flex-direction: column; gap: 14px; padding: 8px 0 28px; }
+.app-request.is-desktop .app-request-body { gap: 16px; padding-top: 16px; }
+.app-request-missing { margin: auto 0; padding: 40px 0; color: var(--app-text-secondary); font: 400 14px/20px var(--app-font); text-align: center; }
+
+.app-request-listing, .app-request-card, .app-request-section, .app-request-link, .app-request-row {
+  border: 1px solid var(--app-border); border-radius: 16px; background: #FFFFFF;
+}
+.app-request-listing {
+  display: flex; align-items: center; gap: 12px; padding: 12px; color: inherit; text-decoration: none; -webkit-tap-highlight-color: transparent;
+}
+.app-request-thumb {
+  display: inline-flex; flex: none; align-items: center; justify-content: center; width: 64px; height: 64px; overflow: hidden;
+  border-radius: 12px; background: var(--app-segment); color: var(--app-text-muted);
+}
+.app-request-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.app-request-thumb .icon { width: 22px; height: 22px; }
+.app-request-listing-text { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
+.app-request-listing-title { display: -webkit-box; overflow: hidden; font: 700 15px/20px var(--app-font); -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.app-request-listing-city { color: var(--app-text-secondary); font: 400 13px/17px var(--app-font); }
+.app-request-listing-price { font: 700 14px/18px var(--app-font); font-variant-numeric: tabular-nums; }
+.app-request .app-row-chevron { flex: none; width: 15px; height: 15px; color: var(--app-text-muted); }
+
+/* Carte de l'état : badge et mode, puis la personne (rond de 38, nom de 15 gras, « Demande reçue »), puis le texte. */
+.app-request-card { display: flex; flex-direction: column; gap: 10px; padding: 14px; }
+.app-request-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.app-request-badge {
+  display: inline-flex; flex: none; align-items: center; height: 22px; padding: 0 8px; border-radius: 11px; background: var(--tone-bg);
+  color: var(--tone-ink); font: 600 11px/1 var(--app-font); white-space: nowrap;
+}
+.app-request-mode { display: inline-flex; align-items: center; gap: 5px; color: var(--app-text-secondary); font: 600 12.5px/16px var(--app-font); }
+.app-request-mode .icon { width: 13px; height: 13px; }
+.app-request-person { display: flex; align-items: center; gap: 8px; }
+.app-request-person > span:last-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.app-request-avatar {
+  display: inline-flex; flex: none; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 50%;
+  background: var(--app-brand-soft); color: var(--app-brand); font: 700 14px/1 var(--app-font);
+}
+.app-request-avatar.is-agency { border-radius: 10px; }
+.app-request-person-name { display: flex; align-items: center; gap: 6px; font: 700 15px/20px var(--app-font); }
+.app-request-kind {
+  display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 9px; background: var(--app-segment);
+  color: var(--app-text-secondary); font: 600 10.5px/1 var(--app-font);
+}
+.app-request-kind.is-pro { background: var(--app-brand-soft); color: var(--app-brand); }
+.app-request-person-role { color: var(--app-text-secondary); font: 400 12.5px/16px var(--app-font); }
+.app-request-explanation { color: rgba(36, 45, 56, 0.85); font: 400 13.5px/19px var(--app-font); }
+
+/* Cartes titrées (SectionCard) : icône bleue de 18 et titre de 16 gras, 14 de marge. */
+.app-request-section { display: flex; flex-direction: column; gap: 12px; padding: 14px; }
+.app-request-section h2 { display: flex; align-items: center; gap: 8px; font: 700 16px/21px var(--app-font); }
+.app-request-section h2 .icon { width: 18px; height: 18px; color: var(--app-brand); }
+.app-request-slot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font: 400 13px/18px var(--app-font); }
+.app-request-slot .icon { width: 16px; height: 16px; color: var(--app-brand); }
+.app-request-slot.is-confirmed .icon { color: #3F6650; }
+.app-request-slot strong { font: 700 15px/20px var(--app-font); font-variant-numeric: tabular-nums; }
+.app-request-slot span { color: var(--app-text-secondary); }
+.app-request-open { display: flex; flex-direction: column; gap: 8px; }
+.app-request-open + .app-request-open { padding-top: 12px; border-top: 1px solid var(--app-border); }
+.app-request-message { color: rgba(36, 45, 56, 0.85); font: 400 14px/20px var(--app-font); white-space: pre-line; overflow-wrap: anywhere; }
+.app-request-error { color: #C0392B; font: 600 13px/18px var(--app-font); }
+.app-request-conflict { display: flex; align-items: flex-start; gap: 6px; color: #B7791F; font: 600 12px/16px var(--app-font); }
+.app-request-conflict .icon { flex: none; width: 14px; height: 14px; margin-top: 1px; }
+.app-request-note { color: var(--app-text-secondary); font: 400 13px/18px var(--app-font); }
+
+/* Demandes liées (linkRow) : carte de coins 14, icône bleue de 16, titre de 14 demi-gras, chevron. */
+.app-request-link {
+  display: flex; align-items: center; gap: 10px; padding: 14px; border-radius: 14px; color: var(--app-navy); font: 600 14px/19px var(--app-font);
+  text-decoration: none;
+}
+.app-request-link > .icon:first-child { width: 16px; height: 16px; color: var(--app-brand); }
+.app-request-link > span { flex: 1; min-width: 0; }
+
+.app-request-actions { display: flex; flex-direction: column; gap: 10px; }
+.app-request-primary, .app-request-secondary, .app-request-cancel {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 52px; margin: 0; padding: 0 16px;
+  border: 0; border-radius: 12px; font: 600 15px/20px var(--app-font); text-decoration: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.app-request-primary { background: var(--app-brand); color: #FFFFFF; }
+.app-request-secondary { background: var(--app-brand-soft); color: var(--app-brand); }
+.app-request-cancel { min-height: 44px; background: transparent; color: #C0392B; font-weight: 700; font-size: 14.5px; }
+.app-request-primary .icon, .app-request-secondary .icon { width: 17px; height: 17px; }
+.app-request :is(.app-request-primary, .app-request-secondary, .app-request-cancel):disabled, .app-request-primary.is-disabled { opacity: 0.5; cursor: default; }
+.app-request :is(.app-request-primary, .app-request-secondary, .app-request-cancel, .app-request-listing, .app-request-link):focus-visible {
+  outline: 3px solid var(--app-brand); outline-offset: 2px;
+}
+@media (hover: hover) {
+  .app-request-primary:not(:disabled):hover { background: var(--app-brand-pressed); }
+  .app-request-secondary:not(:disabled):hover { background: #E2E8F6; }
+  .app-request-listing:hover, .app-request-link:hover { background: #FBFAF8; }
+}
+
+/* Historique : point bleu de 8, action de 13,5 demi-gras, date de 12 grise. */
+.app-request-history { display: flex; flex-direction: column; gap: 10px; padding: 0; list-style: none; }
+.app-request-history li { display: flex; align-items: flex-start; gap: 10px; }
+.app-request-dot { flex: none; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--app-brand); }
+.app-request-history li > span:last-child { display: flex; flex-direction: column; gap: 2px; }
+.app-request-event { font: 600 13.5px/19px var(--app-font); }
+.app-request-event-date { color: var(--app-text-secondary); font: 400 12px/16px var(--app-font); font-variant-numeric: tabular-nums; }
+
+/* Motif du refus, dans la fenêtre « Refuser la demande ? ». */
+.app-request-reason {
+  width: 100%; height: 44px; margin: 4px 0 12px; padding: 0 12px; border: 1px solid var(--app-field-border); border-radius: 12px;
+  background: var(--app-field); color: var(--app-navy); font: 400 16px/20px var(--app-font);
+}
+
+/* « Proposer d'autres créneaux » : jour et heure (SlotPickerRow), barre blanche du bas avec « Envoyer la proposition ». */
+.app-request-picker { display: flex; flex-direction: column; gap: 8px; }
+.app-request-picker-title { color: var(--app-navy); font: 700 13px/17px var(--app-font); }
+.app-request-picker-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.app-request-date {
+  height: 38px; padding: 0 10px; border: 0; border-radius: 8px; background: rgba(118, 118, 128, 0.12); color: var(--app-navy);
+  font: 400 16px/20px var(--app-font);
+}
+.app-request-time {
+  position: relative; display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 12px; border-radius: 19px;
+  background: var(--app-brand-soft); color: var(--app-brand);
+}
+.app-request-time .icon { flex: none; width: 15px; height: 15px; }
+.app-request-time .icon:last-child { width: 11px; height: 11px; }
+.app-request-time select {
+  appearance: none; border: 0; background: transparent; color: inherit; font: 700 16px/20px var(--app-font); cursor: pointer;
+}
+.app-request-picker-actions { display: flex; justify-content: space-between; gap: 12px; }
+.app-request-picker-actions button {
+  margin: 0; padding: 4px 0; border: 0; background: none; color: var(--app-brand); font: 700 13.5px/18px var(--app-font); cursor: pointer;
+}
+.app-request-bar {
+  position: sticky; z-index: 5; bottom: 0; margin: auto -16px 0; padding: 10px 16px calc(6px + env(safe-area-inset-bottom));
+  background: #FFFFFF; box-shadow: 0 -2px 20px rgba(36, 45, 56, 0.06);
+}
+.app-request.is-desktop .app-request-bar { position: static; margin: 0; padding: 0; background: none; box-shadow: none; }
+
+/* « Demandes de visite » d'une annonce, ouvertes sur la fiche : la page de l'app sous 1024 px (fond de page, 16 sur
+   les côtés, 6 au-dessus de l'en-tête) ; sur ordinateur, la colonne de 640 px de la fiche. */
+@media (max-width: 1023.98px) {
+  .listing-screen .app-requests { min-height: 100dvh; padding: 6px 16px 0; background: var(--app-page); }
+}
+.app-requests.is-desktop { padding-top: 32px; }
+
+/* Onglets en capsules de 40 (le choisi bleu, nombre dans un rond de 20). */
+.app-request-tabs { display: flex; gap: 6px; padding-bottom: 10px; }
+.app-request-tab {
+  display: inline-flex; flex: 1 1 0; align-items: center; justify-content: center; gap: 5px; min-width: 0; min-height: 40px; margin: 0;
+  padding: 0 8px; border: 1px solid var(--app-border); border-radius: 20px; background: #FFFFFF; color: var(--app-navy);
+  font: 700 14px/18px var(--app-font); white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+.app-request-tab[aria-selected="true"] { border-color: transparent; background: var(--app-brand); color: #FFFFFF; }
+.app-request-tab-count {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px;
+  background: var(--app-brand); color: #FFFFFF; font: 700 12px/1 var(--app-font);
+}
+.app-request-tab[aria-selected="true"] .app-request-tab-count { background: #FFFFFF; color: var(--app-brand); }
+.app-request-tab:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+.app-request-list { display: flex; flex-direction: column; gap: 12px; padding-bottom: 28px; }
+.app-request-row { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+.app-request-row-main { display: flex; align-items: flex-start; gap: 12px; color: inherit; text-decoration: none; }
+.app-request-row .app-request-thumb { width: 70px; height: 70px; }
+.app-request-row-text { display: flex; flex: 1; flex-direction: column; gap: 5px; min-width: 0; }
+.app-request-row-title { display: flex; align-items: baseline; gap: 4px; }
+.app-request-row-title > span { flex: 1; min-width: 0; overflow: hidden; font: 700 15px/20px var(--app-font); text-overflow: ellipsis; white-space: nowrap; }
+.app-request-row-person { display: flex; align-items: center; gap: 6px; min-width: 0; color: rgba(36, 45, 56, 0.85); font: 600 13px/17px var(--app-font); }
+.app-request-row-person > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-request-row-side { color: var(--app-text-secondary); font: 400 12px/16px var(--app-font); white-space: nowrap; }
+.app-request-row-slot { display: flex; align-items: center; gap: 5px; overflow: hidden; color: var(--app-text-secondary); font: 400 13px/17px var(--app-font); white-space: nowrap; }
+.app-request-row-slot .icon { flex: none; width: 13px; height: 13px; }
+.app-request-row-status { display: flex; align-items: center; gap: 6px; }
+.app-request-row-video { display: inline-flex; align-items: center; gap: 4px; color: var(--app-text-secondary); font: 600 11px/1 var(--app-font); }
+.app-request-row-video .icon { width: 12px; height: 12px; }
+.app-request-row-buttons { display: flex; gap: 8px; }
+.app-request-row-buttons :is(a, button) {
+  display: flex; flex: 1 1 0; align-items: center; justify-content: center; gap: 6px; min-height: 36px; margin: 0; border: 0; border-radius: 11px;
+  background: var(--app-brand-soft); color: var(--app-brand); font: 700 13px/17px var(--app-font); text-decoration: none; cursor: pointer;
+}
+.app-request-row-buttons .icon { width: 15px; height: 15px; }
+
+/* ——— Détail de la visite (VisitDetailView) ———
+   16 entre les blocs : photo de 190 (coins 18) sur bleu clair ; badge de l'état (24 de haut, 11 demi-gras), titre
+   de 22 gras, ville et prix de 14 gris ; carte d'informations (icône bleue de 18 dans 26, titre de 12 gris clair,
+   valeur de 15 moyen, traits fins à 50 du bord) ; boutons larges de 46 (coins 13) teintés à 10 %, rouges pour
+   annuler et supprimer ; « Note » en haut à droite. */
+.app-request.app-detail { min-height: 0; }
+.app-detail-body { display: flex; flex-direction: column; gap: 16px; padding: 8px 0 28px; }
+.app-request.is-desktop .app-detail-body { padding-top: 16px; }
+.app-detail-photo {
+  display: flex; align-items: center; justify-content: center; height: 190px; overflow: hidden; border-radius: 18px;
+  background: var(--app-brand-soft); color: var(--app-brand);
+}
+.app-detail-photo img { width: 100%; height: 100%; object-fit: cover; }
+.app-detail-photo .icon { width: 34px; height: 34px; opacity: 0.55; }
+.app-detail-titles { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.app-detail-badge {
+  display: inline-flex; flex: none; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 12px; background: var(--tone-bg);
+  color: var(--tone-ink); font: 600 11px/1 var(--app-font); white-space: nowrap;
+}
+.app-detail-badge .icon { width: 12px; height: 12px; }
+.app-detail-badge-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.app-detail-title { font: 700 22px/28px var(--app-font); overflow-wrap: anywhere; }
+.app-detail-place { color: var(--app-text-secondary); font: 400 14px/19px var(--app-font); font-variant-numeric: tabular-nums; }
+.app-detail-card { border: 1px solid var(--app-border); border-radius: 16px; background: #FFFFFF; }
+.app-detail-row { position: relative; display: flex; align-items: flex-start; gap: 12px; padding: 11px 12px; }
+.app-detail-row + .app-detail-row::before { content: ''; position: absolute; top: 0; right: 0; left: 50px; height: 1px; background: #F2F0EC; }
+.app-detail-row-icon { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 26px; height: 26px; color: var(--app-brand); }
+.app-detail-row-icon .icon { width: 18px; height: 18px; }
+.app-detail-row-text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.app-detail-row-title { color: var(--app-text-muted); font: 400 12px/16px var(--app-font); }
+.app-detail-row-value { font: 500 15px/20px var(--app-font); white-space: pre-line; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.app-detail-report-summary { font: 700 16px/21px var(--app-font); }
+.app-detail-report-field { display: flex; flex-direction: column; gap: 3px; }
+.app-detail-report-field > span { color: var(--app-text-secondary); font: 600 13px/17px var(--app-font); }
+.app-detail-report-field > p { font: 400 14px/20px var(--app-font); white-space: pre-line; overflow-wrap: anywhere; }
+.app-detail-report-works { font: 600 14px/19px var(--app-font); font-variant-numeric: tabular-nums; }
+.app-detail-report-photos { color: var(--app-text-secondary); font: 400 13px/18px var(--app-font); }
+.app-detail-checklist { display: flex; flex-direction: column; gap: 5px; margin: 2px 0 0; padding: 0; list-style: none; }
+.app-detail-checklist li { position: relative; padding-left: 13px; font: 400 14px/19px var(--app-font); }
+.app-detail-checklist li::before { content: ''; position: absolute; top: 7px; left: 0; width: 5px; height: 5px; border-radius: 50%; background: var(--app-brand); }
+.app-detail-pair { display: flex; gap: 10px; }
+.app-detail-pair > * { flex: 1 1 0; min-width: 0; }
+.app-detail-actions { display: flex; flex-direction: column; gap: 10px; }
+.app-detail-button {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 46px; margin: 0; padding: 0 12px; border: 0;
+  border-radius: 13px; background: rgba(60, 92, 176, 0.1); color: var(--app-brand); font: 600 14px/18px var(--app-font);
+  text-decoration: none; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.app-detail-button.is-danger { background: rgba(192, 57, 43, 0.1); color: #C0392B; }
+.app-detail-button .icon { flex: none; width: 16px; height: 16px; }
+.app-detail-button:disabled { opacity: 0.45; cursor: default; }
+.app-detail-button:focus-visible, .app-detail-note:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+@media (hover: hover) {
+  .app-detail-button:not(:disabled):hover { background: rgba(60, 92, 176, 0.16); }
+  .app-detail-button.is-danger:not(:disabled):hover { background: rgba(192, 57, 43, 0.16); }
+}
+.app-detail-help { color: var(--app-text-secondary); font: 400 12.5px/17px var(--app-font); }
+.app-detail-note {
+  display: inline-flex; align-items: center; justify-content: center; height: 36px; margin: 0; padding: 0 14px; border: 0; border-radius: 18px;
+  background: var(--app-brand-soft); color: var(--app-brand); font: 600 15px/1 var(--app-font); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+
+/* « Nouvelle visite » sur téléphone (VisitFormView) : en-tête de l'app, « Enregistrer » en capsule bleue de 36 (15
+   demi-gras, 16 sur les côtés), cartes de coins 16 (DomiaStyle.cardRadius). */
+.app-visit-save {
+  display: inline-flex; align-items: center; justify-content: center; height: 36px; margin: 0; padding: 0 16px; border: 0; border-radius: 18px;
+  background: var(--app-brand); color: #FFFFFF; font: 600 15px/1 var(--app-font); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.app-visit-save:disabled { opacity: 0.45; cursor: default; }
+.app-visit-save:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+.app-visit-save .dsc-button-spinner { width: 16px; height: 16px; border-color: #FFFFFF; border-right-color: transparent; }
+@media (hover: hover) {
+  .app-visit-save:not(:disabled):hover { background: var(--app-brand-pressed); }
+}
+.app-visit-form .app-page-header { margin-bottom: 4px; }
+.app-visit-form .dsc-card { border-radius: 16px; }
+
 /* Très petit téléphone (moins de 360 px) : onglets et boutons plus serrés, pour que leur ligne tienne. */
 @media (max-width: 359.98px) {
   .app-agenda-tab { gap: 5px; padding: 0 4px; font-size: 12.5px; }
@@ -166,5 +426,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-agenda-tab, .app-agenda-tab-count { transition: none; }
+  .app-agenda-tab, .app-agenda-tab-count, .app-request-tab { transition: none; }
 }

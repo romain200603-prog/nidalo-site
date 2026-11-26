@@ -10,7 +10,7 @@ import { formatArea } from '../../lib/format';
 import { shareListing } from '../../lib/listing/share';
 import { photoUrl, sortedPhotos, type ListingRow } from '../../lib/listings';
 import { accountPath } from '../../lib/paths';
-import { EmptyState, ScreenHeader, Spinner, Toast } from './parts';
+import { EmptyState, LoadFailure, ScreenHeader, Spinner, Toast } from './parts';
 
 // « Outils de diffusion » de l'espace professionnel : chaque annonce en ligne avec son lien, son QR code, un texte
 // prêt pour les réseaux sociaux et une affiche à imprimer pour la vitrine.
@@ -47,10 +47,7 @@ export function Diffusion() {
       <Toast text={toast} />
       <ScreenHeader title="Outils de diffusion" />
       {state.status === 'error' ? (
-        <>
-          <p className="signin-error" role="alert">{state.message}</p>
-          <button type="button" className="btn btn-light" onClick={() => void loadMyListings()}>Réessayer</button>
-        </>
+        <LoadFailure message={state.message} onRetry={() => void loadMyListings()} />
       ) : state.status !== 'ready' ? (
         <Spinner />
       ) : online.length === 0 ? (
@@ -76,7 +73,7 @@ export function Diffusion() {
         onClose={() => setOpen(null)}
         title="Lien de l'annonce"
         message="Copiez ce lien pour le partager."
-        actions={[{ label: 'Fermer', onClick: () => setOpen(null), tone: 'primary' }]}
+        actions={[{ label: 'Fermer', onClick: () => setOpen(null), role: 'cancel' }]}
       >
         {open?.kind === 'link' && <input className="text-input diffusion-link" readOnly value={publicListingUrl(open.row.id)} onFocus={(event) => event.target.select()} />}
       </AlertDialog>
@@ -102,7 +99,7 @@ function DiffusionCard({ row, onLink, onOpen }: { row: ListingRow; onLink: () =>
         <button type="button" className="diffusion-tool" onClick={onLink}><Icon name="link" />Lien</button>
         <button type="button" className="diffusion-tool" onClick={() => onOpen('qr')}><Icon name="scan" />QR code</button>
         <button type="button" className="diffusion-tool" onClick={() => onOpen('text')}><Icon name="messageSquareText" />Texte</button>
-        <a className="diffusion-tool" href={posterPath(row.id)} target="_blank" rel="noopener"><Icon name="fileText" />Affiche</a>
+        <a className="diffusion-tool" href={posterPath(row.id)}><Icon name="fileText" />Affiche</a>
       </div>
     </article>
   );
@@ -141,8 +138,8 @@ function QrDialog({ row, onClose }: { row: ListingRow | null; onClose: () => voi
       title="QR code de l'annonce"
       message="Scanné avec un téléphone, il ouvre cette annonce sur nidalo.fr."
       actions={[
-        { label: 'Télécharger le QR code', onClick: () => void download(), tone: 'primary' },
-        { label: 'Fermer', onClick: () => { setError(null); onClose(); } },
+        { label: 'Télécharger le QR code', onClick: () => void download() },
+        { label: 'Fermer', onClick: () => { setError(null); onClose(); }, role: 'cancel' },
       ]}
     >
       {row && (
@@ -181,8 +178,8 @@ function TextDialog({ row, onClose, onCopied }: { row: ListingRow | null; onClos
       title="Texte pour les réseaux sociaux"
       message="À coller dans une publication ou un message, avec le lien de l'annonce."
       actions={[
-        { label: 'Copier le texte', onClick: () => void copy(), tone: 'primary' },
-        { label: 'Fermer', onClick: () => { setHint(null); onClose(); } },
+        { label: 'Copier le texte', onClick: () => void copy() },
+        { label: 'Fermer', onClick: () => { setHint(null); onClose(); }, role: 'cancel' },
       ]}
     >
       {row && (

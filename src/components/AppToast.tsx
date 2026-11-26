@@ -5,12 +5,15 @@ import '../styles/pieces-app.css';
 
 // Message du bas de l'app (CompareToast et CompareToastState, Features/Compare/CompareButton.swift) : fond bleu,
 // icône, texte et, à droite, une action soulignée (« Annuler », « Voir »). Il reste 4 s ; un seul à la fois, le
-// dernier remplace le précédent. Au-dessus de la barre d'onglets du téléphone, en bas au centre sur ordinateur.
+// dernier remplace le précédent. 70 au-dessus de la zone du bas du téléphone (28 au-dessus de la barre d'onglets), en
+// bas au centre sur ordinateur.
 
 export type ToastMessage = {
   icon: 'heart' | 'check' | 'columns' | 'info';
   text: string;
   action?: { label: string; accessibilityLabel: string; run: () => void };
+  /** Tout le message fait l'action, pas seulement son bouton (« Voir », « Gérer » de la comparaison, comme l'app). */
+  wholeToast?: boolean;
 };
 
 type ToastState = { id: number; message: ToastMessage; leaving: boolean } | null;
@@ -60,10 +63,18 @@ export function ToastHost() {
     return () => window.removeEventListener('pagehide', onHide);
   }, []);
   const message = state?.message;
+  const run = () => {
+    const action = message?.action?.run;
+    hideToast();
+    action?.();
+  };
+  // Toucher le message : au doigt ou à la souris ; au clavier et pour les lecteurs d'écran, son bouton.
+  const wholeToast = Boolean(message?.action && message.wholeToast && !state?.leaving);
   return (
     <div className="app-toast-host" role="status" aria-live="polite">
       {state && message && (
-        <div key={state.id} className={`app-toast${state.leaving ? ' is-leaving' : ''}`}>
+        <div key={state.id} className={`app-toast${state.leaving ? ' is-leaving' : ''}${wholeToast ? ' is-tappable' : ''}`}
+          onClick={wholeToast ? run : undefined}>
           <Icon name={message.icon} />
           <span className="app-toast-text">{message.text}</span>
           {message.action && (
@@ -71,10 +82,9 @@ export function ToastHost() {
               type="button"
               className="app-toast-action"
               aria-label={message.action.accessibilityLabel}
-              onClick={() => {
-                const run = message.action?.run;
-                hideToast();
-                run?.();
+              onClick={(event) => {
+                event.stopPropagation();
+                run();
               }}
             >
               {message.action.label}

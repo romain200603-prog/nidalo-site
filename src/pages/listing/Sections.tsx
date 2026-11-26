@@ -7,7 +7,7 @@ import { energyInk, GEORISQUES, ORIGIN_LABELS, type OriginRow, type Row } from '
 
 // Sections de la fiche sous les cartes du haut (ListingDetailView.swift, PublisherViews.swift).
 
-/** Carte de section (`SectionCard`) : titre 20/800, puis le contenu à 14. */
+/** Carte de section (`SectionCard`, DomiaStyle.swift) : rayon 16, titre de 18 gras sans icône, puis le contenu à 14. */
 export function SectionCard({ id, title, children, className }: { id: string; title: string; children: ReactNode; className?: string }) {
   return (
     <section className={`section-card ${className ?? ''}`} aria-labelledby={id}>
@@ -154,21 +154,25 @@ export function Avatar({ publisher }: { publisher: Publisher }) {
 }
 
 /**
- * « Votre interlocuteur » : sans page de profil en phase 1 (pas de « Voir le profil »). Sans `onContact` (sa propre
- * annonce, comme l'app), pas de bouton de contact. Location d'un particulier : « Contacter le propriétaire » (n° 74).
+ * « Votre interlocuteur » (PublisherCard, PublisherViews.swift 101–188) : toute la ligne (photo, nom, lignes grises et
+ * flèche) ouvre le profil ; puis « Voir le profil » ou « Voir l'agence » et « Contacter… », côte à côte (l'un sous
+ * l'autre sous 330 de large). Sans `onContact` (sa propre annonce, comme l'app), pas de bouton de contact. Location
+ * d'un particulier : « Contacter le propriétaire » (n° 74).
  */
-export function PublisherCard({ publisher, fees, activeCount, onContact, isRental }: {
+export function PublisherCard({ publisher, fees, activeCount, onOpenProfile, onContact, isRental }: {
   publisher: Publisher;
   fees: string | null;
   activeCount: number | null;
+  onOpenProfile: () => void;
   onContact?: () => void;
   isRental: boolean;
 }) {
   const lines = activeCount !== null ? [...publisher.lines, activeCountLine(activeCount)] : publisher.lines;
+  const profileLabel = publisher.isProfessional ? 'Voir l\'agence' : 'Voir le profil';
   return (
     <SectionCard id="interlocuteur" title="Votre interlocuteur">
       <div className="publisher">
-        <div className="publisher-head">
+        <button type="button" className="publisher-head" onClick={onOpenProfile} aria-description={profileLabel}>
           <Avatar publisher={publisher} />
           <span className="publisher-text">
             <span className="publisher-name">
@@ -177,7 +181,8 @@ export function PublisherCard({ publisher, fees, activeCount, onContact, isRenta
             </span>
             {lines.map((line) => <span key={line} className="publisher-line">{line}</span>)}
           </span>
-        </div>
+          <Icon name="chevronRight" className="icon publisher-chevron" />
+        </button>
         {fees && (
           <dl className="feature-rows">
             <FeatureRow title="Honoraires" value={fees} />
@@ -186,26 +191,41 @@ export function PublisherCard({ publisher, fees, activeCount, onContact, isRenta
         {publisher.feeScheduleUrl && (
           <a className="publisher-fees-link" href={publisher.feeScheduleUrl} target="_blank" rel="noopener noreferrer">Barème des honoraires</a>
         )}
-        {onContact && (
-          <button type="button" className="btn btn-primary btn-block" onClick={onContact}>
-            {publisher.isProfessional ? 'Contacter l\'agence' : isRental ? 'Contacter le propriétaire' : 'Contacter le vendeur'}
-          </button>
-        )}
+        <div className="publisher-buttons">
+          <button type="button" className="btn btn-light btn-block" onClick={onOpenProfile}>{profileLabel}</button>
+          {onContact && (
+            <button type="button" className="btn btn-primary btn-block" onClick={onContact}>
+              {publisher.isProfessional ? 'Contacter l\'agence' : isRental ? 'Contacter le propriétaire' : 'Contacter le vendeur'}
+            </button>
+          )}
+        </div>
       </div>
     </SectionCard>
   );
 }
 
+/**
+ * Pied de la fiche (ListingDetailView.footnote) : la mention Géorisques, obligatoire dans les annonces, puis « Publiée
+ * le … », en un seul bloc de 12 gris, lignes à 4 d'écart.
+ */
 export function Footnote({ text }: { text: string | null }) {
-  return text ? <p className="listing-footnote">{text}</p> : null;
+  return (
+    <div className="listing-footnote">
+      <p className="listing-risks">
+        {GEORISQUES.text}{' '}
+        <a href={GEORISQUES.url} target="_blank" rel="noopener noreferrer">{GEORISQUES.label}</a>
+      </p>
+      {text && <p>{text}</p>}
+    </div>
+  );
 }
 
-/** Mention Géorisques, obligatoire dans les annonces : sur chaque fiche. */
-export function RiskNote() {
+/** « Signaler l'annonce » : lien discret au bas de la fiche (drapeau de 14, 13 semi-gras gris). */
+export function ReportRow({ onClick }: { onClick: () => void }) {
   return (
-    <p className="listing-footnote listing-risks">
-      {GEORISQUES.text}{' '}
-      <a href={GEORISQUES.url} target="_blank" rel="noopener noreferrer">{GEORISQUES.label}</a>
-    </p>
+    <button type="button" className="listing-report" onClick={onClick}>
+      <Icon name="flag" />
+      Signaler l'annonce
+    </button>
   );
 }

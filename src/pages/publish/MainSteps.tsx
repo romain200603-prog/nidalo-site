@@ -56,8 +56,8 @@ export function CategoryStep({ draft, update, showsErrors }: StepProps) {
   return (
     <div className="dpub-category">
       <div className="dpub-category-head">
-        {/* « souhaitez-vous » ne se coupe pas au trait d'union, comme dans l'app. */}
-        <h2>Que <span className="dpub-nowrap">souhaitez-vous</span> publier ?</h2>
+        {/* « souhaitez-vous » ne se coupe pas au trait d'union, comme dans l'app ; espace insécable avant « ? ». */}
+        <h2>Que <span className="dpub-nowrap">souhaitez-vous</span> publier ?</h2>
         <p>Choisissez la catégorie, puis le type de bien.</p>
       </div>
       <div className="dpub-category-grid">
@@ -131,7 +131,8 @@ async function communeSuggestions(raw: string, limit = 6, signal?: AbortSignal):
   return found.filter((place) => place.kind === 'municipality' || place.kind === 'district').slice(0, limit);
 }
 
-export const ADDRESS_NOT_FOUND = 'Adresse introuvable. Vérifiez le code postal et la ville.';
+/** Adresse sans position (PublishFormField.address.defaultMessage de l'app). */
+export const ADDRESS_NOT_FOUND = 'Veuillez renseigner une adresse valide.';
 /** La vérification de l'adresse a échoué faute de réseau, pas parce qu'elle est introuvable (n° 80). */
 export const ADDRESS_OFFLINE = 'L\'adresse n\'a pas pu être vérifiée. Vérifiez votre connexion, puis réessayez.';
 
@@ -268,6 +269,10 @@ export function FeaturesStep({ draft, update, showsErrors }: StepProps) {
               guide="livingArea" issue={showsErrors && (draft.livingArea ?? 0) <= 0 ? 'Indiquez la surface.' : null}
               onChange={(value) => set('livingArea', value)} />
           </>
+        )}
+        {/* Immeuble de rapport ou mixte : « R+2 » (PublishFlowView, AmountField avec le préfixe « R+ »). */}
+        {type === 'building' && (
+          <Amount label="Nombre d'étages" value={draft.totalFloors} unit="" prefix="R+" integer onChange={(value) => set('totalFloors', value)} />
         )}
         {(type === 'house' || type === 'land' || type === 'building' || type === 'hotel') && (
           <>

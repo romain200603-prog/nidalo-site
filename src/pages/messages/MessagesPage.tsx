@@ -9,7 +9,9 @@ import { openConversation, useMessaging } from '../../lib/messages/store';
 import { canOpenDetails } from '../../lib/messages/thread';
 import { PATHS } from '../../lib/paths';
 import { ConversationPane, MissingConversation, NoConversation, PaneSkeleton } from './Conversation';
+import { accessibleCommunity, CommunityView, JoinRequestsView } from './Community';
 import { DetailsView, MediaView } from './Details';
+import { AddMembersView, EphemeralView, GroupInfoView } from './GroupInfo';
 import { Inbox, ListSkeleton } from './Inbox';
 import { NewConversationSheet } from './NewConversation';
 import { NoticeDialogs } from './parts';
@@ -79,8 +81,18 @@ function Messenger({ userId }: { userId: string }) {
     pane = <MissingConversation />;
   } else if (route.view === 'details' && canOpenDetails(conversation)) {
     pane = <DetailsView key={conversation.id} conversation={conversation} messages={messages} visits={visits.value} blocked={blocked} me={userId} />;
-  } else if (route.view === 'medias' && canOpenDetails(conversation)) {
+  } else if (route.view === 'medias' && (canOpenDetails(conversation) || (conversation.isGroup && !conversation.communityId))) {
     pane = <MediaView key={conversation.id} conversation={conversation} messages={messages} tab={route.tab} me={userId} />;
+  } else if ((route.view === 'groupe' || route.view === 'communaute') && conversation.isGroup) {
+    pane = conversation.communityId
+      ? <CommunityView key={conversation.id} conversation={conversation} me={userId} />
+      : <GroupInfoView key={conversation.id} conversation={conversation} messages={messages} me={userId} />;
+  } else if (route.view === 'ajout' && conversation.isGroup && (!conversation.communityId || accessibleCommunity(conversation, userId))) {
+    pane = <AddMembersView key={conversation.id} conversation={conversation} />;
+  } else if (route.view === 'ephemeres' && conversation.isGroup && !conversation.communityId) {
+    pane = <EphemeralView key={conversation.id} conversation={conversation} />;
+  } else if (route.view === 'demandes' && accessibleCommunity(conversation, userId)) {
+    pane = <JoinRequestsView key={conversation.id} conversation={conversation} />;
   } else {
     pane = (
       <ConversationPane
@@ -100,8 +112,8 @@ function Messenger({ userId }: { userId: string }) {
     <div className={`dm ${route.conversationId ? 'is-thread' : 'is-list'}`}>
       <Inbox
         inbox={inbox}
-        offers={offers.value}
-        visitRequests={visitRequests.value}
+        visits={visits.value}
+        presence={presence}
         me={userId}
         selectedId={route.conversationId}
         onCompose={() => setComposing(true)}

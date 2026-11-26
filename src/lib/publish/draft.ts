@@ -343,6 +343,17 @@ export function rentalBanYear(energy: EnergyClass | null): number | null {
 
 const blank = (text: string): boolean => text.trim() === '';
 
+/**
+ * Description facultative pour les six types de la catégorie Investissement (appartement loué, maison locative,
+ * immeubles de rapport et mixte, local commercial, bureaux), obligatoire ailleurs (ListingDraft.descriptionIsOptional).
+ */
+export function descriptionIsOptional(draft: PublishDraft): boolean {
+  return draft.category === 'investment' && draft.propertyType !== null && categoryTypes('investment').includes(draft.propertyType);
+}
+
+/** Description à écrire avant de publier : vide et obligatoire pour ce bien. */
+const descriptionMissing = (draft: PublishDraft): boolean => !descriptionIsOptional(draft) && blank(draft.description);
+
 /** Champs obligatoires encore manquants. Les informations de rentabilité ne sont jamais exigées. */
 export function missingRequiredFields(draft: PublishDraft, now = new Date()): RequiredField[] {
   const missing: RequiredField[] = [];
@@ -360,7 +371,7 @@ export function missingRequiredFields(draft: PublishDraft, now = new Date()): Re
   if (rentalBanMessage(draft, now) !== null) missing.push('rentalEnergyClass');
   if (feesNeedPayer(draft)) missing.push('agencyFeesPayer');
   if (coOwnershipNeedsProcedure(draft)) missing.push('coOwnershipProcedure');
-  if (blank(draft.description)) missing.push('description');
+  if (descriptionMissing(draft)) missing.push('description');
   // Le titre n'est exigé que dans le parcours par catégorie (il le propose à l'étape « Description »).
   if (draft.category !== null && blank(draft.title)) missing.push('title');
   return missing;
@@ -422,7 +433,7 @@ export function stepIsComplete(draft: PublishDraft, step: PublishStep, now = new
     case 'media':
       return draft.photos.length > 0;
     case 'description':
-      return !blank(draft.title) && !blank(draft.description);
+      return !blank(draft.title) && !descriptionMissing(draft);
     case 'features':
       if (type === 'land') return (draft.landArea ?? 0) > 0;
       if ((draft.livingArea ?? 0) <= 0) return false;
@@ -498,7 +509,7 @@ export function stepIssues(draft: PublishDraft, step: PublishStep, now = new Dat
       break;
     case 'description':
       if (blank(draft.title)) issues.push('title');
-      if (blank(draft.description)) issues.push('description');
+      if (descriptionMissing(draft)) issues.push('description');
       break;
     default:
       break;
@@ -545,7 +556,7 @@ export function rentIncludingCharges(draft: PublishDraft): number | null {
   return draft.price + draft.monthlyCharges;
 }
 
-/** Loyers annuels actuels hors charges ; jamais le loyer potentiel. Immeuble : somme des loyers par usage. */
+/** Loyers annuels encaissés hors charges ; jamais le loyer potentiel. Immeuble : somme des loyers par usage. */
 export function currentAnnualRent(draft: PublishDraft): number | null {
   const building = buildingOfDraft(draft);
   const total = building ? totalAnnualRent(building) : null;
@@ -571,7 +582,7 @@ export function annualFromMonthly(monthly: number | null): number | null {
   return Math.abs(annual - whole) <= 0.06 + 1e-9 ? whole : round(annual, 2);
 }
 
-/** Rendement brut = loyers annuels actuels hors charges ÷ prix de vente (fraction). */
+/** Rendement brut = loyers annuels encaissés hors charges ÷ prix de vente (fraction). */
 export function grossYield(draft: PublishDraft): number | null {
   const rent = currentAnnualRent(draft);
   if (draft.transaction !== 'sale' || rent === null || draft.price === null || draft.price <= 0) return null;

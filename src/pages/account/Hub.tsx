@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { LargeHeader } from '../../components/LargeHeader';
 import { MenuGroup, type MenuRowItem } from '../../components/MenuRows';
@@ -12,7 +12,7 @@ import { isOwnMandate, loadMandates, mandatesStore, mandatesSubtitle } from '../
 import { loadModerator, moderatorStore } from '../../lib/account/moderation';
 import { loadOpportunities, opportunitiesStore, opportunitiesSubtitle } from '../../lib/account/opportunities';
 import { loadProfessional, professionalStore } from '../../lib/account/professional';
-import { saveAccountType, type Account } from '../../lib/account/profile';
+import type { Account } from '../../lib/account/profile';
 import { editableProjectStore, loadEditableProject, projectSubtitle } from '../../lib/account/projectEditor';
 import { activeSalesCount, loadSales, salesStore, salesSubtitle } from '../../lib/account/sales';
 import { loadSavedSearches, savedSearchesStore } from '../../lib/account/savedSearches';
@@ -21,9 +21,11 @@ import { loadTeam, memberAgency, ROLE_LABELS, teamStore, teamSubtitle } from '..
 import { currentUserId, useStore } from '../../lib/account/session';
 import { notificationsLabel } from '../../lib/badges';
 import { useDesktop } from '../../lib/desktop';
+import { requestsInTab, type DetailRequestRow } from '../../lib/listing/requestDetail';
 import { parisDay } from '../../lib/listing/views';
+import { fetchVisitRequests } from '../../lib/listing/visits';
 import { loadNotifications, notificationsStore, unreadNotificationCount } from '../../lib/notifications';
-import { accountPath, AGENCY_FORM_PATH, AGENCY_PATH, CONTACTS_PATH, MANDATES_PATH, OPPORTUNITIES_PATH, PATHS, SALES_PATH, TEAM_PATH } from '../../lib/paths';
+import { accountPath, AGENCY_FORM_PATH, AGENCY_PATH, CONTACTS_PATH, MANDATES_PATH, OPPORTUNITIES_PATH, SALES_PATH, TEAM_PATH } from '../../lib/paths';
 import { recentlyViewedIds } from '../../lib/recentlyViewed';
 import { SpaceProfileCard } from './parts';
 import { soonPath } from './Screens';
@@ -32,16 +34,15 @@ import '../../styles/compte-app.css';
 // Mon compte (Features/Profile/ProfileView.swift) : l'espace particulier ou l'espace professionnel, comme l'app.
 // Grand titre et cloche, carte du profil, puis les groupes de l'app dans son ordre, avec ses lignes, ses icônes et
 // ses textes ; chaque ligne mène à l'écran que le site a déjà. Ce qui reste sur l'iPhone n'est pas ajouté : la carte
-// « Mon dossier immobilier » (documents), « Alertes sur cet iPhone ».
+// « Mon dossier immobilier » du particulier (son pourcentage vient des documents de l'iPhone), « Alertes sur cet iPhone ».
 
-type Dialog = 'logout' | 'type' | null;
+type Dialog = 'logout' | null;
 
 export function Hub({ account }: { account: Account }) {
   const desktop = useDesktop();
   const moderator = useStore(moderatorStore);
   const notifications = useStore(notificationsStore);
   const [dialog, setDialog] = useState<Dialog>(null);
-  const [typeError, setTypeError] = useState<string | null>(null);
   const isPro = account.profile.account_type === 'professional';
 
   useEffect(() => {
@@ -73,34 +74,23 @@ export function Hub({ account }: { account: Account }) {
   }, [desktop]);
   const unread = notifications.status === 'ready' ? unreadNotificationCount(notifications.items) : 0;
 
-  async function switchType() {
-    setDialog(null);
-    setTypeError(null);
-    const error = await saveAccountType(isPro ? 'individual' : 'professional');
-    if (error) setTypeError(error);
-  }
-
   /** Connexion et sécurité, Confidentialité et données, Type de compte et, pour un modérateur, Signalements. */
   const securityRows: MenuRowItem[] = [
     { icon: 'lock', title: 'Connexion et sécurité', href: accountPath('securite') },
     { icon: 'shieldCheck', title: 'Confidentialité et données', href: accountPath('confidentialite') },
-    { icon: 'user', title: 'Type de compte', subtitle: isPro ? 'Professionnel' : 'Particulier', onClick: () => setDialog('type') },
+    // La page de l'app (AccountTypePage), avec le changement et sa confirmation.
+    { icon: 'circleUser', title: 'Type de compte', subtitle: isPro ? 'Professionnel' : 'Particulier', href: accountPath('type') },
     ...(moderator === true ? [{ icon: 'flag' as const, title: 'Signalements', href: accountPath('signalements') }] : []),
   ];
-  // « Notifications » : la ligne du site, gardée à la place de « Alertes sur cet iPhone » (la cloche du titre mène au
-  // même écran). « Préférences » : les réglages de l'iPhone, « bientôt » sur le site.
-  const settingsRows: MenuRowItem[] = isPro ? [
-    { icon: 'bell', title: 'Notifications', href: accountPath('notifications') },
-    { icon: 'gear', title: 'Préférences', href: soonPath('preferences') },
-    { icon: 'headphones', title: 'Aide et support Pro', href: PATHS.help },
-    { icon: 'info', title: 'Informations légales', href: accountPath('legal') },
-  ] : [
-    { icon: 'bell', title: 'Notifications', href: accountPath('notifications') },
-    { icon: 'gear', title: 'Préférences', href: soonPath('preferences') },
-    { icon: 'circleHelp', title: 'Aide et assistance', href: PATHS.help },
+  // Comme l'app : Préférences, l'aide et les informations légales, pages de Mon compte. Pas de ligne « Notifications »
+  // (la cloche du titre y mène) ; « Alertes sur cet iPhone » reste dans l'app.
+  const settingsRows: MenuRowItem[] = [
+    { icon: 'gear', title: 'Préférences', href: accountPath('preferences') },
+    isPro
+      ? { icon: 'headphones', title: 'Aide et support Pro', href: accountPath('aide') }
+      : { icon: 'circleHelp', title: 'Aide et assistance', href: accountPath('aide') },
     { icon: 'info', title: 'Informations légales', href: accountPath('legal') },
   ];
-  const typeErrorText = typeError && <p className="field-error" role="alert">{typeError}</p>;
 
   return (
     <div className="app-space">
@@ -109,9 +99,9 @@ export function Hub({ account }: { account: Account }) {
           <RoundButton icon="bell" label={notificationsLabel(unread)} href={accountPath('notifications')} dot={unread > 0} />
         )} />
       {isPro ? (
-        <ProSpace securityRows={securityRows} settingsRows={settingsRows} typeError={typeErrorText} />
+        <ProSpace securityRows={securityRows} settingsRows={settingsRows} />
       ) : (
-        <IndividualSpace account={account} securityRows={securityRows} settingsRows={settingsRows} typeError={typeErrorText} />
+        <IndividualSpace account={account} securityRows={securityRows} settingsRows={settingsRows} />
       )}
       <button type="button" className="logout-button" onClick={() => setDialog('logout')}>
         <Icon name="logOut" />
@@ -123,33 +113,20 @@ export function Hub({ account }: { account: Account }) {
         open={dialog === 'logout'}
         onClose={() => setDialog(null)}
         title="Se déconnecter ?"
-        message="Vous pourrez vous reconnecter à tout moment."
+        message="Vous pourrez vous reconnecter à tout moment. Les données de ce navigateur restent enregistrées."
         actions={[
-          { label: 'Se déconnecter', onClick: () => { setDialog(null); void signOut(); }, tone: 'primary' },
-          { label: 'Annuler', onClick: () => setDialog(null) },
-        ]}
-      />
-      <AlertDialog
-        open={dialog === 'type'}
-        onClose={() => setDialog(null)}
-        title={isPro ? 'Passer en particulier ?' : 'Passer en professionnel ?'}
-        message="Vous pourrez revenir en arrière à tout moment depuis Type de compte."
-        actions={[
-          // Sans fiche agence, l'app ouvre d'abord le formulaire professionnel : le site aussi (Profil agence).
-          !isPro && !account.profile.professional_profile_id
-            ? { label: 'Passer en professionnel', href: AGENCY_FORM_PATH, tone: 'primary' }
-            : { label: isPro ? 'Passer en particulier' : 'Passer en professionnel', onClick: () => void switchType(), tone: 'primary' },
-          { label: 'Annuler', onClick: () => setDialog(null) },
+          { label: 'Se déconnecter', onClick: () => { setDialog(null); void signOut(); }, role: 'destructive' },
+          { label: 'Annuler', onClick: () => setDialog(null), role: 'cancel' },
         ]}
       />
     </div>
   );
 }
 
-type SpaceProps = { securityRows: MenuRowItem[]; settingsRows: MenuRowItem[]; typeError: ReactNode };
+type SpaceProps = { securityRows: MenuRowItem[]; settingsRows: MenuRowItem[] };
 
 /** 3a · Espace particulier : la carte du profil, puis Mon espace, Contrats et location, Compte et sécurité, Paramètres et assistance. */
-function IndividualSpace({ account, securityRows, settingsRows, typeError }: SpaceProps & { account: Account }) {
+function IndividualSpace({ account, securityRows, settingsRows }: SpaceProps & { account: Account }) {
   const listings = useStore(myListingsStore);
   const searches = useStore(savedSearchesStore);
   const project = useStore(editableProjectStore);
@@ -185,14 +162,14 @@ function IndividualSpace({ account, securityRows, settingsRows, typeError }: Spa
         { icon: 'filePenLine', title: 'Documents à signer', tint: 'amber', href: soonPath('signature') },
         { icon: 'folderCheck', title: 'Mon dossier immobilier', tint: 'teal', href: soonPath('dossier') },
       ]} />
-      <MenuGroup title="Compte et sécurité" rows={securityRows}>{typeError}</MenuGroup>
+      <MenuGroup title="Compte et sécurité" rows={securityRows} />
       <MenuGroup title="Paramètres et assistance" rows={settingsRows} />
     </>
   );
 }
 
 /** 3b · Espace professionnel : la fiche de l'agence, les chiffres, puis les groupes de l'activité professionnelle. */
-function ProSpace({ securityRows, settingsRows, typeError }: SpaceProps) {
+function ProSpace({ securityRows, settingsRows }: SpaceProps) {
   const listings = useStore(myListingsStore);
   const pro = useStore(professionalStore);
   const team = useStore(teamStore);
@@ -214,6 +191,15 @@ function ProSpace({ securityRows, settingsRows, typeError }: SpaceProps) {
   const name = (member?.agency_name ?? agency?.agency_name)?.trim() || 'Votre agence';
   const line = member ? `${ROLE_LABELS[member.role]} de l'équipe` : agency?.email?.trim() || agency?.city?.trim() || 'Fiche agence à compléter';
   const online = myListings.filter((row) => ONLINE_STATUSES.includes(row.status)).length;
+  const [toHandle, setToHandle] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    // Comme la pastille de l'app (toHandleCount) : les demandes qui attendent une réponse, relues à l'ouverture.
+    fetchVisitRequests()
+      .then((rows) => { if (alive) setToHandle(requestsInTab(rows as DetailRequestRow[], 'toHandle', me, new Date()).length); })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, [me]);
   return (
     <>
       {/* « Modifier » tant que la fiche de l'agence n'est pas en ligne, « Voir » ensuite ou pour un membre de l'équipe. */}
@@ -236,9 +222,13 @@ function ProSpace({ securityRows, settingsRows, typeError }: SpaceProps) {
         { icon: 'handshake', title: 'Mes ventes', tint: 'blue', subtitle: salesSubtitle(saleRows), href: SALES_PATH },
         { icon: 'users', title: 'Mes contacts', tint: 'blue', subtitle: contactsSubtitle(contactItems), badge: newContacts, badgeTone: 'brand', href: CONTACTS_PATH },
         { icon: 'calendarBlank', title: 'Agenda des visites', tint: 'blue', href: accountPath('agenda') },
+        // « Mes visites » : demandes envoyées et reçues ; la pastille compte celles qui attendent une réponse.
+        { icon: 'calendarCheck', title: 'Mes visites', tint: 'blue', badge: toHandle, badgeTone: 'brand', href: accountPath('visites') },
         { icon: 'trend', title: 'Mes opportunités', tint: 'blue', subtitle: opportunitiesSubtitle(opportunityRows), href: OPPORTUNITIES_PATH },
       ]} />
       <MenuGroup title="Outils professionnels" rows={[
+        // Le dossier reste dans l'app iPhone (documents chiffrés sur l'iPhone) : l'écran « bientôt » du site.
+        { icon: 'folderCheck', title: 'Mon dossier immobilier', tint: 'blue', href: soonPath('dossier') },
         { icon: 'chartColumn', title: 'Statistiques', tint: 'blue', href: accountPath('statistiques') },
         { icon: 'userPlus', title: 'Gestion des équipes', tint: 'blue', subtitle: teamSubtitle(team), href: TEAM_PATH },
         { icon: 'megaphone', title: 'Outils de diffusion', tint: 'blue', href: accountPath('diffusion') },
@@ -249,11 +239,9 @@ function ProSpace({ securityRows, settingsRows, typeError }: SpaceProps) {
         // Seul le gérant modifie la fiche de l'agence : un membre de l'équipe n'a pas cette ligne.
         ...(member ? [] : [{ icon: 'badgeCheck' as const, title: 'Informations de l\'agence', href: AGENCY_FORM_PATH }]),
         // Seul chemin de l'espace professionnel vers « Mes informations », membres de l'équipe compris (n° 117).
-        { icon: 'user', title: 'Mes informations', href: accountPath('informations') },
+        { icon: 'circleUser', title: 'Mes informations', href: accountPath('informations') },
         ...securityRows,
-      ]}>
-        {typeError}
-      </MenuGroup>
+      ]} />
       <MenuGroup title="Paramètres et assistance" rows={settingsRows} />
     </>
   );

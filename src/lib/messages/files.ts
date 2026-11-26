@@ -20,19 +20,39 @@ export const UNREADABLE = 'Ce fichier n\'a pas pu être lu.';
 /** Élément choisi, en attente d'envoi (PendingAttachment). */
 export type PendingFile = {
   id: string;
-  kind: 'photo' | 'video' | 'document';
-  /** Nom affiché : « Photo.png », « Vidéo.mp4 », ou le nom du document. */
+  kind: 'photo' | 'video' | 'document' | 'location' | 'contact';
+  /** Nom affiché : « Photo.png », « Vidéo.mp4 », le nom du document, l'adresse ou le nom du contact. */
   fileName: string;
-  file: File;
+  /** Fichier choisi ; `null` pour une localisation ou un contact, déjà prêts (`ready`). */
+  file: File | null;
   byteCount: number;
   category: DocumentCategory | null;
   /** Aperçu local (photo, vignette de vidéo), adresse blob: libérée à la fin. */
   previewUrl: string | null;
   durationSeconds: number | null;
   error: string | null;
+  /** Localisation ou contact : la pièce jointe telle qu'elle part, sans fichier à envoyer (AttachmentImport). */
+  ready?: Attachment;
 };
 
 const newId = () => crypto.randomUUID().toUpperCase();
+
+/** Lieu à joindre (AttachmentImport.locationItem) : l'adresse comme nom, et le point. */
+export function pendingLocation(address: string, latitude: number, longitude: number): PendingFile {
+  const id = newId();
+  return {
+    id, kind: 'location', fileName: address, file: null, byteCount: 0, category: null, previewUrl: null, durationSeconds: null, error: null,
+    ready: { id, kind: 'location', fileName: address, byteCount: 0, latitude, longitude },
+  };
+}
+
+/** Contact à joindre (AttachmentImport.contactItem) : son nom, et ses numéros un par ligne. */
+export function pendingContact(name: string, phones: string[]): PendingFile {
+  const id = newId();
+  const ready: Attachment = { id, kind: 'contact', fileName: name, byteCount: 0 };
+  if (phones.length) ready.detail = phones.join('\n');
+  return { id, kind: 'contact', fileName: name, file: null, byteCount: 0, category: null, previewUrl: null, durationSeconds: null, error: null, ready };
+}
 
 async function header(file: Blob, length = 64): Promise<Uint8Array> {
   return new Uint8Array(await file.slice(0, length).arrayBuffer());
@@ -230,28 +250,41 @@ async function put(path: string, data: Blob, contentType: string): Promise<void>
 }
 
 /**
+ * Photo d'un groupe ou d'une communauté (groupImagePath de l'app) : le JPEG déjà préparé (512 px au plus, sans
+ * métadonnées) part dans « <conversation en minuscules>/group/<UUID en minuscules>.jpg » ; rend ce chemin.
+ */
+export async function uploadGroupPhoto(conversationId: string, jpeg: Blob): Promise<string> {
+  const path = `${conversationId.toLowerCase()}/group/${crypto.randomUUID().toLowerCase()}.jpg`;
+  await put(path, jpeg, 'image/jpeg');
+  return path;
+}
+
+/**
  * Prépare et envoie un élément, puis rend sa pièce jointe telle que l'app l'écrit (LocalAttachmentStorage.store, puis
  * MessageAttachmentFiles.upload) : photo en JPEG, vidéo sans métadonnées et sa vignette, document en image réencodé en
  * JPEG comme une photo (sans lieu ni EXIF), autre document tel quel.
  */
 export async function uploadPending(item: PendingFile, conversationId: string): Promise<Attachment> {
-  const issue = attachmentIssue(item.kind, item.fileName, item.file.size);
+  if (item.ready) return item.ready;
+  const file = item.file;
+  if (!file || item.kind === 'location' || item.kind === 'contact') throw new Error(UNREADABLE);
+  const issue = attachmentIssue(item.kind, item.fileName, file.size);
   if (issue) throw new Error(issue);
   const ext = lowerExtension(item.fileName);
-  if (!contentMatches(item.fileName, await header(item.file))) throw new Error(CONTENT_MISMATCH);
+  if (!contentMatches(item.fileName, await header(file))) throw new Error(CONTENT_MISMATCH);
   const category = item.category ? { category: item.category } : {};
   if (item.kind === 'photo') {
-    const jpeg = await photoJpeg(item.file);
+    const jpeg = await photoJpeg(file);
     const path = storagePath(conversationId, `${newId()}.jpg`);
     await put(path, jpeg, 'image/jpeg');
     return { id: item.id, kind: 'photo', fileName: item.fileName, storagePath: path, byteCount: jpeg.size, ...category };
   }
   if (item.kind === 'video') {
-    const data = new Blob([videoWithoutMetadata(await item.file.arrayBuffer())]);
+    const data = new Blob([videoWithoutMetadata(await file.arrayBuffer())]);
     const path = storagePath(conversationId, `${newId()}.${ext}`);
     await put(path, data, storageContentType('video', ext));
-    const attachment: Attachment = { id: item.id, kind: 'video', fileName: item.fileName, storagePath: path, byteCount: item.file.size };
-    const frame = await videoFrame(item.file);
+    const attachment: Attachment = { id: item.id, kind: 'video', fileName: item.fileName, storagePath: path, byteCount: file.size };
+    const frame = await videoFrame(file);
     if (frame) {
       const thumbnailPath = storagePath(conversationId, `${newId()}.jpg`);
       await put(thumbnailPath, frame.thumbnail, 'image/jpeg');
@@ -261,14 +294,14 @@ export async function uploadPending(item: PendingFile, conversationId: string): 
     return { ...attachment, ...category };
   }
   if (PHOTO_EXTENSIONS.includes(ext)) {
-    const jpeg = await photoJpeg(item.file);
+    const jpeg = await photoJpeg(file);
     const path = storagePath(conversationId, `${newId()}.jpg`);
     await put(path, jpeg, 'image/jpeg');
     return { id: item.id, kind: 'document', fileName: jpegFileName(item.fileName), storagePath: path, byteCount: jpeg.size, ...category };
   }
   const path = storagePath(conversationId, `${newId()}.${ext}`);
-  await put(path, item.file, storageContentType('document', ext));
-  return { id: item.id, kind: 'document', fileName: item.fileName, storagePath: path, byteCount: item.file.size, ...category };
+  await put(path, file, storageContentType('document', ext));
+  return { id: item.id, kind: 'document', fileName: item.fileName, storagePath: path, byteCount: file.size, ...category };
 }
 
 // MARK: - Transfert
@@ -359,4 +392,33 @@ export function signedUrl(path: string): Promise<string | null> {
 export function knownSignedUrl(path: string): string | null {
   const cached = signed.get(path);
   return cached && !(cached instanceof Promise) && Date.now() - cached.at < REUSE_MS ? cached.url : null;
+}
+
+// MARK: - Suppression (MessageAttachmentFiles.serverPaths, remove)
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Chemin d'un fichier du bucket : « <UUID>/<fichier> », sans « : » ni « .. » (localPath(forServer:) de l'app). */
+export function isServerPath(path: string): boolean {
+  if (path.includes(':')) return false;
+  const slash = path.indexOf('/');
+  if (slash < 0) return false;
+  const rest = path.slice(slash + 1);
+  return UUID_PATTERN.test(path.slice(0, slash)) && rest.length > 0 && !rest.includes('..');
+}
+
+/** Fichiers du bucket cités par des pièces jointes (fichier et vignette), à effacer avec leur message. */
+export function serverPaths(items: Attachment[]): string[] {
+  return items.flatMap((item) => [item.storagePath, item.thumbnailPath]).filter((path): path is string => !!path && isServerPath(path));
+}
+
+/** Efface des fichiers du bucket (seul leur auteur le peut) ; un échec n'empêche rien, comme dans l'app. */
+export async function removeFiles(paths: string[]): Promise<void> {
+  if (paths.length === 0) return;
+  try {
+    await supabase.storage.from(ATTACHMENT_BUCKET).remove(paths);
+  } catch {
+    // Fichiers laissés : le message, lui, est supprimé.
+  }
+  for (const path of paths) signed.delete(path);
 }

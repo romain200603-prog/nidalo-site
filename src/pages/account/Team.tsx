@@ -10,7 +10,7 @@ import {
 } from '../../lib/account/team';
 import { plural } from '../../lib/format';
 import { accountPath, AGENCY_FORM_PATH, PATHS, TEAM_INVITE_PATH, TEAM_PATH } from '../../lib/paths';
-import { Avatar, EmptyState, ScreenHeader, Spinner, Toast } from './parts';
+import { Avatar, EmptyState, LoadFailure, ScreenHeader, Spinner, Toast } from './parts';
 
 // « Gestion des équipes » de l'espace professionnel : l'équipe de l'agence (gérant, responsables, agents), les
 // invitations en cours, « Inviter un collaborateur » (un lien à copier ou à envoyer par e-mail) et l'invitation
@@ -82,8 +82,7 @@ function TeamSpace({ screen }: { screen: string | null }) {
     return (
       <div className="space">
         <ScreenHeader title="Gestion des équipes" />
-        <p className="signin-error" role="alert">{state.message}</p>
-        <button type="button" className="btn btn-light" onClick={() => void loadTeam()}>Réessayer</button>
+        <LoadFailure message={state.message} onRetry={() => void loadTeam()} />
       </div>
     );
   }
@@ -149,7 +148,7 @@ function TeamScreen({ agency, members, invites, toast }: { agency: TeamAgency; m
   return (
     <div className="space team">
       <Toast text={flash ?? toast} />
-      <ScreenHeader title="Gestion des équipes" action={manager ? <a className="save-capsule" href={TEAM_INVITE_PATH}>Inviter</a> : undefined} />
+      <ScreenHeader title="Gestion des équipes" action={manager ? <a className="nav-text-button" href={TEAM_INVITE_PATH}>Inviter</a> : undefined} />
       <section className="sale-head space-card team-head">
         <Avatar name={agency.agency_name} path={agency.logo_path} size={64} />
         <div className="sale-head-text">
@@ -237,10 +236,9 @@ function TeamScreen({ agency, members, invites, toast }: { agency: TeamAgency; m
           {
             label: selected.role === 'agent' ? 'Passer responsable' : 'Passer agent',
             onClick: () => void run(() => setMemberRole(selected.user_id, selected.role === 'agent' ? 'manager' : 'agent'), 'role'),
-            tone: 'primary',
           },
-          { label: 'Retirer de l\'équipe', onClick: () => { setConfirm({ kind: 'remove', member: selected }); setSelected(null); } },
-          { label: 'Annuler', onClick: () => setSelected(null), tone: 'quiet' },
+          { label: 'Retirer de l\'équipe', onClick: () => { setConfirm({ kind: 'remove', member: selected }); setSelected(null); }, role: 'destructive' },
+          { label: 'Annuler', onClick: () => setSelected(null), role: 'cancel' },
         ] : []}
       />
       <AlertDialog
@@ -249,8 +247,8 @@ function TeamScreen({ agency, members, invites, toast }: { agency: TeamAgency; m
         title={confirm?.kind === 'remove' ? `Retirer ${memberName(confirm.member)} de l'équipe ?` : ''}
         message="Son compte ne sera plus rattaché à l'agence et reprendra son type d'avant. Ses annonces restent sur son compte."
         actions={[
-          { label: 'Retirer de l\'équipe', onClick: () => { if (confirm?.kind === 'remove') void run(() => removeMember(confirm.member.user_id), 'retire'); }, tone: 'primary' },
-          { label: 'Annuler', onClick: () => setConfirm(null), tone: 'quiet' },
+          { label: 'Retirer de l\'équipe', onClick: () => { if (confirm?.kind === 'remove') void run(() => removeMember(confirm.member.user_id), 'retire'); }, role: 'destructive' },
+          { label: 'Annuler', onClick: () => setConfirm(null), role: 'cancel' },
         ]}
       />
       <AlertDialog
@@ -259,8 +257,8 @@ function TeamScreen({ agency, members, invites, toast }: { agency: TeamAgency; m
         title="Annuler cette invitation ?"
         message="Le lien ne marchera plus. Vous pourrez en créer un autre."
         actions={[
-          { label: 'Annuler l\'invitation', onClick: () => { if (confirm?.kind === 'revoke') void run(() => revokeInvite(confirm.invite.id), 'annulee'); }, tone: 'primary' },
-          { label: 'Garder', onClick: () => setConfirm(null), tone: 'quiet' },
+          { label: 'Annuler l\'invitation', onClick: () => { if (confirm?.kind === 'revoke') void run(() => revokeInvite(confirm.invite.id), 'annulee'); }, role: 'destructive' },
+          { label: 'Garder', onClick: () => setConfirm(null), role: 'cancel' },
         ]}
       />
       <AlertDialog
@@ -269,8 +267,8 @@ function TeamScreen({ agency, members, invites, toast }: { agency: TeamAgency; m
         title="Quitter l'équipe ?"
         message={`Votre compte ne sera plus rattaché à ${agency.agency_name} et reprendra son type d'avant. Vos annonces restent sur votre compte.`}
         actions={[
-          { label: 'Quitter l\'équipe', onClick: () => void run(leaveTeam, 'quitte'), tone: 'primary' },
-          { label: 'Annuler', onClick: () => setConfirm(null), tone: 'quiet' },
+          { label: 'Quitter l\'équipe', onClick: () => void run(leaveTeam, 'quitte'), role: 'destructive' },
+          { label: 'Annuler', onClick: () => setConfirm(null), role: 'cancel' },
         ]}
       />
       <LinkDialog url={manualLink} onClose={() => setManualLink(null)} />
@@ -286,7 +284,7 @@ function LinkDialog({ url, onClose }: { url: string | null; onClose: () => void 
       onClose={onClose}
       title="Lien d'invitation"
       message="Le lien est sélectionné : copiez-le avec le menu ou le clavier."
-      actions={[{ label: 'Fermer', onClick: onClose, tone: 'primary' }]}
+      actions={[{ label: 'Fermer', onClick: onClose, role: 'cancel' }]}
     >
       {url && <input className="text-input team-link-input" readOnly value={url} aria-label="Lien d'invitation" autoFocus onFocus={(event) => event.currentTarget.select()} />}
     </AlertDialog>
@@ -473,8 +471,7 @@ function InvitationScreen({ token }: { token: string }) {
     return (
       <div className="space">
         <ScreenHeader title="Invitation" />
-        <p className="signin-error" role="alert">{state.message}</p>
-        <button type="button" className="btn btn-light" onClick={() => void load()}>Réessayer</button>
+        <LoadFailure message={state.message} onRetry={() => void load()} />
       </div>
     );
   }

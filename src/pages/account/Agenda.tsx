@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
+import { showToast } from '../../components/AppToast';
 import { ContentUnavailable } from '../../components/ContentUnavailable';
 import { Icon } from '../../components/Icon';
 import { LargeHeader } from '../../components/LargeHeader';
+import { OfflineState, WifiExclamationIcon } from '../../components/OfflineState';
 import { SectionLabel } from '../../components/MenuRows';
 import { RoundButton } from '../../components/RoundButton';
 import {
-  acceptsReport, agendaItems, agendaStore, AGENDA_LOAD_ERROR, canContact, contactConversationId, CONVERSATION_NOT_FOUND, countIn,
-  directionsUrl, displayStatus, EMPTY_TABS, fetchAgencyNames, findExistingConversation, isRequestEntry, isVideoVisit, loadAgenda,
+  acceptsReport, agendaItems, agendaStore, AGENDA_LOAD_ERROR, canContact, cancelVisit, contactConversationId, CONVERSATION_NOT_FOUND, countIn,
+  deleteVisit, directionsUrl, displayStatus, downloadVisitCalendar, EMPTY_TABS, fetchAgencyNames, findExistingConversation, isRequestEntry, isVideoVisit, loadAgenda,
   loadVisitSessions, noAddressNotice, noSellerNotice, PERIOD_TITLES, periodGroupsIn, receivedRequest, routableAddress, sessionBookedLabel,
   sessionTitle, shortStatusLabel, TAB_TITLES, upcomingSessionsOf, visitCardTitle, visitDateBlock, visitPersonLine, visitSessionsStore,
-  visitSlotCount, visitTimeRange, type AgendaItem, type VisitDisplayStatus, type VisitSession, type VisitTab,
+  visitShareText, visitSlotCount, visitTimeRange, type AgendaItem, type VisitDisplayStatus, type VisitSession, type VisitTab,
 } from '../../lib/account/agenda';
 import { useSession, useStore } from '../../lib/account/session';
 import { useDesktop } from '../../lib/desktop';
@@ -19,6 +21,7 @@ import { accountPath, conversationPath, PATHS, visitRequestPath } from '../../li
 import { useFitTexts } from '../listing/fitText';
 import { ActionMenu, ChoiceDialog, IphoneOnlyDialog, ScreenHead, type MenuItem } from './DesktopParts';
 import { Spinner } from './parts';
+import { VisitDetail } from './VisitDetail';
 import '../../styles/agenda-app.css';
 
 // « Mon agenda », comme l'app (Features/Visits/VisitsAgendaView.swift) : sur téléphone, son écran (retour rond, « + »,
@@ -26,9 +29,10 @@ import '../../styles/agenda-app.css';
 // mise en page du site (en-tête, onglets et « + » sur une ligne) avec ces pièces. Itinéraire (Plans, sauf en visio),
 // Message (la conversation liée ; pour une demande reçue, celle déjà ouverte avec le demandeur ; sinon une conversation
 // avec le vendeur) et le menu « … ». Les visites viennent de agenda_visits, les demandes de visite pas encore acceptées
-// de my_visit_requests, les créneaux ouverts de my_visit_sessions (lib/account/agenda). Le détail d'une visite ou d'une
-// séance de créneaux, leurs modifications et le calendrier restent dans l'app iPhone ; une demande ouvre l'écran
-// « Demande de visite ».
+// de my_visit_requests, les créneaux ouverts de my_visit_sessions (lib/account/agenda). Toucher une visite ouvre son
+// détail (&visite=…), une demande l'écran « Demande de visite ». « Ajouter à mon calendrier » donne un fichier .ics ;
+// Annuler et Supprimer écrivent dans agenda_visits comme l'app. Modifier, reprogrammer, la note et la page d'une séance
+// de créneaux restent dans l'app iPhone.
 
 const TABS: VisitTab[] = ['upcoming', 'past', 'cancelled'];
 
@@ -41,17 +45,20 @@ function dateTone(status: VisitDisplayStatus): string {
 /** Teinte de la pastille d'état : « Confirmée » vert, « À confirmer » et « En attente » ambre, « Annulée » rouge, « Terminée » gris. */
 const PILL_TONES: Record<VisitDisplayStatus, string> = { confirmed: 'green', toConfirm: 'amber', awaitingOther: 'amber', cancelled: 'red', done: 'gray' };
 
+/** Ce que le menu « … » et le détail d'une visite font : iPhone seulement, calendrier, annuler, supprimer. */
+type VisitHandlers = { iphone: (title: string) => void; calendar: (item: AgendaItem) => void; cancel: (item: AgendaItem) => void; remove: (item: AgendaItem) => void };
+
 /** Actions du menu « … » d'une visite enregistrée, dans l'ordre et aux conditions de l'app (VisitCard.menu). */
-function menuItems(item: AgendaItem, status: VisitDisplayStatus, iphone: (title: string) => void): MenuItem[] {
+function menuItems(item: AgendaItem, status: VisitDisplayStatus, { iphone, calendar, cancel, remove }: VisitHandlers): MenuItem[] {
   const fromRequest = item.requestId !== null;
   const isActive = item.status !== 'cancelled' && status !== 'done' && !fromRequest;
   const items: MenuItem[] = [];
   if (isActive) items.push({ label: 'Modifier la visite', icon: 'squarePen', onClick: () => iphone('Modifier la visite') });
   if (status !== 'done' && !fromRequest) items.push({ label: 'Reprogrammer', icon: 'calendarDays', onClick: () => iphone('Reprogrammer') });
   items.push({ label: 'Ajouter une note', icon: 'fileText', onClick: () => iphone('Ajouter une note') });
-  items.push({ label: 'Ajouter à mon calendrier', icon: 'calendarPlus', onClick: () => iphone('Ajouter à mon calendrier') });
-  if (isActive) items.push({ label: 'Annuler la visite', icon: 'x', onClick: () => iphone('Annuler la visite'), danger: true });
-  if (item.conversationId === null && !fromRequest) items.push({ label: 'Supprimer', icon: 'trash', onClick: () => iphone('Supprimer'), danger: true });
+  items.push({ label: 'Ajouter à mon calendrier', icon: 'calendarPlus', onClick: () => calendar(item) });
+  if (isActive) items.push({ label: 'Annuler la visite', icon: 'x', onClick: () => cancel(item), danger: true });
+  if (item.conversationId === null && !fromRequest) items.push({ label: 'Supprimer', icon: 'trash', onClick: () => remove(item), danger: true });
   return items;
 }
 
@@ -84,13 +91,13 @@ function AddVisitButton({ href }: { href: string }) {
  * Itinéraire (ou « Voir les créneaux » d'une demande à plusieurs créneaux), Message et « … ». Une demande s'ouvre en
  * touchant la carte ; les boutons gardent la priorité.
  */
-function VisitCard({ item, now, slotCount, agencyName, onNotice, onIphone, onContact }: {
+function VisitCard({ item, now, slotCount, agencyName, onNotice, handlers, onContact }: {
   item: AgendaItem;
   now: Date;
   slotCount: number | null;
   agencyName: string | null;
   onNotice: (text: string) => void;
-  onIphone: (title: string) => void;
+  handlers: VisitHandlers;
   onContact: (item: AgendaItem) => void;
 }) {
   const status = displayStatus(item, now);
@@ -104,6 +111,8 @@ function VisitCard({ item, now, slotCount, agencyName, onNotice, onIphone, onCon
   return (
     <article className="app-visit">
       {request && <a className="app-visit-open" href={visitRequestPath(item.id)} aria-label={`Voir la demande : ${item.listing?.title ?? 'Visite'}`} />}
+      {/* Une visite enregistrée : la carte entière ouvre son détail (VisitDetailView). */}
+      {!request && <a className="app-visit-detail" href={accountPath('agenda', { visite: item.id })} aria-label={`Voir la visite : ${item.listing?.title ?? 'Visite'}`} />}
       <div className="app-visit-main">
         <span className={`app-visit-date app-tone-${dateTone(status)}`} role="img" aria-label={visitDateLong(item.start)}>
           <span className="app-visit-weekday" aria-hidden="true">{date.weekday}</span>
@@ -141,7 +150,7 @@ function VisitCard({ item, now, slotCount, agencyName, onNotice, onIphone, onCon
         <button type="button" className="app-visit-button is-outline" disabled={!contactable} onClick={() => onContact(item)}>
           <Icon name="messageCircle" />Message
         </button>
-        {!request && <ActionMenu label="Autres actions" items={menuItems(item, status, onIphone)} triggerClassName="dsc-menu-button app-visit-more" />}
+        {!request && <ActionMenu label="Autres actions" items={menuItems(item, status, handlers)} triggerClassName="dsc-menu-button app-visit-more" />}
       </div>
     </article>
   );
@@ -178,7 +187,12 @@ export function AgendaScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [iphoneOnly, setIphoneOnly] = useState<string | null>(null);
   const [agencies, setAgencies] = useState<Map<string, string>>(() => new Map());
+  // Visite à annuler ou à supprimer, en attente de confirmation (visitToCancel, visitToDelete).
+  const [confirm, setConfirm] = useState<{ kind: 'cancel' | 'delete'; item: AgendaItem } | null>(null);
+  const busy = useRef(false);
   const asked = useRef(new Set<string>());
+  // « Détail de la visite » : la visite ouverte depuis sa carte (&visite=…).
+  const visitId = new URLSearchParams(window.location.search).get('visite');
 
   useEffect(() => {
     void loadAgenda();
@@ -230,14 +244,93 @@ export function AgendaScreen() {
     else setNotice(noSellerNotice(item));
   }
 
+  const handlers: VisitHandlers = {
+    iphone: setIphoneOnly,
+    calendar: downloadVisitCalendar,
+    cancel: (item) => setConfirm({ kind: 'cancel', item }),
+    remove: (item) => setConfirm({ kind: 'delete', item }),
+  };
+
+  /** Annulation ou suppression confirmée ; une visite supprimée depuis son détail ramène à l'agenda. */
+  async function confirmed() {
+    if (!confirm || !me || busy.current) return;
+    const { kind, item } = confirm;
+    setConfirm(null);
+    busy.current = true;
+    const error = kind === 'cancel' ? await cancelVisit(item) : await deleteVisit(item, me);
+    busy.current = false;
+    if (error) setNotice(error);
+    else if (kind === 'delete' && visitId) window.location.replace(accountPath('agenda'));
+  }
+
+  /** « Partager la visite » : le partage du navigateur, sinon le texte copié (ou montré, à copier à la main). */
+  async function share(item: AgendaItem) {
+    const text = visitShareText(item, visitDateLong);
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ text });
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast({ icon: 'check', text: 'Texte copié' });
+    } catch {
+      setNotice(text);
+    }
+  }
+
+  const dialogs = (
+    <>
+      <ChoiceDialog open={notice !== null} title={notice ?? ''} onClose={() => setNotice(null)} dismissible={false}
+        actions={[{ label: 'OK', onClick: () => setNotice(null), role: 'cancel' }]} />
+      <IphoneOnlyDialog title={iphoneOnly} onClose={() => setIphoneOnly(null)} />
+      <ChoiceDialog open={confirm?.kind === 'cancel'} title="Annuler cette visite ?" onClose={() => setConfirm(null)}
+        message={confirm ? `${visitDateLong(confirm.item.start)}${confirm.item.contactName ? ` avec ${confirm.item.contactName}` : ''}.` : undefined}
+        actions={[
+          { label: 'Annuler la visite', onClick: () => void confirmed(), role: 'destructive' },
+          { label: 'Garder la visite', onClick: () => setConfirm(null), role: 'cancel' },
+        ]} />
+      <ChoiceDialog open={confirm?.kind === 'delete'} title="Supprimer cette visite ?" onClose={() => setConfirm(null)}
+        message="Elle disparaîtra définitivement de votre agenda."
+        actions={[
+          { label: 'Supprimer', onClick: () => void confirmed(), role: 'destructive' },
+          { label: 'Garder', onClick: () => setConfirm(null), role: 'cancel' },
+        ]} />
+    </>
+  );
+
+  if (visitId) {
+    // Détail d'une visite : l'attente de la première lecture, la coupure, puis la visite (ou « Visite supprimée »).
+    const item = state.visits.find((visit) => visit.id.toLowerCase() === visitId.toLowerCase()) ?? null;
+    const load = state.status === 'loading' || state.status === 'none' ? 'loading' : state.status === 'error' && state.visits.length === 0 && state.offline ? 'offline' : 'ready';
+    return (
+      <>
+        <VisitDetail item={item} load={load} onRetry={() => void loadAgenda()} now={now}
+          actions={{ ...handlers, contact: (visit) => void contact(visit), notice: setNotice, share: (visit) => void share(visit) }} />
+        {dialogs}
+      </>
+    );
+  }
+
   let content;
   if (state.status === 'loading' && state.visits.length === 0) {
     content = <Spinner label="Chargement des visites…" />;
+  } else if (state.status === 'error' && state.visits.length === 0 && state.offline) {
+    // Coupure de connexion : « Pas de connexion Internet », comme l'app (VisitsAgendaView).
+    content = <OfflineState onRetry={() => void loadAgenda()} />;
   } else if (state.status === 'error' && state.visits.length === 0) {
     content = (
-      <ContentUnavailable icon="triangleAlert" title="Visites indisponibles" text={AGENDA_LOAD_ERROR}>
+      // Autre échec (VisitsAgendaView) : le wifi au point d'exclamation, « Visites indisponibles », le message et
+      // « Réessayer » en bouton plein.
+      <div className="app-unavailable" role="alert">
+        <WifiExclamationIcon className="icon app-unavailable-icon" />
+        <h2>Visites indisponibles</h2>
+        <p>{AGENDA_LOAD_ERROR}</p>
         <button type="button" className="app-agenda-retry" onClick={() => void loadAgenda()}>Réessayer</button>
-      </ContentUnavailable>
+      </div>
     );
   } else if (groups.length === 0 && sessions.length === 0) {
     // État vide seulement sans visite ni créneau ouvert à venir.
@@ -262,7 +355,7 @@ export function AgendaScreen() {
             {group.items.map((item) => (
               <VisitCard key={item.id} item={item} now={now} slotCount={visitSlotCount(item, state.requests)}
                 agencyName={item.listing ? agencies.get(item.listing.listingId.toLowerCase()) ?? null : null}
-                onNotice={setNotice} onIphone={setIphoneOnly} onContact={(visit) => void contact(visit)} />
+                onNotice={setNotice} handlers={handlers} onContact={(visit) => void contact(visit)} />
             ))}
           </section>
         ))}
@@ -290,9 +383,7 @@ export function AgendaScreen() {
         </>
       )}
       <div className="app-agenda-panel" role="tabpanel" aria-label={TAB_TITLES[tab]}>{content}</div>
-      <ChoiceDialog open={notice !== null} title={notice ?? ''} onClose={() => setNotice(null)}
-        actions={[{ label: 'OK', onClick: () => setNotice(null), tone: 'primary' }]} />
-      <IphoneOnlyDialog title={iphoneOnly} onClose={() => setIphoneOnly(null)} />
+      {dialogs}
     </div>
   );
 }

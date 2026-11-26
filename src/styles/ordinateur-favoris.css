@@ -116,7 +116,6 @@
 
   /* États : chargement, erreur, aucun favori, aucun favori ne correspond. */
   .dfav .account-spinner { padding: 64px 0; }
-  .dfav .spinner { border-color: var(--d-blue-light); border-top-color: var(--d-blue); }
   .dfav .account-empty { gap: 10px; padding: 56px 16px; }
   .dfav .account-empty > .icon { width: 40px; height: 40px; color: var(--d-blue); }
   .dfav .account-empty h2 { margin-top: 4px; color: var(--d-text); font-size: 20px; font-weight: 700; line-height: 26px; }

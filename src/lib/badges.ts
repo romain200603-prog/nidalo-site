@@ -4,6 +4,7 @@ import { supabase } from './supabase';
 import { isNewAccount } from './account/auth';
 import { createStore, currentUserId, sessionStore, useSession, useStore } from './account/session';
 import { loadNotifications, notificationsStore, unreadNotificationCount } from './notifications';
+import { isOfflineFailure } from './loadFailure';
 
 // Pastilles rouges de la barre du haut sur ordinateur, comme l'app :
 // - Messages : non-lus des conversations non archivées (MessagingStore.swift:36-38, RootTabView.swift:32) ;
@@ -72,9 +73,10 @@ export type ConversationRow = ConversationUnreadRow & { conversation_id: string 
 
 /**
  * Dernières lignes de my_conversations du compte, partagées par la pastille et la page Messages (une seule lecture
- * pour les deux). `failed` : la première lecture a échoué ; `local` : lignes changées sur place (conversation lue).
+ * pour les deux). `failed` : la première lecture a échoué (`offline` : faute de connexion) ; `local` : lignes changées
+ * sur place (conversation lue).
  */
-export type ConversationRows = { userId: string | null; rows: ConversationRow[] | null; failed: boolean; local: boolean };
+export type ConversationRows = { userId: string | null; rows: ConversationRow[] | null; failed: boolean; local: boolean; offline?: boolean };
 
 export const conversationRowsStore = createStore<ConversationRows>({ userId: null, rows: null, failed: false, local: false });
 
@@ -104,7 +106,7 @@ export const loadUnreadMessages = coalesced(async () => {
   // Comme refreshFromServer (`try?`) : une lecture qui échoue garde le dernier nombre connu.
   if (error || !Array.isArray(data)) {
     const current = conversationRowsStore.get();
-    if (!current.rows) setRows({ ...current, failed: true });
+    if (!current.rows) setRows({ ...current, failed: true, offline: isOfflineFailure(error) });
     return;
   }
   setRows({ userId: session.userId, rows: data as ConversationRow[], failed: false, local: false });
@@ -258,8 +260,8 @@ export function useBadges(): Badges {
   };
 }
 
-/** Barre d'onglets du bas : affichée sous 761 px (styles/app.css). */
-const TAB_BAR_QUERY = '(max-width: 760px)';
+/** Barre d'onglets du bas : affichée sous 1024 px (styles/app.css). */
+const TAB_BAR_QUERY = '(max-width: 1023px)';
 
 function tabBarQuery(): MediaQueryList | null {
   try {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  agendaVisit, areValidSlots, createVisitRequestParams, hourLabel, isSlotPast, nextVisit, openRequest, requestDisplayStatus,
-  requestSlotLabel, slotHourLabel, slotLabel, slotStart, SLOT_TIMES, suggestedSlot, visitDateInline, visitDateLong, visitErrorMessage,
-  VISIT_FAILURE_MESSAGE, type VisitRequestRow,
+  agendaVisit, areValidSlots, bookSlotParams, createVisitRequestParams, hourLabel, isSlotPast, nextVisit, openRequest, openSlotsFromRows,
+  previousRequestNotice, requestDisplayStatus, requestSlotLabel, sessionDay, sessionRange, slotHourLabel, slotLabel, slotStart, SLOT_TIMES,
+  suggestedSlot, visitDateInline, visitDateLong, visitErrorMessage, visitSessionErrorMessage, VISIT_FAILURE_MESSAGE, type VisitRequestRow,
 } from './visits';
 
 const now = new Date('2026-11-06T10:00:00Z');
@@ -125,5 +125,55 @@ describe('Formulaire de demande (VisitRequestFormView)', () => {
   it('message d\'erreur : celui du serveur pour un refus, sinon celui de l\'app', () => {
     expect(visitErrorMessage({ code: 'P0001', message: 'Ce créneau n\'est plus disponible.' })).toBe('Ce créneau n\'est plus disponible.');
     expect(visitErrorMessage({ code: '08006', message: 'réseau' })).toBe(VISIT_FAILURE_MESSAGE);
+  });
+});
+
+describe('« Proposer une autre date » (VisitRequestFormView, previous)', () => {
+  it('cite la demande refusée et son motif', () => {
+    const params = createVisitRequestParams({
+      id: 'r9', listingId: 'l1', mode: 'onSite', message: '', previousRequestId: 'r1',
+      slots: [{ id: 's1', start: new Date('2026-11-07T09:00:00Z') }],
+    });
+    expect(params.p_previous_request_id).toBe('r1');
+    expect(createVisitRequestParams({ id: 'r9', listingId: 'l1', mode: 'onSite', message: '', slots: [] })).not.toHaveProperty('p_previous_request_id');
+    expect(previousRequestNotice({ decline_reason: ' Bien déjà loué ' }))
+      .toBe('Votre demande précédente a été refusée (Bien déjà loué). Proposez d\'autres créneaux : une nouvelle demande sera envoyée.');
+    expect(previousRequestNotice({ decline_reason: null }))
+      .toBe('Votre demande précédente a été refusée. Proposez d\'autres créneaux : une nouvelle demande sera envoyée.');
+  });
+});
+
+describe('Créneaux ouverts par le vendeur (VisitSessionStore.openSlots et book)', () => {
+  const row = (start: string, end: string, fields: Partial<Parameters<typeof openSlotsFromRows>[0][number]> = {}) => ({
+    session_id: 'c1', slot_start: start, slot_end: end, duration_minutes: 30, places_left: 2, booked_by_me: false, bookable: true, ...fields,
+  });
+
+  it('lit les créneaux du plus proche au plus lointain, écarte une ligne illisible', () => {
+    const slots = openSlotsFromRows([
+      row('2026-11-20T10:00:00Z', '2026-11-20T10:30:00Z'), row('2026-11-20 09:00:00+00', '2026-11-20 09:30:00.123456+00'),
+      row('pas une date', '2026-11-20T10:30:00Z'), row('2026-11-21T10:00:00Z', '2026-11-21T10:30:00Z', { session_id: '' }),
+    ]);
+    expect(slots.map((slot) => slot.start.toISOString())).toEqual(['2026-11-20T09:00:00.000Z', '2026-11-20T10:00:00.000Z']);
+    expect(slots[0]).toMatchObject({ sessionId: 'c1', durationMinutes: 30, placesLeft: 2, bookedByMe: false, bookable: true });
+    expect(slots[0].end.toISOString()).toBe('2026-11-20T09:30:00.123Z');
+  });
+
+  it('arguments de book_visit_slot : début à la seconde, message nettoyé, absent s\'il est vide', () => {
+    const slot = { sessionId: 'c1', start: new Date('2026-11-20T09:00:00.000Z') };
+    expect(bookSlotParams('r9', slot, '  Bonjour  ')).toEqual({ p_id: 'r9', p_session_id: 'c1', p_slot_start: '2026-11-20T09:00:00Z', p_message: 'Bonjour' });
+    expect(bookSlotParams('r9', slot, '   ')).toEqual({ p_id: 'r9', p_session_id: 'c1', p_slot_start: '2026-11-20T09:00:00Z' });
+  });
+
+  it('refus : le message du serveur, sinon la connexion, sinon le message de l\'app', () => {
+    expect(visitSessionErrorMessage({ code: 'P0001', message: 'Ce créneau est complet.' }, false)).toBe('Ce créneau est complet.');
+    expect(visitSessionErrorMessage(new TypeError('Failed to fetch'), true)).toBe('Connexion impossible. Vérifiez votre accès à Internet, puis réessayez.');
+    expect(visitSessionErrorMessage({ code: '42501' }, false)).toBe('Cette action n\'a pas abouti. Réessayez dans un instant.');
+  });
+
+  it('écrit le jour et l\'horaire comme l\'app (VisitSessionFormat)', () => {
+    const start = new Date(2026, 10, 18, 10, 0);
+    expect(sessionDay(start)).toBe('Mercredi 18 novembre');
+    expect(sessionDay(start, false)).toBe('Mer. 18 nov.');
+    expect(sessionRange(start, new Date(2026, 10, 18, 10, 30))).toBe('10 h 00 – 10 h 30');
   });
 });

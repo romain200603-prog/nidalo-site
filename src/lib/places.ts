@@ -266,6 +266,20 @@ export async function communeAt(coordinate: Coordinate, signal?: AbortSignal): P
   }
 }
 
+/**
+ * Adresse d'un point (« Position actuelle » de la Localisation, dans Messages) : le premier résultat du géocodage
+ * inverse, la même demande que communeAt. `null` si le service ne répond pas.
+ */
+export async function placeAt(coordinate: Coordinate, signal?: AbortSignal): Promise<PlaceSuggestion | null> {
+  try {
+    return parseGeoplateforme(await get(REVERSE_GEOCODING, {
+      lat: swiftNumber(coordinate.latitude), lon: swiftNumber(coordinate.longitude), index: 'address', limit: '1',
+    }, signal))[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Suggestions pour le champ de recherche de biens (communes, arrondissements, quartiers). */
 export async function placeSuggestions(raw: string, limit = 6, signal?: AbortSignal): Promise<PlaceSuggestion[]> {
   const query = placeQuery(raw);

@@ -10,28 +10,29 @@
 @import './ecrans-fiche-telephone.css';
 
 /* Couleurs et mesures de la page. Sous 1024 px, les jetons de l'ordinateur (--d-…) que la page et les écrans de la
-   fiche utilisent sont définis ici, avec la police système du téléphone (aucune police téléchargée). */
+   fiche utilisent sont définis ici, avec la police de l'app (Inter, comme sur ordinateur). */
 :root {
-  /* Couleurs de l'app (AppColors.swift : navy, textSecondary, textTertiary, border, brand, brandSoft, pageBackground ;
-     demande du 17/11). */
-  --m-text: #242D38;
-  --m-grey: #75808B;
-  --m-time: #9AA2AA;
-  --m-line: #ECEAE6;
-  --m-blue: #3C5CB0;
-  --m-blue-hover: #2F4A92;
-  --m-blue-soft: #EEF2FA;
-  --m-blue-outline: #C9D3EE;
+  /* Couleurs de l'app (AppColors.swift) : les jetons communs du site (app.css, pieces-app.css), sous les noms de la page. */
+  --m-text: var(--app-navy);
+  --m-grey: var(--app-text-secondary);
+  --m-time: var(--app-text-muted);
+  --m-line: var(--app-border);
+  --m-blue: var(--app-brand);
+  --m-blue-hover: var(--app-brand-pressed);
+  --m-blue-soft: var(--app-brand-soft);
+  --m-blue-outline: var(--blue-border);
+  /* NidaloPill .green et HomeCategoryColors(.invest) : vert foncé sur vert pâle. */
   --m-green: #2F7A4E;
-  --m-green-soft: #E6F0EA;
-  --m-online: #2BB673;
-  --m-thread: #FAF9F6;
-  --m-hover: #F6F5F1;
-  --m-red: #E5484D;
+  --m-green-soft: #E3F2E8;
+  /* Point « en ligne » : yieldGreen. */
+  --m-online: var(--app-yield-green);
+  --m-thread: var(--app-page);
+  --m-hover: var(--app-segment);
+  --m-red: var(--red);
 }
 @media (max-width: 1023.98px) {
   :root {
-    --d-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --d-font: 'Nidalo Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     --d-bg: #FAF9F6;
     --d-text: #242D38;
     --d-grey: #75808B;
@@ -86,7 +87,7 @@
 .dm-link-button { padding: 0; border: 0; background: none; color: var(--m-blue); font-size: 14px; font-weight: 600; cursor: pointer; }
 .dm-link-button:hover { text-decoration: underline; }
 .dm-chevron { flex: none; width: 16px; height: 16px; color: var(--d-chevron); }
-.dm-inline-spinner { width: 16px; height: 16px; border-width: 2px; margin-left: 8px; vertical-align: -3px; }
+.dm-inline-spinner { width: 16px; height: 16px; margin-left: 8px; vertical-align: -3px; }
 .dm-error { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--d-red); font-size: 14px; font-weight: 600; line-height: 20px; }
 .dm-error .icon { flex: none; width: 16px; height: 16px; }
 
@@ -103,7 +104,7 @@
 .dm-side { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #FFFFFF; border-right: 1px solid var(--m-line); }
 .dm-side-top { flex: none; display: flex; flex-direction: column; gap: 14px; padding: 20px 20px 12px; }
 .dm-side-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.dm-side-head h1 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.01em; line-height: 30px; }
+.dm-side-head h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em; line-height: 30px; }
 /* Crayon de l'app : rond bleu clair de 42 px, icône bleue. */
 .dm-compose { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; padding: 0; border: 0; border-radius: 50%; background: var(--m-blue-soft); color: var(--m-blue); cursor: pointer; }
 .dm-compose:hover { background: #E2E8F6; }
@@ -164,14 +165,15 @@
 .dm-results-title { margin: 8px 0 0; font-size: 15px; font-weight: 600; line-height: 20px; }
 .dm-card-list { margin: 0; padding: 4px; border: 1px solid var(--d-card-border); border-radius: 16px; background: #FFFFFF; list-style: none; }
 .dm-contact { display: flex; align-items: center; gap: 12px; width: 100%; padding: 9px 10px; border: 0; border-radius: 12px; background: none; color: inherit; text-align: left; text-decoration: none; cursor: pointer; }
-.dm-contact:hover { background: var(--d-hover); }
+@media (hover: hover) { .dm-contact:hover { background: var(--d-hover); } }
 .dm-contact-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .dm-contact-name { overflow: hidden; font-size: 15px; font-weight: 600; line-height: 21px; text-overflow: ellipsis; white-space: nowrap; }
 .dm-contact-detail, .dm-contact-preview { overflow: hidden; color: var(--d-grey); font-size: 13.5px; line-height: 19px; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Lignes d'action (ActionRow) */
 .dm-action-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 8px 14px; border: 0; border-radius: 12px; background: none; color: var(--d-text); text-align: left; text-decoration: none; cursor: pointer; }
-.dm-action-row:hover { background: var(--d-hover); }
+/* Survol à la souris seulement : sur un écran tactile, la ligne touchée ne reste pas grisée. */
+@media (hover: hover) { .dm-action-row:hover { background: var(--d-hover); } }
 .dm-action-row > .icon:first-child { flex: none; width: 20px; height: 20px; color: var(--m-blue); }
 .dm-action-row.is-waiting { cursor: progress; opacity: 0.7; }
 .dm-action-row.is-destructive { color: var(--d-red); }
@@ -316,7 +318,7 @@ a.dm-banner:hover .dm-banner-link { text-decoration: underline; }
 .dm-offer-status.is-accepted { background: var(--m-green-soft); color: var(--m-green); }
 .dm-offer-status.is-closed { background: #F2F0EC; color: var(--m-grey); }
 .dm-offer-status.is-countered { background: #FEF7E7; color: #81622C; }
-.dm-offer-amount { margin: 10px 0 0; font-size: 22px; font-weight: 800; line-height: 28px; font-variant-numeric: tabular-nums; }
+.dm-offer-amount { margin: 10px 0 0; font-size: 22px; font-weight: 700; line-height: 28px; font-variant-numeric: tabular-nums; }
 .dm-offer-gap { margin: 2px 0 0; color: var(--m-grey); font-size: 13px; font-weight: 500; }
 .dm-offer-conditions { margin: 8px 0 0; font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
 .dm-offer-reason { margin: 6px 0 0; color: var(--m-grey); font-size: 13px; font-weight: 500; }
@@ -335,7 +337,7 @@ a.dm-banner:hover .dm-banner-link { text-decoration: underline; }
 .dm-visit-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9px; background: var(--m-blue-soft); color: var(--m-blue); }
 .dm-visit-icon .icon { width: 17px; height: 17px; }
 .dm-visit-kind { flex: 1; min-width: 0; color: var(--m-blue); font-size: 13px; font-weight: 700; line-height: 18px; }
-.dm-visit-when { margin: 12px 0 0; font-size: 17px; font-weight: 800; line-height: 23px; font-variant-numeric: tabular-nums; }
+.dm-visit-when { margin: 12px 0 0; font-size: 17px; font-weight: 700; line-height: 23px; font-variant-numeric: tabular-nums; }
 .dm-visit-where { margin: 2px 0 0; overflow: hidden; color: var(--m-grey); font-size: 13px; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }
 .dm-visit-more { margin: 4px 0 0; color: var(--m-grey); font-size: 12.5px; line-height: 17px; }
 .dm-visit-slots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
@@ -388,7 +390,7 @@ a.dm-banner:hover .dm-banner-link { text-decoration: underline; }
 .dm-file.is-out .dm-file-card { background: rgba(255, 255, 255, 0.14); }
 a.dm-file:hover .dm-file-card { background: #EFEDE7; }
 a.dm-file.is-out:hover .dm-file-card { background: rgba(255, 255, 255, 0.2); }
-.dm-file-badge { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border: 1px solid var(--m-line); border-radius: 9px; background: #FFFFFF; color: var(--m-blue); font-size: 10.5px; font-weight: 800; letter-spacing: 0.02em; }
+.dm-file-badge { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border: 1px solid var(--m-line); border-radius: 9px; background: #FFFFFF; color: var(--m-blue); font-size: 10.5px; font-weight: 700; letter-spacing: 0.02em; }
 .dm-file-badge.is-pdf { color: var(--m-red); }
 .dm-file.is-out .dm-file-badge { border-color: #FFFFFF; }
 .dm-file-badge .icon { width: 19px; height: 19px; }
@@ -534,14 +536,9 @@ a.dm-file.is-out:hover .dm-file-card { background: rgba(255, 255, 255, 0.2); }
 .dm-media-gallery .dm-media-square { border-radius: 6px; }
 .dm-media-empty { margin: 30px 30px 0; color: var(--d-grey); font-size: 14px; line-height: 20px; text-align: center; }
 
-/* ——— Fenêtres (feuilles et alertes de l'app) ——— */
+/* ——— Feuilles de l'app (les alertes sont la fenêtre Nidalo commune, app.css) ——— */
 .dm-dialog { font-family: var(--d-font); }
-.dm-dialog .alert-body h2 { color: var(--d-text); }
-.dm-dialog .btn { min-height: 46px; border-radius: var(--d-button-radius); font-size: 15px; }
-.dm-btn-danger { background: var(--d-red); color: #FFFFFF; }
-.dm-btn-danger:hover { background: #A93226; }
-.dm-name-input { margin-top: 4px; }
-.dm-sheet { width: min(560px, 100vw - 48px); max-height: min(780px, 100dvh - 48px); overflow: hidden; border-radius: 20px; background: var(--d-bg); box-shadow: 0 24px 60px rgba(10, 26, 68, 0.3); color: var(--d-text); font-family: var(--d-font); }
+.dm-sheet { width: min(560px, 100vw - 48px); max-height: min(780px, 100dvh - 48px); overflow: hidden; border-radius: 20px; background: var(--d-bg); box-shadow: 0 24px 60px rgba(36, 45, 56, 0.3); color: var(--d-text); font-family: var(--d-font); }
 .dm-sheet-body { display: flex; flex-direction: column; max-height: min(780px, 100dvh - 48px); }
 .dm-sheet-head { flex: none; display: flex; align-items: center; gap: 8px; min-height: 64px; padding: 12px 14px 12px 22px; border-bottom: 1px solid var(--d-separator); background: #FFFFFF; }
 .dm-sheet-head h2 { flex: 1; margin: 0; color: var(--d-text); font-size: 19px; font-weight: 700; outline: none; }
@@ -640,7 +637,7 @@ a.dm-file.is-out:hover .dm-file-card { background: rgba(255, 255, 255, 0.2); }
 .dm-viewer-nav.is-prev { left: 16px; }
 .dm-viewer-nav.is-next { right: 16px; }
 .dm-viewer-nav .icon { width: 24px; height: 24px; }
-.dm-viewer .spinner { border-color: rgba(255, 255, 255, 0.3); border-top-color: #FFFFFF; }
+.dm-viewer .spinner { color: #FFFFFF; }
 
 /* ——— Nouveaux messages en fondu ; chargement en formes grises qui pulsent ——— */
 .dm-msg.is-new, .dm-system.is-new { animation: dm-fade-in 0.28s ease-out both; }
@@ -728,10 +725,10 @@ a.dm-file.is-out:hover .dm-file-card { background: rgba(255, 255, 255, 0.2); }
   .dm-offer-host .wrap-narrow { padding-left: 16px; padding-right: 16px; }
 }
 
-/* Barre du bas du téléphone (jusqu'à 760 px) : la liste s'arrête au-dessus ; une conversation ouverte la cache et
-   prend toute la hauteur, avec la barre d'écriture tout en bas, comme dans l'app. */
-@media (max-width: 760px) {
-  .page-fill { height: calc(100vh - var(--tabbar-height) - env(safe-area-inset-bottom)); height: calc(100dvh - var(--tabbar-height) - env(safe-area-inset-bottom)); }
+/* Barre d'onglets (sous 1024 px) : la liste s'arrête au-dessus ; une conversation ouverte la cache et prend toute la
+   hauteur, avec la barre d'écriture tout en bas, comme dans l'app. */
+@media (max-width: 1023px) {
+  .page-fill { height: calc(100vh - var(--tabbar-height) - var(--tabbar-bottom)); height: calc(100dvh - var(--tabbar-height) - var(--tabbar-bottom)); }
   /* La page n'est pas plus haute que l'écran : la place de la barre du bas est déjà retirée de .page-fill. */
   #root:has(> .page-fill) { min-height: 0; }
   body:has(.dm.is-thread) { padding-bottom: 0; }

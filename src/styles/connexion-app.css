@@ -55,11 +55,61 @@
 }
 /* Fenêtre d'une action (favori, recherche enregistrée…) : plein écran sur téléphone, 480 px sur ordinateur. */
 .signin-sheet { width: 100vw; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: #FAF9F6; color: #1F2430; overflow: hidden; overscroll-behavior: contain; }
-.signin-sheet::backdrop { background: rgba(10, 26, 68, 0.45); }
+.signin-sheet::backdrop { background: rgba(36, 45, 56, 0.45); }
 @media (min-width: 1024px) {
-  .signin-sheet { width: 480px; height: min(760px, calc(100dvh - 48px)); margin: auto; border-radius: 28px; box-shadow: 0 24px 64px rgba(10, 26, 68, 0.28); }
+  .signin-sheet { width: 480px; height: min(760px, calc(100dvh - 48px)); margin: auto; border-radius: 28px; box-shadow: 0 24px 64px rgba(36, 45, 56, 0.28); }
 }
 .auth.is-dialog { height: 100%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: none; }
+/* Téléphone : la présentation plein écran de l'app (fullScreenCover) monte du bas, sans voile sur la page dessous ;
+   ordinateur : la fenêtre apparaît comme les autres fenêtres ; fondu seul si « Réduire les animations ». */
+@media (max-width: 1023px) {
+  .signin-sheet[open] { animation: alert-sheet-up 0.45s cubic-bezier(0.32, 0.72, 0, 1); }
+  .signin-sheet::backdrop { background: transparent; }
+}
+@media (min-width: 1024px) {
+  .signin-sheet[open] { animation: alert-dialog-in 0.25s ease-out; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .signin-sheet[open] { animation: alert-fade-in 0.25s ease-out; }
+}
+
+/* Conditions et confidentialité (LegalSheet) : la feuille de l'app par-dessus l'écran de connexion. Téléphone : posée
+   en bas jusqu'à 24 du haut, rayon 32, poignée, en-tête « Conditions » au retour rond qui ferme ; elle se referme aussi
+   en la tirant vers le bas par son en-tête. Ordinateur : fenêtre de 640 au centre. Le texte : celui de la page. */
+/* « dialog. » : la feuille est rendue dans la colonne des boutons, dont les enfants reçoivent un écart en haut. */
+dialog.legal-sheet {
+  width: min(640px, calc(100vw - 48px)); height: min(860px, calc(100dvh - 48px)); max-width: none; max-height: none; margin: auto;
+  border-radius: 28px; background: var(--app-page); color: var(--app-navy); box-shadow: 0 24px 64px rgba(36, 45, 56, 0.28); overflow: hidden;
+}
+.legal-sheet[open] { animation: alert-dialog-in 0.25s ease-out; }
+.legal-sheet-body { display: flex; flex-direction: column; height: 100%; }
+.legal-sheet-head { position: relative; flex: none; padding: 14px 16px 0; }
+.legal-sheet-grabber { display: none; }
+.legal-sheet-scroll { flex: 1; min-height: 0; padding: 0 16px 28px; overflow-y: auto; overscroll-behavior: contain; }
+.legal-sheet-loading { display: flex; justify-content: center; padding-top: 40px; }
+.legal-sheet .legal-sheet-doc { padding-top: 0; }
+/* Le titre de la page reste visible dans la feuille, même sur une page dont l'en-tête du téléphone le masque. */
+.legal-sheet.legal-sheet .legal-sheet-doc > h1 {
+  position: static; width: auto; height: auto; margin: 0; overflow: visible; clip: auto; white-space: normal; font-size: 22px; line-height: 1.25;
+}
+@media (max-width: 1023px) {
+  dialog.legal-sheet {
+    width: 100%; max-width: 600px; height: calc(100dvh - 24px); margin: auto auto 0; border-radius: 32px 32px 0 0; box-shadow: none;
+    transition: translate 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .legal-sheet[open] { animation: alert-sheet-up 0.45s cubic-bezier(0.32, 0.72, 0, 1); }
+  .legal-sheet[open]::backdrop { animation: alert-fade-in 0.3s ease-out; }
+  .legal-sheet-head { touch-action: none; }
+  .legal-sheet-grabber {
+    display: block; position: absolute; top: 5px; left: 50%; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px;
+    background: rgba(60, 60, 67, 0.3);
+  }
+  .legal-sheet-scroll { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .legal-sheet[open] { animation: alert-fade-in 0.25s ease-out; }
+  .legal-sheet { transition: none; }
+}
 
 /* ——— Colonne, barre du haut, scène ——— */
 
@@ -90,7 +140,7 @@
 /* Le lancement en boucle : entre le bas de la croix (43 sous le haut) et le haut du titre, sur toute la largeur. */
 .auth-loop-zone { position: relative; flex: 1 1 0; min-height: 0; margin: -11px -20px 0; }
 .auth-welcome-head { padding: 0 4px; }
-.auth-hero-title { color: var(--auth-ink); font-size: 33px; font-weight: 800; line-height: 37px; letter-spacing: -1px; }
+.auth-hero-title { color: var(--auth-ink); font-size: 33px; font-weight: 700; line-height: 37px; letter-spacing: -1px; }
 .auth-hero-subtitle { margin-top: 13px; color: var(--auth-subtle); font-size: 15px; font-weight: 500; line-height: calc(1.21em + 2px); }
 .auth-welcome-head .team-intro { margin-top: 14px; }
 .auth-hero-space { height: 6px; margin-top: 18px; }
@@ -108,7 +158,7 @@
 .auth-apple .auth-provider-logo { width: 18px; height: 18px; margin-top: -2px; }
 .auth-provider .icon { width: 19px; height: 19px; stroke-width: 1.75; }
 .auth-provider[disabled] { cursor: default; }
-.auth-provider .spinner { width: 19px; height: 19px; border-width: 2.5px; }
+.auth-provider .spinner { width: 19px; height: 19px; }
 @media (hover: hover) {
   .auth-provider:not([disabled]):hover { background: #F7F6F3; }
   .auth-provider.auth-apple:not([disabled]):hover { background: #1A1A1A; }
@@ -150,7 +200,7 @@
 .auth-steps { justify-content: flex-end; }
 .auth-head-box { position: relative; }
 .auth-step-head { position: relative; padding: 16px 24px 24px; }
-.auth-step-title { color: var(--auth-ink); font-size: 30px; font-weight: 800; line-height: 1.21; }
+.auth-step-title { color: var(--auth-ink); font-size: 30px; font-weight: 700; line-height: 1.21; }
 .auth-step-subtitle { margin-top: 8px; color: var(--auth-subtle); font-size: 15px; font-weight: 500; line-height: calc(1.21em + 2px); }
 .auth-step-head .team-intro { margin-top: 14px; }
 .auth h1:focus { outline: none; }

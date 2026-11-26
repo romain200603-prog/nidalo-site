@@ -1,17 +1,17 @@
-/* Accueil de l'app (Features/Home : HomeView.swift, HomeCategoryCard.swift, HomeSections.swift), sous 1024 px, et les
-   cartes d'annonce de l'accueil (HomeListingCard, CompactListingCard, SimilarListingCard), aussi sur ordinateur. 1 pt
+/* Accueil de l'app (Features/Home : HomeView.swift, HomeCategoryCard.swift, HomeSections.swift), sous 1024 px, et la
+   carte d'annonce de l'accueil (HomeListingCard, dans toutes les rangées), aussi sur ordinateur. 1 pt
    de l'app = 1 px ici ; ombres : flou CSS = 2 × le rayon SwiftUI ; « systemApp » de l'app = police système
    (--app-font-system), « manrope » = --app-font (Inter dans l'app : « heavy » y est le gras, 700). */
 
-/* ——— Page (sa barre du haut ; pas d'en-tête bleu sous 761 px, règles dans app.css) ——— */
+/* ——— Page (sa barre du haut ; pas d'en-tête bleu sous 1024 px, règles dans app.css) ——— */
 .home-app { padding-bottom: 28px; color: var(--app-navy); }
 
 /* ——— Barre du haut, sans fond (44) : logo maison, « NIDΛLO », cloche dans un rond blanc ——— */
 .home-app-top { display: flex; align-items: center; height: 44px; margin: calc(10px + env(safe-area-inset-top)) 16px 0; }
 .home-app-brand { display: flex; align-items: center; gap: 10px; margin: 0; }
 .home-app-logo { display: block; width: 32px; height: 27px; }
-/* 19 pt très gras, capitales de 13,3 : le dessin du nom à la même hauteur de capitales. */
-.home-app-word { display: block; width: auto; height: 13.85px; }
+/* « NIDΛLO » (DomiaWordmark) : police système très grasse de 19, lettres espacées de 19 × 0,26, encre de l'accueil. */
+.home-app-word { display: block; color: #1B2235; font: 800 19px/23px var(--app-font-system); letter-spacing: 4.94px; white-space: nowrap; }
 .home-app-bell { position: relative; display: flex; align-items: center; justify-content: center; flex: none; width: 44px; height: 44px; margin: 0 -1px 0 auto; color: var(--app-navy); text-decoration: none; -webkit-tap-highlight-color: transparent; }
 .home-app-bell-circle { position: relative; display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border: 1px solid var(--app-border); border-radius: 50%; background: #FFFFFF; }
 .home-app-bell .icon { width: 20px; height: 20px; }
@@ -19,11 +19,6 @@
 .home-app-dot { position: absolute; left: 22.5px; top: 8px; width: 8px; height: 8px; border-radius: 50%; background: #E5484D; box-shadow: 0 0 0 2px #FFFFFF; }
 .home-app-bell:focus-visible { outline: none; }
 .home-app-bell:focus-visible .home-app-bell-circle { outline: 3px solid var(--app-brand); outline-offset: 2px; }
-/* 761–1023 px : l'en-tête bleu du site est là ; le titre de la page reste pour les lecteurs d'écran. */
-@media (min-width: 761px) {
-  .home-app-top { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); }
-  .home-app-bell { display: none; }
-}
 
 /* ——— Carte des catégories : pavés, puis les filtres de la catégorie ouverte, en accordéon ——— */
 .home-category { position: relative; margin: 32px 16px 0; padding: 18px 10px 14px; border: 1px solid var(--app-border); border-radius: 26px; background: #FFFFFF; box-shadow: 0 10px 30px rgba(31, 36, 48, 0.07); }
@@ -88,18 +83,21 @@
 .home-resume-chevron { flex: none; width: 16px; height: 16px; margin-left: 8px; color: var(--app-navy); }
 .home-resume-new + .home-resume-chevron { margin-left: 0; }
 
-/* ——— Sections : en-tête (pavé de 36, titre 18 gras, « Voir tout »), puis une rangée qui défile ——— */
+/* ——— Sections : en-tête (pavé de 36, titre 18 gras, « Voir tout »), puis une rangée qui défile ; couleurs de chaque
+   rubrique (HomeSection.inkHex et softHex de l'app) ——— */
 .home-app-section { display: flex; flex-direction: column; gap: 14px; margin-top: 32px; }
 .home-app-section.is-first { margin-top: 24px; }
 .home-section-header { display: flex; align-items: flex-start; gap: 10px; padding: 0 16px; }
 .home-section-tile { display: flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; border-radius: 10px; }
 .home-section-tile .icon { width: 22px; height: 22px; }
-.home-section-tile.tint-blue { background: #EEF2FA; color: #3C5CB0; }
-.home-section-tile.tint-green { background: #E6F0EA; color: #2F7A4E; }
-.home-section-tile.tint-teal { background: #E3F1EF; color: #2C7A72; }
-.home-section-tile.tint-amber { background: #F8EED8; color: #946B1E; }
-.home-section-tile.tint-gray { background: #F1F0EC; color: #5D6470; }
-.home-section-tile.tint-red { background: #FDECF1; color: #EB4B47; }
+.home-section-tile.tint-opportunities { background: #E5F2EA; color: #2E7D4F; }
+.home-section-tile.tint-cities { background: #EAEFFA; color: #3C5CB0; }
+.home-section-tile.tint-viewed { background: #EFEDE9; color: #5B6571; }
+.home-section-tile.tint-similar { background: #EEEBFB; color: #6247C4; }
+.home-section-tile.tint-newest { background: #DFF2F4; color: #008A9C; }
+.home-section-tile.tint-drops { background: #FCEEDD; color: #C25E00; }
+/* trending-up et trending-down, plus plats : à 112 % (iconScale). */
+.home-section-tile.tint-opportunities .icon, .home-section-tile.tint-drops .icon { transform: scale(1.12); }
 .home-section-text { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
 .home-section-row { display: flex; align-items: center; gap: 8px; min-height: 36px; }
 .home-section-row h2 { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--app-navy); font: 700 18px/22px var(--app-font); white-space: nowrap; }
@@ -118,7 +116,7 @@
 .home-city { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 15px; border: 1px solid var(--app-border); border-radius: 999px; background: #FFFFFF; color: var(--app-navy); font: 600 14px/17px var(--app-font-system); text-decoration: none; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
 .home-city .icon { width: 14px; height: 14px; color: var(--app-brand); }
 
-/* 761–1023 px (sous l'en-tête bleu du site) : la carte et les titres sur une colonne de 688 px au milieu, les
+/* 761–1023 px (iPhone couché, tablette) : la carte et les titres sur une colonne de 688 px au milieu, les
    rangées de cartes sur toute la largeur de l'écran, la première carte alignée sur la colonne. */
 @media (min-width: 761px) {
   .home-category { max-width: 688px; margin-left: auto; margin-right: auto; }
@@ -127,14 +125,19 @@
   .home-app-carousel { padding-left: max(16px, calc((100% - 688px) / 2)); padding-right: max(16px, calc((100% - 688px) / 2)); }
 }
 
-/* ——— Carte d'annonce de l'accueil (HomeListingCard) : 248 de large, photo de 156, rayon 22 ——— */
+/* ——— Sans réseau (HomeView.feedContent) : « Pas de connexion Internet » 24 sous la carte, à la place des sections
+   (les villes restent, 24 dessous) ; pendant « Réessayer », la roue grise, 24 sous la carte. Aussi sur ordinateur. ——— */
+.home-feed-state { margin-top: 24px; }
+.home-feed-loading { display: flex; justify-content: center; }
+
+/* ——— Carte d'annonce de l'accueil (HomeListingCard) : 248 de large, photo de 186, rayon 22 ——— */
 .home-listing-card { position: relative; display: flex; flex: none; flex-direction: column; width: 248px; min-width: 0; overflow: hidden; border-radius: 22px; background: #FFFFFF; color: var(--app-navy); }
 /* Contour de 1 dessiné par-dessus la photo, comme dans l'app (strokeBorder). */
-.home-listing-card::before, .compact-card::before, .similar-card::before { content: ''; position: absolute; inset: 0; z-index: 2; border: 1px solid var(--app-border); border-radius: inherit; pointer-events: none; }
-.home-listing-card:has(.stretched:focus-visible), .compact-card:has(.stretched:focus-visible), .similar-card:has(.stretched:focus-visible) { outline: 3px solid var(--app-brand); outline-offset: 2px; }
-.home-listing-card .stretched:focus-visible, .compact-card .stretched:focus-visible, .similar-card .stretched:focus-visible { outline: none; }
-.hlc-photo { position: relative; flex: none; height: 156px; background: #EEF1F5; }
-.hlc-photo > .photo, .hlc-photo > .photo-empty, .hlc-photo > .home-no-photo, .clc-photo-clip > .photo, .clc-photo-clip > .photo-empty, .clc-photo-clip > .home-no-photo, .slc-photo > .photo, .slc-photo > .photo-empty, .slc-photo > .home-no-photo { width: 100%; height: 100%; }
+.home-listing-card::before { content: ''; position: absolute; inset: 0; z-index: 2; border: 1px solid var(--app-border); border-radius: inherit; pointer-events: none; }
+.home-listing-card:has(.stretched:focus-visible) { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+.home-listing-card .stretched:focus-visible { outline: none; }
+.hlc-photo { position: relative; flex: none; height: 186px; background: #F2F0EC; }
+.hlc-photo > .photo, .hlc-photo > .photo-empty, .hlc-photo > .home-no-photo { width: 100%; height: 100%; }
 .home-no-photo { display: flex; align-items: center; justify-content: center; color: rgba(36, 45, 56, 0.35); }
 .home-no-photo .icon { width: 30px; height: 30px; }
 .home-no-photo.tint-apartment { background: #DDE6F0; }
@@ -172,54 +175,14 @@
 .hlc-city { display: flex; align-items: center; gap: 5px; margin: 7px 0 0; overflow: hidden; color: var(--app-text-secondary); font: 400 12px/15px var(--app-font-system); white-space: nowrap; }
 .hlc-city .icon { flex: none; width: 12px; height: 12px; }
 
-/* ——— Carte compacte (CompactListingCard) : 296 × 112, rayon 18, 8 tout autour, photo de 88 × 80 (rayon 9) à gauche,
-   12 entre la photo et les lignes ; Consultés récemment, Nouveautés, Baisses de prix ——— */
-.compact-card { position: relative; display: flex; flex: none; align-items: center; gap: 12px; width: 296px; height: 112px; min-width: 0; padding: 8px; border-radius: 18px; background: #FFFFFF; color: var(--app-navy); }
-.clc-photo { position: relative; flex: none; width: 88px; height: 80px; }
-.clc-photo-clip { width: 100%; height: 100%; overflow: hidden; border-radius: 9px; background: #EEF1F5; }
-/* « Nouveau » (étiquette pleine) à 5 du bas et du bord de la photo ; la baisse de prix déborde de 4 en haut à gauche. */
-.clc-photo .hlc-new { left: 5px; top: auto; bottom: 5px; }
-.clc-photo .hlc-drop { left: -4px; top: -4px; }
-.clc-body { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
-/* Nouveautés : place pour le cœur à droite du titre ; le cœur, sans fond, 15 bleu, dans un carré de 32 en haut à droite
-   de la carte (44 pour le doigt). */
-.compact-card.is-new .home-card-title { padding-right: 22px; }
-.heart-button.clc-heart { right: 0; top: 0; width: 32px; height: 32px; border-radius: 10px; background: transparent; color: var(--app-brand); --heart-full: var(--app-brand); }
-.heart-button.clc-heart::after { inset: -6px; }
-.clc-heart .icon { width: 15px; height: 15px; }
-
-/* ——— Carte moyenne (SimilarListingCard) : 170 de large, rayon 18, photo de 100, lignes à 10 du bord ——— */
-.similar-card { position: relative; display: flex; flex: none; flex-direction: column; width: 170px; min-width: 0; overflow: hidden; border-radius: 18px; background: #FFFFFF; color: var(--app-navy); }
-.slc-photo { position: relative; flex: none; height: 100px; background: #EEF1F5; }
-/* Rendement brut (HomeYieldPill) à 8 du haut et du bord : 12 gras blanc, 24 de haut, rayon 8. */
-.slc-yield { position: absolute; left: 8px; top: 8px; z-index: 2; display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 8px; color: #FFFFFF; font: 700 12px/1 var(--app-font); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; }
-.slc-yield.is-good { background: var(--app-yield-green); }
-.slc-yield.is-low { background: var(--app-caution); }
-/* Cœur des favoris (FavoriteButton) : rond blanc à 85 % de 28, à 6 du haut et du bord, cœur de 14,5 sombre, plein en bleu. */
-.heart-button.slc-heart { right: 6px; top: 6px; width: 28px; height: 28px; border-radius: 50%; background: rgba(255, 255, 255, 0.85); color: var(--app-navy); --heart-full: var(--app-brand); }
-.slc-heart .icon { width: 14.5px; height: 14.5px; margin-top: 2px; }
-.slc-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 10px; }
-
-/* Lignes des deux cartes : titre 16 gras, lieu 12 gris clair, prix 17 gras (3 de plus au-dessus), petite ligne. */
-.home-card-title { margin: 0; overflow: hidden; color: var(--app-navy); font: 700 16px/20px var(--app-font); white-space: nowrap; text-overflow: ellipsis; }
-.home-card-title a { color: inherit; text-decoration: none; }
-.home-card-location { margin: 0; overflow: hidden; color: var(--app-text-muted); font: 400 12px/15px var(--app-font); white-space: nowrap; text-overflow: ellipsis; }
-.home-card-price { display: flex; align-items: baseline; gap: 6px; min-width: 0; margin: 3px 0 0; overflow: hidden; color: var(--app-navy); font-family: var(--app-font); white-space: nowrap; }
-.home-card-price s { flex: none; color: var(--app-text-muted); font-size: 12px; line-height: 15px; font-variant-numeric: tabular-nums; }
-.home-card-now { min-width: 0; overflow: hidden; font-size: 17px; line-height: 21px; text-overflow: ellipsis; }
-.home-card-amount { font-weight: 700; font-variant-numeric: tabular-nums; }
-.home-card-suffix { margin-left: 2px; font-size: 0.7em; font-weight: 600; }
-.compact-card .hlc-facts, .similar-card .hlc-facts { margin: 0; }
-
 @media (min-width: 1024px) {
   .dhome .home-listing-card { width: auto; transition: box-shadow 0.15s ease, transform 0.15s ease; }
-  .dhome .hlc-photo { height: auto; aspect-ratio: 248 / 156; }
-  .dhome .compact-card { width: auto; transition: box-shadow 0.15s ease, transform 0.15s ease; }
-  .dhome .home-listing-card:hover, .dhome .compact-card:hover { box-shadow: var(--d-card-hover-shadow); transform: translateY(-2px); }
+  .dhome .hlc-photo { height: auto; aspect-ratio: 248 / 186; }
+  .dhome .home-listing-card:hover { box-shadow: var(--d-card-hover-shadow); transform: translateY(-2px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .home-category-filters.is-entering { animation: app-fade-in 0.25s ease-in-out both; }
   .home-category-filters.is-leaving { animation: app-fade-out 0.25s ease-in-out both; }
-  .dhome .home-listing-card, .dhome .compact-card { transition: none; }
-  .dhome .home-listing-card:hover, .dhome .compact-card:hover { transform: none; }
+  .dhome .home-listing-card { transition: none; }
+  .dhome .home-listing-card:hover { transform: none; }
 }
