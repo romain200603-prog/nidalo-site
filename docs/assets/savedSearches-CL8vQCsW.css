@@ -1,1 +1,0 @@
-@media (max-width:760px){dialog.filters-dialog[open]{animation:.45s cubic-bezier(.32,.72,0,1) alert-sheet-up}dialog.filters-dialog::backdrop{background:0 0}.filters-dialog .filters-scroll{padding-top:calc(12px + env(safe-area-inset-top))}}@media (max-width:760px) and (prefers-reduced-motion:reduce){dialog.filters-dialog[open]{animation:.25s ease-out alert-fade-in}}
