@@ -11,11 +11,11 @@ import { energyInk, energyLetter, energyLines, feesLabel, GEORISQUES, priceFeesN
 import { photoUrl, placeLine, sortedPhotos, type ListingRow } from '../../lib/listings';
 import { accountPath } from '../../lib/paths';
 import { QrCode } from './Diffusion';
-import { EmptyState, Spinner } from './parts';
+import { EmptyState, LoadFailure, ScreenHeader, Spinner } from './parts';
 
 // Affiche de vitrine d'une annonce (Outils de diffusion) : format A4, à imprimer ou à enregistrer en PDF depuis le
 // navigateur. La photo principale, le prix, les surfaces, le DPE et les honoraires, un QR code vers l'annonce, et
-// l'agence.
+// l'agence. Elle s'ouvre dans la page, comme dans l'app (retour vers les Outils de diffusion).
 
 type AgencyState = { status: 'loading' } | { status: 'ready'; agency: AgencyRecord | null };
 
@@ -33,8 +33,7 @@ export function Poster({ listingId }: { listingId: string | null }) {
   if (listings.status === 'error') {
     return (
       <div className="space">
-        <p className="signin-error" role="alert">{listings.message}</p>
-        <button type="button" className="btn btn-light" onClick={() => void loadMyListings()}>Réessayer</button>
+        <LoadFailure message={listings.message} onRetry={() => void loadMyListings()} />
       </div>
     );
   }
@@ -50,15 +49,18 @@ export function Poster({ listingId }: { listingId: string | null }) {
       />
     );
   }
+  // La page de l'app (PosterView) : l'aperçu de la feuille A4, puis « Imprimer ou enregistrer » (bouton plein) ; la
+  // fenêtre d'impression du navigateur remplace la feuille de partage de l'iPhone, d'où la phrase sur le PDF.
   return (
-    <div className="poster-screen">
-      <div className="poster-toolbar">
-        <a className="round-back" href={back} aria-label="Retour"><Icon name="arrowLeft" /></a>
-        <h1>Affiche de vitrine</h1>
-        <button type="button" className="save-capsule" onClick={() => window.print()}>Imprimer</button>
+    <div className="space poster-screen">
+      <ScreenHeader title="Affiche de vitrine" back={back} />
+      <div className="poster-preview">
+        <PosterSheet row={row} agency={agency.agency} />
       </div>
+      <button type="button" className="btn btn-primary poster-print" onClick={() => window.print()}>
+        <Icon name="printer" />Imprimer ou enregistrer
+      </button>
       <p className="poster-hint">Format A4. Pour un PDF, choisissez « Enregistrer au format PDF » dans la fenêtre d&apos;impression.</p>
-      <PosterSheet row={row} agency={agency.agency} />
     </div>
   );
 }

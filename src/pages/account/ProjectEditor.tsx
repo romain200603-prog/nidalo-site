@@ -20,8 +20,10 @@ import { accountPath, PATHS } from '../../lib/paths';
 import { placeShortName, placeSuggestions } from '../../lib/places';
 import { draftFromProject } from '../../lib/projectSearch';
 import { knownCityCenter, OUTDOOR_LABELS, OUTDOOR_SPACES, paramsFromDraft, type OutdoorSpace } from '../../lib/search';
+import { HidesTabBar } from '../../components/HidesTabBar';
+import { useDesktop } from '../../lib/desktop';
 import { ChoiceDialog, ProgressRing, ScreenHead } from './DesktopParts';
-import { Spinner } from './parts';
+import { AppSection, ScreenHeader, Spinner } from './parts';
 
 // « Mon projet immobilier » sur ordinateur (Features/Profile/ProjectEditorView.swift et
 // DesignSystem/Components/FormControls.swift), dans la colonne de 640 px : les quatre parcours aux critères propres,
@@ -55,8 +57,11 @@ function offsetAfterSignificant(formatted: string, count: number): number {
   return formatted.length;
 }
 
+/** Carte titrée ; sur téléphone, la section de l'app (NidaloSection : libellé gris en capitales, puis la carte). */
 function CardSection({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   const id = useId();
+  const desktop = useDesktop();
+  if (!desktop) return <AppSection title={title} className={className ? `project-section ${className}` : 'project-section'}>{children}</AppSection>;
   return (
     <section className={`dsc-card ${className ?? ''}`} aria-labelledby={id}>
       <h2 id={id} className="dsc-card-title">{title}</h2>
@@ -404,10 +409,10 @@ function InvestmentSections({ c, set, issues, more, onMore }: {
         <Amount label="Rendement net minimum (estimé)" value={c.minNetYield} onChange={(v) => set({ minNetYield: v })} unit="%" percent
           issue={issues.minNetYield} />
         <CashFlowChoices value={c.minMonthlyCashFlow} onChange={(v) => set({ minMonthlyCashFlow: v })} />
-        <Amount label="Loyer actuel minimum (perçu, hors loyer potentiel)" value={c.minCurrentMonthlyRent}
+        <Amount label="Loyers encaissés minimum (hors loyer potentiel)" value={c.minCurrentMonthlyRent}
           onChange={(v) => set({ minCurrentMonthlyRent: v })} unit="€/mois" />
         <InfoLine>
-          Rendement brut : loyers annuels actuels hors charges ÷ prix. Rendement net et cash-flow sont estimés avec un crédit sur 20 ans à 3,5 %,
+          Rendement brut : loyers annuels encaissés hors charges ÷ prix. Rendement net et cash-flow sont estimés avec un crédit sur 20 ans à 3,5 %,
           votre apport, les charges et la taxe foncière de chaque annonce ; une annonce sans loyer connu n'est pas retenue.
         </InfoLine>
       </CardSection>
@@ -505,6 +510,8 @@ function HotelSections({ c, set, issues }: { c: HotelCriteria; set: (patch: Part
 
 // MARK: - Écran
 
+const PROJECT_INTRO = 'Définissez vos critères pour trouver les biens qui vous correspondent';
+
 /** Recherche réglée par le projet (router.startSearch(for:)). */
 function searchUrl(project: Project): string {
   return `${PATHS.search}?${paramsFromDraft(draftFromProject(project.kind, encodeCriteria(project.criteria)))}`;
@@ -519,6 +526,7 @@ function Editor({ saved }: { saved: Project }) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const stepsId = useId();
+  const desktop = useDesktop();
 
   const issues = projectIssues(draft.criteria, draft.kind);
   const hasIssues = Object.keys(issues).length > 0;
@@ -560,12 +568,24 @@ function Editor({ saved }: { saved: Project }) {
       break;
   }
 
+  const leave = () => (hasChanges ? setLeaving(true) : window.location.assign(back));
+  const active = !isEmptyCriteria(saved.criteria) && <span className="dsc-active"><span aria-hidden="true" />Projet actif</span>;
+
   return (
-    <div className="dsc dsc-project-screen">
-      <ScreenHead title="Mon projet immobilier" subtitle="Définissez vos critères pour trouver les biens qui vous correspondent"
-        onBack={() => (hasChanges ? setLeaving(true) : window.location.assign(back))}>
-        {!isEmptyCriteria(saved.criteria) && <span className="dsc-active"><span aria-hidden="true" />Projet actif</span>}
-      </ScreenHead>
+    <div className={desktop ? 'dsc dsc-project-screen' : 'dsc dsc-project-screen is-phone'}>
+      {desktop ? (
+        <ScreenHead title="Mon projet immobilier" subtitle={PROJECT_INTRO} onBack={leave}>{active}</ScreenHead>
+      ) : (
+        // Téléphone : la page de l'app (barre d'onglets masquée), retour qui demande « Enregistrer les modifications ? ».
+        <>
+          <HidesTabBar />
+          <ScreenHeader title="Mon projet immobilier" onBack={leave} />
+          <div className="project-intro">
+            <p>{PROJECT_INTRO}</p>
+            {active}
+          </div>
+        </>
+      )}
 
       <CardSection title="Votre projet">
         <div className="dsc-kinds">
@@ -687,13 +707,20 @@ function Editor({ saved }: { saved: Project }) {
 
 export function ProjectEditor() {
   const state = useStore(editableProjectStore);
+  const desktop = useDesktop();
   useEffect(() => {
     void loadEditableProject();
   }, []);
   if (state.status === 'ready') return <Editor saved={state.project} />;
   return (
-    <div className="dsc dsc-project-screen">
-      <ScreenHead title="Mon projet immobilier" subtitle="Définissez vos critères pour trouver les biens qui vous correspondent" />
+    <div className={desktop ? 'dsc dsc-project-screen' : 'dsc dsc-project-screen is-phone'}>
+      {desktop ? <ScreenHead title="Mon projet immobilier" subtitle={PROJECT_INTRO} /> : (
+        <>
+          <HidesTabBar />
+          <ScreenHeader title="Mon projet immobilier" />
+          <p className="project-intro">{PROJECT_INTRO}</p>
+        </>
+      )}
       {state.status === 'error' ? (
         // Projet illisible : rien n'est proposé à l'enregistrement, pour ne pas remplacer le projet du compte par un projet vide.
         <div className="dsc-empty">

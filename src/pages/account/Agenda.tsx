@@ -3,7 +3,7 @@ import { showToast } from '../../components/AppToast';
 import { ContentUnavailable } from '../../components/ContentUnavailable';
 import { Icon } from '../../components/Icon';
 import { LargeHeader } from '../../components/LargeHeader';
-import { OfflineState } from '../../components/OfflineState';
+import { OfflineState, WifiExclamationIcon } from '../../components/OfflineState';
 import { SectionLabel } from '../../components/MenuRows';
 import { RoundButton } from '../../components/RoundButton';
 import {
@@ -323,9 +323,14 @@ export function AgendaScreen() {
     content = <OfflineState onRetry={() => void loadAgenda()} />;
   } else if (state.status === 'error' && state.visits.length === 0) {
     content = (
-      <ContentUnavailable icon="triangleAlert" title="Visites indisponibles" text={AGENDA_LOAD_ERROR}>
+      // Autre échec (VisitsAgendaView) : le wifi au point d'exclamation, « Visites indisponibles », le message et
+      // « Réessayer » en bouton plein.
+      <div className="app-unavailable" role="alert">
+        <WifiExclamationIcon className="icon app-unavailable-icon" />
+        <h2>Visites indisponibles</h2>
+        <p>{AGENDA_LOAD_ERROR}</p>
         <button type="button" className="app-agenda-retry" onClick={() => void loadAgenda()}>Réessayer</button>
-      </ContentUnavailable>
+      </div>
     );
   } else if (groups.length === 0 && sessions.length === 0) {
     // État vide seulement sans visite ni créneau ouvert à venir.
