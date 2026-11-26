@@ -55,7 +55,6 @@ type Props = {
   row: ListingRow;
   content: CardContent;
   selected?: boolean;
-  onHover?: (id: string | null) => void;
   headingLevel?: 'h2' | 'h3';
   /** Liste de la recherche seulement : « Nouveau » ou « Baisse de prix · avant … » sur la photo (ListingBadgePill). */
   showsBadge?: boolean;
@@ -67,7 +66,7 @@ type Props = {
  * Fiche d'une annonce dans les résultats (ListingResultCard de l'app) : photo sur toute la largeur (rendement, cœur,
  * Comparer), puis étiquette, titre, lieu, prix, indicateurs.
  */
-export function ListingCard({ row, content, selected = false, onHover, headingLevel = 'h2', showsBadge = false, alreadySeen = false }: Props) {
+export function ListingCard({ row, content, selected = false, headingLevel = 'h2', showsBadge = false, alreadySeen = false }: Props) {
   const photos = sortedPhotos(row).slice(0, 10);
   const price = formatCardPrice(content.price);
   const facts = formatFacts(content.panelFacts);
@@ -78,11 +77,7 @@ export function ListingCard({ row, content, selected = false, onHover, headingLe
   const isLeased = (row.rental_info as { isLeased?: boolean } | null)?.isLeased === true;
   const badge = showsBadge && content.badge ? badgeText(content.badge) : null;
   return (
-    <article
-      className={`listing-card card${selected ? ' is-selected' : ''}`}
-      onMouseEnter={() => onHover?.(row.id)}
-      onMouseLeave={() => onHover?.(null)}
-    >
+    <article className={`listing-card card${selected ? ' is-selected' : ''}`}>
       {/* Un clic sur la photo ouvre l'annonce ; le balayage fait défiler les photos. Clavier : le lien du titre. */}
       <div className="listing-card-photo" onClick={(event) => {
         if ((event.target as HTMLElement).closest('button')) return;

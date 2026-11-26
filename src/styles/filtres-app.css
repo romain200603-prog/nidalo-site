@@ -1,12 +1,12 @@
-/* « Filtres de recherche » (SearchFiltersSheet de l'app) jusqu'à 760 px : plein écran comme dans l'app
-   (domiaFullScreenCover), qui monte du bas comme une présentation plein écran de l'iPhone, sans voile sur la page
-   d'où il vient ; le haut sous la zone du haut de l'écran. Fondu seul si « Réduire les animations ». Au-delà : la
-   fenêtre centrée et la page complète de l'ordinateur (app.css). */
-@media (max-width: 760px) {
+/* « Filtres de recherche » (SearchFiltersSheet de l'app) jusqu'à 760 px et dès 1024 px (étape 7b) : plein écran comme
+   dans l'app (domiaFullScreenCover), qui monte du bas comme une présentation plein écran de l'iPhone, sans voile sur la
+   page d'où il vient ; le haut sous la zone du haut de l'écran. Fondu seul si « Réduire les animations ». Entre les
+   deux : la fenêtre centrée (app.css) ; sur ordinateur le contenu sur la colonne de 720 (app.css). */
+@media (max-width: 760px), (min-width: 1024px) {
   dialog.filters-dialog[open] { animation: alert-sheet-up 0.45s cubic-bezier(0.32, 0.72, 0, 1); }
   dialog.filters-dialog::backdrop { background: transparent; }
   .filters-dialog .filters-scroll { padding-top: calc(12px + env(safe-area-inset-top)); }
 }
-@media (max-width: 760px) and (prefers-reduced-motion: reduce) {
+@media (max-width: 760px) and (prefers-reduced-motion: reduce), (min-width: 1024px) and (prefers-reduced-motion: reduce) {
   dialog.filters-dialog[open] { animation: alert-fade-in 0.25s ease-out; }
 }
