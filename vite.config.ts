@@ -47,10 +47,8 @@ export const CONTENT_SECURITY_POLICY = [
 ].join('; ');
 
 const COMMON_HEAD = [
-  // Couleur de la barre du navigateur : celle du fond de page de l'app sous 1024 px (plus d'en-tête bleu), le blanc de la
-  // barre du haut de l'ordinateur au-dessus.
-  '<meta name="theme-color" content="#FAF9F6" media="(max-width: 1023px)">',
-  '<meta name="theme-color" content="#FFFFFF" media="(min-width: 1024px)">',
+  // Couleur de la barre du navigateur : celle du fond de page de l'app, sur toutes les largeurs (plus de barre en haut).
+  '<meta name="theme-color" content="#FAF9F6">',
   '<meta name="format-detection" content="telephone=no">',
   '<meta name="referrer" content="same-origin">',
   '<link rel="icon" href="/favicon.svg" type="image/svg+xml">',

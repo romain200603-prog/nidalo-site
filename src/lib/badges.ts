@@ -1,18 +1,18 @@
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { isNewAccount } from './account/auth';
 import { createStore, currentUserId, sessionStore, useSession, useStore } from './account/session';
-import { loadNotifications, notificationsStore, unreadNotificationCount } from './notifications';
+import { loadNotifications } from './notifications';
 import { isOfflineFailure } from './loadFailure';
 
-// Pastilles rouges de la barre du haut sur ordinateur, comme l'app :
+// Pastilles rouges, comme l'app :
 // - Messages : non-lus des conversations non archivées (MessagingStore.swift:36-38, RootTabView.swift:32) ;
 // - Notifications : notifications non lues du serveur (NotificationStore.swift:23, cloche de HomeView.swift:303-324).
-// Elles suivent le temps réel (MessagingRealtime.swift, AppContainer.swift:207-221) et se relisent quand l'onglet
-// redevient visible, comme l'app au retour au premier plan (RootTabView.swift:59-67).
-// Sur téléphone, la barre d'onglets du bas a la pastille Messages de l'app (AppTabBar, n° 44) : lue à l'ouverture de
-// chaque page et au retour sur l'onglet ; en direct seulement sur la page Messages.
+// En direct (startLiveBadges), elles suivent le temps réel (MessagingRealtime.swift, AppContainer.swift:207-221) et se
+// relisent quand l'onglet redevient visible, comme l'app au retour au premier plan (RootTabView.swift:59-67).
+// La barre d'onglets du bas a la pastille Messages de l'app (AppTabBar, n° 44), sur toutes les largeurs : lue à
+// l'ouverture de chaque page et au retour sur l'onglet ; en direct seulement sur la page Messages.
 
 /** Ce que l'on lit d'une ligne de my_conversations (is_archived vient de conversation_preferences, joint par le serveur). */
 export type ConversationUnreadRow = { unread_count?: number | null; is_archived?: boolean | null };
@@ -237,60 +237,18 @@ export function startLiveNotifications(): () => void {
   };
 }
 
-export type Badges = { shown: boolean; messages: number; notifications: number };
-
 /**
- * Pastilles de la barre du haut : seulement avec un compte, et pas pendant le choix du profil d'un compte neuf
- * (showsUnreadBadge dans l'app). À appeler seulement sur ordinateur.
- */
-export function useBadges(): Badges {
-  const session = useSession();
-  const userId = session.status === 'signedIn' ? session.userId : null;
-  const shown = userId !== null && !isNewAccount();
-  useEffect(() => {
-    if (!shown) return undefined;
-    return startLiveBadges();
-  }, [shown, userId]);
-  const messages = useStore(unreadMessagesStore);
-  const notifications = useStore(notificationsStore);
-  return {
-    shown,
-    messages: shown ? messages : 0,
-    notifications: shown && notifications.status === 'ready' ? unreadNotificationCount(notifications.items) : 0,
-  };
-}
-
-/** Barre d'onglets du bas : affichée sous 1024 px (styles/app.css). */
-const TAB_BAR_QUERY = '(max-width: 1023px)';
-
-function tabBarQuery(): MediaQueryList | null {
-  try {
-    return typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(TAB_BAR_QUERY) : null;
-  } catch {
-    return null;
-  }
-}
-
-function onTabBarChange(listener: () => void): () => void {
-  const query = tabBarQuery();
-  if (!query) return () => undefined;
-  query.addEventListener('change', listener);
-  return () => query.removeEventListener('change', listener);
-}
-
-/**
- * Pastille Messages de la barre d'onglets du téléphone (AppTabBar, n° 44) : seulement avec un compte, et pas pendant
- * le choix du profil d'un compte neuf (showsUnreadBadge). Les non-lus sont lus une fois à l'ouverture de la page, puis
- * au retour sur l'onglet et au retour par « Précédent » (page gardée en mémoire par le navigateur). `reads` faux : la
- * page les lit déjà elle-même, en direct (Messages), ou masque la barre (fiche d'une annonce, hidesTabBar).
+ * Pastille Messages de la barre d'onglets (AppTabBar, n° 44), sur toutes les largeurs : seulement avec un compte, et
+ * pas pendant le choix du profil d'un compte neuf (showsUnreadBadge). Les non-lus sont lus une fois à l'ouverture de la
+ * page, puis au retour sur l'onglet et au retour par « Précédent » (page gardée en mémoire par le navigateur). `reads`
+ * faux : la page les lit déjà elle-même, en direct (Messages), ou masque la barre (fiche d'une annonce, hidesTabBar).
  */
 export function useTabBarBadge(reads: boolean): number {
   const session = useSession();
   const userId = session.status === 'signedIn' ? session.userId : null;
   const shown = userId !== null && !isNewAccount();
-  const visible = useSyncExternalStore(onTabBarChange, () => tabBarQuery()?.matches ?? false, () => false);
   useEffect(() => {
-    if (!shown || !reads || !visible) return undefined;
+    if (!shown || !reads) return undefined;
     void loadUnreadMessages();
     const onVisible = () => {
       if (document.visibilityState === 'visible') void loadUnreadMessages();
@@ -304,7 +262,7 @@ export function useTabBarBadge(reads: boolean): number {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('pageshow', onShow);
     };
-  }, [shown, reads, visible, userId]);
+  }, [shown, reads, userId]);
   const messages = useStore(unreadMessagesStore);
   return shown ? messages : 0;
 }

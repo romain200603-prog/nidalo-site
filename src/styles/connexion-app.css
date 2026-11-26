@@ -1,8 +1,8 @@
 /* Écran de connexion de l'app (Features/Account/AuthView.swift et AuthLaunchLoop.swift), mesures de l'app (1 pt = 1 px).
    Accueil : le lancement en boucle, « Votre prochain bien commence ici. », Apple, Google et l'e-mail ; étapes par
-   e-mail : le titre sur le fond clair et la feuille blanche en bas. Téléphone (moins de 1024 px) : plein écran, sans
-   barre du haut, barre du bas ni pied de page ; ordinateur : un panneau clair dans la colonne de la page ; fenêtre
-   d'une action : le même écran. */
+   e-mail : le titre sur le fond clair et la feuille blanche en bas. Sur toutes les largeurs : plein écran, sans barre
+   d'onglets ni pied de page (dans la colonne de 720 px à partir de 1024 px) ; fenêtre d'une action : le même écran,
+   dans une fenêtre de 480 px au centre à partir de 1024 px. */
 
 .auth {
   --auth-blue: #3A5BAE;
@@ -41,19 +41,18 @@
 
 /* ——— Présentations ——— */
 
-/* Téléphone : plein écran, comme la présentation plein écran de l'app ; la page sous l'écran ne défile plus. */
-@media (max-width: 1023px) {
-  .auth.is-page { position: fixed; inset: 0; z-index: 40; overflow-x: hidden; overflow-y: auto; overscroll-behavior: none; }
-  html:has(.auth.is-page:not([hidden] *)) { overflow: hidden; }
-  body:has(.auth.is-page:not([hidden] *)) { padding-bottom: 0; }
-  body:has(.auth.is-page:not([hidden] *)) :is(.topbar, .tabbar, .footer, .phone-page-head) { display: none; }
-}
-/* Ordinateur : la barre du haut et le pied de page restent ; l'écran dans un panneau clair de la colonne. */
+/* Écran de la page (Mon compte, Favoris, Messages, Publier sans compte) : plein écran sur toutes les largeurs, comme la
+   présentation plein écran de l'app (sans barre d'onglets ni pied de page) ; la page sous l'écran ne défile plus. */
+.auth.is-page { position: fixed; inset: 0; z-index: 40; overflow-x: hidden; overflow-y: auto; overscroll-behavior: none; }
+html:has(.auth.is-page:not([hidden] *)) { overflow: hidden; }
+body:has(.auth.is-page:not([hidden] *)) { padding-bottom: 0; }
+body:has(.auth.is-page:not([hidden] *)) :is(.tabbar, .footer, .phone-page-head) { display: none; }
+/* À partir de 1024 px : l'écran du téléphone dans la colonne de 720 px, centrée sur son fond ; le lancement en boucle
+   couvre la largeur de la colonne. */
 @media (min-width: 1024px) {
-  .auth.is-page { width: 100%; max-width: 480px; min-height: 760px; margin: 32px auto 0; border: 1px solid var(--auth-border); border-radius: 28px; overflow: hidden; }
-  .account-wrap:has(> .auth.is-page), .favorites-wrap:has(> .favorites-signin > .auth.is-page) { padding-top: 0; }
+  .auth.is-page .auth-column { max-width: var(--app-column); }
 }
-/* Fenêtre d'une action (favori, recherche enregistrée…) : plein écran sur téléphone, 480 px sur ordinateur. */
+/* Fenêtre d'une action (favori, recherche enregistrée…) : plein écran sous 1024 px, 480 px au centre à partir de 1024 px. */
 .signin-sheet { width: 100vw; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: #FAF9F6; color: #1F2430; overflow: hidden; overscroll-behavior: contain; }
 .signin-sheet::backdrop { background: rgba(36, 45, 56, 0.45); }
 @media (min-width: 1024px) {
@@ -123,7 +122,6 @@ dialog.legal-sheet {
 .auth-round.is-end { margin-left: auto; }
 .auth .auth-round:focus-visible { border-radius: 50%; }
 @media (hover: hover) { .auth-round:hover { background: #F7F6F3; } }
-@media (min-width: 1024px) { .auth.is-page .auth-round.is-welcome-close { display: none; } }
 
 .auth-stage { position: relative; display: flex; flex: 1 0 auto; flex-direction: column; overflow: hidden; }
 @supports (overflow: clip) { .auth-stage { overflow: clip; } }

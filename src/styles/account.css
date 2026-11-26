@@ -38,7 +38,6 @@
   height: 44px; padding: 0 16px; border-radius: 22px; background: var(--green); color: #FFFFFF; font: 700 14px/1 var(--app-font);
   white-space: nowrap; transform: translateX(-50%); animation: account-toast-in 0.3s var(--app-ease, ease-out);
 }
-@media (min-width: 1024px) { .account-toast { top: calc(var(--topbar-height) + 8px); } }
 .account-toast-check { flex: none; width: 17px; height: 17px; }
 @keyframes account-toast-in { from { opacity: 0; transform: translate(-50%, -52px); } }
 @media (prefers-reduced-motion: reduce) {
@@ -773,7 +772,7 @@ a.save-capsule { text-decoration: none; }
 @media print {
   @page { size: A4 portrait; margin: 0; }
   html, body { margin: 0 !important; padding: 0 !important; background: #FFFFFF !important; }
-  body:has(.poster) .topbar, body:has(.poster) .dtop, body:has(.poster) .tabbar, body:has(.poster) .footer, body:has(.poster) .dfoot,
+  body:has(.poster) .tabbar, body:has(.poster) .footer,
   body:has(.poster) .skip-link, body:has(.poster) .account-toast, .poster-screen > .screen-header, .poster-print, .poster-hint { display: none !important; }
   body:has(.poster) .page, body:has(.poster) main, body:has(.poster) .account-wrap { display: block; max-width: none; min-height: 0; margin: 0; padding: 0; }
   .poster-screen { display: block; padding: 0; }

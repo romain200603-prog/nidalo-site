@@ -1,64 +1,25 @@
 import type { ReactNode } from 'react';
 // Styles communs d'abord : les styles des écrans (compte, favoris, annonce) viennent après et les précisent.
 import '../styles/app.css';
-// Ordinateur (≥ 1024 px seulement) : police Inter, couleurs, barre du haut, pied de page, colonne de 640 px.
+// Police Inter (toutes les largeurs) et valeurs --d-* des pages de l'ordinateur pas encore refaites (≥ 1024 px).
 import '../styles/ordinateur.css';
 import { ToastHost } from './AppToast';
 import { ContentUnavailable } from './ContentUnavailable';
-import { DesktopFooter } from './DesktopFooter';
-import { DesktopHeader } from './DesktopHeader';
 import { Icon } from './Icon';
-import type { IconName } from './iconPaths';
 import { PageHeader } from './PageHeader';
 import { SignInSheet } from './account/SignInSheet';
 import { StrokeIcon } from './StrokeIcon';
 import { badgeText, messagesLabel, useTabBarBadge } from '../lib/badges';
 import { CONTACT_EMAIL } from '../lib/config';
-import { useDesktop } from '../lib/desktop';
 import { PATHS } from '../lib/paths';
+
+// Le cadre de toutes les pages, comme l'app sur toutes les largeurs : pas de barre en haut (chaque page commence comme
+// son écran de l'app), la barre d'onglets en bas, et le pied de page du web (mentions légales) au bas de chaque page.
 
 export type Section = 'home' | 'search' | 'favorites' | 'publish' | 'messages' | 'account' | 'other';
 
 function current(active: boolean) {
   return active ? ('page' as const) : undefined;
-}
-
-export function Brand() {
-  return (
-    <a className="brand" href={PATHS.home} aria-label="Nidalo, accueil">
-      <img className="brand-tile" src="/assets/logo-tile.svg" width={36} height={36} alt="" />
-      <img className="brand-word" src="/assets/wordmark-white.svg" width={85} height={13} alt="" />
-    </a>
-  );
-}
-
-const TOP_LINKS: { section: Section; href: string; label: string; icon: IconName }[] = [
-  { section: 'search', href: PATHS.search, label: 'Rechercher', icon: 'search' },
-  { section: 'favorites', href: PATHS.favorites, label: 'Favoris', icon: 'heart' },
-  { section: 'messages', href: PATHS.messages, label: 'Messages', icon: 'messages' },
-  { section: 'account', href: PATHS.account, label: 'Mon compte', icon: 'user' },
-];
-
-export function Header({ section }: { section: Section }) {
-  return (
-    <header className="topbar">
-      <div className="wrap">
-        <Brand />
-        <nav className="topnav" aria-label="Menu principal">
-          {TOP_LINKS.map((link) => (
-            <a key={link.section} href={link.href} aria-current={current(section === link.section)}>
-              <Icon name={link.icon} />
-              {link.label}
-            </a>
-          ))}
-          <a className="publish" href={PATHS.publish} aria-current={current(section === 'publish')}>
-            <Icon name="plus" />
-            Publier
-          </a>
-        </nav>
-      </div>
-    </header>
-  );
 }
 
 /** Fiche d'une annonce : la barre du bas y est masquée (hidesTabBar de l'app), sa pastille n'est pas lue. */
@@ -67,10 +28,11 @@ function isListingPage(): boolean {
 }
 
 /**
- * Barre d'onglets de l'app (AppTabBar.swift), sous 1024 px : Accueil · Favoris · « + » Publier · Messages · Mon compte,
- * chacun avec son libellé dessous, et la pastille des messages non lus sur Messages (« 99+ » au-delà de 99, n° 44). La
- * page Messages lit déjà ses non-lus en direct. Icônes de l'app : maison redessinée (encre de 18, trait de 1,6), cœur
- * Lucide de 24, carré bleu de 28 au « + » de 18, bulle message-square-text de 19,56, circle-user de 22.
+ * Barre d'onglets de l'app (AppTabBar.swift), sur toutes les largeurs : Accueil · Favoris · « + » Publier · Messages ·
+ * Mon compte, chacun avec son libellé dessous, et la pastille des messages non lus sur Messages (« 99+ » au-delà de 99,
+ * n° 44). La page Messages lit déjà ses non-lus en direct. Icônes de l'app : maison redessinée (encre de 18, trait de
+ * 1,6), cœur Lucide de 24, carré bleu de 28 au « + » de 18, bulle message-square-text de 19,56, circle-user de 22. À
+ * partir de 1024 px, son fond blanc couvre toute la fenêtre, ses cinq boutons dans la colonne de 720 px au centre.
  */
 export function TabBar({ section }: { section: Section }) {
   const unread = useTabBarBadge(section !== 'messages' && !isListingPage());
@@ -143,24 +105,12 @@ export function Framed() {
   );
 }
 
-/** En-tête : la barre du haut sur ordinateur (≥ 1024 px), l'en-tête actuel en dessous. */
-export function SiteHeader({ section }: { section: Section }) {
-  return useDesktop() ? <DesktopHeader section={section} /> : <Header section={section} />;
-}
-
-/** Pied de page : le pied bleu (le bleu du bandeau de l'app) sur ordinateur (≥ 1024 px), le pied actuel en dessous. */
-export function SiteFooter() {
-  return useDesktop() ? <DesktopFooter /> : <Footer />;
-}
-
 /**
- * Retour et titre d'une page que l'app n'a pas (aide, 404, « bientôt »…), en haut de la page sous 761 px, là où il n'y
- * a plus d'en-tête bleu : le retour ramène à la page précédente du site, sinon à `back`. Le titre de la page reste
- * son h1 (masqué à l'écran sous 761 px, lu par les lecteurs d'écran).
+ * Retour et titre d'une page que l'app n'a pas (aide, pages légales, 404, annonce introuvable), en haut de la page sur
+ * toutes les largeurs (dans la colonne de 720 px à partir de 1024 px) : le retour ramène à la page précédente du site,
+ * sinon à `back`. Le titre de la page reste son h1 (masqué à l'écran, lu par les lecteurs d'écran).
  */
 export function PhonePageHeader({ title, back }: { title: string; back: string }) {
-  const desktop = useDesktop();
-  if (desktop) return null;
   return (
     <div className="wrap phone-page-head">
       <PageHeader title={title} back={back} history decorative />
@@ -169,8 +119,10 @@ export function PhonePageHeader({ title, back }: { title: string; back: string }
 }
 
 /**
- * `fill` : la page occupe l'écran sous la barre du haut, sans pied de page (Messages sur ordinateur).
- * `phoneHeader` : page que l'app n'a pas, avec son retour et son titre sur téléphone (PhonePageHeader).
+ * `wide` : page dont le corps est une collection d'annonces (recherche) : à partir de 1024 px, son pied de page à la
+ * largeur du grand conteneur (1180 px) au lieu de la colonne (720 px).
+ * `fill` : la page occupe la fenêtre au-dessus de la barre d'onglets, sans pied de page (Messages).
+ * `phoneHeader` : page que l'app n'a pas, avec son retour et son titre (PhonePageHeader).
  */
 export function Page({ section, children, wide = false, fill = false, phoneHeader }: {
   section: Section;
@@ -185,12 +137,11 @@ export function Page({ section, children, wide = false, fill = false, phoneHeade
       <a className="skip-link" href="#contenu">
         Aller au contenu
       </a>
-      <SiteHeader section={section} />
       <main id="contenu" tabIndex={-1}>
         {phoneHeader && <PhonePageHeader title={phoneHeader.title} back={phoneHeader.back} />}
         {children}
       </main>
-      {!fill && <SiteFooter />}
+      {!fill && <Footer />}
       <TabBar section={section} />
       <ToastHost />
       <SignInSheet />

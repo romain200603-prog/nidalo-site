@@ -59,7 +59,7 @@
   }
 }
 
-/* ——— Page : toute la hauteur sous la barre du haut, sans pied de page ——— */
+/* ——— Page : toute la hauteur de la fenêtre au-dessus de la barre d'onglets, sans pied de page ——— */
 .page-fill { height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; }
 .page-fill > main { flex: 1; min-height: 0; display: flex; }
 .dm {
@@ -725,12 +725,12 @@ a.dm-file.is-out:hover .dm-file-card { background: rgba(255, 255, 255, 0.2); }
   .dm-offer-host .wrap-narrow { padding-left: 16px; padding-right: 16px; }
 }
 
-/* Barre d'onglets (sous 1024 px) : la liste s'arrête au-dessus ; une conversation ouverte la cache et prend toute la
-   hauteur, avec la barre d'écriture tout en bas, comme dans l'app. */
+/* Barre d'onglets (sur toutes les largeurs) : la page s'arrête au-dessus. Sous 1024 px, une conversation ouverte la
+   cache et prend toute la hauteur, avec la barre d'écriture tout en bas, comme dans l'app. */
+.page-fill { height: calc(100vh - var(--tabbar-height) - var(--tabbar-bottom)); height: calc(100dvh - var(--tabbar-height) - var(--tabbar-bottom)); }
+/* La page n'est pas plus haute que l'écran : la place de la barre du bas est déjà retirée de .page-fill. */
+#root:has(> .page-fill) { min-height: 0; }
 @media (max-width: 1023px) {
-  .page-fill { height: calc(100vh - var(--tabbar-height) - var(--tabbar-bottom)); height: calc(100dvh - var(--tabbar-height) - var(--tabbar-bottom)); }
-  /* La page n'est pas plus haute que l'écran : la place de la barre du bas est déjà retirée de .page-fill. */
-  #root:has(> .page-fill) { min-height: 0; }
   body:has(.dm.is-thread) { padding-bottom: 0; }
   body:has(.dm.is-thread) .tabbar { display: none; }
   body:has(.dm.is-thread) .page-fill { height: 100vh; height: 100dvh; }
