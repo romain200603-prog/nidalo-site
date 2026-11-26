@@ -1,9 +1,9 @@
-/* Accueil de l'app (Features/Home : HomeView.swift, HomeCategoryCard.swift, HomeSections.swift), sous 1024 px, et la
-   carte d'annonce de l'accueil (HomeListingCard, dans toutes les rangées), aussi sur ordinateur. 1 pt
-   de l'app = 1 px ici ; ombres : flou CSS = 2 × le rayon SwiftUI ; « systemApp » de l'app = police système
-   (--app-font-system), « manrope » = --app-font (Inter dans l'app : « heavy » y est le gras, 700). */
+/* Accueil de l'app (Features/Home : HomeView.swift, HomeCategoryCard.swift, HomeSections.swift) et sa carte d'annonce
+   (HomeListingCard, dans toutes les rangées), à toutes les largeurs ; élargi à partir de 1024 px. 1 pt de l'app = 1 px
+   ici ; ombres : flou CSS = 2 × le rayon SwiftUI ; « systemApp » de l'app = police système (--app-font-system),
+   « manrope » = --app-font (Inter dans l'app : « heavy » y est le gras, 700). */
 
-/* ——— Page (sa barre du haut ; pas d'en-tête bleu sous 1024 px, règles dans app.css) ——— */
+/* ——— Page (sa barre du haut ; pas d'en-tête bleu sous 1024 px) ——— */
 .home-app { padding-bottom: 28px; color: var(--app-navy); }
 
 /* ——— Barre du haut, sans fond (44) : logo maison, « NIDΛLO », cloche dans un rond blanc ——— */
@@ -125,6 +125,16 @@
   .home-app-carousel { padding-left: max(16px, calc((100% - 688px) / 2)); padding-right: max(16px, calc((100% - 688px) / 2)); }
 }
 
+/* ——— Ordinateur (à partir de 1024 px) : le même écran dans le grand conteneur (1180, ses marges de 16 comprises), sur
+   le fond de la page comme dans l'app (son accueil n'a plus de bandeau bleu : homeBanner n'y sert plus) ; titres, carte
+   et « Reprendre ma recherche » alignés sur la première carte de chaque rangée. Les rangées restent des rangées qui
+   défilent dans le conteneur et montrent plus de cartes (molette, souris ou clavier : useRailScroll). ——— */
+@media (min-width: 1024px) {
+  .home-app-top, .home-category, .home-resume { width: calc(100% - 32px); max-width: calc(var(--app-wide) - 32px); margin-left: auto; margin-right: auto; }
+  .home-section-header { max-width: var(--app-wide); }
+  .home-app-carousel { width: 100%; max-width: var(--app-wide); margin-left: auto; margin-right: auto; padding-left: 16px; padding-right: 16px; }
+}
+
 /* ——— Sans réseau (HomeView.feedContent) : « Pas de connexion Internet » 24 sous la carte, à la place des sections
    (les villes restent, 24 dessous) ; pendant « Réessayer », la roue grise, 24 sous la carte. Aussi sur ordinateur. ——— */
 .home-feed-state { margin-top: 24px; }
@@ -175,14 +185,7 @@
 .hlc-city { display: flex; align-items: center; gap: 5px; margin: 7px 0 0; overflow: hidden; color: var(--app-text-secondary); font: 400 12px/15px var(--app-font-system); white-space: nowrap; }
 .hlc-city .icon { flex: none; width: 12px; height: 12px; }
 
-@media (min-width: 1024px) {
-  .dhome .home-listing-card { width: auto; transition: box-shadow 0.15s ease, transform 0.15s ease; }
-  .dhome .hlc-photo { height: auto; aspect-ratio: 248 / 186; }
-  .dhome .home-listing-card:hover { box-shadow: var(--d-card-hover-shadow); transform: translateY(-2px); }
-}
 @media (prefers-reduced-motion: reduce) {
   .home-category-filters.is-entering { animation: app-fade-in 0.25s ease-in-out both; }
   .home-category-filters.is-leaving { animation: app-fade-out 0.25s ease-in-out both; }
-  .dhome .home-listing-card { transition: none; }
-  .dhome .home-listing-card:hover { transform: none; }
 }

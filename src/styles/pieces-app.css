@@ -126,8 +126,8 @@ span.criterion-chip-label { cursor: default; }
 .heart-icon.is-filled .heart-icon-full { opacity: 1; }
 
 /* ——— Message du bas (CompareToast) : fond bleu, 50 de haut, rayon 14, icône 16, texte Inter 14 semibold sur deux
-   lignes au plus, action soulignée à droite. Au-dessus de la barre d'onglets du téléphone, en bas au centre sur
-   ordinateur. Un seul à la fois. ——— */
+   lignes au plus, action soulignée à droite. Au-dessus de la barre d'onglets, de toute la largeur sous 1024 px, de 358
+   au centre à partir de 1024 px. Un seul à la fois. ——— */
 .app-toast-host {
   position: fixed; z-index: 70; left: 16px; right: 16px; bottom: calc(24px + env(safe-area-inset-bottom));
   display: flex; justify-content: center; margin: 0; pointer-events: none;
@@ -148,9 +148,9 @@ span.criterion-chip-label { cursor: default; }
 .app-toast.is-leaving { animation: app-toast-out 0.2s ease-out both; }
 @keyframes app-toast-in { from { opacity: 0; transform: translateY(100%); } }
 @keyframes app-toast-out { to { opacity: 0; transform: translateY(100%); } }
+/* 70 au-dessus de la zone du bas, comme l'app : 28 au-dessus de la barre d'onglets de 42, sur toutes les largeurs. */
+.app-toast-host { bottom: calc(var(--tabbar-height) + var(--tabbar-bottom) + 28px); }
 @media (max-width: 1023px) {
-  /* 70 au-dessus de la zone du bas, comme l'app : 28 au-dessus de la barre d'onglets de 42. */
-  .app-toast-host { bottom: calc(var(--tabbar-height) + var(--tabbar-bottom) + 28px); }
   .app-toast { max-width: none; }
 }
 

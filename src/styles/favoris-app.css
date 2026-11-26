@@ -114,7 +114,7 @@
 /* « Pas de connexion Internet » (n° 54) : 62 sous les onglets quand les favoris du compte n'ont pas été lus, 24 sous
    la recherche et les catégories quand leurs fiches ne l'ont pas été (padding .top 62 et Spacing.xl de l'app). */
 .fav-empty-place-favorites > .app-offline { padding: 0 24px; }
-.favorites-list > .app-offline, .dfav-list > .app-offline { grid-column: 1 / -1; padding: 24px 24px 0; }
+.favorites-list > .app-offline { grid-column: 1 / -1; padding: 24px 24px 0; }
 
 @media (prefers-reduced-motion: reduce) {
   .fav-tabs-pill { display: none; }
@@ -125,3 +125,10 @@
   .fav-pulse { display: none; }
 }
 @keyframes fav-panel-fade { from { opacity: 0; } }
+
+/* Ordinateur (à partir de 1024 px, étape 7b) : la page du téléphone dans le grand conteneur (page `wide`), ses cartes
+   en grille (account.css) ; les recherches enregistrées 2 par ligne sur toute la largeur, au lieu de la colonne de 720. */
+@media (min-width: 1024px) {
+  .favorites-wrap .favorites-searches { max-width: none; }
+  .favorites-searches .saved-searches.is-embedded { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

@@ -4,6 +4,7 @@ import { Icon } from '../components/Icon';
 import { Page } from '../components/Layout';
 import { OfflineState } from '../components/OfflineState';
 import { ListingPhoto } from '../components/PhotoPager';
+import { useRailScroll } from '../components/useRailScroll';
 import { editableProjectStore, loadEditableProject } from '../lib/account/projectEditor';
 import { useSession, useStore } from '../lib/account/session';
 import { clearCompare, COMPARE_MAX, removeFromCompare, setCompareReference, useCompare } from '../lib/compare';
@@ -11,7 +12,6 @@ import {
   compareListings, comparisonItem, CRITERION_LABELS, deltaText, isEstimate, noteText, projectDownPayment, valueText, type Comparison,
   type ComparisonAnalysis, type ComparisonRow, type ComparisonValue,
 } from '../lib/comparison';
-import { useDesktop } from '../lib/desktop';
 import type { SearchMode } from '../lib/labels';
 import { DPE_COLORS } from '../lib/labels';
 import { fetchListing, ListingNotFound, UUID_PATTERN, type ListingRow } from '../lib/listings';
@@ -21,8 +21,8 @@ import '../styles/comparer-app.css';
 
 // « Comparer » (/comparer/), comme l'écran Comparer de l'app (Features/Compare/CompareView.swift) : les biens choisis
 // en colonnes (trois au plus, gardés dans l'onglet), les critères de leur nature, les écarts au bien de référence et
-// « Notre analyse ». Sur ordinateur, dans une colonne de 640 px ; en dessous de 1024 px, l'écran plein écran de l'app
-// (sans barre d'onglets) : colonne des critères figée de 96 et colonnes de 128 qui défilent de côté.
+// « Notre analyse ». L'écran plein écran de l'app (sans barre d'onglets) : colonne des critères figée de 96 et colonnes
+// de 128 qui défilent de côté ; à partir de 1024 px, dans le grand conteneur (1180 px).
 
 /** Biens lus sur le serveur, par identifiant ; `null` : annonce introuvable ; `'error'` : lecture ratée. */
 type Loaded = Map<string, ListingRow | null | 'error'>;
@@ -73,107 +73,6 @@ function closeCompare(mode: SearchMode | null) {
   window.location.assign(mode ? searchModePath(mode) : PATHS.search);
 }
 
-function EnergyValue({ letter }: { letter: string }) {
-  return (
-    <span className="cmp-energy" style={{ background: DPE_COLORS[letter], color: letter <= 'C' ? '#FFFFFF' : 'var(--d-text)' }}>
-      {letter}
-    </span>
-  );
-}
-
-function Cell({ row, index, now }: { row: ComparisonRow; index: number; now: Date }) {
-  const value: ComparisonValue | null = row.values[index];
-  const delta = row.deltas[index];
-  return (
-    <>
-      {value ? (
-        <span className="cmp-value">
-          {value.kind === 'energy' ? <EnergyValue letter={value.letter} /> : <span className="cmp-value-text">{valueText(value, row.criterion, now)}</span>}
-          {isEstimate(row.criterion) && <span className="cmp-estimate">est.</span>}
-        </span>
-      ) : (
-        <span className="cmp-missing">Non renseigné</span>
-      )}
-      {delta && <span className={`cmp-delta is-${delta.assessment}`}>{deltaText(delta.difference, row.criterion)}</span>}
-    </>
-  );
-}
-
-function Analysis({ analysis, year }: { analysis: ComparisonAnalysis; year: number }) {
-  if (!analysis.strengths.length && !analysis.warnings.length) return <p className="cmp-no-gap">Pas d'écart marquant.</p>;
-  return (
-    <ul className="cmp-notes">
-      {analysis.strengths.map((note, index) => (
-        <li key={`s${index}`} className="is-strength"><Icon name="check" />{noteText(note, year)}</li>
-      ))}
-      {analysis.warnings.map((note, index) => (
-        <li key={`w${index}`} className="is-warning"><Icon name="triangleAlert" />{noteText(note, year)}</li>
-      ))}
-    </ul>
-  );
-}
-
-function CompareTable({ comparison, mode }: { comparison: Comparison; mode: SearchMode | null }) {
-  const now = new Date();
-  const year = now.getFullYear();
-  const reference = comparison.referenceIndex;
-  const refClass = (index: number) => (index === reference ? ' is-reference' : '');
-  return (
-    <div className="cmp-card">
-      <table className="cmp-table">
-        <colgroup>
-          <col className="cmp-col-criterion" />
-          {comparison.items.map((item) => <col key={item.id} />)}
-        </colgroup>
-        <thead>
-          <tr>
-            <td className="cmp-corner" />
-            {comparison.items.map((item, index) => (
-              <th key={item.id} scope="col" className={`cmp-head${refClass(index)}`}>
-                <span className="cmp-photo">
-                  <ListingPhoto photo={item.photo} />
-                  {index === reference && (
-                    <span className="cmp-star" role="img" aria-label="Bien de référence"><Icon name="star" /></span>
-                  )}
-                  <button type="button" className="cmp-remove" onClick={() => removeFromCompare(item.id)} aria-label="Retirer de la comparaison" title="Retirer de la comparaison">
-                    <Icon name="x" />
-                  </button>
-                </span>
-                <a className="cmp-title" href={listingPath(item.id, mode)}>{item.title}</a>
-                <span className="cmp-city">{item.city}</span>
-                {index === reference ? (
-                  <span className="cmp-reference">Référence</span>
-                ) : (
-                  <button type="button" className="cmp-make-reference" onClick={() => setCompareReference(item.id)}>Prendre en référence</button>
-                )}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {comparison.rows.map((row) => {
-            const label = CRITERION_LABELS[row.criterion];
-            return (
-              <tr key={row.criterion}>
-                <th scope="row" className="cmp-criterion"><Icon name={label.icon} />{label.text}</th>
-                {comparison.items.map((item, index) => (
-                  <td key={item.id} className={`cmp-cell${refClass(index)}`}><Cell row={row} index={index} now={now} /></td>
-                ))}
-              </tr>
-            );
-          })}
-          <tr className="cmp-analysis-row">
-            <th scope="row" className="cmp-criterion"><Icon name="thumbsUp" />Notre analyse</th>
-            {comparison.items.map((item, index) => (
-              <td key={item.id} className={`cmp-cell${refClass(index)}`}><Analysis analysis={comparison.analyses[index]} year={year} /></td>
-            ))}
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 /**
  * Apport du projet du compte pour « Mensualité (est.) » (container.account.project dans l'app, n° 65) : `undefined`
  * tant que la session ou le projet se lisent ; `null` sans compte, sans apport, ou si le projet n'a pas pu être lu.
@@ -192,7 +91,7 @@ function useProjectDownPayment() {
   }, [session.status, userId, project]);
 }
 
-/** État de l'écran, le même sur téléphone et sur ordinateur : la comparaison des biens lus, et ce qu'il faut montrer. */
+/** État de l'écran : la comparaison des biens lus, et ce qu'il faut montrer. */
 function useComparisonScreen(mode: SearchMode | null) {
   const compare = useCompare();
   const { rows, loading, retry } = useComparedListings(compare.ids);
@@ -233,56 +132,7 @@ function ClearDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
   );
 }
 
-function DesktopCompare({ mode }: { mode: SearchMode | null }) {
-  const { comparison, retry, empty, unavailable, waiting } = useComparisonScreen(mode);
-  const [confirmClear, setConfirmClear] = useState(false);
-
-  return (
-    <div className="wrap wrap-narrow cmp">
-      <header className="cmp-head-row">
-        <div className="cmp-titles">
-          <h1>Comparer</h1>
-          <p>Comparez facilement les biens pour faire le meilleur choix.</p>
-        </div>
-        <button type="button" className="cmp-close" onClick={() => closeCompare(mode)}>
-          <Icon name="x" />
-          Fermer
-        </button>
-      </header>
-
-      {empty && (
-        <div className="cmp-empty">
-          <span className="cmp-empty-icon" aria-hidden="true"><Icon name="columns" /></span>
-          <h2>Comparez vos biens préférés</h2>
-          <p>Ajoutez des biens depuis vos recherches pour comparer leurs caractéristiques en un coup d'œil.</p>
-          <a className="cmp-discover" href={mode ? searchModePath(mode) : PATHS.search}>Découvrir les biens</a>
-        </div>
-      )}
-      {waiting && <div className="cmp-loading" role="status" aria-busy="true"><span className="spinner" aria-hidden="true" />Chargement…</div>}
-      {/* Aucun bien lu (pas de connexion, serveur qui ne répond pas) : l'état commun de l'app (n° 64). */}
-      {unavailable && <OfflineState className="cmp-error" onRetry={retry} />}
-      {!empty && !waiting && !unavailable && (
-        <div className="cmp-content">
-          {comparison.isMixed && (
-            <p className="cmp-mixed"><Icon name="info" />Biens de natures différentes : seuls les critères communs sont comparés.</p>
-          )}
-          <CompareTable comparison={comparison} mode={mode} />
-          {comparison.items.length < COMPARE_MAX && (
-            <a className="cmp-add" href={mode ? searchModePath(mode) : PATHS.search}>
-              <Icon name="plus" />
-              Ajouter un bien depuis la recherche
-            </a>
-          )}
-          <button type="button" className="cmp-clear" onClick={() => setConfirmClear(true)}>Vider la comparaison</button>
-        </div>
-      )}
-
-      <ClearDialog open={confirmClear} onClose={() => setConfirmClear(false)} />
-    </div>
-  );
-}
-
-// MARK: - Téléphone (CompareView.swift)
+// MARK: - Écran (CompareView.swift)
 
 /** Case d'un bien (CompareView.cell) : valeur en 13 gras et « est. », ou « Non renseigné » ; écart en pastille. */
 function PhoneCell({ row, index, now }: { row: ComparisonRow; index: number; now: Date }) {
@@ -391,7 +241,7 @@ function PhoneCompareTable({ comparison, mode }: { comparison: Comparison; mode:
   );
 }
 
-/** Écran Comparer du téléphone : plein écran comme dans l'app (domiaFullScreenCover), la barre d'onglets masquée. */
+/** Écran Comparer : plein écran comme dans l'app (domiaFullScreenCover), la barre d'onglets masquée. */
 function PhoneCompare({ mode }: { mode: SearchMode | null }) {
   const { comparison, retry, empty, unavailable, waiting } = useComparisonScreen(mode);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -444,11 +294,11 @@ function PhoneCompare({ mode }: { mode: SearchMode | null }) {
 }
 
 export function ComparePage() {
-  const desktop = useDesktop();
+  useRailScroll();
   const mode = useMemo(() => listingModeFromParams(new URLSearchParams(window.location.search)), []);
   return (
-    <Page section="search">
-      {desktop ? <DesktopCompare mode={mode} /> : <PhoneCompare mode={mode} />}
+    <Page section="search" wide>
+      <PhoneCompare mode={mode} />
     </Page>
   );
 }

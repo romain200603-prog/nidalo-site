@@ -8,7 +8,6 @@ import { deleteMyAccount } from '../../lib/account/deleteAccount';
 import { saveAccountType, saveFindableByPhone, type Account } from '../../lib/account/profile';
 import { useSession } from '../../lib/account/session';
 import { CONTACT_EMAIL } from '../../lib/config';
-import { useDesktop } from '../../lib/desktop';
 import { accountPath, AGENCY_FORM_PATH, PATHS } from '../../lib/paths';
 import { AlertDialog } from '../listing/Dialogs';
 import { LEGAL_TEXTS, LEGAL_TITLES } from './LegalText';
@@ -191,22 +190,20 @@ const HELP_QUESTIONS: [string, string][] = [
 
 /** « Aide et assistance » (HelpView) : « Questions fréquentes » repliables, puis « Écrire à l'équipe » (e-mail). */
 export function HelpScreen() {
-  const desktop = useDesktop();
   return (
     <div className="space help-screen">
       <ScreenHeader title="Aide et assistance" />
       <section className="help-section" aria-labelledby="aide-questions">
         <SectionLabel id="aide-questions" title="Questions fréquentes" />
         <GroupCard separatorInset={16}>
-          {HELP_QUESTIONS.map(([question, answer], index) => (
+          {HELP_QUESTIONS.map(([question, answer]) => (
             <li key={question}>
               <details className="help-question">
                 <summary>
                   <span>{question}</span>
                   <Icon name="chevronRight" className="icon help-chevron" />
                 </summary>
-                {/* Sur ordinateur, le bouton « Publier une annonce » de la barre du haut remplace le « + » de la barre du bas. */}
-                <p>{index === 2 && desktop ? 'Cliquez sur « Publier une annonce » dans la barre du haut : photos, adresse, prix, surface, DPE, puis publication.' : answer}</p>
+                <p>{answer}</p>
               </details>
             </li>
           ))}

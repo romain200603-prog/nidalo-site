@@ -1,12 +1,11 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import type { IconName } from '../../components/iconPaths';
-import { useDesktop } from '../../lib/desktop';
 import { PATHS } from '../../lib/paths';
 import { AlertDialog, type AlertAction } from '../listing/Dialogs';
 
-// Briques de Mon espace sur ordinateur (≥ 1024 px) : fenêtres de confirmation de l'app (la fenêtre Nidalo commune,
-// rouge pour une action destructive) et avis « Dans l'app iPhone pour l'instant ».
+// Briques des écrans de Mon compte (aussi pour Publier et la carte) : fenêtres de confirmation de l'app (la fenêtre
+// Nidalo commune, rouge pour une action destructive) et avis « Dans l'app iPhone pour l'instant ».
 
 /** Ce que l'app garde sur l'iPhone (documents, alertes, préférences, calendrier). */
 export const IPHONE_ONLY = 'Dans l’app iPhone pour l’instant';
@@ -71,7 +70,7 @@ export function ProgressRing({ progress, size = 64 }: { progress: number; size?:
   );
 }
 
-// MARK: - Écrans de la colonne de 640 px (Mon agenda, Ajouter une visite, Mon projet, Biens consultés)
+// MARK: - Pièces des écrans (.dsc) : en-tête, photo d'un bien, menu « … »
 
 /** En-tête d'un écran : retour (lien ou bouton), titre, sous-titre et contenu facultatifs, action à droite. */
 export function ScreenHead({ title, subtitle, back = PATHS.account, onBack, action, children }: {
@@ -112,8 +111,8 @@ export type MenuItem = { label: string; icon?: IconName; onClick: () => void; da
 
 /**
  * Menu de l'app (Menu) : liste d'actions sous le bouton « … », ou sous un bouton à libellé (`trigger`) ; Échap ou
- * un clic ailleurs le referme. Sur téléphone, la page défile juste assez pour le montrer en entier, au-dessus de la
- * barre du bas. Au clavier : ouvert, le focus va à la première action ; les flèches (et Début, Fin) passent d'une
+ * un clic ailleurs le referme. La page défile juste assez pour le montrer en entier, au-dessus de la barre du bas.
+ * Au clavier : ouvert, le focus va à la première action ; les flèches (et Début, Fin) passent d'une
  * action à l'autre ; Échap rend le focus au bouton ; Tab referme. Une action inactive (`disabled`) reste affichée.
  */
 export function ActionMenu({ label, items, trigger, triggerClassName = 'dsc-menu-button', icon = 'ellipsis', className }: {
@@ -131,10 +130,9 @@ export function ActionMenu({ label, items, trigger, triggerClassName = 'dsc-menu
   const listRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const id = useId();
-  const desktop = useDesktop();
   useEffect(() => {
-    if (open && !desktop) listRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [open, desktop]);
+    if (open) listRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [open]);
   useEffect(() => {
     if (open) listRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true });
   }, [open]);

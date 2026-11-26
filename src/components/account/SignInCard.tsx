@@ -23,8 +23,8 @@ import '../../styles/connexion-app.css';
 // Écran de connexion de l'app (Features/Account/AuthView.swift) : l'accueil sur le fond clair avec le lancement en
 // boucle, « Continuer avec Apple / Google / l'e-mail », puis les étapes par e-mail dans la feuille blanche (se
 // connecter, créer un compte, mot de passe oublié, e-mail envoyé, nouveau mot de passe). Apple et Google ouvrent la page
-// du service, qui revient sur Mon compte. Sur téléphone (moins de 1024 px), l'écran prend toute la page, sans barre du
-// haut, barre du bas ni pied de page ; sur ordinateur, un panneau clair dans la colonne de la page ; dans la fenêtre
+// du service, qui revient sur Mon compte. Sur toutes les largeurs, l'écran prend toute la page, sans barre d'onglets ni
+// pied de page (dans la colonne de 720 px à partir de 1024 px), et sa croix ramène à la page d'avant ; dans la fenêtre
 // d'une action (`onClose`), le même écran.
 // L'étape « Vérifiez votre e-mail » (code à 6 chiffres) de l'app n'est pas reprise : les e-mails ne contiennent qu'un lien.
 

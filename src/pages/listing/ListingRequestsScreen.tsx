@@ -4,7 +4,6 @@ import { Icon } from '../../components/Icon';
 import { OfflineState } from '../../components/OfflineState';
 import { PageHeader } from '../../components/PageHeader';
 import { CONVERSATION_NOT_FOUND, findExistingConversation } from '../../lib/account/agenda';
-import { useDesktop } from '../../lib/desktop';
 import { openListingConversation } from '../../lib/listing/conversation';
 import {
   otherParty, referenceSlot, REQUEST_TAB_EMPTY, REQUEST_TAB_TITLES, requestOpenSlots, requestRole, requestsInTab, isRescheduling,
@@ -31,7 +30,6 @@ const sameId = (a: string | null | undefined, b: string | null | undefined) => !
 type Load = { status: 'loading' } | { status: 'offline' } | { status: 'ready'; requests: DetailRequestRow[] };
 
 export function ListingRequestsScreen({ listingId, me, onClose }: { listingId: string | null; me: string | null; onClose: () => void }) {
-  const desktop = useDesktop();
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [tab, setTab] = useState<RequestTab | null>(null);
   const [missing, setMissing] = useState(false);
@@ -124,15 +122,8 @@ export function ListingRequestsScreen({ listingId, me, onClose }: { listingId: s
   }
 
   return (
-    <div className={`app-request app-requests dl-screen${desktop ? ' is-desktop wrap wrap-narrow' : ''}`}>
-      {desktop ? (
-        <header className="dl-screen-head">
-          <div className="dl-screen-titles"><h1 tabIndex={-1}>{title}</h1></div>
-          <button type="button" className="dl-screen-close" onClick={onClose} aria-label="Fermer" title="Fermer"><Icon name="x" /></button>
-        </header>
-      ) : (
-        <PageHeader title={title} onBack={onClose} />
-      )}
+    <div className="app-request app-requests dl-screen">
+      <PageHeader title={title} onBack={onClose} />
       <div className="app-request-tabs" role="tablist" aria-label="Demandes">
         {TABS.map((option) => {
           const count = requestsInTab(requests, option, me, now).length;

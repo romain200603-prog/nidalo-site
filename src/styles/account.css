@@ -38,7 +38,6 @@
   height: 44px; padding: 0 16px; border-radius: 22px; background: var(--green); color: #FFFFFF; font: 700 14px/1 var(--app-font);
   white-space: nowrap; transform: translateX(-50%); animation: account-toast-in 0.3s var(--app-ease, ease-out);
 }
-@media (min-width: 1024px) { .account-toast { top: calc(var(--topbar-height) + 8px); } }
 .account-toast-check { flex: none; width: 17px; height: 17px; }
 @keyframes account-toast-in { from { opacity: 0; transform: translate(-50%, -52px); } }
 @media (prefers-reduced-motion: reduce) {
@@ -59,6 +58,10 @@
 
 /* ——— Mon compte : page et briques (MySpaceComponents.swift) ——— */
 .account-wrap { max-width: 640px; padding-top: 8px; }
+/* À partir de 1024 px : Mon compte et ses écrans dans la colonne de la page (720 px). */
+@media (min-width: 1024px) {
+  .account-page { max-width: var(--app-column); }
+}
 .space { display: flex; flex-direction: column; gap: 14px; padding-bottom: 28px; }
 /* En-tête de page (PageHeader : 10 dessous) puis 8 avant le contenu, comme les pages de l'app. */
 .space > .screen-header { margin-bottom: -6px; }
@@ -636,10 +639,6 @@ a.save-capsule { text-decoration: none; }
 .stats-row span { overflow: hidden; max-width: 100%; color: var(--text-secondary); font-size: 11.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .stats-favorites { margin: 0; color: var(--text-secondary); font-size: 13px; }
 .stats-note { margin: 0; color: var(--text-secondary); font-size: 12.5px; line-height: 1.5; }
-@media (min-width: 1024px) {
-  .stats-totals { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-  .stats-total:last-child:nth-child(odd) { grid-column: auto; }
-}
 
 /* Mes ventes */
 .sales-suggestion-list { display: flex; flex-direction: column; margin: 0 -16px; padding: 0; list-style: none; }
@@ -773,7 +772,7 @@ a.save-capsule { text-decoration: none; }
 @media print {
   @page { size: A4 portrait; margin: 0; }
   html, body { margin: 0 !important; padding: 0 !important; background: #FFFFFF !important; }
-  body:has(.poster) .topbar, body:has(.poster) .dtop, body:has(.poster) .tabbar, body:has(.poster) .footer, body:has(.poster) .dfoot,
+  body:has(.poster) .tabbar, body:has(.poster) .footer,
   body:has(.poster) .skip-link, body:has(.poster) .account-toast, .poster-screen > .screen-header, .poster-print, .poster-hint { display: none !important; }
   body:has(.poster) .page, body:has(.poster) main, body:has(.poster) .account-wrap { display: block; max-width: none; min-height: 0; margin: 0; padding: 0; }
   .poster-screen { display: block; padding: 0; }

@@ -14,7 +14,6 @@ import { favoritesStore, loadFavorites } from '../../lib/account/favorites';
 import { loadMyListings, myListingsStore } from '../../lib/account/myListings';
 import { newUUID } from '../../lib/account/projectEditor';
 import { currentUserId, useStore } from '../../lib/account/session';
-import { useDesktop } from '../../lib/desktop';
 import { dayString, visitDateLong } from '../../lib/listing/visits';
 import { LISTING_COLUMNS, photoUrl, sortedPhotos, UUID_PATTERN, type ListingRow } from '../../lib/listings';
 import { fetchInboxRows, fetchProfiles } from '../../lib/messages/api';
@@ -24,11 +23,11 @@ import { accountPath } from '../../lib/paths';
 import { addressSuggestions, normalized } from '../../lib/places';
 import { supabase } from '../../lib/supabase';
 import { Modal } from '../listing/Dialogs';
-import { ActionMenu, ChoiceDialog, IPHONE_ONLY, IphoneOnlyDialog, ScreenHead, Thumb } from './DesktopParts';
+import { ActionMenu, ChoiceDialog, IPHONE_ONLY, IphoneOnlyDialog, Thumb } from './DesktopParts';
 import { Spinner } from './parts';
 import '../../styles/agenda-app.css';
 
-// « Ajouter une visite » sur ordinateur, dans la colonne de 640 px, et sur téléphone (Features/Visits/VisitFormView.swift, création) :
+// « Ajouter une visite », l'écran de l'app sur toutes les largeurs (Features/Visits/VisitFormView.swift, création) :
 // bien concerné (une de mes annonces, un favori ou le bien d'une conversation, VisitListingPicker.swift), date et
 // heure, rendez-vous, participants, rappels et suivi. « Enregistrer » écrit dans agenda_visits la même ligne que
 // l'app (lib/account/agenda, newVisitRow) ; « Ajouter à mon calendrier » donne ensuite le fichier .ics de la visite.
@@ -234,7 +233,6 @@ function TextField({ label, value, onChange, error, type = 'text', autoComplete,
 const visitAddressFetcher = (raw: string, _limit?: number, signal?: AbortSignal) => addressSuggestions(raw, 5, signal);
 
 export function AddVisit({ fromAgenda }: { fromAgenda: boolean }) {
-  const desktop = useDesktop();
   const agenda = useStore(agendaStore);
   const back = fromAgenda ? accountPath('agenda') : accountPath();
   const [initialStart] = useState(() => defaultVisitStart(new Date()));
@@ -372,23 +370,18 @@ export function AddVisit({ fromAgenda }: { fromAgenda: boolean }) {
 
   const existingDate = existing ? visitDateLong(existing.start) : '';
 
-  // « Enregistrer » : sur téléphone, la capsule bleue de 36 à droite de l'en-tête de l'app (VisitFormView) ; sur
-  // ordinateur, le bouton du site en haut à droite.
+  // « Enregistrer » : la capsule bleue de 36 à droite de l'en-tête de l'app (VisitFormView).
   const saveButton = (
-    <button type="button" className={desktop ? 'dsc-button dsc-button-primary' : 'app-visit-save'} onClick={() => void save()} disabled={!canSave}
+    <button type="button" className="app-visit-save" onClick={() => void save()} disabled={!canSave}
       aria-describedby={!canSave && !saving ? `${addressId}-aide` : undefined}>
       {saving ? <span className="spinner dsc-button-spinner" role="status" aria-label="Enregistrement" /> : 'Enregistrer'}
     </button>
   );
 
   return (
-    <div className={desktop ? 'dsc dsc-form-screen' : 'dsc dsc-form-screen app-visit-form'}>
-      {desktop ? (
-        <ScreenHead title="Nouvelle visite" onBack={leave} action={saveButton} />
-      ) : (
-        // En-tête de l'app : retour rond, titre de 17 centré, « Enregistrer » à droite.
-        <PageHeader title="Nouvelle visite" onBack={leave} trailing={saveButton} />
-      )}
+    <div className="dsc dsc-form-screen app-visit-form">
+      {/* En-tête de l'app : retour rond, titre de 17 centré, « Enregistrer » à droite. */}
+      <PageHeader title="Nouvelle visite" onBack={leave} trailing={saveButton} />
       <p id={`${addressId}-aide`} className="visually-hidden">Choisissez un bien ou indiquez une adresse</p>
       {saved && <div className="dsc-saved" role="status"><Icon name="check" />{saved}</div>}
 

@@ -1,25 +1,23 @@
 import { useEffect, useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { OfflineState } from '../../components/OfflineState';
-import { formatArea, formatPrice } from '../../lib/format';
-import { LISTING_COLUMNS, PUBLIC_STATUSES, photoUrl, sortedPhotos, UUID_PATTERN, type ListingRow } from '../../lib/listings';
+import { LISTING_COLUMNS, PUBLIC_STATUSES, UUID_PATTERN, type ListingRow } from '../../lib/listings';
 import { listingPath } from '../../lib/paths';
 import { clearHistory, clearHistoryMessage, recentlyViewedIds, removeFromHistory } from '../../lib/recentlyViewed';
 import { supabase } from '../../lib/supabase';
-import { useDesktop } from '../../lib/desktop';
 import { ContentUnavailable } from '../../components/ContentUnavailable';
-import { ChoiceDialog, ScreenHead, Thumb } from './DesktopParts';
+import { ChoiceDialog } from './DesktopParts';
 import { AppListingRow, ScreenHeader, Spinner } from './parts';
 
-// « Biens consultés » sur ordinateur (Features/Profile/ViewedListingsView.swift), dans la colonne de 640 px : les
-// fiches ouvertes par le compte (gardées dans ce navigateur, lib/recentlyViewed), de la plus récente à la plus
-// ancienne. Ouvrir un bien, le retirer de l'historique, ou tout vider après confirmation. Comme l'app, chaque bien est
-// relu tel que le serveur le rend (une de mes annonces en brouillon aussi) ; un bien que le serveur ne rend plus est
-// retiré de l'historique, et une lecture ratée montre « Pas de connexion Internet » (n° 225).
-// Sur téléphone, la page de l'app : en-tête et « Vider » (15 gras bleu), une carte à l'ombre par bien (marges 10) avec
-// la ligne d'annonce de l'app (photo 84, prix, type, lieu, petite ligne, pastille d'état ; photo pâlie si le bien n'est
-// plus en ligne) et la croix « Retirer de l'historique » à droite. Le glissement « Retirer » de l'iPhone n'a pas
-// d'équivalent : la croix fait la même chose.
+// « Biens consultés » (Features/Profile/ViewedListingsView.swift) : les fiches ouvertes par le compte (gardées dans ce
+// navigateur, lib/recentlyViewed), de la plus récente à la plus ancienne. Ouvrir un bien, le retirer de l'historique,
+// ou tout vider après confirmation. Comme l'app, chaque bien est relu tel que le serveur le rend (une de mes annonces
+// en brouillon aussi) ; un bien que le serveur ne rend plus est retiré de l'historique, et une lecture ratée montre
+// « Pas de connexion Internet » (n° 225).
+// La page de l'app sur toutes les largeurs : en-tête et « Vider » (15 gras bleu), une carte à l'ombre par bien (marges
+// 10) avec la ligne d'annonce de l'app (photo 84, prix, type, lieu, petite ligne, pastille d'état ; photo pâlie si le
+// bien n'est plus en ligne) et la croix « Retirer de l'historique » à droite. Le glissement « Retirer » de l'iPhone n'a
+// pas d'équivalent : la croix fait la même chose.
 
 /** Teinte de la pastille d'état (ViewedListingsView.row) : En ligne vert, Sous offre ambre, sinon rouge. */
 const pillTone = (status: string) => (status === 'active' ? 'green' : status === 'underOffer' ? 'amber' : 'red');
@@ -98,7 +96,6 @@ export function ViewedListings() {
   }
 
   const shown = ids.flatMap((id) => rows.get(id.toLowerCase()) ?? []);
-  const desktop = useDesktop();
 
   const dialog = (
     <ChoiceDialog
@@ -113,84 +110,35 @@ export function ViewedListings() {
     />
   );
 
-  if (!desktop) {
-    return (
-      <div className="space viewed-screen">
-        <ScreenHeader
-          title="Biens consultés"
-          action={ids.length > 0 && <button type="button" className="viewed-clear" onClick={() => setConfirming(true)}>Vider</button>}
-        />
-        {ids.length === 0 ? (
-          <ContentUnavailable icon="clock" title="Aucun bien consulté" text="Les annonces que vous ouvrez apparaîtront ici." />
-        ) : loading && rows.size === 0 ? (
-          <Spinner />
-        ) : loadFailed && rows.size === 0 ? (
-          <OfflineState onRetry={retry} />
-        ) : (
-          <ul className="viewed-list">
-            {shown.map((row) => (
-              <li key={row.id} className="viewed-row app-card">
-                <a className="viewed-link" href={listingPath(row.id)} aria-label={row.title || undefined}>
-                  <AppListingRow
-                    row={row}
-                    dimmed={!isPublic(row.status)}
-                    showsShortFacts
-                    pills={<span className={`app-pill app-tone-${pillTone(row.status)}`}>{AVAILABILITY[row.status] ?? row.status}</span>}
-                  />
-                </a>
-                <button type="button" className="viewed-remove" aria-label="Retirer de l'historique" onClick={() => remove(row.id)}>
-                  <Icon name="x" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {dialog}
-      </div>
-    );
-  }
-
   return (
-    <div className="dsc dsc-viewed-screen">
-      <ScreenHead
+    <div className="space viewed-screen">
+      <ScreenHeader
         title="Biens consultés"
-        action={ids.length > 0 && <button type="button" className="dsc-button dsc-button-light" onClick={() => setConfirming(true)}>Vider</button>}
+        action={ids.length > 0 && <button type="button" className="viewed-clear" onClick={() => setConfirming(true)}>Vider</button>}
       />
       {ids.length === 0 ? (
-        <div className="dsc-empty">
-          <Icon name="clock" />
-          <h2>Aucun bien consulté</h2>
-          <p>Les annonces que vous ouvrez apparaîtront ici.</p>
-        </div>
+        <ContentUnavailable icon="clock" title="Aucun bien consulté" text="Les annonces que vous ouvrez apparaîtront ici." />
       ) : loading && rows.size === 0 ? (
         <Spinner />
       ) : loadFailed && rows.size === 0 ? (
         <OfflineState onRetry={retry} />
       ) : (
-        <ul className="dsc-viewed-list">
-          {shown.map((row) => {
-            const photo = sortedPhotos(row)[0];
-            const visible = isPublic(row.status);
-            return (
-              <li key={row.id} className="dsc-viewed">
-                <a className="dsc-viewed-link" href={listingPath(row.id)}>
-                  <Thumb url={photo ? photoUrl(photo.storage_path) : null} className={`dsc-viewed-photo${visible ? '' : ' is-faded'}`} />
-                  <span className="dsc-viewed-text">
-                    <span className="dsc-viewed-title">{row.title}</span>
-                    <span className="dsc-viewed-line">{row.city} · {formatArea(row.living_area)}</span>
-                    <span className="dsc-viewed-price">
-                      <strong>{formatPrice(row.price)}</strong>
-                      {row.transaction === 'rent' && <span className="dsc-viewed-month">/mois</span>}
-                      {!visible && <span className="dsc-viewed-status">{AVAILABILITY[row.status] ?? row.status}</span>}
-                    </span>
-                  </span>
-                </a>
-                <button type="button" className="dsc-viewed-remove" aria-label="Retirer de l'historique" onClick={() => remove(row.id)}>
-                  <Icon name="x" />Retirer
-                </button>
-              </li>
-            );
-          })}
+        <ul className="viewed-list">
+          {shown.map((row) => (
+            <li key={row.id} className="viewed-row app-card">
+              <a className="viewed-link" href={listingPath(row.id)} aria-label={row.title || undefined}>
+                <AppListingRow
+                  row={row}
+                  dimmed={!isPublic(row.status)}
+                  showsShortFacts
+                  pills={<span className={`app-pill app-tone-${pillTone(row.status)}`}>{AVAILABILITY[row.status] ?? row.status}</span>}
+                />
+              </a>
+              <button type="button" className="viewed-remove" aria-label="Retirer de l'historique" onClick={() => remove(row.id)}>
+                <Icon name="x" />
+              </button>
+            </li>
+          ))}
         </ul>
       )}
       {dialog}
