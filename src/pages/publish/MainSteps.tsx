@@ -56,8 +56,8 @@ export function CategoryStep({ draft, update, showsErrors }: StepProps) {
   return (
     <div className="dpub-category">
       <div className="dpub-category-head">
-        {/* « souhaitez-vous » ne se coupe pas au trait d'union, comme dans l'app. */}
-        <h2>Que <span className="dpub-nowrap">souhaitez-vous</span> publier ?</h2>
+        {/* « souhaitez-vous » ne se coupe pas au trait d'union, comme dans l'app ; espace insécable avant « ? ». */}
+        <h2>Que <span className="dpub-nowrap">souhaitez-vous</span> publier ?</h2>
         <p>Choisissez la catégorie, puis le type de bien.</p>
       </div>
       <div className="dpub-category-grid">
