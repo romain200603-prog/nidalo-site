@@ -2757,7 +2757,7 @@ try {
   }
 
   // Accueil sur ordinateur (étape 7b) : l'accueil du téléphone élargi, à 1440 × 900 et 1024 × 768, avec les annonces
-  // inventées. Le bandeau bleu de l'app (#1F5BC6) sur toute la largeur de la fenêtre ; barre du haut, carte des
+  // inventées. Sur le fond de la page, sans bandeau bleu, comme l'accueil de l'app ; barre du haut, carte des
   // catégories, titres et première carte de chaque rangée au bord gauche du grand conteneur (1180, 16 dedans) ; les
   // rangées restent des rangées d'une ligne, qui montrent plus de cartes et défilent à la molette et à la souris sans
   // ouvrir l'annonce ; les catégories ouvrent leurs champs dans la carte ; « Plus de critères » ouvre les filtres plein
@@ -2784,7 +2784,7 @@ try {
       const home = document.querySelector('.home-app');
       const rails = [...document.querySelectorAll('.home-app-section .home-app-carousel')].filter((rail) => rail.querySelector('article'));
       return {
-        band: [Math.round(box(home).left), Math.round(box(home).width) === document.documentElement.clientWidth, getComputedStyle(home).backgroundImage.includes('rgb(31, 91, 198)')],
+        band: [Math.round(box(home).left), Math.round(box(home).width) === document.documentElement.clientWidth, getComputedStyle(home).backgroundImage === 'none'],
         lefts: [...new Set([...[document.querySelector('.home-app-top'), document.querySelector('.home-category'), ...rails.map((rail) => rail.querySelector('article'))]
           .map((element) => Math.round(box(element).left)),
           ...[...document.querySelectorAll('.home-app-section .home-section-header')].map((header) => Math.round(box(header).left + parseFloat(getComputedStyle(header).paddingLeft)))])],
@@ -2796,7 +2796,7 @@ try {
         overflowX: document.documentElement.scrollWidth - innerWidth,
       };
     });
-    expectSame(A, 'élargi [bandeau, bords gauches, lignes par rangée, cartes entières, débord]', layout,
+    expectSame(A, 'élargi [pleine largeur sans bandeau, bords gauches, lignes par rangée, cartes entières, débord]', layout,
       { band: [0, true, true], lefts: [edge], rows: [1], shown: width === 1440 ? 4 : 3, overflowX: 0 });
     const noPhoto = await page.locator('section:has(#opportunites) .home-no-photo').count();
     if (noPhoto < 1 || await page.getByText('Photos à venir').count()) problems.push(`${A} : annonce sans photo mal affichée`);
