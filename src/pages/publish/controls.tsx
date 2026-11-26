@@ -64,11 +64,13 @@ function offsetAfterSignificant(formatted: string, count: number): number {
  * curseur à sa place, saisie en % pour une fraction (`percent`), nombre entier (`integer`), sans espaces pour une
  * année (`groups` à false). Un montant en euros collé avec des points de milliers (« 250.000 ») se lit 250 000.
  */
-export function Amount({ label, value, onChange, unit, percent = false, integer = false, groups = true, issue = null, guide }: {
+export function Amount({ label, value, onChange, unit, prefix, percent = false, integer = false, groups = true, issue = null, guide }: {
   label: string;
   value: number | null;
   onChange: (value: number | null) => void;
   unit: string;
+  /** Texte gris devant le nombre saisi (« R+ » du nombre d'étages), comme l'app. */
+  prefix?: string;
   percent?: boolean;
   integer?: boolean;
   groups?: boolean;
@@ -129,6 +131,7 @@ export function Amount({ label, value, onChange, unit, percent = false, integer 
     <div className={`number-field dsc-amount${message ? ' has-error' : ''}`} data-guide={guide}>
       <label htmlFor={id}>{label}</label>
       <div className="number-input">
+        {prefix && text !== '' && <span className="prefix" aria-hidden="true">{prefix}</span>}
         <input ref={input} id={id} type="text" inputMode={integer ? 'numeric' : 'decimal'} autoComplete="off" placeholder={EMPTY}
           value={text} onChange={handle} onPaste={paste} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
           aria-invalid={message ? true : undefined} aria-describedby={message ? `${id}-erreur` : undefined} />
@@ -166,11 +169,13 @@ export function TextInput({ label, value, onChange, error = null, maxLength = 15
 /** Libellé suivi de pastilles. */
 export function Choices({ label, layout = 'row', guide, children }: {
   label: string;
-  layout?: 'row' | 'wide' | 'outdoor' | 'stack' | 'two';
+  /** `rooms` : une ligne de cinq pastilles à 6 d'écart (RoomsPicker), au lieu de 8. */
+  layout?: 'row' | 'rooms' | 'wide' | 'outdoor' | 'stack' | 'two';
   children: ReactNode;
 } & Guided) {
   const id = useId();
-  const grid = layout === 'wide' ? 'dpub-choices-wide' : layout === 'two' ? 'dpub-choices-two' : `dsc-choices-${layout}`;
+  const grid = layout === 'wide' ? 'dpub-choices-wide' : layout === 'two' ? 'dpub-choices-two' : layout === 'rooms' ? 'dsc-choices-row dpub-choices-rooms'
+    : `dsc-choices-${layout}`;
   return (
     <div className="dsc-choices" role="group" aria-labelledby={id} data-guide={guide}>
       <FieldLabel id={id}>{label}</FieldLabel>
@@ -204,7 +209,7 @@ export function RoomsChoice({ title, value, onChange, startsAtOne = false, guide
   startsAtOne?: boolean;
 } & Guided) {
   return (
-    <Choices label={title} guide={guide}>
+    <Choices label={title} layout="rooms" guide={guide}>
       {[1, 2, 3, 4, 5].map((count) => (
         <ChoiceChip key={count} title={count === 5 ? '5+' : count === 1 && !startsAtOne ? 'Studio' : String(count)}
           selected={value === count} onClick={() => onChange(value === count ? null : count)} expands />
