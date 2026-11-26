@@ -1,7 +1,7 @@
-/* Page Messages (demande de Romain du 14 novembre 2026) : une vraie messagerie, dans le style de la conversation de
-   l'app iPhone. À partir de 1024 px : sous la barre du haut, deux colonnes sur toute la hauteur restante, chacune avec
-   son propre défilement (liste de 360 px, conversation). En dessous de 1024 px : une seule colonne, comme dans l'app,
-   la liste puis la conversation avec une flèche retour. La barre du haut du site ne change pas. */
+/* Page Messages : une vraie messagerie, avec les écrans de l'app iPhone à toutes les largeurs. Une seule colonne, comme
+   dans l'app : la liste, puis la conversation poussée par-dessus avec une flèche retour ; la page occupe la fenêtre
+   au-dessus de la barre d'onglets, chaque écran avec son propre défilement. À partir de 1024 px, ces écrans dans la
+   colonne de 720 px au centre (--app-column), le fond de la page de chaque côté. */
 
 /* Les écrans « Faire une offre » et « Demande de visite » de la fiche s'ouvrent aussi dans la conversation : leurs
    styles d'ordinateur et de téléphone sont repris ici par @import (ceux du téléphone, communs avec la page d'une
@@ -9,8 +9,8 @@
 @import './ordinateur-fiche.css';
 @import './ecrans-fiche-telephone.css';
 
-/* Couleurs et mesures de la page. Sous 1024 px, les jetons de l'ordinateur (--d-…) que la page et les écrans de la
-   fiche utilisent sont définis ici, avec la police de l'app (Inter, comme sur ordinateur). */
+/* Couleurs et mesures de la page. Les jetons --d-… que la page et les écrans de la fiche utilisent sont définis ici, à
+   toutes les largeurs, avec la police de l'app (Inter). */
 :root {
   /* Couleurs de l'app (AppColors.swift) : les jetons communs du site (app.css, pieces-app.css), sous les noms de la page. */
   --m-text: var(--app-navy);
@@ -30,33 +30,31 @@
   --m-hover: var(--app-segment);
   --m-red: var(--red);
 }
-@media (max-width: 1023.98px) {
-  :root {
-    --d-font: 'Nidalo Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    --d-bg: #FAF9F6;
-    --d-text: #242D38;
-    --d-grey: #75808B;
-    --d-help: #9AA2AA;
-    --d-icon: #5B6571;
-    --d-chevron: #A7AEB5;
-    --d-card-border: #ECEAE6;
-    --d-separator: #F2F0EC;
-    --d-field-border: #E3E0DA;
-    --d-blue: #3C5CB0;
-    --d-blue-hover: #2F4A92;
-    --d-blue-light: #EEF2FA;
-    --d-blue-line: #C9D3EE;
-    --d-green: #577965;
-    --d-green-pill: #E9F0E8;
-    --d-green-text: #3F6650;
-    --d-red: #C0392B;
-    --d-night: #22366B;
-    --d-hover: #F4F2EE;
-    --d-card-radius: 18px;
-    --d-card-hover-shadow: 0 10px 28px rgba(36, 45, 56, 0.08);
-    --d-button-height: 44px;
-    --d-button-radius: 12px;
-  }
+:root {
+  --d-font: 'Nidalo Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --d-bg: #FAF9F6;
+  --d-text: #242D38;
+  --d-grey: #75808B;
+  --d-help: #9AA2AA;
+  --d-icon: #5B6571;
+  --d-chevron: #A7AEB5;
+  --d-card-border: #ECEAE6;
+  --d-separator: #F2F0EC;
+  --d-field-border: #E3E0DA;
+  --d-blue: #3C5CB0;
+  --d-blue-hover: #2F4A92;
+  --d-blue-light: #EEF2FA;
+  --d-blue-line: #C9D3EE;
+  --d-green: #577965;
+  --d-green-pill: #E9F0E8;
+  --d-green-text: #3F6650;
+  --d-red: #C0392B;
+  --d-night: #22366B;
+  --d-hover: #F4F2EE;
+  --d-card-radius: 18px;
+  --d-card-hover-shadow: 0 10px 28px rgba(36, 45, 56, 0.08);
+  --d-button-height: 44px;
+  --d-button-radius: 12px;
 }
 
 /* ——— Page : toute la hauteur de la fenêtre au-dessus de la barre d'onglets, sans pied de page ——— */
@@ -67,12 +65,12 @@
   --blue-press: var(--m-blue-hover);
   --blue-soft: var(--m-blue-soft);
   --d-red: var(--m-red);
-  --dm-pad: 24px;
+  --dm-pad: 16px;
   flex: 1;
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: 360px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   background: var(--m-thread);
   color: var(--m-text);
   font-family: var(--d-font);
@@ -100,8 +98,8 @@
 .dm-check { display: inline-flex; flex: none; }
 .dm-check .icon { width: 14px; height: 14px; }
 
-/* ——— Colonne de gauche : titre, recherche, filtres, puis la liste qui défile seule ——— */
-.dm-side { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #FFFFFF; border-right: 1px solid var(--m-line); }
+/* ——— Liste : titre, recherche, filtres, puis les conversations, qui défilent ——— */
+.dm-side { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #FFFFFF; }
 .dm-side-top { flex: none; display: flex; flex-direction: column; gap: 14px; padding: 20px 20px 12px; }
 .dm-side-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .dm-side-head h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em; line-height: 30px; }
@@ -121,8 +119,7 @@
 .dm-search-clear .icon { width: 13px; height: 13px; stroke-width: 3; }
 
 /* Toutes / Non lues / Archivées : capsules de l'app (38 px, la choisie en bleu), le nombre après le titre ; jamais
-   coupées, sans défilement à l'horizontale (elles passent à la ligne s'il le faut). Dans la colonne de 360 px, un peu
-   moins de marge que dans l'app pour tenir sur une ligne ; sur téléphone, celle de l'app. */
+   coupées (une seule ligne qui défile : messages-app.css). */
 .dm-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
 .dm-tab { flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 38px; padding: 0 12px; border: 1px solid var(--m-line); border-radius: 999px; background: #FFFFFF; color: var(--m-text); font-size: 14px; font-weight: 700; white-space: nowrap; cursor: pointer; }
 .dm-tab:hover { background: var(--m-hover); }
@@ -134,7 +131,6 @@
 .dm-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .dm-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; color: inherit; text-decoration: none; }
 .dm-row:hover { background: var(--m-hover); }
-.dm-row[aria-current="true"] { background: var(--m-blue-soft); }
 .dm-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 /* Si la place manque, c'est le nom qui se coupe, jamais la pastille ni l'heure. */
 .dm-row-top { display: flex; align-items: center; gap: 6px; }
@@ -206,20 +202,13 @@
 .dm-button:disabled { opacity: 0.5; cursor: default; }
 .dm-phone-retry { flex: none; align-self: flex-start; }
 
-/* ——— Droite : la conversation ——— */
+/* ——— La conversation, et les écrans poussés par-dessus la liste ——— */
 .dm-main { min-width: 0; min-height: 0; display: flex; background: var(--m-thread); }
 .dm-pane { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.dm-pane-empty { align-items: center; justify-content: center; gap: 10px; padding: 32px; color: var(--m-grey); text-align: center; }
-.dm-pane-empty > .icon { width: 30px; height: 30px; color: var(--m-blue); }
-.dm-pane-empty h2 { margin: 0; color: var(--m-grey); font-size: 17px; font-weight: 600; }
-.dm-pane-empty p { margin: 0; font-size: 15px; }
 .dm-pane-top { flex: none; background: #FFFFFF; }
-.dm-back-link { display: none; }
 
-
-/* En-tête : avatar, nom, statut ; à droite « Proposer une visite », Appeler, « … ». */
+/* En-tête : retour, avatar, nom, statut ; à droite Appeler et « … ». */
 .dm-head { display: flex; align-items: center; gap: 12px; height: 72px; padding: 0 var(--dm-pad); border-bottom: 1px solid var(--m-line); background: #FFFFFF; }
-.dm-back { display: none; }
 .dm-head-who { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 0; border: 0; border-radius: 12px; background: none; color: inherit; text-align: left; text-decoration: none; }
 :is(a, button).dm-head-who { cursor: pointer; }
 :is(a, button).dm-head-who:hover .dm-head-title { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
@@ -230,9 +219,6 @@
 .dm-head-sub > span { overflow: hidden; text-overflow: ellipsis; }
 .dm-online-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--m-online); }
 .dm-head-tools { flex: none; display: flex; align-items: center; gap: 10px; }
-.dm-outline { flex: none; display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border: 1px solid var(--m-blue-outline); border-radius: 12px; background: #FFFFFF; color: var(--m-blue); font-size: 14px; font-weight: 700; white-space: nowrap; text-decoration: none; cursor: pointer; }
-.dm-outline:hover { background: var(--m-blue-soft); }
-.dm-outline .icon { width: 17px; height: 17px; }
 .dm-round { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; border: 1px solid var(--m-line); border-radius: 50%; background: #FFFFFF; color: var(--m-text); cursor: pointer; }
 .dm-round:hover { background: var(--m-hover); }
 .dm-round .icon { width: 18px; height: 18px; }
@@ -248,7 +234,7 @@
 .dm-menu-list button .icon { flex: none; width: 18px; height: 18px; color: var(--d-icon); }
 .dm-menu-list button.is-destructive, .dm-menu-list button.is-destructive .icon { color: var(--d-red); }
 
-/* Barre de l'annonce : photo de 52 px, titre, « Ville · prix · rendement · lots », « Voir l'annonce › ». */
+/* Carte de l'annonce : photo, titre, « Ville · surface », puis le prix et « Voir › ». */
 .dm-banner { display: flex; align-items: center; gap: 14px; height: 76px; padding: 0 var(--dm-pad); border-bottom: 1px solid var(--m-line); background: #FFFFFF; color: inherit; text-decoration: none; }
 .dm-banner-photo { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; overflow: hidden; border-radius: 12px; background: var(--m-blue-soft); color: var(--m-blue); }
 .dm-banner-photo img { width: 100%; height: 100%; object-fit: cover; }
@@ -256,7 +242,6 @@
 .dm-banner-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .dm-banner-title { overflow: hidden; font-size: 16px; font-weight: 700; line-height: 22px; text-overflow: ellipsis; white-space: nowrap; }
 .dm-banner-line { overflow: hidden; color: var(--m-grey); font-size: 14px; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.dm-banner-yield { color: var(--m-green); font-weight: 700; }
 .dm-banner-link { flex: none; display: inline-flex; align-items: center; gap: 2px; color: var(--m-blue); font-size: 15px; font-weight: 600; }
 .dm-banner-link .icon { width: 17px; height: 17px; }
 a.dm-banner:hover .dm-banner-link { text-decoration: underline; }
@@ -458,18 +443,10 @@ a.dm-file.is-out:hover .dm-file-card { background: rgba(255, 255, 255, 0.2); }
 .dm-field textarea { flex: 1; min-width: 0; height: 50px; max-height: 138px; padding: 14px 0; border: 0; background: transparent; color: var(--m-text); font: inherit; font-size: 15px; line-height: 22px; resize: none; outline: none; }
 .dm .dm-field textarea:focus-visible { outline: none; }
 .dm-field textarea::placeholder { color: var(--m-time); opacity: 1; }
-.dm-emoji { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; margin-bottom: 8px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--m-grey); cursor: pointer; }
-.dm-emoji[aria-expanded="true"] { background: var(--m-blue-soft); color: var(--m-blue); }
-.dm-emoji:hover { background: var(--m-hover); }
-.dm-emoji .icon { width: 21px; height: 21px; stroke-width: 1.7; }
 .dm-send { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; padding: 0; border: 0; border-radius: 50%; background: var(--m-blue); box-shadow: 0 4px 12px rgba(60, 92, 176, 0.3); color: #FFFFFF; cursor: pointer; }
 .dm-send:hover:not(:disabled) { background: var(--m-blue-hover); }
 .dm-send:disabled { background: #C9CED6; box-shadow: none; cursor: default; }
 .dm-send .icon { width: 21px; height: 21px; }
-/* Émojis : un petit panneau au-dessus du champ, à droite. */
-.dm-emoji-panel { position: absolute; right: -1px; bottom: calc(100% + 8px); z-index: 30; display: grid; grid-template-columns: repeat(8, 36px); gap: 2px; max-width: calc(100vw - 24px); padding: 8px; border: 1px solid var(--m-line); border-radius: 16px; background: #FFFFFF; box-shadow: 0 12px 32px rgba(36, 45, 56, 0.16); }
-.dm-emoji-panel button { width: 36px; height: 36px; padding: 0; border: 0; border-radius: 10px; background: none; font-size: 21px; line-height: 1; cursor: pointer; }
-.dm-emoji-panel button:hover { background: var(--m-hover); }
 .dm-bottom-line { flex: none; display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 76px; padding: 16px var(--dm-pad); border-top: 1px solid var(--m-line); background: #FFFFFF; color: var(--m-grey); font-size: 15px; font-weight: 600; text-align: center; }
 .dm-bottom-line .dm-link-button { font-size: 15px; font-weight: 700; }
 
@@ -639,99 +616,78 @@ a.dm-file.is-out:hover .dm-file-card { background: rgba(255, 255, 255, 0.2); }
 .dm-viewer-nav .icon { width: 24px; height: 24px; }
 .dm-viewer .spinner { color: #FFFFFF; }
 
-/* ——— Nouveaux messages en fondu ; chargement en formes grises qui pulsent ——— */
+/* ——— Nouveaux messages en fondu ——— */
 .dm-msg.is-new, .dm-system.is-new { animation: dm-fade-in 0.28s ease-out both; }
 @keyframes dm-fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-.dm-skel { display: block; border-radius: 8px; background: #EEECE8; animation: dm-pulse 1.4s ease-in-out infinite; }
-@keyframes dm-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
-.dm-skel-list { padding-top: 2px; }
-.dm-skel-row { display: flex; align-items: center; gap: 12px; height: 80px; padding: 0 12px; }
-.dm-skel-avatar { flex: none; width: 48px; height: 48px; border-radius: 50%; }
-.dm-skel-lines { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 9px; }
-.dm-skel-line { height: 12px; border-radius: 6px; }
-.dm-skel-line.is-thin { height: 10px; }
-.dm-thread.is-skeleton { -webkit-mask-image: none; mask-image: none; overflow: hidden; }
-.dm-skel-thread { display: flex; flex-direction: column; justify-content: flex-end; gap: 10px; min-height: 100%; padding: 16px 40px; }
-.dm-skel-bubble { height: 40px; margin-left: 36px; border-radius: 16px 16px 16px 4px; }
-.dm-skel-bubble.is-out { align-self: flex-end; margin-left: 0; border-radius: 16px 16px 4px 16px; background: #E5E9F3; }
-.dm-skel-bubble.is-tall { height: 62px; }
-.dm-skel-head { display: flex; align-items: center; gap: 12px; height: 72px; padding: 0 var(--dm-pad); border-bottom: 1px solid var(--m-line); background: #FFFFFF; }
-.dm-skel-head .dm-skel-avatar { width: 44px; height: 44px; }
-.dm-skel-head .dm-skel-lines { flex: none; width: 180px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .dm-msg.is-new, .dm-system.is-new, .dm-skel { animation: none; }
+  .dm-msg.is-new, .dm-system.is-new { animation: none; }
   .dm-voice-spinner { animation-duration: 2.4s; }
 }
 
-/* Entre 1024 et 1279 px : marges du fil réduites ; la liste garde ses 360 px. */
-@media (min-width: 1024px) and (max-width: 1279px) {
-  .dm-thread-inner, .dm-skel-thread { padding-left: 24px; padding-right: 24px; }
-  .dm-media-gallery { grid-template-columns: repeat(3, 1fr); }
-}
+/* ——— Une seule colonne, comme dans l'app : la liste, ou la conversation poussée par-dessus ——— */
+.dm.is-thread .dm-side { display: none; }
+.dm-side-top { padding: 16px 16px 10px; }
+.dm-list-scroll { padding: 2px 6px 16px; }
+.dm-head { gap: 8px; height: 64px; padding: 0 12px 0 6px; }
+.dm-back { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--m-text); cursor: pointer; }
+.dm-back:hover { background: var(--m-hover); }
+.dm-back .icon { width: 24px; height: 24px; }
 
-/* ——— Moins de 1024 px : une seule colonne, comme dans l'app ——— */
+.dm-head-who { gap: 10px; }
+.dm-head-tools { gap: 6px; }
+.dm-banner { gap: 12px; height: 68px; padding: 0 16px; }
+.dm-banner-photo { width: 44px; height: 44px; border-radius: 10px; }
+.dm-banner-title { font-size: 15px; line-height: 20px; }
+.dm-banner-line { font-size: 13px; line-height: 18px; }
+.dm-thread-inner { padding: 12px 12px 16px; }
+.dm-interactive { max-width: min(540px, 100% - 36px); }
+.dm-msg.is-out .dm-interactive { max-width: min(540px, 88%); }
+.dm-bottom { padding: 10px 12px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+.dm-quick { margin-bottom: 3px; }
+.dm-composer { gap: 8px; }
+.dm-plus { width: 40px; height: 40px; margin-bottom: 3px; }
+.dm-field { min-height: 46px; padding-left: 14px; border-radius: 23px; }
+.dm-field textarea { height: 44px; max-height: 132px; padding: 11px 0; font-size: 16px; }
+.dm-send { width: 46px; height: 46px; }
+/* Feuilles : en bas sous 1024 px ; au centre à partir de 1024 px, comme les feuilles de l'app sur un iPad. */
 @media (max-width: 1023.98px) {
-  .dm { --dm-pad: 16px; grid-template-columns: minmax(0, 1fr); }
-  .dm.is-list .dm-main { display: none; }
-  .dm.is-thread .dm-side { display: none; }
-  .dm-side { border-right: 0; }
-  .dm-side-top { padding: 16px 16px 10px; }
-  .dm-list-scroll { padding: 2px 6px 16px; }
-  .dm-head { gap: 8px; height: 64px; padding: 0 12px 0 6px; }
-  .dm-back { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--m-text); cursor: pointer; }
-  .dm-back:hover { background: var(--m-hover); }
-  .dm-back .icon { width: 24px; height: 24px; }
-  .dm-back-link { display: inline-block; margin-bottom: 8px; }
-
-  .dm-head-who { gap: 10px; }
-  .dm-head-tools { gap: 6px; }
-  /* « Proposer une visite » devient un bouton rond (icône calendrier) pour garder la place du nom. */
-  .dm-outline { width: 40px; padding: 0; border-radius: 50%; justify-content: center; }
-  .dm-outline .dm-outline-label { display: none; }
-  .dm-banner { gap: 12px; height: 68px; padding: 0 16px; }
-  .dm-banner-photo { width: 44px; height: 44px; border-radius: 10px; }
-  .dm-banner-title { font-size: 15px; line-height: 20px; }
-  .dm-banner-line { font-size: 13px; line-height: 18px; }
-  .dm-banner-link .dm-banner-link-label { display: none; }
-  .dm-thread-inner { padding: 12px 12px 16px; }
-  .dm-interactive { max-width: min(540px, 100% - 36px); }
-  .dm-msg.is-out .dm-interactive { max-width: min(540px, 88%); }
-  .dm-bottom { padding: 10px 12px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
-  .dm-quick { margin-bottom: 3px; }
-  .dm-composer { gap: 8px; }
-  .dm-plus { width: 40px; height: 40px; margin-bottom: 3px; }
-  .dm-field { min-height: 46px; padding-left: 14px; border-radius: 23px; }
-  .dm-field textarea { height: 44px; max-height: 132px; padding: 11px 0; font-size: 16px; }
-  .dm-emoji { margin-bottom: 5px; }
-  .dm-send { width: 46px; height: 46px; }
-  .dm-emoji-panel { grid-template-columns: repeat(8, minmax(0, 36px)); right: -54px; }
-  .dm-skel-thread { padding: 12px 12px 16px; }
   .dm-sheet { width: 100vw; max-width: 100vw; max-height: 92dvh; margin: auto 0 0; border-radius: 20px 20px 0 0; }
   .dm-sheet-body { max-height: 92dvh; }
   .dm-sheet-content, .dm-new-body { padding: 16px 16px calc(20px + env(safe-area-inset-bottom)); }
   .dm-sources { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px 6px; }
   .dm-source-icon { width: 50px; height: 50px; }
-  .dm-detail-actions { grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); }
-  .dm-details-inner { width: calc(100% - 32px); padding-top: 18px; }
-  .dm-media-gallery { grid-template-columns: repeat(3, 1fr); }
+}
+.dm-detail-actions { grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); }
+.dm-details-inner { width: calc(100% - 32px); padding-top: 18px; }
+.dm-media-gallery { grid-template-columns: repeat(3, 1fr); }
+/* Visionneuse (plein écran à toutes les largeurs) : sous 1024 px, flèches plus petites, posées sur la photo ; à partir
+   de 1024 px, de part et d'autre de la photo, pour la souris. */
+@media (max-width: 1023.98px) {
   .dm-viewer-stage { padding: 0 8px 16px; }
   .dm-viewer-nav { width: 40px; height: 40px; }
   .dm-viewer-nav.is-prev { left: 8px; }
   .dm-viewer-nav.is-next { right: 8px; }
-
-  /* Écrans de la fiche (« Faire une offre », « Demande de visite ») dans la conversation, sur téléphone : leurs styles
-     sont dans ecrans-fiche-telephone.css, communs avec la page d'une annonce. */
-  .dm-offer-host .wrap-narrow { padding-left: 16px; padding-right: 16px; }
 }
 
-/* Barre d'onglets (sur toutes les largeurs) : la page s'arrête au-dessus. Sous 1024 px, une conversation ouverte la
-   cache et prend toute la hauteur, avec la barre d'écriture tout en bas, comme dans l'app. */
+/* Écrans de la fiche (« Faire une offre ») dans la conversation : leurs styles sont dans ecrans-fiche-telephone.css,
+   communs avec la page d'une annonce. */
+.dm-offer-host .wrap-narrow { padding-left: 16px; padding-right: 16px; }
+
+/* Barre d'onglets : la page s'arrête au-dessus. Une conversation ouverte (et ses écrans : détails, groupe, communauté)
+   la cache et prend toute la hauteur, avec la barre d'écriture tout en bas, comme hidesTabBar dans l'app, à toutes les
+   largeurs ; le corps de la page perd aussi sa marge du bas, comme avec HidesTabBar. */
 .page-fill { height: calc(100vh - var(--tabbar-height) - var(--tabbar-bottom)); height: calc(100dvh - var(--tabbar-height) - var(--tabbar-bottom)); }
 /* La page n'est pas plus haute que l'écran : la place de la barre du bas est déjà retirée de .page-fill. */
 #root:has(> .page-fill) { min-height: 0; }
-@media (max-width: 1023px) {
-  body:has(.dm.is-thread) { padding-bottom: 0; }
-  body:has(.dm.is-thread) .tabbar { display: none; }
-  body:has(.dm.is-thread) .page-fill { height: 100vh; height: 100dvh; }
+body:has(.dm.is-thread) { padding-bottom: 0; }
+body:has(.dm.is-thread) .tabbar { display: none; }
+body:has(.dm.is-thread) .page-fill { height: 100vh; height: 100dvh; }
+
+/* ——— À partir de 1024 px : les mêmes écrans dans la colonne de 720 px au centre, barres du haut et du bas comprises,
+   le fond de la page de chaque côté ——— */
+@media (min-width: 1024px) {
+  .dm { width: 100%; max-width: var(--app-column); margin: 0 auto; }
+  /* « Faire une offre » à la largeur de la colonne (720, 688 de contenu), comme sur la page d'une annonce. */
+  .dm-offer-host .wrap-narrow { max-width: none; }
 }

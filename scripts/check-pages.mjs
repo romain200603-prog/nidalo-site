@@ -3018,10 +3018,10 @@ try {
     await edge.close();
   }
 
-  // Messages (demande de Romain du 14 novembre 2026) : une vraie messagerie, deux colonnes à partir de 1024 px (liste de
-  // 360 px, conversation sur tout le reste), une seule colonne en dessous ; actions envoyées au serveur simulé comme l'app
-  // les envoie, temps réel, « En ligne », demandes de visite, à 1440 × 960 puis 1024 × 768 ; horloge figée au vendredi
-  // 6 novembre 2026, 10 h 50 à Paris. Captures pour Romain : 3-messages-*.png.
+  // Messages : une vraie messagerie, avec les écrans de l'app à toutes les largeurs (à partir de 1024 px, dans la colonne
+  // de 720 px : la liste, puis la conversation par-dessus, avec la flèche retour) ; actions envoyées au serveur simulé
+  // comme l'app les envoie, temps réel, « En ligne », demandes de visite, à 1440 × 960 puis 1024 × 768 ; horloge figée au
+  // vendredi 6 novembre 2026, 10 h 50 à Paris. Captures : 3-messages-*.png.
   const chatContext = async ({ width = 1440, height = 960, account = {}, signedIn = true, phone = false, reducedMotion = 'no-preference', slow = {} } = {}) => {
     const context = await browser.newContext(phone ? { ...devices['iPhone 13'], locale: 'fr-FR', timezoneId: 'Europe/Paris', reducedMotion }
       : { viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR', timezoneId: 'Europe/Paris', reducedMotion });
@@ -3033,6 +3033,16 @@ try {
   };
   const A = chatId(1).toUpperCase();
   const rowLink = (n) => `.dm-list .dm-row[href="/messages/?c=${chatId(n)}"]`;
+  /** Retour à la liste par les flèches des écrans (la liste est sous la conversation, comme dans l'app). */
+  const backToList = async (page, name) => {
+    for (let step = 0; step < 3 && !(await page.locator('.dm.is-list').count()); step += 1) {
+      const pushed = page.locator(':is(.dmg-bar, .dm-details-bar) button[aria-label="Retour"]');
+      const from = page.url();
+      await (await pushed.count() ? pushed.first() : page.locator(':is(.dm-pane-top, .dm-missing-top) .dm-back')).click();
+      await page.waitForFunction((url) => window.location.href !== url, from, { timeout: 8000 }).catch(() => undefined);
+    }
+    await page.waitForSelector('.dm.is-list .dm-list .dm-row', { timeout: 8000 }).catch(() => problems.push(`${name} : la flèche ne ramène pas à la liste`));
+  };
   // Deuxième ligne, comme l'app (demande du 17/11) : la petite maison et le sous-titre de l'interlocuteur (bien et
   // ville, ou nombre de membres d'un groupe).
   const INITIAL_ROWS = [
@@ -3071,12 +3081,14 @@ try {
     await page.waitForSelector('.dm-list .dm-row');
     // Pastille : 1 + 2 + 3 non-lus ; l'archivée n'y compte pas.
     await waitForMessagesBadge(page, '6', M);
-    expectSame(M, 'volet de droite sans ?c=', await textOf(page, '.dm-main'), 'Sélectionnez une conversation');
+    // Sans ?c= : la liste seule, rien n'est ouvert ni lu.
+    expectSame(M, 'liste seule sans ?c=', [await page.locator('.dm.is-list').count(), await page.locator('.dm-main').count()], [1, 0]);
     if (chatCalls(chat, 'messages').length || chatCalls(chat, 'rpc/mark_conversation_read').length) problems.push(`${M} : sans ?c=, une conversation est lue ou marquée lue`);
+    // L'écran de l'app dans la colonne de 720 px au centre, au-dessus de la barre d'onglets.
     const layout = await page.evaluate(() => {
       const box = (selector) => document.querySelector(selector)?.getBoundingClientRect();
       return {
-        side: Math.round(box('.dm-side')?.width ?? 0), main: Math.round(box('.dm-main')?.width ?? 0), top: box('.dm')?.top, bottom: box('.dm')?.bottom,
+        column: [box('.dm')?.left, box('.dm')?.width], side: Math.round(box('.dm-side')?.width ?? 0), top: box('.dm')?.top, bottom: box('.dm')?.bottom,
         pageScroll: document.documentElement.scrollHeight - innerHeight, overflowX: document.documentElement.scrollWidth - innerWidth,
         footer: Boolean(document.querySelector('footer.footer')), active: document.querySelector('.tabbar a[href="/messages/"]')?.getAttribute('aria-current') ?? null,
         search: Math.round(box('.dm-search')?.height ?? 0), tabs: [...document.querySelectorAll('.dm-tab')].map((tab) => Math.round(tab.getBoundingClientRect().height)),
@@ -3085,18 +3097,16 @@ try {
       };
     });
     expectSame(M, 'mise en page', layout, {
-      side: 360, main: width - 360, top: 0, bottom: height - 46, pageScroll: 0, overflowX: 0, footer: false, active: 'page', search: 44, tabs: [38, 38, 38, 38, 38],
+      column: [(width - 720) / 2, 720], side: 720, top: 0, bottom: height - 46, pageScroll: 0, overflowX: 0, footer: false, active: 'page', search: 52, tabs: [38, 38, 38, 38, 38],
       font: 'Nidalo Inter', rowAvatar: 46,
     });
-    expectSame(M, 'en-tête de la colonne', [await textOf(page, '.dm-side-head h1'), await page.getAttribute('.dm-compose', 'aria-label'),
+    expectSame(M, 'en-tête de la liste', [await textOf(page, '.dm-side-head h1'), await page.getAttribute('.dm-compose', 'aria-label'),
       await page.getAttribute('.dm-search-open', 'aria-label'), await textOf(page, '.dm-search-open')],
     ['Messages', 'Nouveau message', 'Rechercher un contact ou une annonce', 'Rechercher un contact ou un bien']);
     expectSame(M, 'conversations', await inboxRows(page), INITIAL_ROWS);
     expectSame(M, 'filtres', await page.$$eval('.dm-tab', (els) => els.map((el) => [el.getAttribute('aria-label'), el.getAttribute('aria-pressed')])),
       [['Tous, 5', 'true'], ['Non lus, 3', 'false'], ['Favoris, 1', 'false'], ['Visites, 1', 'false'], ['Archivés, 1', 'false']]);
-    // Aucune conversation n'est ouverte d'elle-même : aucune ligne n'est sélectionnée.
-    if (await page.locator('.dm-row[aria-current="true"]').count()) problems.push(`${M} : une conversation est sélectionnée sans ?c=`);
-    await chatShot(page, `3-messages-vide-${width}.png`);
+    await chatShot(page, `3-messages-liste-${width}.png`);
 
     if (width === 1440) {
       // Filtres (capsules de l'app) : non lus, favoris, visites à venir (sans les archivées), archivés, tous.
@@ -3138,7 +3148,8 @@ try {
       }), ['Tous, 5', 'solid', '3px', 'rgb(60, 92, 176)']);
     }
 
-    // Ouvrir la conversation de l'agence : elle s'ouvre à droite sans recharger la page, est lue puis marquée lue une fois.
+    // Ouvrir la conversation de l'agence : elle s'ouvre par-dessus la liste sans recharger la page, cache la barre
+    // d'onglets (hidesTabBar), est lue puis marquée lue une fois.
     let mark = chat.calls.length;
     await page.evaluate(() => { window.nidaloMarker = 'même page'; });
     await page.click(rowLink(1));
@@ -3153,16 +3164,18 @@ try {
     if ((await page.evaluate(() => window.nidaloMarker)) !== 'même page') problems.push(`${M} : la page s'est rechargée à l'ouverture`);
     expectSame(M, 'lecture des messages', chatCalls(chat, 'messages', mark).map((call) => `${call.method} ${call.search}`),
       [`GET ?select=id,conversation_id,sender_id,kind,client_id,content,created_at,expires_at,reply_to_id,forwarded,message_reactions(user_id,emoji,created_at)&conversation_id=eq.${A}&order=created_at.desc&limit=200`]);
-    const pad = width >= 1280 ? 40 : 24;
-    const opened = await page.evaluate(() => {
-      const row = document.querySelector('.dm-row[aria-current="true"]');
+    const opened = await page.evaluate((id) => {
+      const row = document.querySelector(`.dm-row[href="/messages/?c=${id}"]`);
+      const shown = (selector) => Boolean(document.querySelector(selector)?.getClientRects().length);
+      const pane = document.querySelector('.dm-main').getBoundingClientRect();
       const inner = document.querySelector('.dm-thread-inner').getBoundingClientRect();
       const sent = [...document.querySelectorAll('.dm-bubble.is-out')];
       const received = [...document.querySelectorAll('.dm-bubble:not(.is-out)')];
       const style = (el) => (el ? [getComputedStyle(el).backgroundColor, getComputedStyle(el).color, getComputedStyle(el).borderRadius] : null);
       const msgs = [...document.querySelectorAll('.dm-msg')];
       return {
-        row: row?.querySelector('.dm-row-name')?.textContent ?? null, rowBackground: row ? getComputedStyle(row).backgroundColor : null,
+        row: row?.querySelector('.dm-row-name')?.textContent ?? null, list: shown('.dm-side'), tabbar: shown('.tabbar'), bodyPadding: getComputedStyle(document.body).paddingBottom,
+        pane: [pane.left, pane.width, pane.top, pane.bottom - innerHeight],
         unread: row?.querySelector('.dm-unread')?.textContent ?? null, sent: style(sent[0]), received: style(received[0]),
         receivedLeft: [...new Set(received.map((el) => Math.round(el.getBoundingClientRect().left - inner.left)))],
         sentRight: [...new Set(sent.map((el) => Math.round(inner.right - el.getBoundingClientRect().right)))],
@@ -3170,19 +3183,23 @@ try {
         avatars: [...document.querySelectorAll('.dm-msg-avatar:not(.is-empty)')].map((el) => Math.round(el.getBoundingClientRect().width)),
         fresh: document.querySelectorAll('.is-new').length,
       };
-    });
+    }, chatId(1));
+    // La conversation dans la colonne de 720 px, sur toute la hauteur (la barre d'onglets et la marge du bas de la page
+    // s'en vont) ; la liste reste dessous, cachée ; le fil de l'app : 18,5 px de marge, avatars de 23 et 8 px d'écart.
     expectSame(M, 'conversation ouverte', opened, {
-      row: 'Agence Démo Lyon', rowBackground: 'rgb(238, 242, 250)', unread: null,
+      row: 'Agence Démo Lyon', list: false, tabbar: false, bodyPadding: '0px', pane: [(width - 720) / 2, 720, 0, 0], unread: null,
       sent: ['rgb(60, 92, 176)', 'rgb(255, 255, 255)', '16px 16px 4px'], received: ['rgb(255, 255, 255)', 'rgb(36, 45, 56)', '16px 16px 16px 4px'],
-      receivedLeft: [pad + 31], sentRight: [pad], gaps: ['14px', '4px'], avatars: opened.avatars.map(() => 23), fresh: 0,
+      receivedLeft: [50], sentRight: [19], gaps: ['2px', '8px'], avatars: opened.avatars.map(() => 23), fresh: 0,
     });
-    expectSame(M, 'en-tête', [await textOf(page, '.dm-head-title'), await textOf(page, '.dm-head-sub'), await page.getAttribute('.dm-head-who', 'href'),
-      await page.$$eval('.dm-head-tools button', (els) => els.map((el) => el.getAttribute('aria-label')))],
-    ['Agence Démo Lyon', 'Appartement 3 pièces · Lyon 2e', `/messages/?c=${chatId(1)}&vue=details`, ['Proposer une visite', 'Appeler', 'Plus d\'options']]);
-    // Carte de l'annonce de l'app : la ville et la surface (le rendement en plus sur ordinateur), le prix à droite et « Voir ›».
+    // En-tête de l'app : la flèche retour, le nom et le bien ; à droite la capsule Appeler | « … » (pas de « Proposer une
+    // visite » : la visite passe par « Détails » et la fiche).
+    expectSame(M, 'en-tête', [await page.getAttribute('.dm-head .dm-back', 'aria-label'), await textOf(page, '.dm-head-title'), await textOf(page, '.dm-head-sub'),
+      await page.getAttribute('.dm-head-who', 'href'), await page.$$eval('.dm-head-tools button', (els) => els.map((el) => el.getAttribute('aria-label')))],
+    ['Retour', 'Agence Démo Lyon', 'Appartement 3 pièces · Lyon 2e', `/messages/?c=${chatId(1)}&vue=details`, ['Appeler', 'Plus d\'options']]);
+    // Carte de l'annonce de l'app : la ville et la surface, le prix à droite et « Voir ›».
     expectSame(M, 'barre de l\'annonce', [await textOf(page, '.dm-banner-title'), await textOf(page, '.dm-banner-line'), await textOf(page, '.dm-banner-price'),
       await textOf(page, '.dm-banner-link'), await page.getAttribute('a.dm-banner', 'href')],
-    ['Appartement 3 pièces', 'Lyon 2e · 62 m² · 7,8 % brut', '238 000 €', 'Voir', `/annonce/?id=${homeId(1)}`]);
+    ['Appartement 3 pièces', 'Lyon 2e · 62 m²', '238 000 €', 'Voir', `/annonce/?id=${homeId(1)}`]);
     // Séparateurs de l'app : le jour et l'heure du premier message (« Aujourd'hui · 09:58 »).
     expectSame(M, 'jours', await page.$$eval('.dm-day-label', (els) => els.map((el) => el.textContent)), ['Hier · 18:02', 'Aujourd\'hui · 09:58']);
     // Coches dans les bulles : l'agence a tout lu jusqu'à 10:45.
@@ -3206,23 +3223,26 @@ try {
     expectSame(M, 'fichier', [await textOf(page, '.dm-file-name'), await textOf(page, '.dm-file-line'), await textOf(page, '.dm-file-badge'),
       await page.$eval('.dm-file-badge', (el) => getComputedStyle(el).color), await page.getAttribute('a.dm-file', 'href'), await page.getAttribute('a.dm-file', 'target')],
     ['Simulation_pret.pdf', 'PDF · 245 Ko', 'PDF', 'rgb(192, 57, 43)', `https://izzsoitqtzzswkpvdozd.supabase.co/storage/v1/object/sign/message-attachments/${LOAN_PDF}?token=jeton-de-test`, '_blank']);
-    // Zone de saisie : bande blanche (12 / 24 / 16 px), « + » de 44 px, champ de 52 px, envoi de 52 px grisé tant que
-    // le champ est vide ; une conversation sur une annonce propose « Envoyer le dossier complet ».
+    // Barre d'écriture de l'app : bande blanche (8 / 14 / 8 px), « + » de 30 × 44, champ de 36 px, appareil photo, envoi
+    // de 34 px pâle tant que le champ est vide ; une conversation sur une annonce propose « Envoyer le dossier complet ».
     expectSame(M, 'réponses rapides', await quickReplies(page), ['Envoyer le dossier complet']);
     const composer = async () => page.evaluate(() => {
       const size = (selector) => { const box = document.querySelector(selector).getBoundingClientRect(); return [Math.round(box.width), Math.round(box.height)]; };
       const bottom = getComputedStyle(document.querySelector('.dm-bottom'));
       return {
         band: [bottom.paddingTop, bottom.paddingLeft, bottom.paddingBottom, bottom.borderTopColor, bottom.backgroundColor],
-        plus: size('.dm-plus'), field: size('.dm-field')[1], send: size('.dm-send'), sendColor: getComputedStyle(document.querySelector('.dm-send')).backgroundColor,
+        plus: size('.dm-plus'), field: size('.dm-field')[1], camera: size('.dm-camera'), send: size('.dm-send'),
+        sendColor: [getComputedStyle(document.querySelector('.dm-send')).backgroundColor, getComputedStyle(document.querySelector('.dm-send')).opacity],
         disabled: document.querySelector('.dm-send').disabled, placeholder: document.querySelector('.dm-field textarea').placeholder,
-        labels: ['.dm-plus', '.dm-emoji', '.dm-send'].map((selector) => document.querySelector(selector).getAttribute('aria-label')),
+        labels: ['.dm-plus', '.dm-camera', '.dm-send'].map((selector) => document.querySelector(selector).getAttribute('aria-label')),
+        width: Math.round(document.querySelector('.dm-bottom').getBoundingClientRect().width),
         chip: Math.round(document.querySelector('.dm-quick button')?.getBoundingClientRect().height ?? 0),
       };
     });
     expectSame(M, 'zone de saisie', await composer(), {
-      band: ['12px', '24px', '16px', 'rgb(236, 234, 230)', 'rgb(255, 255, 255)'], plus: [44, 44], field: 52, send: [52, 52], sendColor: 'rgb(201, 206, 214)',
-      disabled: true, placeholder: 'Votre message...', labels: ['Ajouter une pièce jointe', 'Ajouter un émoji', 'Envoyer'], chip: 34,
+      band: ['8px', '14px', '8px', 'rgb(236, 234, 230)', 'rgb(255, 255, 255)'], plus: [30, 44], field: 36, camera: [34, 44], send: [34, 34],
+      sendColor: ['rgb(60, 92, 176)', '0.45'], disabled: true, placeholder: 'Votre message...', labels: ['Ajouter une pièce jointe', 'Prendre une photo', 'Envoyer'],
+      width: 720, chip: 34,
     });
     const atBottom = await page.evaluate(() => { const el = document.querySelector('.dm-thread'); return el.scrollHeight - el.scrollTop - el.clientHeight; });
     if (atBottom > 2) problems.push(`${M} : la conversation ne s'ouvre pas en bas (${atBottom} px plus bas)`);
@@ -3260,7 +3280,7 @@ try {
       const unliked = await oneCall(chat, 'message_reactions', mark, `${M} : cœur retiré`);
       if (unliked) expectSame(M, 'cœur retiré', [unliked.method, unliked.search], ['DELETE', `?message_id=eq.${messageId(7).toUpperCase()}&user_id=eq.${USER_ID.toUpperCase()}`]);
 
-      // Écrire : le champ grandit jusqu'à 4 lignes (lineLimit(1...4) de l'app) ; un émoji choisi dans le panneau se place au curseur ; Maj + Entrée
+      // Écrire : le champ grandit jusqu'à 4 lignes (lineLimit(1...4) de l'app) ; un émoji tapé au clavier se place au curseur ; Maj + Entrée
       // va à la ligne ; Entrée envoie, avec exactement les colonnes de l'app (MessageInsert) ; le message arrive en fondu.
       const checkInsert = (call, what, content, preview) => {
         if (!call) return;
@@ -3272,19 +3292,19 @@ try {
       };
       const fieldHeight = () => page.$eval('.dm-field textarea', (el) => Math.round(el.getBoundingClientRect().height));
       await page.fill('.dm-composer textarea', 'Une\ndeux');
-      expectSame(M, 'champ de 2 lignes', await fieldHeight(), 72);
+      expectSame(M, 'champ de 2 lignes', await fieldHeight(), 56);
       await page.fill('.dm-composer textarea', 'Un\ndeux\ntrois\nquatre\ncinq\nsix\nsept');
-      expectSame(M, 'champ de 7 lignes (4 affichées)', await fieldHeight(), 116);
+      expectSame(M, 'champ de 7 lignes (4 affichées)', await fieldHeight(), 100);
       await page.fill('.dm-composer textarea', '');
-      expectSame(M, 'champ vide', await fieldHeight(), 50);
+      expectSame(M, 'champ vide', await fieldHeight(), 34);
       mark = chat.calls.length;
       await page.fill('.dm-composer textarea', 'Merci, à jeudi ');
       expectSame(M, 'envoi possible', [await page.isDisabled('.dm-send'), await page.$eval('.dm-send', (el) => getComputedStyle(el).backgroundColor)], [false, 'rgb(60, 92, 176)']);
-      await page.click('.dm-emoji');
-      await page.waitForSelector('.dm-emoji-panel');
-      expectSame(M, 'panneau des émojis', [await page.getAttribute('.dm-emoji', 'aria-expanded'), await page.locator('.dm-emoji-panel button').count()], ['true', 32]);
-      await page.click('.dm-emoji-panel button[aria-label="🙂"]');
-      expectSame(M, 'émoji ajouté', [await page.inputValue('.dm-composer textarea'), await page.locator('.dm-emoji-panel').count(),
+      // Pas de panneau d'émojis : comme dans l'app, c'est le clavier qui les donne.
+      await page.focus('.dm-composer textarea');
+      await page.keyboard.press('End');
+      await page.keyboard.insertText('🙂');
+      expectSame(M, 'émoji ajouté', [await page.inputValue('.dm-composer textarea'), await page.locator('.dm-emoji, .dm-emoji-panel').count(),
         await page.evaluate(() => document.activeElement?.matches('.dm-composer textarea') ?? false)], ['Merci, à jeudi 🙂', 0, true]);
       await page.keyboard.press('Shift+Enter');
       expectSame(M, 'Maj + Entrée', await page.inputValue('.dm-composer textarea'), 'Merci, à jeudi 🙂\n');
@@ -3299,6 +3319,11 @@ try {
         await page.evaluate(() => [...document.querySelectorAll('.dm-msg')].map((el) => el.classList.contains('is-new')).join('')), (await inboxRows(page))[0]],
       ['', true, 'Envoyé', `${'false'.repeat(await page.locator('.dm-msg').count() - 1)}true`, { ...INITIAL_ROWS[0], preview: 'Vous : Merci, à jeudi 🙂', unread: null, time: '10:50' }]);
       if (await page.locator('dialog.alert-dialog[open]').count()) problems.push(`${M} : une fenêtre (prénom ?) s'ouvre alors que le compte a un prénom`);
+
+      // Appareil photo de la barre d'écriture, à toutes les largeurs comme dans l'app : le choix d'une photo (l'appareil
+      // photo du téléphone ; un fichier sur ordinateur).
+      const [cameraChooser] = await Promise.all([page.waitForEvent('filechooser', { timeout: 8000 }), page.click('.dm-camera')]);
+      expectSame(M, 'appareil photo', [cameraChooser.isMultiple(), await page.getAttribute('[data-testid="dm-camera-input"]', 'capture')], [false, 'environment']);
 
       // « Envoyer le dossier complet » : le choix des documents immobiliers, comme dans le « + ».
       await page.click('.dm-quick button:text-is("Envoyer le dossier complet")');
@@ -3447,8 +3472,8 @@ try {
       expectSame(M, 'avis du blocage', await noticeText(page, M), 'Compte bloqué.');
       const blocked = await oneCall(chat, 'user_blocks', mark, `${M} : bloquer`, (call) => call.method !== 'GET');
       if (blocked) expectSame(M, 'blocage', [blocked.method, blocked.body], ['POST', { blocked_id: AGENT_ID.toUpperCase() }]);
-      expectSame(M, 'compte bloqué', [await textOf(page, '.dm-bottom-line'), await page.locator('.dm-composer').count(), (await headerMenu(page))[3],
-        await page.locator('.dm-head-tools button[aria-label="Proposer une visite"]').count()], ['Vous avez bloqué ce compte Débloquer', 0, 'Débloquer', 0]);
+      expectSame(M, 'compte bloqué', [await textOf(page, '.dm-bottom-line'), await page.locator('.dm-composer').count(), (await headerMenu(page))[3]],
+        ['Vous avez bloqué ce compte Débloquer', 0, 'Débloquer']);
       mark = chat.calls.length;
       await page.click('.dm-bottom-line .dm-link-button');
       await page.waitForSelector('.dm-composer');
@@ -3506,19 +3531,20 @@ try {
           && cards[1].querySelector('.dm-offer-status')?.textContent === 'En attente';
       }, null, { timeout: 8000 }).catch(() => problems.push(`${M} : la nouvelle offre n'apparaît pas dans la conversation`));
 
-      // B : le compte vend ; Julien demande une visite (samedi 10 h ou dimanche 14 h) et fait une offre.
+      // B : le compte vend ; Julien demande une visite (samedi 10 h ou dimanche 14 h) et fait une offre. Retour à la
+      // liste par la flèche, puis la ligne de B.
+      await backToList(page, `${M} : avant B`);
       mark = chat.calls.length;
       await page.click(rowLink(2));
       await page.waitForURL(`${base}/messages/?c=${chatId(2)}`);
       await page.waitForSelector('.dm-offer-actions');
       await page.waitForSelector('.dm-visit-actions');
-      await page.waitForFunction(() => /lots/.test(document.querySelector('.dm-banner-line')?.textContent ?? ''), null, { timeout: 8000 }).catch(() => undefined);
       const readB = await oneCall(chat, 'rpc/mark_conversation_read', mark, `${M} : ouverture de B`);
       if (readB) expectSame(M, 'B marquée lue', readB.body, { p_conversation_id: chatId(2).toUpperCase() });
       await waitForMessagesBadge(page, '3', `${M} : après l'ouverture de B`);
       // Numéro non partagé : le téléphone reste, en gris, et l'avis de l'app l'explique.
       expectSame(M, 'en-tête de B (numéro non partagé)', [await textOf(page, '.dm-head-sub'), await page.$$eval('.dm-head-tools button', (els) => els.map((el) => el.getAttribute('aria-label'))),
-        await textOf(page, '.dm-banner-line')], ['Appartement 2 pièces · Lyon 6e', ['Proposer une visite', 'Appeler, numéro non partagé', 'Plus d\'options'], 'Lyon 6e · 45 m² · 3 lots dont 2 loués']);
+        await textOf(page, '.dm-banner-line')], ['Appartement 2 pièces · Lyon 6e', ['Appeler, numéro non partagé', 'Plus d\'options'], 'Lyon 6e · 45 m²']);
       await page.click('.dm-head button[aria-label="Appeler, numéro non partagé"]');
       expectSame(M, 'appel sans numéro', await noticeText(page, M), 'Julien M. n\'a pas partagé son numéro. Vous pouvez lui écrire ici.');
       expectSame(M, 'offre reçue', [await textOf(page, '.dm-offer-head'), await textOf(page, '.dm-offer-gap'), await page.$$eval('.dm-offer-actions button', (els) => els.map((el) => el.textContent))],
@@ -3635,6 +3661,7 @@ try {
 
     // D : groupe en sourdine, marqué lu à l'ouverture ; l'en-tête ouvre « Infos du groupe » (&vue=groupe), le + la feuille
     // « Ajouter des membres » (étape 4b : vérifiés en détail plus bas, « messages groupes »).
+    await backToList(page, `${M} : avant le groupe`);
     mark = chat.calls.length;
     await page.click(rowLink(4));
     await page.waitForURL(`${base}/messages/?c=${chatId(4)}`);
@@ -3671,6 +3698,7 @@ try {
     }
 
     // « Détails » : ouvert par l'en-tête de la conversation à deux, à sa propre adresse ; « Retour » revient.
+    await backToList(page, `${M} : avant les détails`);
     await page.click(rowLink(1));
     await page.waitForSelector('.dm-head-who[href]');
     await page.click('.dm-head-who');
@@ -3699,12 +3727,20 @@ try {
       await extra.close();
     }
 
-    // « Nouvelle discussion » : actions rapides, contacts ; « Nouveau groupe », « Nouvelle communauté » et « Nouvelle
-    // diffusion » poussent leur écran dans la feuille (étape 4b), « Retour » revient.
+    // « Nouvelle discussion » (le crayon de la liste) : actions rapides, contacts ; « Nouveau groupe », « Nouvelle
+    // communauté » et « Nouvelle diffusion » poussent leur écran dans la feuille (étape 4b), « Retour » revient. Plein
+    // écran comme l'app (fullScreenCover), son contenu dans la colonne de 720 px.
+    await backToList(page, `${M} : avant « Nouvelle discussion »`);
     await page.click('.dm-compose');
     expectSame(M, 'nouvelle discussion', [await dialogTitle(page, 'sheet'), await page.$$eval('dialog[open] .dm-quick-actions .dm-action-text', (els) => els.map((el) => el.textContent)),
       await page.$$eval('dialog[open] .dm-results-title', (els) => els.map((el) => el.textContent))],
     ['Nouvelle discussion', ['Nouveau groupe', 'Nouvelle communauté', 'Nouveau contact', 'Nouvelle diffusion'], ['Contacts fréquents', 'A', 'C', 'I', 'J', 'L', 'M']]);
+    await page.waitForFunction(() => document.querySelector('dialog.dm-new[open]')?.getAnimations().length === 0, null, { timeout: 8000 }).catch(() => undefined);
+    expectSame(M, 'nouvelle discussion en plein écran', await page.evaluate(() => {
+      const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+      const [dialog, body, head] = [box('dialog.dm-new[open]'), box('dialog.dm-new[open] .dm-sheet-body'), box('dialog.dm-new[open] .dm-sheet-head')];
+      return [dialog.left, dialog.top, dialog.width, dialog.height, body.left, body.width, Math.round(head.height)];
+    }), [0, 0, width, height, (width - 720) / 2, 720, 56]);
     await page.waitForTimeout(300);
     await chatShot(page, `3-messages-nouvelle-${width}.png`);
     if (width === 1440) {
@@ -3739,6 +3775,7 @@ try {
       // Une conversation sans annonce : ni barre de l'annonce, ni réponse rapide.
       expectSame(M, 'conversation sans annonce', await page.locator('.dm-banner, .dm-quick').count(), 0);
       // Une agence qui publie, pas encore contactée : start_direct_conversation.
+      await backToList(page, `${M} : avant l'agence`);
       await page.click('.dm-compose');
       await page.fill('dialog[open] input[aria-label="Nom, numéro ou nom de profil"]', 'Immo');
       mark = chat.calls.length;
@@ -3752,8 +3789,8 @@ try {
     await chatDesk.close();
   }
 
-  // Chargement : la roue de l'app (ProgressView) dans la liste et dans la conversation de l'adresse, pendant la lecture ;
-  // plus de formes grises.
+  // Chargement : la roue de l'app (ProgressView) dans la conversation de l'adresse, avec sa flèche retour, pendant la
+  // lecture (la liste, cachée dessous, a la sienne) ; plus de formes grises.
   {
     const M = 'messages chargement';
     const { context: slowDesk, chat } = await chatContext({ width: 1440, height: 960 });
@@ -3762,11 +3799,11 @@ try {
     page = await slowDesk.newPage();
     page.on('pageerror', (error) => problems.push(`${M}: erreur ${error.message}`));
     await page.goto(`${base}/messages/?c=${chatId(1)}`);
-    await page.waitForSelector('.dm-side .spinner[role="status"]', { timeout: 8000 }).catch(() => problems.push(`${M} : pas de roue dans la liste`));
-    expectSame(M, 'roues', [await page.getAttribute('.dm-side .spinner', 'aria-label'),
+    await page.waitForSelector('.dm-main .dm-thread.is-loading .spinner[role="status"]', { timeout: 8000 }).catch(() => problems.push(`${M} : pas de roue dans la conversation`));
+    expectSame(M, 'roues', [await page.$$eval('.dm-side .spinner[role="status"]', (els) => els.map((el) => [el.getAttribute('aria-label'), el.getClientRects().length > 0])),
       await page.$$eval('.dm-main .dm-thread.is-loading .spinner[role="status"]', (els) => els.map((el) => el.getAttribute('aria-label'))),
-      await page.locator('.dm-main .dm-back').count(), await page.locator('[class*="dm-skel"]').count()],
-    ['Chargement des conversations', ['Chargement des messages'], 1, 0]);
+      await page.locator('.dm-main .dm-back:visible').count(), await page.locator('[class*="dm-skel"]').count()],
+    [[['Chargement des conversations', false]], ['Chargement des messages'], 1, 0]);
     await page.waitForTimeout(300);
     await page.screenshot({ path: join(out, '3-messages-chargement-1440.png') });
     await page.waitForSelector('.dm-head-title', { timeout: 8000 });
@@ -3995,6 +4032,7 @@ try {
     }
     await page.waitForSelector('.dm-bubble.is-out');
     // Une conversation qui a déjà des messages : pas de prénom demandé.
+    await backToList(page, M);
     await page.click(rowLink(1));
     await page.waitForSelector('.dm-thread-inner .dm-day');
     mark = chat.calls.length;
@@ -4325,6 +4363,7 @@ try {
 
     // Dans le groupe : la réponse de Camille cite un message supprimé depuis ; l'original est relu une fois par son
     // identifiant (comme message(id:) de l'app), puis « Message supprimé », qui ne mène nulle part.
+    await backToList(page, M);
     mark = chat.calls.length;
     await page.click(rowLink(4));
     await page.waitForURL(`${base}/messages/?c=${chatId(4)}`);
@@ -4974,6 +5013,7 @@ try {
 
     // « Nouvelle communauté » : nom, description, catégorie et couverture, puis « Passer » (sans premiers membres) ;
     // create_community, puis la discussion principale s'ouvre.
+    await backToList(page, M);
     await page.click('.dm-compose');
     await page.click('dialog[open] .dm-quick-actions .dm-action-row:has-text("Nouvelle communauté")');
     await sheetTitle('Nouvelle communauté');
@@ -5010,6 +5050,7 @@ try {
 
     // La communauté de quartier : page, invitation (lien, QR code, copie, annulation), demandes, membres, départ.
     const C = COMMUNITY_ID.toUpperCase();
+    await backToList(page, M);
     await page.click(rowLink(9).replace(chatId(9), COMMUNITY_CHAT));
     await page.waitForURL(`${base}/messages/?c=${COMMUNITY_CHAT}`);
     await page.click('.dm-head-who');

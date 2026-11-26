@@ -1,6 +1,6 @@
 /* Messagerie avec les morceaux de l'app iPhone : réponses, transferts et réactions (MessageInteractionViews.swift),
-   liste des conversations (MessagesView.swift), recherche (MessagingSearchView.swift). Sur téléphone, chaque écran
-   copie l'app ; sur ordinateur, les deux colonnes restent, avec ces morceaux. Police de l'app (Inter) partout. */
+   liste des conversations (MessagesView.swift), recherche (MessagingSearchView.swift). Chaque écran copie l'app, à
+   toutes les largeurs (à partir de 1024 px, dans la colonne de 720 px : messages.css). Police de l'app (Inter). */
 
 /* ——— Liste ——— */
 .dm-side-title { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -9,8 +9,6 @@
 .dm-search-line .dm-search { flex: 1; min-width: 0; }
 .dm-search-cancel { flex: none; padding: 6px 0; border: 0; background: none; color: var(--m-blue); font-size: 15px; font-weight: 600; cursor: pointer; }
 .dm-search-cancel:hover { text-decoration: underline; }
-/* « Toutes les conversations » : titre de section de l'app, seulement sur téléphone. */
-.dm-list-title { display: none; }
 .dm-account-pill { flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 999px; background: #F1F0EC; color: #5D6470; font-size: 11px; font-weight: 700; line-height: 1; white-space: nowrap; }
 .dm-account-pill.is-pro { background: var(--m-blue-soft); color: var(--m-blue); }
 .dm-row-check { flex: none; display: inline-flex; color: var(--m-time); }
@@ -170,44 +168,43 @@
   .dm-interactive-body::after { transition: none; }
 }
 
-/* ——— Téléphone : la liste et les bulles de l'app ——— */
-@media (max-width: 1023.98px) {
-  .dm-side { background: var(--m-thread); }
-  .dm-side-top { gap: 0; padding: 8px 16px 10px; }
-  .dm-side-head { align-items: center; }
-  .dm-side-title { gap: 4px; }
-  .dm-side-head h1 { font-size: 30px; font-weight: 700; line-height: 36px; letter-spacing: -0.01em; }
-  .dm-side-sub { font-size: 15px; line-height: 20px; }
-  .dm-search-line { margin-top: 15px; }
-  .dm-search { height: 52px; padding-left: 13px; }
-  .dm-search > .icon { width: 17px; height: 17px; }
-  .dm-tabs { gap: 8px; margin-top: 13px; }
-  .dm-tab { padding: 0 15px; }
-  .dm-list-scroll { padding: 0 16px 20px; }
-  .dm-list-title { display: block; margin: 12px 0 10px; font-size: 18px; font-weight: 700; line-height: 24px; }
-  .dm-list { gap: 0; padding: 4px 0; border: 1px solid var(--m-line); border-radius: 22px; background: #FFFFFF; box-shadow: 0 2px 8px rgba(36, 45, 56, 0.05); }
-  .dm-list > li { position: relative; }
-  /* Trait fin entre deux discussions, aligné sur le nom. */
-  .dm-list > li + li::before { content: ''; position: absolute; top: 0; left: 72px; right: 0; height: 1px; background: #F2F0EC; }
-  .dm-row { border-radius: 0; }
-  .dm-list > li:first-child .dm-row { border-radius: 21px 21px 0 0; }
-  .dm-list > li:last-child .dm-row { border-radius: 0 0 21px 21px; }
-  .dm-list > li:only-child .dm-row { border-radius: 21px; }
-  .dm-activity h2 { padding: 0; }
-  .dm-linked-list { padding: 0; }
-  .dm-linked-scroll { padding: 12px 16px 20px; }
+/* ——— La liste et les bulles de l'app ——— */
+.dm-side { background: var(--m-thread); }
+.dm-side-top { gap: 0; padding: 8px 16px 10px; }
+.dm-side-head { align-items: center; }
+.dm-side-title { gap: 4px; }
+.dm-side-head h1 { font-size: 30px; font-weight: 700; line-height: 36px; letter-spacing: -0.01em; }
+.dm-side-sub { font-size: 15px; line-height: 20px; }
+.dm-search-line { margin-top: 15px; }
+.dm-search { height: 52px; padding-left: 13px; }
+.dm-search > .icon { width: 17px; height: 17px; }
+.dm-tabs { gap: 8px; margin-top: 13px; }
+.dm-tab { padding: 0 15px; }
+.dm-list-scroll { padding: 0 16px 20px; }
+/* « Toutes les conversations » : titre de section de l'app. */
+.dm-list-title { display: block; margin: 12px 0 10px; font-size: 18px; font-weight: 700; line-height: 24px; }
+.dm-list { gap: 0; padding: 4px 0; border: 1px solid var(--m-line); border-radius: 22px; background: #FFFFFF; box-shadow: 0 2px 8px rgba(36, 45, 56, 0.05); }
+.dm-list > li { position: relative; }
+/* Trait fin entre deux discussions, aligné sur le nom. */
+.dm-list > li + li::before { content: ''; position: absolute; top: 0; left: 72px; right: 0; height: 1px; background: #F2F0EC; }
+.dm-row { border-radius: 0; }
+.dm-list > li:first-child .dm-row { border-radius: 21px 21px 0 0; }
+.dm-list > li:last-child .dm-row { border-radius: 0 0 21px 21px; }
+.dm-list > li:only-child .dm-row { border-radius: 21px; }
+.dm-activity h2 { padding: 0; }
+.dm-linked-list { padding: 0; }
+.dm-linked-scroll { padding: 12px 16px 20px; }
 
-  /* Fil : séries serrées comme l'app (2 px dans une série, 8 px entre deux séries), texte de 16 px. */
-  .dm-msg { margin-top: 2px; }
-  .dm-msg.starts-group { margin-top: 8px; }
-  .dm-bubble { padding: 7px 12px; font-size: 16px; line-height: 21px; }
-  .dm-media-caption, .dm-caption { font-size: 16px; }
-  /* Photos de l'app (AttachmentBubble) : 3 px entre les vignettes, légende de 14, « +N » de 22. */
-  .dm-media-grid { gap: 3px; }
-  .dm-media-caption { font-size: 14px; line-height: 19px; }
-  .dm-more { font-size: 22px; }
-  .dm-reply-bar { margin-bottom: 6px; }
-}
+/* Fil : séries serrées comme l'app (2 px dans une série, 8 px entre deux séries), texte de 16 px. */
+.dm-msg { margin-top: 2px; }
+.dm-msg.starts-group { margin-top: 8px; }
+.dm-bubble { padding: 7px 12px; font-size: 16px; line-height: 21px; }
+.dm-media-caption, .dm-caption { font-size: 16px; }
+/* Photos de l'app (AttachmentBubble) : 3 px entre les vignettes, légende de 14, « +N » de 22. */
+.dm-media-grid { gap: 3px; }
+.dm-media-caption { font-size: 14px; line-height: 19px; }
+.dm-more { font-size: 22px; }
+.dm-reply-bar { margin-bottom: 6px; }
 
 /* ——— Étape 4 : liste des conversations comme l'app (MessagesView.swift) ———
    Toute la colonne défile (titre, recherche, filtres, prochaine visite, liste), comme le ScrollView de l'app. */
@@ -350,13 +347,11 @@
 .dm-linked-line { font-size: 12.5px; }
 .dm-linked-unread { min-width: 20px; height: 20px; padding: 0; border-radius: 50%; font-size: 11px; line-height: 20px; }
 
-@media (max-width: 1023.98px) {
-  .dm-side > .dm-list-scroll { padding: 0 16px 20px; }
-  .dm-list-scroll > .dm-side-top { padding: 8px 0 10px; }
-  .dm-search-open { margin-top: 15px; height: 52px; padding-left: 13px; }
-  .dm-tabs { margin: 13px -16px 0; padding: 0 16px; }
-  .dm-list { box-shadow: var(--shadow); }
-}
+.dm-side > .dm-list-scroll { padding: 0 16px 20px; }
+.dm-list-scroll > .dm-side-top { padding: 8px 0 10px; }
+.dm-search-open { margin-top: 15px; height: 52px; padding-left: 13px; }
+.dm-tabs { margin: 13px -16px 0; padding: 0 16px; }
+.dm-list { box-shadow: var(--shadow); }
 
 /* ——— Étape 4 : conversation à deux comme l'app (ConversationView.swift) ———
    En-tête : retour rond « en verre », avatar de 38, nom de 16 et pastille PRO ou Particulier, « En ligne » en vert,
@@ -385,9 +380,6 @@ a.dm-banner:hover .dm-banner-title { text-decoration: underline; }
 .dm-missing-top { flex: none; display: flex; align-items: center; min-height: 52px; padding: 6px 16px; background: #FFFFFF; }
 .dm-missing-top .dm-back { display: inline-flex; }
 .dm-pane-missing .dm-thread { -webkit-mask-image: none; mask-image: none; }
-@media (min-width: 1024px) {
-  .dm-missing-top { display: none; }
-}
 
 /* Fil : séparateur « Aujourd'hui · 10:42 » en texte gris, sans cadre ; pastille du jour en haut pendant le défilement. */
 .dm-thread-box { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; isolation: isolate; }
@@ -514,9 +506,6 @@ a.dm-banner:hover .dm-banner-title { text-decoration: underline; }
 .dm-reply-bar { margin: -4px 0 4px; padding-left: 4px; border-radius: 0; background: none; }
 .dm-reply-bar-cancel .icon { background: var(--app-page); }
 
-/* Barre d'écriture : l'appareil photo seulement sur téléphone, les émojis seulement sur ordinateur. */
-.dm-camera { display: none; }
-
 /* Localisation (LocationShareSheet) */
 .dm-location { gap: 14px; }
 .dm-location-current { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; border: 0; border-radius: 18px; background: #FFFFFF; color: var(--app-navy); font: inherit; text-align: left; cursor: pointer; }
@@ -599,81 +588,92 @@ a.dm-banner:hover .dm-banner-title { text-decoration: underline; }
 .dm-bottom-line { min-height: 0; padding: 18px 16px; padding-bottom: calc(18px + env(safe-area-inset-bottom)); color: var(--app-text-secondary); font-size: 13.5px; font-weight: 600; line-height: 18px; }
 .dm-bottom-line .dm-link-button { color: var(--app-brand); font-size: 13.5px; font-weight: 700; }
 
-/* ——— Téléphone : en-tête, carte de l'annonce, fil et barre d'écriture de l'app ——— */
-@media (max-width: 1023.98px) {
-  .dm-pane { background: var(--app-page); }
-  .dm-pane-top { margin-bottom: -16px; padding-bottom: 16px; background: linear-gradient(to bottom, #FFFFFF 0, #FFFFFF 72%, rgba(255, 255, 255, 0) 100%); pointer-events: none; }
-  .dm-pane-top > * { pointer-events: auto; }
-  .dm-head { gap: 10px; height: auto; min-height: 46px; padding: 6px 16px 0; border-bottom: 0; background: transparent; }
-  .dm-back { width: 40px; height: 40px; border: 1px solid var(--app-border); background: rgba(255, 255, 255, 0.86); box-shadow: 0 2px 8px rgba(36, 45, 56, 0.06); color: var(--app-navy); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
-  .dm-back:hover { background: #FFFFFF; }
-  .dm-back .icon { width: 20px; height: 20px; }
-  .dm-head-who { gap: 10px; }
-  .dm-head-text { gap: 0; }
-  .dm-head-name { gap: 6px; }
-  .dm-head-title { color: var(--app-navy); font-size: 16px; line-height: 21px; }
-  .dm-head-sub { color: var(--app-text-muted); font-size: 12px; line-height: 16px; }
-  .dm-head-sub.is-online { color: var(--app-yield-green); }
-  /* « Proposer une visite » : pas dans l'en-tête de l'app (la visite passe par « Détails » et la fiche). */
-  .dm-outline { display: none; }
-  .dm-missing-top { min-height: 46px; padding: 6px 16px; }
-  .dm-missing-top .dm-back { border: 0; background: none; box-shadow: none; }
-  .dm-missing-top .dm-back .icon { width: 24px; height: 24px; }
+/* ——— En-tête, carte de l'annonce, fil et barre d'écriture de l'app ——— */
+.dm-pane { background: var(--app-page); }
+.dm-pane-top { margin-bottom: -16px; padding-bottom: 16px; background: linear-gradient(to bottom, #FFFFFF 0, #FFFFFF 72%, rgba(255, 255, 255, 0) 100%); pointer-events: none; }
+.dm-pane-top > * { pointer-events: auto; }
+.dm-head { gap: 10px; height: auto; min-height: 46px; padding: 6px 16px 0; border-bottom: 0; background: transparent; }
+.dm-back { width: 40px; height: 40px; border: 1px solid var(--app-border); background: rgba(255, 255, 255, 0.86); box-shadow: 0 2px 8px rgba(36, 45, 56, 0.06); color: var(--app-navy); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.dm-back:hover { background: #FFFFFF; }
+.dm-back .icon { width: 20px; height: 20px; }
+.dm-head-who { gap: 10px; }
+.dm-head-text { gap: 0; }
+.dm-head-name { gap: 6px; }
+.dm-head-title { color: var(--app-navy); font-size: 16px; line-height: 21px; }
+.dm-head-sub { color: var(--app-text-muted); font-size: 12px; line-height: 16px; }
+.dm-head-sub.is-online { color: var(--app-yield-green); }
+.dm-missing-top { min-height: 46px; padding: 6px 16px; }
+.dm-missing-top .dm-back { border: 0; background: none; box-shadow: none; }
+.dm-missing-top .dm-back .icon { width: 24px; height: 24px; }
 
-  .dm-banner-wrap { padding: 10px 16px 0; }
-  .dm-banner { gap: 10px; height: auto; padding: 8px 10px; border: 0; border-radius: 16px; background: #FFFFFF; box-shadow: 0 3px 10px rgba(36, 45, 56, 0.08); }
-  .dm-banner-photo { width: 40px; height: 40px; border-radius: 11px; }
-  .dm-banner-title { color: var(--app-navy); font-size: 14.5px; line-height: 19px; }
-  .dm-banner-line { color: var(--app-text-secondary); font-size: 12px; line-height: 16px; }
-  .dm-banner-extra { display: none; }
+.dm-banner-wrap { padding: 10px 16px 0; }
+.dm-banner { gap: 10px; height: auto; padding: 8px 10px; border: 0; border-radius: 16px; background: #FFFFFF; box-shadow: 0 3px 10px rgba(36, 45, 56, 0.08); }
+.dm-banner-photo { width: 40px; height: 40px; border-radius: 11px; }
+.dm-banner-title { color: var(--app-navy); font-size: 14.5px; line-height: 19px; }
+.dm-banner-line { color: var(--app-text-secondary); font-size: 12px; line-height: 16px; }
 
-  /* 16 px du haut : le fondu de l'en-tête, sous lequel les messages passent en défilant (zone sûre de l'app). */
-  .dm-thread-inner { padding: 16px 18.5px 14px; }
-  .dm-thread-inner > .dm-thread-empty:first-child { margin-top: 40px; }
-  .dm-msg-line { max-width: calc(100% - 40px); }
-  .dm-interactive, .dm-msg.is-out .dm-interactive { max-width: 289px; }
-  .dm-msg-context { max-width: calc(100% - 40px); }
-  /* Sous l'en-tête et son fondu (16 px), comme la pastille posée dans la zone sûre de l'app. */
-  .dm-day-pill { top: 24px; }
+/* 16 px du haut : le fondu de l'en-tête, sous lequel les messages passent en défilant (zone sûre de l'app). */
+.dm-thread-inner { padding: 16px 18.5px 14px; }
+.dm-thread-inner > .dm-thread-empty:first-child { margin-top: 40px; }
+.dm-msg-line { max-width: calc(100% - 40px); }
+.dm-interactive, .dm-msg.is-out .dm-interactive { max-width: 289px; }
+.dm-msg-context { max-width: calc(100% - 40px); }
+/* Sous l'en-tête et son fondu (16 px), comme la pastille posée dans la zone sûre de l'app. */
+.dm-day-pill { top: 24px; }
 
-  .dm-bottom { padding: 8px 9px 8px 14px; padding-bottom: calc(8px + env(safe-area-inset-bottom)); border-top: 1px solid var(--app-border); }
-  .dm-composer { gap: 10px; }
-  .dm-plus { width: 30px; height: 44px; margin: 0; border-radius: 0; background: none; color: var(--app-text-secondary); }
-  .dm-plus:hover { background: none; color: var(--app-navy); }
-  .dm-plus .icon { width: 22px; height: 22px; stroke-width: 1.4; }
-  .dm-field { min-height: 36px; margin: 4px 0; padding: 0 12px 0 14px; border: 1px solid var(--app-border); border-radius: 18px; background: var(--app-page); }
-  .dm-field:focus-within { border-color: var(--app-border); }
-  .dm-field textarea { height: 34px; max-height: 100px; padding: 6px 0; color: var(--app-navy); font-size: 16px; line-height: 22px; }
-  .dm-field textarea::placeholder { color: var(--app-text-muted); }
-  .dm-emoji, .dm-emoji-panel { display: none; }
-  .dm-camera { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 44px; padding: 0; border: 0; background: none; color: var(--app-text-secondary); cursor: pointer; }
-  .dm-camera .icon { width: 21px; height: 21px; }
-  .dm-send { width: 34px; height: 34px; margin: 5px 0; background: var(--app-brand); box-shadow: none; }
-  .dm-send:disabled { background: var(--app-brand); opacity: 0.45; }
-  .dm-send .icon { width: 17px; height: 17px; }
+.dm-bottom { padding: 8px 9px 8px 14px; padding-bottom: calc(8px + env(safe-area-inset-bottom)); border-top: 1px solid var(--app-border); }
+.dm-composer { gap: 10px; }
+.dm-plus { width: 30px; height: 44px; margin: 0; border-radius: 0; background: none; color: var(--app-text-secondary); }
+.dm-plus:hover { background: none; color: var(--app-navy); }
+.dm-plus .icon { width: 22px; height: 22px; stroke-width: 1.4; }
+.dm-field { min-height: 36px; margin: 4px 0; padding: 0 12px 0 14px; border: 1px solid var(--app-border); border-radius: 18px; background: var(--app-page); }
+.dm-field:focus-within { border-color: var(--app-border); }
+.dm-field textarea { height: 34px; max-height: 100px; padding: 6px 0; color: var(--app-navy); font-size: 16px; line-height: 22px; }
+.dm-field textarea::placeholder { color: var(--app-text-muted); }
+.dm-camera { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 44px; padding: 0; border: 0; background: none; color: var(--app-text-secondary); cursor: pointer; }
+.dm-camera .icon { width: 21px; height: 21px; }
+.dm-send { width: 34px; height: 34px; margin: 5px 0; background: var(--app-brand); box-shadow: none; }
+.dm-send:disabled { background: var(--app-brand); opacity: 0.45; }
+.dm-send .icon { width: 17px; height: 17px; }
 
-  /* Détails : barre de 52, « Détails » centré, retour de 44 sans fond. */
-  .dm-details-bar { height: 52px; padding: 0 6px; border-bottom: 0; background: var(--app-page); }
-  .dm-details-bar .dm-round { width: 44px; height: 44px; }
-  .dm-details-bar .dm-round .icon { width: 22px; height: 22px; }
-  .dm-details-bar h2 { font-size: 17px; font-weight: 600; }
+/* Détails : barre de 52, « Détails » centré, retour de 44 sans fond. */
+.dm-details-bar { height: 52px; padding: 0 6px; border-bottom: 0; background: var(--app-page); }
+.dm-details-bar .dm-round { width: 44px; height: 44px; }
+.dm-details-bar .dm-round .icon { width: 22px; height: 22px; }
+.dm-details-bar h2 { font-size: 17px; font-weight: 600; }
 
-  /* Nouvelle discussion (NewConversationView) : plein écran, titre centré de 17, croix ronde blanche bordée. */
-  .dm-sheet.dm-new { height: 100dvh; max-height: 100dvh; border-radius: 0; }
-  .dm-sheet.dm-new .dm-sheet-body { height: 100%; max-height: 100dvh; background: var(--app-page); }
-  .dm-sheet.dm-new .dm-sheet-grabber { display: none; }
-  .dm-sheet.dm-new .dm-sheet-head { justify-content: center; padding: 10px 16px; }
-  .dm-sheet.dm-new .dm-sheet-head h2 { flex: none; font-size: 17px; font-weight: 700; text-align: center; }
-  .dm-sheet.dm-new .dm-sheet-close { position: absolute; right: 16px; top: 50%; width: 36px; height: 36px; margin-top: -18px; border: 1px solid var(--app-border); background: #FFFFFF; }
-  .dm-sheet.dm-new .dm-sheet-back { position: absolute; left: 16px; top: 50%; margin-top: -17px; }
-  .dm-new .dm-search { height: 48px; border-radius: 999px; }
+/* Nouvelle discussion (NewConversationView) : plein écran, titre centré de 17, croix ronde blanche bordée. */
+.dm-sheet.dm-new { height: 100dvh; max-height: 100dvh; border-radius: 0; }
+.dm-sheet.dm-new .dm-sheet-body { height: 100%; max-height: 100dvh; background: var(--app-page); }
+.dm-sheet.dm-new .dm-sheet-grabber { display: none; }
+.dm-sheet.dm-new .dm-sheet-head { justify-content: center; padding: 10px 16px; }
+.dm-sheet.dm-new .dm-sheet-head h2 { flex: none; font-size: 17px; font-weight: 700; text-align: center; }
+.dm-sheet.dm-new .dm-sheet-close { position: absolute; right: 16px; top: 50%; width: 36px; height: 36px; margin-top: -18px; border: 1px solid var(--app-border); background: #FFFFFF; }
+.dm-sheet.dm-new .dm-sheet-back { position: absolute; left: 16px; top: 50%; margin-top: -17px; }
+.dm-new .dm-search { height: 48px; border-radius: 999px; }
+
+/* « Nouvelle discussion » (NewConversationView, plein écran dans l'app, iPad compris) : à partir de 1024 px, toute la
+   fenêtre, son contenu dans la colonne de 720 px ; en-tête et marges de l'écran de l'app, comme sous 1024 px. */
+@media (min-width: 1024px) {
+  .dm-sheet.dm-new { width: 100vw; max-width: 100vw; margin: 0; box-shadow: none; background: var(--app-page); }
+  .dm-sheet.dm-new .dm-sheet-body { width: 100%; max-width: var(--app-column); margin: 0 auto; }
+  .dm-sheet.dm-new .dm-sheet-head { position: relative; min-height: 0; border-bottom: 0; background: transparent; }
+  .dm-sheet.dm-new .dm-sheet-head h2 { line-height: 25px; }
+  .dm-sheet.dm-new .dm-sheet-close { color: var(--app-navy); }
+  .dm-sheet.dm-new .dm-sheet-close .icon { width: 14px; height: 14px; stroke-width: 2.8; }
+  .dm-sheet.dm-new .dm-sheet-back { width: 34px; height: 34px; margin-left: -6px; }
+  .dm-new .dm-new-body { padding: 10px 20px calc(20px + env(safe-area-inset-bottom)); }
+}
+@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
+  /* Il monte du bas, comme le fullScreenCover de l'app. */
+  .dm-sheet.dm-new[open] { animation: alert-sheet-up 0.45s cubic-bezier(0.32, 0.72, 0, 1); }
 }
 
 /* ——— Groupes et communautés (GroupInfoView.swift, NewGroupView.swift, CommunityViews.swift,
-   CommunityInviteViews.swift, BroadcastView.swift) : mêmes mesures à toutes les largeurs ; sur ordinateur, les écrans
-   poussés restent dans la colonne de droite (640 au plus, comme l'app) et les feuilles au centre. ——— */
+   CommunityInviteViews.swift, BroadcastView.swift) : mêmes mesures à toutes les largeurs ; les écrans poussés sont dans
+   la colonne de la page (à partir de 1024 px, celle de 720 px), les feuilles au centre à partir de 1024 px. ——— */
 
-/* En-tête d'un groupe : sur téléphone, la ligne blanche de l'app (chevron de 24, avatar de 36, + bleu, ⋮ gris). */
+/* En-tête d'un groupe : la ligne blanche de l'app (chevron de 24, avatar de 36, + bleu, ⋮ gris). */
 .dm-head.is-group .dm-head-who:active { opacity: 0.55; transition: opacity 0.15s ease-out; }
 
 /* Barre d'un écran poussé : titre centré, « Modifier » à droite. */
@@ -956,29 +956,29 @@ button.dmg-member-line { cursor: pointer; }
 .dmg-refuse:disabled, .dmg-accept:disabled { opacity: 0.5; cursor: default; }
 .dmg-request-spinner { width: 20px; height: 20px; }
 
-@media (max-width: 1023.98px) {
-  .dm-pane-top .dm-head.is-group { gap: 12px; min-height: 52px; padding: 6px 14px 6px 12px; background: #FFFFFF; }
-  .dm-head.is-group .dm-back { width: 30px; height: 40px; border: 0; border-radius: 8px; background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
-  .dm-head.is-group .dm-back .icon { width: 24px; height: 24px; }
-  .dm-head.is-group .dm-head-who { gap: 12px; min-height: 44px; }
-  .dm-head.is-group .dm-head-text { gap: 3px; }
-  .dm-head.is-group .dm-head-title { font-size: 16px; line-height: 20px; }
-  .dm-head.is-group .dm-head-sub { color: var(--app-text-muted); font-size: 12px; line-height: 16px; }
-  .dm-head.is-group .dm-head-tools { gap: 12px; }
-  .dm-head.is-group .dm-round { width: 28px; height: 40px; border: 0; border-radius: 8px; background: none; color: var(--app-text-secondary); }
-  .dm-head.is-group .dm-round.dm-head-add { width: 36px; color: var(--app-brand); }
-  .dm-head.is-group .dm-round .icon { width: 21px; height: 21px; }
-  /* Écrans poussés dans « Nouvelle discussion » : marges de 16, « Passer » à droite du titre centré. */
-  .dm-new .dmg-body { padding: 8px 16px 24px; }
-  .dm-new .dmg-body.is-form { padding-top: 4px; }
-  .dm-new .dm-sheet-trailing { position: absolute; right: 8px; top: 50%; margin-top: -22px; }
-  .dmg-page > .dmg-body { padding: 8px 16px 24px; }
-  .dmg-inner { padding-top: 16px; }
-}
+.dm-pane-top .dm-head.is-group { gap: 12px; min-height: 52px; padding: 6px 14px 6px 12px; background: #FFFFFF; }
+.dm-head.is-group .dm-back { width: 30px; height: 40px; border: 0; border-radius: 8px; background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.dm-head.is-group .dm-back .icon { width: 24px; height: 24px; }
+.dm-head.is-group .dm-head-who { gap: 12px; min-height: 44px; }
+.dm-head.is-group .dm-head-text { gap: 3px; }
+.dm-head.is-group .dm-head-title { font-size: 16px; line-height: 20px; }
+.dm-head.is-group .dm-head-sub { color: var(--app-text-muted); font-size: 12px; line-height: 16px; }
+.dm-head.is-group .dm-head-tools { gap: 12px; }
+.dm-head.is-group .dm-round { width: 28px; height: 40px; border: 0; border-radius: 8px; background: none; color: var(--app-text-secondary); }
+.dm-head.is-group .dm-round.dm-head-add { width: 36px; color: var(--app-brand); }
+.dm-head.is-group .dm-round .icon { width: 21px; height: 21px; }
+/* Écrans poussés dans « Nouvelle discussion » : marges de 16, « Passer » à droite du titre centré. */
+.dm-new .dmg-body { padding: 8px 16px 24px; }
+.dm-new .dmg-body.is-form { padding-top: 4px; }
+.dm-new .dm-sheet-trailing { position: absolute; right: 8px; top: 50%; margin-top: -22px; }
+.dmg-page > .dmg-body { padding: 8px 16px 24px; }
+.dmg-inner { padding-top: 16px; }
 @media (min-width: 1024px) {
-  .dm-new .dmg-steps { padding: 14px 22px 10px; }
-  .dmg-step { padding-bottom: 16px; }
-  .dmg-sheet .dmg-step, .dm-new .dmg-step { padding: 12px 22px 18px; }
+  /* Feuilles au centre : marges de la fenêtre (22 px). */
+  .dmg-sheet .dmg-step { padding: 12px 22px 18px; }
+  /* Écrans poussés à la largeur de la colonne de 720 px (688 de contenu), comme les détails. */
+  .dmg-page > .dmg-body { width: 100%; }
+  .dmg-page .dmg-step { padding-left: 16px; padding-right: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .dmg-toast { animation: dmg-fade-in 0.2s ease-in-out; }

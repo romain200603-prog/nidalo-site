@@ -3,20 +3,17 @@ import { Icon } from '../../components/Icon';
 import { LoadErrorState, OfflineState } from '../../components/OfflineState';
 import { useStore } from '../../lib/account/session';
 import { formatArea, formatPrice } from '../../lib/format';
-import { highlightsFor } from '../../lib/highlights';
 import { answerOffer, canMakeOffer, offerErrorMessage, offersIn, type OfferAction, type OfferRow } from '../../lib/listing/offers';
 import { profitabilityFor } from '../../lib/listing/profitability';
 import {
   areValidSlots, dayString, INVALID_SLOTS_MESSAGE, slotHourLabel, slotStart, SLOT_TIMES, suggestedSlot, visitErrorMessage, type SlotDraft,
 } from '../../lib/listing/visits';
-import { sortedPhotos } from '../../lib/listings';
 import type { Message } from '../../lib/messages/api';
 import { keepNumbersTogether } from '../../lib/messages/format';
 import { groupSummary, isDeletedAccount, sameId, type Conversation, type ListingSnapshot } from '../../lib/messages/inbox';
-import { lotsLabel } from '../../lib/messages/listingBar';
 import { isOnline } from '../../lib/messages/presence';
 import {
-  loadOffers, loadOlderMessages, loadVisitRequests, refreshAfterOffer, refreshAfterVisit, reloadThread, unblock, type Loadable, type ThreadState,
+  loadOffers, loadOlderMessages, refreshAfterOffer, refreshAfterVisit, reloadThread, unblock, type Loadable, type ThreadState,
 } from '../../lib/messages/store';
 import { callState, canOpenDetails, visibleMessages } from '../../lib/messages/thread';
 import {
@@ -25,11 +22,10 @@ import {
 import { listingPath } from '../../lib/paths';
 import { hotelPerformanceOf } from '../listing/data';
 import { OfferScreen } from '../listing/OfferScreen';
-import { VisitRequestScreen } from '../listing/VisitRequestScreen';
 import { BlockDialog, CallDialog, directMenuItems, groupMenuItems, ReportSheet } from './actions';
 import { Composer, type Suggestion } from './Composer';
 import { ForwardSheet } from './MessageInteractions';
-import { listingStore, loadListingRow, loadLots, lotsStore } from './listingRow';
+import { listingStore, loadListingRow } from './listingRow';
 import { AddGroupMembersSheet } from './GroupInfo';
 import { ActionMenu, ConfirmDialog, ConversationAvatar, PlainSheet, PublisherBadge, Sheet, showNotice } from './parts';
 import { navigate, openOnClick, routePath } from './route';
@@ -39,12 +35,12 @@ import { Thread, ThreadLoading } from './Thread';
 // retour rond, l'avatar de 38 (point vert « en ligne »), le nom et sa pastille PRO ou Particulier, « En ligne » en vert
 // ou le sous-titre, puis la capsule Appeler | « … » (le téléphone reste, en gris sans numéro partagé) ; la carte de
 // l'annonce flotte dessous (photo de 40, « Lyon 2e · 62 m² », prix et « Voir › »). Puis les messages, les réponses
-// proposées selon le contexte et la barre d'écriture. Sur ordinateur, à droite de la liste, l'en-tête garde
-// « Proposer une visite » (demande de Romain du 14 novembre 2026) et la carte de l'annonce le rendement et les lots.
+// proposées selon le contexte et la barre d'écriture. Le même écran à toutes les largeurs (à partir de 1024 px, dans
+// la colonne de 720 px) : la demande de visite passe par « Détails » et la fiche, comme dans l'app.
 
-type Screen = { kind: 'offer'; parent: OfferRow | null } | { kind: 'visit' };
+type Screen = { kind: 'offer'; parent: OfferRow | null };
 
-/** Retour à la liste (téléphone) : rond « en verre » de 40, la conversation se ferme. */
+/** Retour à la liste : rond « en verre » de 40, la conversation se ferme. */
 function BackToList() {
   return (
     <button type="button" className="dm-back" onClick={() => navigate({ conversationId: null })} aria-label="Retour" title="Retour">
@@ -81,7 +77,7 @@ export function ConversationPane({ conversation, thread, offers, visitRequests, 
   const isBlocked = !conversation.isGroup && !!other && blocked.has(other.toLowerCase());
   const canWrite = !isBlocked && !conversation.hasLeft && !isDeletedAccount(conversation);
   const listing = conversation.listing;
-  // Fiche du bien lue pour la barre de l'annonce : rendement, formulaire de visite, carte « Rentabilité » de l'offre.
+  // Fiche du bien lue pour la carte de l'annonce (surface, « Voir ») et pour la carte « Rentabilité » de l'offre.
   const rows = useStore(listingStore);
   const listingRow = listing ? rows.get(listing.listingId.toLowerCase()) : undefined;
   useEffect(() => { if (listing) loadListingRow(listing.listingId); }, [listing]);
@@ -93,14 +89,6 @@ export function ConversationPane({ conversation, thread, offers, visitRequests, 
     id: conversation.id, isGroup: conversation.isGroup, listingId: listing.listingId, transaction: listing.transaction,
     isSellerSide: conversation.isSellerSide, title: listing.title, price: listing.price,
   }, offers.value, now);
-  // « Proposer une visite » : l'acheteur ouvre le formulaire de visite de la fiche ; le vendeur propose un autre créneau
-  // pour la demande en cours (seulement quand le serveur le permet).
-  const openRequest = [...requests].reverse().find((request) => request.allowedActions.includes('propose')
-    && (request.status === 'pending' || request.status === 'counterProposed')) ?? null;
-  const visitAction: (() => void) | null = conversation.isGroup || isBlocked || !listing ? null
-    : conversation.isSellerSide ? (openRequest ? () => setProposing(openRequest) : null)
-      : listingRow?.status === 'ready' && !sameId(listingRow.row.owner_id, me) ? () => setScreen({ kind: 'visit' }) : null;
-
   // Réponses rapides : après une demande de visite à laquelle on peut répondre, « Oui, samedi 10 h » (accepte ce
   // créneau) et « Proposer un autre créneau » ; dans une conversation sur une annonce, « Envoyer le dossier complet »
   // (choix des documents à envoyer, comme « Documents immobiliers » du « + »).
@@ -157,21 +145,6 @@ export function ConversationPane({ conversation, thread, offers, visitRequests, 
       </div>
     );
   }
-  if (screen?.kind === 'visit' && listingRow?.status === 'ready') {
-    return (
-      <div className="dm-pane dm-pane-screen">
-        <div className="dl dm-offer-host">
-          <VisitRequestScreen
-            row={listingRow.row}
-            photo={sortedPhotos(listingRow.row)[0]}
-            recipientName={conversation.counterpart.name}
-            onClose={() => setScreen(null)}
-            onSent={() => void loadVisitRequests()}
-          />
-        </div>
-      </div>
-    );
-  }
 
   return (
     <section className="dm-pane" aria-label={`Conversation avec ${conversation.counterpart.name}`}>
@@ -183,7 +156,6 @@ export function ConversationPane({ conversation, thread, offers, visitRequests, 
             conversation={conversation}
             online={isOnline(presence, conversation.id, other)}
             isBlocked={isBlocked}
-            onVisit={visitAction}
             onCall={() => {
               const state = callState(conversation.counterpart.name, conversation.counterpart.phone);
               if (state.enabled) setCalling(true);
@@ -280,11 +252,10 @@ function HeaderCapsule({ hasPhone, onCall, children }: { hasPhone: boolean; onCa
   );
 }
 
-function DirectHeader({ conversation, online, isBlocked, onVisit, onCall, onBlock, onReport }: {
+function DirectHeader({ conversation, online, isBlocked, onCall, onBlock, onReport }: {
   conversation: Conversation;
   online: boolean;
   isBlocked: boolean;
-  onVisit: (() => void) | null;
   onCall: () => void;
   onBlock: () => void;
   onReport: () => void;
@@ -318,12 +289,6 @@ function DirectHeader({ conversation, online, isBlocked, onVisit, onCall, onBloc
         </a>
       ) : <div className="dm-head-who">{who}</div>}
       <div className="dm-head-tools">
-        {onVisit && (
-          <button type="button" className="dm-outline" onClick={onVisit} aria-label="Proposer une visite" title="Proposer une visite">
-            <Icon name="calendar" />
-            <span className="dm-outline-label">Proposer une visite</span>
-          </button>
-        )}
         <HeaderCapsule hasPhone={hasPhone} onCall={onCall}>
           <ActionMenu label="Plus d'options" className="dm-capsule-button" items={directMenuItems({ conversation, isBlocked, onBlock, onReport })}>
             <Icon name="ellipsis" />
@@ -387,40 +352,20 @@ function GroupHeader({ conversation, me, onReport }: { conversation: Conversatio
 
 /**
  * Carte flottante de l'annonce (ConversationView.banner) : photo de 40, titre, « Lyon 2e · 62 m² », à droite le prix
- * (« /mois » pour une location) et « Voir › » quand la fiche a pu être lue ; elle ouvre l'annonce. Sur ordinateur,
- * la ligne garde aussi le rendement brut (vert, ventes avec leur carte « Rentabilité ») et les lots (demande du 14/11).
+ * (« /mois » pour une location) et « Voir › » quand la fiche a pu être lue ; elle ouvre l'annonce.
  */
 function ListingBanner({ listing }: { listing: ListingSnapshot }) {
   const rows = useStore(listingStore);
-  const lots = useStore(lotsStore);
   const state = rows.get(listing.listingId.toLowerCase());
-  const lotState = lots.get(listing.listingId.toLowerCase());
-  useEffect(() => { loadLots(listing.listingId); }, [listing.listingId]);
   const opens = state?.status === 'ready';
   const price = `${formatPrice(listing.price)}${listing.transaction === 'rent' ? '/mois' : ''}`;
   const area = state?.status === 'ready' && state.row.living_area > 0 ? formatArea(state.row.living_area) : null;
-  const grossYield = useMemo(() => {
-    if (state?.status !== 'ready' || hotelPerformanceOf(state.row) || !profitabilityFor(state.row)) return null;
-    return highlightsFor(state.row, null)?.text?.grossYield ?? null;
-  }, [state]);
-  const lotText = lotState?.status === 'ready' ? lotsLabel(lotState.statuses) : null;
-  const extra = [grossYield ? `${grossYield} brut` : null, lotText].filter((part): part is string => !!part);
   const body = (
     <>
       <span className="dm-banner-photo">{listing.coverUrl ? <img src={listing.coverUrl} alt="" /> : <Icon name="image" />}</span>
       <span className="dm-banner-text">
         <span className="dm-banner-title">{listing.title}</span>
-        <span className="dm-banner-line">
-          {keepNumbersTogether([listing.city, area].filter(Boolean).join(' · '))}
-          {extra.length > 0 && (
-            <span className="dm-banner-extra">
-              {' · '}
-              {grossYield && <span className="dm-banner-yield">{keepNumbersTogether(`${grossYield} brut`)}</span>}
-              {grossYield && lotText && ' · '}
-              {lotText}
-            </span>
-          )}
-        </span>
+        <span className="dm-banner-line">{keepNumbersTogether([listing.city, area].filter(Boolean).join(' · '))}</span>
       </span>
       <span className="dm-banner-end">
         <span className="dm-banner-price">{keepNumbersTogether(price)}</span>
@@ -673,15 +618,6 @@ export function PaneSkeleton() {
     <div className="dm-pane">
       <div className="dm-missing-top"><BackToList /></div>
       <ThreadLoading />
-    </div>
-  );
-}
-
-/** Rien n'est ouvert : la page n'ouvre jamais une conversation d'elle-même. */
-export function NoConversation() {
-  return (
-    <div className="dm-pane dm-pane-empty">
-      <h2>Sélectionnez une conversation</h2>
     </div>
   );
 }

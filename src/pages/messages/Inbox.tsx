@@ -20,20 +20,19 @@ import { openOnClick, routePath } from './route';
 
 // Liste des conversations, comme l'app (MessagesView.swift) : grand titre « Messages » et crayon « Nouveau message »,
 // champ « Rechercher un contact ou un bien » qui ouvre la recherche, les cinq filtres en capsules qui défilent sur une
-// ligne, la carte « Prochaine visite », puis « Toutes les conversations » dans une carte blanche. Sur ordinateur, la
-// même colonne à gauche (360 px), la conversation ouverte surlignée ; la recherche s'ouvre dans cette colonne.
+// ligne, la carte « Prochaine visite », puis « Toutes les conversations » dans une carte blanche ; la recherche s'ouvre
+// à sa place. Une conversation ouverte passe par-dessus : la liste reste dessous, avec son filtre et sa recherche.
 
 /** Texte de l'échec de lecture des conversations (MessagingStore.load, DomiaEmptyState.failed). */
 export const INBOX_FAILED = { title: 'Conversations indisponibles', message: 'Vos conversations n\'ont pas pu être chargées. Vérifiez votre connexion, puis réessayez.' };
 
 type Presence = ReadonlyMap<string, ReadonlySet<string>>;
 
-export function Inbox({ inbox, visits, presence, me, selectedId, onCompose }: {
+export function Inbox({ inbox, visits, presence, me, onCompose }: {
   inbox: InboxState;
   visits: ConversationVisit[];
   presence: Presence;
   me: string | null;
-  selectedId: string | null;
   onCompose: () => void;
 }) {
   const [filter, setFilter] = useState<InboxFilter>('all');
@@ -109,7 +108,7 @@ export function Inbox({ inbox, visits, presence, me, selectedId, onCompose }: {
         </div>
 
         <h2 className="dm-list-title">Toutes les conversations</h2>
-        <InboxList inbox={inbox} shown={shown} filter={filter} presence={presence} me={me} selectedId={selectedId} />
+        <InboxList inbox={inbox} shown={shown} filter={filter} presence={presence} me={me} />
       </div>
     </aside>
   );
@@ -141,13 +140,12 @@ function NextVisitCard({ visit, conversation }: { visit: ConversationVisit; conv
   );
 }
 
-function InboxList({ inbox, shown, filter, presence, me, selectedId }: {
+function InboxList({ inbox, shown, filter, presence, me }: {
   inbox: InboxState;
   shown: Conversation[];
   filter: InboxFilter;
   presence: Presence;
   me: string | null;
-  selectedId: string | null;
 }) {
   // Premier chargement : la roue de l'app, pas « Aucune conversation » (n° 209).
   if (inbox.status === 'loading') return <ListSkeleton />;
@@ -169,7 +167,6 @@ function InboxList({ inbox, shown, filter, presence, me, selectedId }: {
             conversation={conversation}
             online={!conversation.isGroup && isOnline(presence, conversation.id, conversation.otherUserId)}
             me={me}
-            selected={sameId(conversation.id, selectedId)}
           />
         </li>
       ))}
@@ -187,7 +184,7 @@ export function ListSkeleton() {
  * « Particulier », heure (bleue s'il y a des non-lus), la petite maison et le bien (ou le rôle), puis le dernier message
  * et la pastille des non-lus (grise en sourdine), ou la cloche barrée d'une conversation en sourdine.
  */
-function ConversationRow({ conversation, online, me, selected }: { conversation: Conversation; online: boolean; me: string | null; selected: boolean }) {
+function ConversationRow({ conversation, online, me }: { conversation: Conversation; online: boolean; me: string | null }) {
   const unread = conversation.unreadCount > 0;
   const subtitle = conversation.counterpart.subtitle;
   const activity = lastActivity(conversation);
@@ -195,7 +192,6 @@ function ConversationRow({ conversation, online, me, selected }: { conversation:
     <a
       className="dm-row"
       href={routePath({ conversationId: conversation.id })}
-      aria-current={selected ? 'true' : undefined}
       onClick={openOnClick(conversation.id)}
     >
       <ConversationAvatar conversation={conversation} size={46} fontSize={15} online={online} />
