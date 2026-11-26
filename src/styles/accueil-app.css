@@ -125,18 +125,12 @@
   .home-app-carousel { padding-left: max(16px, calc((100% - 688px) / 2)); padding-right: max(16px, calc((100% - 688px) / 2)); }
 }
 
-/* ——— Ordinateur (à partir de 1024 px) : le même écran dans le grand conteneur (1180, ses marges de 16 comprises). Le
-   bandeau bleu de l'accueil (homeBanner #1F5BC6 : « Ne change pas la couleur de l'accueil ») sur toute la largeur de la
-   fenêtre, derrière la barre du haut (logo et nom en blanc) et le haut de la carte des catégories ; titres, carte et
-   « Reprendre ma recherche » alignés sur la première carte de chaque rangée. Les rangées restent des rangées qui
+/* ——— Ordinateur (à partir de 1024 px) : le même écran dans le grand conteneur (1180, ses marges de 16 comprises), sur
+   le fond de la page comme dans l'app (son accueil n'a plus de bandeau bleu : homeBanner n'y sert plus) ; titres, carte
+   et « Reprendre ma recherche » alignés sur la première carte de chaque rangée. Les rangées restent des rangées qui
    défilent dans le conteneur et montrent plus de cartes (molette, souris ou clavier : useRailScroll). ——— */
 @media (min-width: 1024px) {
-  /* flow-root : la marge du haut de la barre reste dans la page, sous le bandeau qui part du haut de la fenêtre. */
-  .home-app { --home-band: #1F5BC6; display: flow-root; background: linear-gradient(var(--home-band), var(--home-band)) top / 100% 152px no-repeat; }
   .home-app-top, .home-category, .home-resume { width: calc(100% - 32px); max-width: calc(var(--app-wide) - 32px); margin-left: auto; margin-right: auto; }
-  .home-app-logo { filter: brightness(0) invert(1); }
-  .home-app-word { color: #FFFFFF; }
-  .home-app-bell:focus-visible .home-app-bell-circle { outline-color: #FFFFFF; }
   .home-section-header { max-width: var(--app-wide); }
   .home-app-carousel { width: 100%; max-width: var(--app-wide); margin-left: auto; margin-right: auto; padding-left: 16px; padding-right: 16px; }
 }

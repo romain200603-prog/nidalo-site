@@ -1,8 +1,7 @@
 /* Nidalo sur le web : mêmes couleurs que l'app (DesignSystem/Tokens/AppColors.swift) et sa police, Inter (Typography.swift :
    « manrope » de l'app, déclarée sous le nom « Nidalo Inter » dans ordinateur.css), sur toutes les largeurs. */
 :root {
-  /* Les jetons de l'app (AppColors.swift) sous les anciens noms du site, sur toutes les largeurs. Le bleu du bandeau de
-     l'accueil (homeBanner #1F5BC6) a son propre jeton (--home-band, accueil-app.css). */
+  /* Les jetons de l'app (AppColors.swift) sous les anciens noms du site, sur toutes les largeurs. */
   --blue: #3C5CB0;
   --blue-press: #2F4A92;
   --blue-soft: #EEF2FA;
