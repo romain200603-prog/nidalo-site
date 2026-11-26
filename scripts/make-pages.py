@@ -38,8 +38,8 @@ def page(path, title, description, entry, *, og_title=None, canonical=True, noin
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text('\n'.join(lines), encoding='utf-8')
 
-APP_DESC = 'Nidalo, l’immobilier entre particuliers et professionnels : acheter, louer, investir selon le rendement locatif ou trouver un hôtel à vendre.'
-page('index', 'Nidalo, l’immobilier simple et rentable', APP_DESC, 'home', og_title='Nidalo')
+APP_DESC = 'Annonces immobilières de particuliers et de professionnels : biens à vendre et à louer, investissements avec rendement locatif calculé et hôtels à vendre.'
+page('index', 'Nidalo – Vente immobilière, investissement et hôtels', APP_DESC, 'home')
 page('recherche/index', 'Rechercher un bien · Nidalo', 'Cherchez un bien à acheter, à louer ou à rentabiliser, sur la liste ou sur la carte.', 'search')
 page('annonce/index', 'Annonce · Nidalo', 'Une annonce immobilière sur Nidalo.', 'listing', og_title='Annonce sur Nidalo', canonical=False)
 for path, section, title in [
