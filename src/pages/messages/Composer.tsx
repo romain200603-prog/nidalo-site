@@ -23,24 +23,17 @@ import { LocationSheet } from './LocationSheet';
 import { Dialog, Sheet, showIphoneOnly, showNotice } from './parts';
 
 // Barre d'écriture, comme l'app (ConversationView.writingBar) : réponses rapides selon le contexte, puis « + » (pièces
-// jointes), « Votre message... » (jusqu'à 4 lignes), l'appareil photo (téléphone) et le rond bleu d'envoi. Le site
-// n'enregistre pas de message vocal : le rond garde la flèche, pâle tant que le champ est vide. Sur ordinateur, un
-// bouton d'émojis remplace l'appareil photo. Entrée envoie, Maj + Entrée va à la ligne. Le premier message d'une
-// conversation à deux demande d'abord le prénom (« Votre prénom »), comme l'app. Le « + » ouvre « Joindre »
-// (AttachmentMenuSheet) : appareil photo et caméra vidéo de l'appareil, photos, vidéos et documents, une adresse ou la
-// position, un contact (là où le navigateur sait en choisir un) ; l'aperçu (AttachmentPreviewSheet) envoie chaque
-// fichier puis le message.
+// jointes), « Votre message... » (jusqu'à 4 lignes), l'appareil photo et le rond bleu d'envoi, à toutes les largeurs.
+// Le site n'enregistre pas de message vocal : le rond garde la flèche, pâle tant que le champ est vide. Entrée envoie,
+// Maj + Entrée va à la ligne. Le premier message d'une conversation à deux demande d'abord le prénom (« Votre
+// prénom »), comme l'app. Le « + » ouvre « Joindre » (AttachmentMenuSheet) : appareil photo et caméra vidéo de
+// l'appareil, photos, vidéos et documents, une adresse ou la position, un contact (là où le navigateur sait en choisir
+// un) ; l'aperçu (AttachmentPreviewSheet) envoie chaque fichier puis le message.
 
 /** Réponse rapide au-dessus du champ : une action, ou `documents` pour choisir des documents à envoyer. */
 export type Suggestion = { key: string; label: string; icon?: IconName; disabled?: boolean; onSelect: (() => void) | 'documents' };
 
 const SEND_FAILED = 'Le message n\'a pas pu être envoyé. Réessayez.';
-
-/** Émojis du bouton à droite du champ (le site n'a pas le clavier d'émojis de l'iPhone). */
-const EMOJIS = [
-  '😀', '😊', '🙂', '😉', '😍', '🥰', '😂', '😅', '😇', '🤔', '😮', '😢', '🙏', '👍', '👎', '👏',
-  '💪', '👌', '🤝', '🙌', '👋', '✌️', '❤️', '🔥', '🎉', '✅', '❌', '⏰', '🏠', '🔑', '📅', '📍',
-];
 
 type SourceAction = 'camera' | 'media' | 'documents' | 'video' | 'location' | 'contact';
 
@@ -83,23 +76,17 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer, rep
   me?: string | null;
 }) {
   const account = useStore(accountStore);
-  const emojiPanelId = useId();
   const [draft, setDraft] = useState('');
   const [askName, setAskName] = useState(false);
   const [menu, setMenu] = useState<'closed' | 'sources' | 'categories' | 'location'>('closed');
-  const [emojis, setEmojis] = useState(false);
   const [pending, setPending] = useState<PendingFile[]>([]);
   const field = useRef<HTMLTextAreaElement>(null);
-  const emojiButton = useRef<HTMLButtonElement>(null);
-  const emojiPanel = useRef<HTMLDivElement>(null);
   const mediaInput = useRef<HTMLInputElement>(null);
   const documentInput = useRef<HTMLInputElement>(null);
   const cameraInput = useRef<HTMLInputElement>(null);
   const videoInput = useRef<HTMLInputElement>(null);
   const category = useRef<DocumentCategory | null>(null);
   const pendingRef = useRef<PendingFile[]>([]);
-  // Place du curseur après un émoji ajouté, appliquée une fois le champ mis à jour.
-  const caret = useRef<number | null>(null);
   pendingRef.current = pending;
 
   useEffect(() => { void loadAccount(); }, []);
@@ -117,42 +104,7 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer, rep
     const lines = 4 * (parseFloat(style.lineHeight) || 22) + (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, lines)}px`;
-    if (caret.current !== null) {
-      el.focus();
-      el.setSelectionRange(caret.current, caret.current);
-      caret.current = null;
-    }
   }, [draft]);
-
-  // Panneau des émojis : se ferme avec Échap ou un clic ailleurs.
-  useEffect(() => {
-    if (!emojis) return undefined;
-    const onPointer = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!emojiPanel.current?.contains(target) && !emojiButton.current?.contains(target)) setEmojis(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      setEmojis(false);
-      emojiButton.current?.focus();
-    };
-    document.addEventListener('pointerdown', onPointer);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [emojis]);
-
-  /** Met l'émoji à la place du curseur, puis remet le curseur juste après. */
-  const insertEmoji = (emoji: string) => {
-    const el = field.current;
-    const start = el?.selectionStart ?? draft.length;
-    const end = el?.selectionEnd ?? draft.length;
-    caret.current = start + emoji.length;
-    setDraft(`${draft.slice(0, start)}${emoji}${draft.slice(end)}`);
-    setEmojis(false);
-  };
 
   const firstName = account.status === 'ready' ? account.account.details?.first_name ?? '' : '';
   const canSend = draft.trim() !== '';
@@ -306,25 +258,6 @@ export function Composer({ conversation, messages, suggestions, onMakeOffer, rep
               }
             }}
           />
-          <button
-            ref={emojiButton}
-            type="button"
-            className="dm-emoji"
-            onClick={() => setEmojis((open) => !open)}
-            aria-label="Ajouter un émoji"
-            aria-expanded={emojis}
-            aria-controls={emojis ? emojiPanelId : undefined}
-            title="Ajouter un émoji"
-          >
-            <Icon name="smile" />
-          </button>
-          {emojis && (
-            <div ref={emojiPanel} id={emojiPanelId} className="dm-emoji-panel" role="group" aria-label="Émojis">
-              {EMOJIS.map((emoji) => (
-                <button key={emoji} type="button" onClick={() => insertEmoji(emoji)} aria-label={emoji}>{emoji}</button>
-              ))}
-            </div>
-          )}
         </div>
         <button type="button" className="dm-camera" onClick={() => cameraInput.current?.click()} aria-label="Prendre une photo" title="Prendre une photo">
           <Icon name="camera" />

@@ -8,7 +8,7 @@ import { MAX_PRESENCE_CHANNELS, usePresence } from '../../lib/messages/presence'
 import { openConversation, useMessaging } from '../../lib/messages/store';
 import { canOpenDetails } from '../../lib/messages/thread';
 import { PATHS } from '../../lib/paths';
-import { ConversationPane, MissingConversation, NoConversation, PaneSkeleton } from './Conversation';
+import { ConversationPane, MissingConversation, PaneSkeleton } from './Conversation';
 import { accessibleCommunity, CommunityView, JoinRequestsView } from './Community';
 import { DetailsView, MediaView } from './Details';
 import { AddMembersView, EphemeralView, GroupInfoView } from './GroupInfo';
@@ -17,10 +17,10 @@ import { NewConversationSheet } from './NewConversation';
 import { NoticeDialogs } from './parts';
 import { useRoute } from './route';
 
-// Page Messages (demande de Romain du 14 novembre 2026) : à partir de 1024 px, la liste à gauche (360 px) et la
-// conversation ouverte à droite, sur toute la hauteur sous la barre du haut, sans pied de page. En dessous de 1024 px,
-// une seule colonne comme dans l'app : la liste, ou la conversation de l'adresse (?c=…) avec une flèche retour.
-// Rien n'est ouvert sans ?c= dans l'adresse.
+// Page Messages, comme l'app sur toutes les largeurs (à partir de 1024 px, dans la colonne de 720 px au centre) : la
+// liste, ou la conversation de l'adresse (?c=…) poussée par-dessus avec une flèche retour, comme la pile de navigation
+// de l'app ; la page occupe la fenêtre au-dessus de la barre d'onglets, sans pied de page, et une conversation ouverte
+// cache cette barre (hidesTabBar). Rien n'est ouvert sans ?c= dans l'adresse.
 
 export function MessagesPage() {
   const session = useSession();
@@ -49,7 +49,7 @@ function Starting() {
   return (
     <div className={`dm ${route.conversationId ? 'is-thread' : 'is-list'}`}>
       <aside className="dm-side" aria-label="Conversations"><ListSkeleton /></aside>
-      <div className="dm-main">{route.conversationId ? <PaneSkeleton /> : <NoConversation />}</div>
+      {route.conversationId && <div className="dm-main"><PaneSkeleton /></div>}
     </div>
   );
 }
@@ -72,11 +72,13 @@ function Messenger({ userId }: { userId: string }) {
   useEffect(() => () => openConversation(null), []);
 
   const messages = conversation && thread.status === 'ready' && sameId(thread.conversationId, conversation.id) ? thread.messages : [];
+  // Conversations jamais lues : la liste reste, avec son état d'erreur et « Réessayer », même avec ?c= dans l'adresse.
+  const opened = !!route.conversationId && inbox.status !== 'error';
   let pane;
-  if (!route.conversationId) {
-    pane = <NoConversation />;
+  if (!opened) {
+    pane = null;
   } else if (inbox.status !== 'ready') {
-    pane = inbox.status === 'loading' ? <PaneSkeleton /> : <NoConversation />;
+    pane = <PaneSkeleton />;
   } else if (!conversation) {
     pane = <MissingConversation />;
   } else if (route.view === 'details' && canOpenDetails(conversation)) {
@@ -109,16 +111,9 @@ function Messenger({ userId }: { userId: string }) {
   }
 
   return (
-    <div className={`dm ${route.conversationId ? 'is-thread' : 'is-list'}`}>
-      <Inbox
-        inbox={inbox}
-        visits={visits.value}
-        presence={presence}
-        me={userId}
-        selectedId={route.conversationId}
-        onCompose={() => setComposing(true)}
-      />
-      <div className="dm-main">{pane}</div>
+    <div className={`dm ${opened ? 'is-thread' : 'is-list'}`}>
+      <Inbox inbox={inbox} visits={visits.value} presence={presence} me={userId} onCompose={() => setComposing(true)} />
+      {pane && <div className="dm-main">{pane}</div>}
       <NewConversationSheet open={composing} conversations={conversations} onClose={() => setComposing(false)} />
       <NoticeDialogs />
     </div>
