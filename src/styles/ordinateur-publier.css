@@ -1,7 +1,7 @@
 /* « Publier une annonce » sur ordinateur (src/pages/publish), dans la colonne de 640 px de Mon espace : mêmes cartes,
    champs, pastilles et barre d'actions que .dsc (ordinateur-mon-espace.css), plus ce qui est propre à la publication
-   (progression en 7 étapes, photos, aperçu, vérification, confirmation). Sous 1024 px, la page garde le message
-   « bientôt » du téléphone : rien ici ne s'applique. */
+   (progression en 7 étapes, photos, aperçu, vérification, confirmation). Sous 1024 px, rien ici ne s'applique : le
+   téléphone a l'assistant plein écran de l'app (publier-telephone.css). */
 @media (min-width: 1024px) {
   /* Progression : une barre par étape, bleue jusqu'à l'étape la plus loin atteinte, un peu plus épaisse pour l'étape
      en cours. Chaque étape atteinte s'ouvre d'un clic, sur une zone de 44 px de haut prise sur l'espace autour de la
@@ -43,6 +43,10 @@
   .dpub-spinner { width: 18px; height: 18px; }
   .dpub-progress-text { color: var(--d-grey); font-size: 14px; font-weight: 600; text-align: center; }
   .dpub .dsc-action-buttons.is-single { grid-template-columns: minmax(0, 1fr); }
+  /* « Enregistrer les modifications » sur une ligne : il rapetisse jusqu'à 80 %, puis se coupe. */
+  .dpub-button-text { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Pièces : « Studio » rapetisse jusqu'à 85 % s'il manque de place, puis se coupe. */
+  .dpub-chip-title { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* ——— Étape 1, catégorie et type de bien (PublishFlowView.categoryStep, PublishCategoryTile, PublishTypeTile) ———
      Sans carte autour : titre de 26 gras et sous-titre de 15 medium gris (6 d'écart), puis les quatre catégories en
@@ -128,6 +132,8 @@
   /* Adresse : code postal et ville côte à côte. */
   .dpub-postal-row { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; align-items: start; }
   .dpub .dpub-place.has-error .place-field input { border-color: var(--d-red); }
+  /* « R+ » devant le nombre d'étages d'un immeuble, gris comme l'unité. */
+  .dpub .number-input .prefix { flex: none; margin-right: -6px; color: var(--d-grey); font-size: 14px; font-weight: 500; }
 
   /* Indicateurs calculés (Investissement, Hôtels). */
   .dpub-indicator { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px; background: var(--d-separator); }
