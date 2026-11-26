@@ -33,9 +33,21 @@
 .account-empty p { margin: 0; max-width: 360px; color: var(--text-secondary); font-size: 13px; }
 .account-empty .btn { margin-top: 10px; }
 .account-empty .link-button { margin-top: 8px; font-size: 14px; font-weight: 700; }
-.account-toast { position: fixed; z-index: 45; left: 50%; top: calc(var(--topbar-height) + 12px); transform: translateX(-50%); display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px; background: var(--ink); color: #FFFFFF; font-size: 14px; font-weight: 600; white-space: nowrap; box-shadow: 0 8px 24px rgba(36, 45, 56, 0.2); }
-.account-toast .icon { width: 16px; height: 16px; }
-.text-input { width: 100%; height: 48px; padding: 0 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--ink); font: inherit; font-size: 16px; font-weight: 500; }
+.account-toast {
+  position: fixed; z-index: 45; left: 50%; top: calc(env(safe-area-inset-top) + 8px); display: inline-flex; align-items: center; gap: 6px;
+  height: 44px; padding: 0 16px; border-radius: 22px; background: var(--green); color: #FFFFFF; font: 700 14px/1 var(--app-font);
+  white-space: nowrap; transform: translateX(-50%); animation: account-toast-in 0.3s var(--app-ease, ease-out);
+}
+@media (min-width: 1024px) { .account-toast { top: calc(var(--topbar-height) + 8px); } }
+.account-toast-check { flex: none; width: 17px; height: 17px; }
+@keyframes account-toast-in { from { opacity: 0; transform: translate(-50%, -52px); } }
+@media (prefers-reduced-motion: reduce) {
+  .account-toast { animation-name: account-toast-fade; }
+  @keyframes account-toast-fade { from { opacity: 0; } }
+}
+/* Champs des pages de Mon compte (NidaloField) : 52 de haut, coins 16, fond #FAF9F6, bord #E8E6E1 ; texte de 16 (pas
+   de zoom de Safari à la saisie). */
+.text-input { width: 100%; height: 52px; padding: 0 14px; border: 1px solid #E8E6E1; border-radius: 16px; background: #FAF9F6; color: var(--ink); font: inherit; font-size: 16px; font-weight: 500; }
 .text-input::placeholder { color: var(--placeholder); }
 .text-input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(60, 92, 176, 0.18); }
 .text-input[aria-invalid="true"] { border-color: var(--red); }
@@ -47,10 +59,45 @@
 
 /* ——— Mon compte : page et briques (MySpaceComponents.swift) ——— */
 .account-wrap { max-width: 640px; padding-top: 8px; }
-.space { display: flex; flex-direction: column; gap: 23px; padding-bottom: 12px; }
+.space { display: flex; flex-direction: column; gap: 14px; padding-bottom: 28px; }
+/* En-tête de page (PageHeader : 10 dessous) puis 8 avant le contenu, comme les pages de l'app. */
+.space > .screen-header { margin-bottom: -6px; }
 .space-title { font-size: 34px; font-weight: 700; letter-spacing: -0.5px; }
 .space-title.is-long { font-size: 31px; }
-.space-card { background: var(--card); border: 1px solid var(--border); border-radius: 20px; }
+/* Carte des pages professionnelles (spaceCard de l'app) : blanche, coins 16, bordure #ECEAE6, sans ombre. */
+.space-card { background: var(--card); border: 1px solid var(--app-border, #ECEAE6); border-radius: 16px; }
+/* Carte blanche des pages de Mon compte (nidaloShadowCard) : coins 22, bordure #ECEAE6, ombre très légère. */
+.app-card { background: #FFFFFF; border: 1px solid var(--app-border, #ECEAE6); border-radius: 22px; box-shadow: var(--shadow); }
+
+/* Section de page (NidaloSection, AppSection dans parts.tsx) : petit titre gris en capitales, 8, puis la carte (marges
+   16, 14 entre ses éléments) ; 6 au-dessus. */
+.app-section { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding-top: 6px; }
+.app-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 16px; }
+.app-section-card {
+  display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 16px; border: 1px solid var(--app-border, #ECEAE6); border-radius: 22px;
+  background: #FFFFFF; box-shadow: var(--shadow); color: var(--app-navy, #242D38); font-family: var(--app-font);
+}
+
+/* Boutons des pages de Mon compte (NidaloPrimaryButtonStyle, NidaloSecondaryButtonStyle) : 56 de haut, coins 18, 16
+   gras ; plein bleu (plus foncé pressé), ou blanc bordé de #C9DAFB au texte bleu (bleu pâle pressé). */
+.app-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 56px; margin: 0; padding: 0 16px;
+  border: 0; border-radius: 18px; font: 700 16px/1.2 var(--app-font); text-align: center; text-decoration: none; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.app-button .icon { width: 18px; height: 18px; }
+.app-button-primary { background: var(--app-brand, #3C5CB0); color: #FFFFFF; }
+.app-button-primary:active { background: var(--blue-press); }
+.app-button-secondary { border: 1px solid var(--blue-border); background: #FFFFFF; color: var(--app-brand, #3C5CB0); }
+.app-button-secondary:active { background: var(--app-brand-soft, #EEF2FA); }
+.app-button-danger { background: #C0392B; color: #FFFFFF; }
+.app-button-danger:active { opacity: 0.85; }
+.app-button:is([disabled], [aria-disabled="true"]) { opacity: 0.5; cursor: default; }
+.app-button:focus-visible { outline: 3px solid var(--app-brand, #3C5CB0); outline-offset: 2px; }
+@media (hover: hover) {
+  .app-button-primary:not([disabled]):hover { background: var(--blue-press); }
+  .app-button-secondary:not([disabled]):hover { background: #F7F9FD; }
+}
 .space-section { display: flex; flex-direction: column; gap: 12px; }
 .section-title { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 18px; font-weight: 700; }
 .section-title .icon { width: 20px; height: 20px; color: var(--blue); }
@@ -121,12 +168,7 @@
 
 /* En-tête des écrans (retour, titre, action) */
 /* Le titre reste centré sur la page (les deux côtés prennent la même place), comme le titre d'une barre de l'iPhone. */
-.screen-header { display: grid; grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr); align-items: center; gap: 10px; min-height: 48px; }
-.screen-header h1 { overflow: hidden; font-size: 17px; font-weight: 700; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
-.screen-header-action { display: flex; justify-content: flex-end; }
-.round-back { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--border); background: var(--card); color: var(--ink); cursor: pointer; }
-.round-back .icon { width: 20px; height: 20px; }
-.save-capsule { display: inline-flex; align-items: center; justify-content: center; min-width: 96px; height: 36px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--blue); color: #FFFFFF; font-size: 14px; font-weight: 700; cursor: pointer; }
+.save-capsule { display: inline-flex; align-items: center; justify-content: center; min-width: 96px; height: 36px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--blue); color: #FFFFFF; font-size: 14px; font-weight: 700; cursor: pointer; }
 .save-capsule[disabled] { opacity: 0.45; cursor: default; }
 .save-capsule .spinner-white { width: 16px; height: 16px; }
 /* Bouton texte de la barre de navigation de l'iPhone (« Ajouter », « Modifier », « Inviter » des pages pro) : Inter 17
@@ -134,57 +176,116 @@
 .nav-text-button { display: inline-flex; align-items: center; justify-content: center; height: 42px; padding: 0 16px; border: 1px solid var(--border); border-radius: 21px; background: var(--card); color: var(--app-brand, #3C5CB0); font: 600 17px/1 var(--app-font); text-decoration: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .nav-text-button:active { opacity: 0.6; }
 .nav-text-button:focus-visible { outline: 2px solid var(--app-brand, #3C5CB0); outline-offset: 2px; }
-.screen-note { margin: 0; color: var(--text-secondary); font-size: 13px; text-align: center; }
-
 /* Écrans simples */
-.soon-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 20px; text-align: center; }
-.soon-card > .icon { width: 34px; height: 34px; color: var(--blue); }
-.soon-card h2 { font-size: 16px; font-weight: 700; }
-.soon-card p { margin: 0; max-width: 420px; color: var(--text-secondary); font-size: 13.5px; }
-.legal-rows { margin: 0; padding: 0; list-style: none; overflow: hidden; }
-.legal-rows li + li { border-top: 1px solid var(--border); }
-.legal-rows a { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 16px; color: var(--ink); font-size: 15px; font-weight: 600; text-decoration: none; }
-.legal-rows a:hover { background: #F7F6F3; }
-.privacy-card { display: flex; align-items: flex-start; gap: 12px; padding: 16px; }
-.privacy-card > .icon { width: 24px; height: 24px; color: var(--green); }
-.privacy-card h2 { font-size: 15px; font-weight: 700; }
-.privacy-card p { margin: 4px 0 0; color: var(--text-secondary); font-size: 13px; }
-.toggle-card { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
-.toggle-card p { margin: 0; color: var(--text-secondary); font-size: 13px; }
-.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 31px; color: var(--ink); font-size: 15px; font-weight: 600; cursor: pointer; }
-.delete-card { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 22px 18px; text-align: center; }
-.delete-card h2 { font-size: 19px; font-weight: 700; }
-.delete-card p { margin: 0; color: var(--text-secondary); font-size: 14px; }
-.delete-card .delete-note { color: var(--text-muted); font-size: 12.5px; }
-.delete-card .btn { width: 100%; }
-.delete-card .btn[aria-disabled="true"] { opacity: 0.5; cursor: default; }
-.danger-button { display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 50px; border: 0; border-radius: 14px; background: var(--red); color: #FFFFFF; font-size: 16px; font-weight: 700; cursor: pointer; }
-.danger-button[disabled] { opacity: 0.7; cursor: default; }
+/* Page « en construction » de l'app (ProfilePlaceholderView : ContentUnavailableView) : marteau et titre de 16 gras,
+   texte de 12 gris, au milieu de l'écran. */
+.placeholder-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 52vh; padding: 24px 28px; color: var(--app-navy); font-family: var(--app-font); text-align: center; }
+.placeholder-state h2 { display: inline-flex; align-items: center; gap: 8px; margin: 0; color: var(--app-navy); font: 700 16px/1.3 var(--app-font); }
+.placeholder-state h2 .icon { width: 18px; height: 18px; }
+.placeholder-state p { max-width: 360px; margin: 0; color: var(--app-text-secondary); font: 400 12px/1.4 var(--app-font); }
+/* Confidentialité et données : 16 entre les cartes ; carte d'information (InfoCard : carré bleu de 40, titre de 16 gras,
+   texte de 13,5 gris, 12 d'écart, marges 16) et carte de l'interrupteur (15 gras, texte de 13 gris, 8 d'écart). */
+.privacy-screen { gap: 16px; }
+.info-tile-card { display: flex; flex-direction: column; gap: 12px; padding: 16px; font-family: var(--app-font); }
+.info-tile-card h2 { display: flex; align-items: center; gap: 12px; margin: 0; color: var(--app-navy); font: 700 16px/1.3 var(--app-font); }
+.info-tile { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 13px; background: var(--app-brand-soft); color: var(--app-brand); }
+.info-tile .icon { width: 19px; height: 19px; }
+.info-tile-card p { margin: 0; color: var(--app-text-secondary); font: 400 13.5px/1.4 var(--app-font); }
+.toggle-card { display: flex; flex-direction: column; gap: 8px; padding: 16px; font-family: var(--app-font); }
+.toggle-card p { margin: 0; color: var(--app-text-secondary); font: 400 13px/1.4 var(--app-font); }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 31px; color: var(--app-navy); font: 700 15px/1.3 var(--app-font); cursor: pointer; }
+/* Supprimer mon compte (DeleteAccountSheet en page) : carte de 22 à l'ombre, marges 20, 16 d'écart ; corbeille de 24
+   dans un carré rouge pâle de 52 (coins 16), titre de 19 gras, texte de 14,5, note de 13 ; bouton rouge de 56 (coins 18)
+   puis « Annuler » secondaire, 10 entre eux. */
+.delete-card { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 20px; font-family: var(--app-font); text-align: center; }
+.delete-tile { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 16px; background: #FCE9E9; color: #C2413E; }
+.delete-tile .icon { width: 24px; height: 24px; }
+.delete-card h2 { margin: 0; color: var(--app-navy); font: 700 19px/1.3 var(--app-font); }
+.delete-card p { margin: 0; color: var(--app-text-secondary); font: 400 14.5px/1.4 var(--app-font); }
+.delete-card .delete-note { font-size: 13px; }
+.delete-card .signin-error { margin: 0; font-size: 12px; }
+.delete-buttons { display: flex; flex-direction: column; gap: 10px; align-self: stretch; padding-top: 4px; }
+/* Pages de menu (NidaloMenuPage : Type de compte) : 10 entre les éléments, le bouton 14 plus bas. */
+.menu-page { gap: 10px; }
+.menu-page-check { display: inline-flex; flex: none; color: var(--app-brand); }
+.menu-page-check .icon { width: 18px; height: 18px; }
+.menu-page-button { width: 100%; margin-top: 14px; }
+/* Groupes de lignes de l'app dans les pages poussées (Informations légales, Type de compte, Préférences). */
+.space .app-menu-group { display: flex; flex-direction: column; gap: 8px; }
+/* Aide et assistance (HelpView) : « Questions fréquentes », questions repliables de 15 semibold (marges 16 · 14),
+   réponse de 14,5 gris ; puis « Écrire à l'équipe », 8 plus bas. */
+.help-section { display: flex; flex-direction: column; gap: 8px; }
+.help-question summary {
+  display: flex; align-items: center; gap: 12px; padding: 14px 16px; color: var(--app-navy); font: 600 15px/1.3 var(--app-font);
+  list-style: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.help-question summary::-webkit-details-marker { display: none; }
+.help-question summary > span { flex: 1; min-width: 0; }
+.help-chevron { flex: none; width: 16px; height: 16px; color: var(--app-text-muted); transition: transform 0.25s var(--app-ease, ease); }
+.help-question[open] .help-chevron { transform: rotate(90deg); }
+.help-question p { margin: -8px 0 0; padding: 0 16px 14px; color: var(--app-text-secondary); font: 400 14.5px/1.45 var(--app-font); }
+.help-question summary:focus-visible { outline: 3px solid var(--app-brand); outline-offset: -3px; border-radius: 22px; }
+.help-contact { margin-top: 8px; }
+@media (prefers-reduced-motion: reduce) { .help-chevron { transition: none; } }
 
 /* « Quel est votre profil ? » : celui de l'app, dans profil-app.css. */
 
-/* « Mes informations » */
+/* « Mes informations » (EditProfileView) : quatre sections de l'app (AppSection), 14 entre elles ; champs de 52. Les
+   formulaires pro gardent leurs cartes à titre (ProWorkCard : titre de 15,5 gras dans la carte, 12 d'écart). */
 .info-form { display: flex; flex-direction: column; gap: 16px; }
+.my-info .info-form { gap: 14px; }
 .info-card { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
-.field-group-title { font-size: 16px; font-weight: 700; }
+.field-group-title { font-size: 15.5px; font-weight: 700; }
 .form-field { display: flex; flex-direction: column; gap: 6px; }
-.date-row { display: flex; align-items: center; gap: 12px; }
-.date-row .text-input { flex: 1; }
+/* Refus à l'enregistrement (PinnedErrorLine) : sous l'en-tête. */
+.info-save-error { margin: 0; color: var(--red); font: 500 12px/16px var(--app-font); }
+.date-row { display: flex; align-items: center; gap: 10px; }
+.date-row .text-input { flex: 1; min-width: 0; }
+/* Photo de 84 qui ouvre le menu « Photo de profil », badge appareil de 28 (bleu, bordé de blanc) ; à côté, le bouton
+   secondaire et « Supprimer la photo » en rouge. */
 .photo-row { display: flex; align-items: center; gap: 16px; }
-.photo-avatar { position: relative; flex: none; width: 84px; height: 84px; }
+.photo-avatar { position: relative; flex: none; width: 84px; height: 84px; margin: 0; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; }
 .photo-avatar > img { width: 84px; height: 84px; border-radius: 50%; object-fit: cover; }
-.photo-badge { position: absolute; right: -2px; bottom: -2px; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 2px solid #FFFFFF; border-radius: 50%; background: var(--blue); color: #FFFFFF; cursor: pointer; }
-.photo-badge .icon { width: 15px; height: 15px; }
-.photo-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
-.chips-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
-.type-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 4px; }
-.type-row > div { display: flex; flex-direction: column; gap: 2px; }
-.type-value { color: var(--ink); font-size: 15px; font-weight: 700; }
+.photo-badge { position: absolute; right: 0; bottom: 0; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 2px solid #FFFFFF; border-radius: 50%; background: var(--app-brand); color: #FFFFFF; }
+.photo-badge .icon { width: 14px; height: 14px; }
+.photo-actions { display: flex; flex: 1; min-width: 0; flex-direction: column; align-items: stretch; gap: 8px; }
+.photo-actions .info-text-button { align-self: flex-start; }
+/* Bouton texte de 13,5 gras (« Effacer », « Passer en… », « Supprimer la photo »), zone d'appui de 44. */
+.info-text-button { flex: none; min-height: 44px; margin: -12px 0; padding: 0; border: 0; background: none; color: var(--app-brand); font: 700 13.5px/1.2 var(--app-font); cursor: pointer; }
+.info-text-button.is-danger { color: var(--red); }
+.info-hint { margin: 0; color: var(--app-text-secondary); font: 400 12.5px/1.35 var(--app-font); }
+/* Interrupteur au titre de 14,5 semibold et au sous-titre de 12,5 gris, dans le même bloc. */
+.info-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; }
+.info-toggle-text { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; }
+.info-toggle-title { color: var(--app-navy); font: 600 14.5px/1.3 var(--app-font); }
+.info-toggle-detail { color: var(--app-text-secondary); font: 400 12.5px/1.35 var(--app-font); }
+.text-input.is-locked { opacity: 0.6; }
+/* Situation professionnelle : pastilles en grille de deux colonnes, 8 d'écart. */
+.info-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+/* Type de compte : champ bordé de 48 (coins 12), valeur 15 semibold et « Passer en… » en bleu. */
+.type-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; padding: 0 14px; border: 1px solid var(--app-border); border-radius: 12px; background: #FFFFFF; }
+.type-value { color: var(--app-navy); font: 600 15px/1.2 var(--app-font); }
+.type-row .info-text-button { margin: 0; min-height: 44px; }
 .postal-pair { grid-template-columns: minmax(110px, 0.6fr) 1fr; }
-.form-place input { height: 48px; border-radius: 12px; font-weight: 500; }
-.form-place .place-field-icon { top: 13px; width: 20px; height: 20px; color: var(--text-secondary); }
-.form-place .place-field-clear { top: 5px; }
-.form-place .place-list { top: 54px; }
+.form-place input { height: 52px; border: 1px solid #E8E6E1; border-radius: 16px; background: #FAF9F6; font-weight: 500; }
+.form-place .place-field-icon { top: 15px; width: 20px; height: 20px; color: var(--text-secondary); }
+.form-place .place-field-clear { top: 7px; }
+.form-place .place-list { top: 58px; }
+
+/* Feuille « Permettre aux personnes… » (PhoneFindabilityPrompt) : alignée à gauche, marges 20, 14 d'écart ; téléphone de
+   22 dans un rond bleu pâle de 46, question de 18 gras, texte de 13 gris ; « Plus tard » et « Oui » côte à côte (52). */
+.findability-body { display: flex; flex-direction: column; gap: 14px; padding: 20px; color: var(--app-navy); font-family: var(--app-font); text-align: left; }
+.findability-top { display: flex; }
+.findability-icon { display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; border-radius: 50%; background: var(--app-brand-soft); color: var(--app-brand); }
+.findability-icon .icon { width: 22px; height: 22px; }
+.findability-body h2 { margin: 0; color: var(--app-navy); font: 700 18px/1.3 var(--app-font); }
+.findability-body p { margin: 0; color: var(--app-text-secondary); font: 400 13px/1.4 var(--app-font); }
+.findability-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.findability-actions .btn { width: 100%; min-height: 52px; border-radius: 12px; font: 600 15px/1.2 var(--app-font); }
+@media (max-width: 1023px) {
+  .findability-body { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+  .findability-top { touch-action: none; }
+}
 
 /* Pastilles de choix (onglets de Mes annonces) */
 .select-chip { display: inline-flex; align-items: center; flex: none; gap: 6px; height: 38px; padding: 0 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--ink); font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
@@ -195,28 +296,21 @@
 .deposit-button { width: 100%; font-weight: 700; }
 .deposit-button .icon { width: 18px; height: 18px; }
 .my-listings { display: flex; flex-direction: column; gap: 12px; }
-.my-listing { padding: 14px; }
+/* Carte d'annonce (MyListingCard) : carte de 22 à l'ombre, marges 14, 12 d'écart : la ligne d'annonce et sa pastille,
+   le titre de 13,5 semibold et la date de 12 gris clair, puis les boutons de 38 (coins 11, bleu pâle, 13,5 semibold,
+   icône de 14 ; bleu plein pour Reprendre et Republier) et le menu « … » à droite. */
+.my-listing { display: flex; flex-direction: column; gap: 12px; padding: 14px; font-family: var(--app-font); }
 .my-listing[aria-busy="true"] { opacity: 0.6; }
-.my-listing-top { display: flex; gap: 12px; }
-.my-listing-photo { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 92px; height: 80px; overflow: hidden; border-radius: 12px; background: var(--chip); color: var(--placeholder); }
-.my-listing-photo img { width: 100%; height: 100%; object-fit: cover; }
-.my-listing-text { flex: 1; min-width: 0; }
-.my-listing-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.my-listing-title-row h2 { overflow: hidden; font-size: 15px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-.status-badge { display: inline-flex; align-items: center; flex: none; height: 22px; padding: 0 8px; border-radius: 7px; font-size: 11.5px; font-weight: 700; }
-.status-badge.tone-positive { background: var(--green-soft); }
-.status-badge.tone-estimated { background: var(--estimated-soft); color: var(--estimated); }
-.status-badge.tone-muted { background: var(--chip); }
-.status-badge.tone-brand { background: var(--blue-soft); color: var(--blue); }
-.my-listing-line { margin: 3px 0 0; color: var(--text-secondary); font-size: 13px; }
-.my-listing-price { margin: 2px 0 0; color: var(--ink); font-size: 15px; }
-.my-listing-price strong { font-weight: 700; }
-.my-listing-price span { margin-left: 2px; font-size: 12.5px; font-weight: 700; }
-.my-listing-date { margin: 2px 0 0; color: var(--text-muted); font-size: 12px; }
-.my-listing-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
-.action-button { display: inline-flex; flex: 1; align-items: center; justify-content: center; gap: 6px; height: 40px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--blue); font-size: 14px; font-weight: 700; text-decoration: none; cursor: pointer; }
-.action-button .icon { width: 16px; height: 16px; }
-.action-button.is-filled { border-color: transparent; background: var(--blue); color: #FFFFFF; }
+.my-listing-titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.my-listing-titles h2 { overflow: hidden; color: var(--app-navy); font: 600 13.5px/1.3 var(--app-font); text-overflow: ellipsis; white-space: nowrap; }
+.my-listing-date { margin: 0; color: var(--app-text-muted); font: 400 12px/1.3 var(--app-font); }
+.my-listing-actions { display: flex; align-items: center; gap: 8px; }
+.my-listing-actions .dsc-menu { margin-left: auto; }
+.my-listing-readonly { color: var(--app-text-secondary); font: 600 13px/1.2 var(--app-font); }
+.action-button { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 6px; height: 38px; padding: 0 14px; border: 0; border-radius: 11px; background: var(--app-brand-soft); color: var(--app-brand); font: 600 13.5px/1 var(--app-font); text-decoration: none; cursor: pointer; }
+.action-button .icon { width: 14px; height: 14px; }
+.action-button.is-filled { background: var(--app-brand); color: #FFFFFF; }
+.action-button[disabled] { opacity: 0.5; cursor: default; }
 
 /* Menus « … » */
 .menu-anchor { position: relative; flex: none; }
@@ -384,11 +478,14 @@
 .agency-listings-title { font-size: 17px; font-weight: 700; }
 
 /* Son formulaire (ProfessionalOnboardingView.swift) */
-.agency-status { display: flex; align-items: flex-start; gap: 12px; padding: 14px; }
-.agency-status-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 40px; height: 40px; border-radius: 12px; background: var(--blue-soft); color: var(--blue); }
-.agency-status-icon .icon { width: 21px; height: 21px; }
-.agency-status h2 { font-size: 15.5px; font-weight: 700; }
-.agency-status p { margin: 4px 0 0; color: var(--text-secondary); font-size: 13px; }
+/* Carte de statut du formulaire (statusCard) : carte de 22 à l'ombre, marges 14 ; icône de 22 gris foncé dans un cadre
+   de 40 (IconTile) ; titre 15,5 gras, texte 13 gris. */
+.agency-status { display: flex; align-items: flex-start; gap: 12px; padding: 14px; font-family: var(--app-font); }
+.agency-status-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 40px; height: 40px; color: #5B6571; }
+.agency-status-icon .icon { width: 22px; height: 22px; }
+.agency-status h2 { color: var(--app-navy); font: 700 15.5px/1.3 var(--app-font); }
+.agency-status p { margin: 4px 0 0; color: var(--app-text-secondary); font: 400 13px/1.4 var(--app-font); }
+.agency-section .app-section-card { gap: 14px; }
 .agency-logo-row { display: flex; align-items: center; gap: 12px; }
 .agency-logo-preview { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 56px; height: 56px; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--page); color: var(--text-muted); }
 .agency-logo-preview img { width: 100%; height: 100%; object-fit: cover; }
@@ -423,10 +520,12 @@ a.save-capsule { text-decoration: none; }
 .diffusion-textarea { height: auto; padding: 10px 12px; font-size: 14px; line-height: 1.45; resize: none; }
 
 /* ——— Affiche de vitrine (A4) : mêmes proportions à l'écran et sur papier (tailles en % de la largeur) ——— */
-.poster-screen { display: flex; flex-direction: column; gap: 12px; padding-bottom: 16px; }
-.poster-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.poster-toolbar h1 { font-size: 17px; font-weight: 700; }
-.poster-hint { margin: 0; color: var(--text-secondary); font-size: 12.5px; }
+/* Affiche (PosterView) : aperçu de la feuille (coins 4, ombre douce), « Imprimer ou enregistrer » plein, 16 d'écart. */
+.poster-screen { gap: 16px; padding-bottom: 16px; }
+.poster-preview .poster { border: 0; border-radius: 4px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12); }
+.poster-print { width: 100%; }
+.poster-print .icon { width: 18px; height: 18px; }
+.poster-hint { margin: -6px 0 0; color: var(--app-text-secondary); font: 400 12.5px/1.4 var(--app-font); text-align: center; }
 .poster { container-type: inline-size; display: flex; flex-direction: column; width: 100%; aspect-ratio: 210 / 297; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; background: #FFFFFF; color: var(--ink); box-shadow: 0 8px 24px rgba(36, 45, 56, 0.08); }
 .poster-band { flex: none; padding: 3cqw 6cqw; background: var(--blue); color: #FFFFFF; font-size: 6.4cqw; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
 /* La photo prend la place qui reste : un titre long la réduit, rien ne déborde de la feuille. */
@@ -632,7 +731,6 @@ a.save-capsule { text-decoration: none; }
 .team-author { display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; color: var(--text-secondary); font-size: 12.5px; font-weight: 600; }
 .team-author .icon { flex: none; width: 14px; height: 14px; }
 .contact-head .team-author { margin-top: -4px; }
-.my-listing-readonly { color: var(--text-muted); font-size: 12.5px; }
 .contact-note-text { margin: 0; font-size: 14.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .mandate-readonly { text-align: center; }
 
@@ -676,9 +774,154 @@ a.save-capsule { text-decoration: none; }
   @page { size: A4 portrait; margin: 0; }
   html, body { margin: 0 !important; padding: 0 !important; background: #FFFFFF !important; }
   body:has(.poster) .topbar, body:has(.poster) .dtop, body:has(.poster) .tabbar, body:has(.poster) .footer, body:has(.poster) .dfoot,
-  body:has(.poster) .skip-link, body:has(.poster) .account-toast, .poster-toolbar, .poster-hint { display: none !important; }
+  body:has(.poster) .skip-link, body:has(.poster) .account-toast, .poster-screen > .screen-header, .poster-print, .poster-hint { display: none !important; }
   body:has(.poster) .page, body:has(.poster) main, body:has(.poster) .account-wrap { display: block; max-width: none; min-height: 0; margin: 0; padding: 0; }
-  .poster-screen { padding: 0; }
+  .poster-screen { display: block; padding: 0; }
+  .poster-preview .poster { border-radius: 0; box-shadow: none; }
   .poster { width: 210mm; height: 297mm; aspect-ratio: auto; border: 0; border-radius: 0; box-shadow: none; break-inside: avoid; }
   .poster, .poster * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ——— Texte légal dans Mon compte (LegalPageView) ———
+   Grand titre de 22 gras, dates de 13 gris (6 d'écart), introduction de 14,5 ; sommaire numéroté (15 gras, lignes de
+   13,5, numéros bleus sur 26) ; une carte par section (marges 14, titre « 1. … » de 17 gras, texte de 15 à 85 %,
+   puces bleues, intertitres de 14,5 gras) ; « Une question sur ce texte ? », « Autres textes », « Revenir au sommaire ». */
+.legal-text-screen { font-family: var(--app-font); }
+.legal-text-head { display: flex; flex-direction: column; gap: 6px; scroll-margin-top: 12px; outline: none; }
+.legal-text-head h2 { margin: 0; color: var(--app-navy); font: 700 22px/1.25 var(--app-font); }
+.legal-text-head p { margin: 0; color: var(--app-text-secondary); font: 400 13px/1.35 var(--app-font); }
+.legal-text-lead { margin: 0; color: rgba(36, 45, 56, 0.85); font: 400 14.5px/1.45 var(--app-font); }
+.legal-toc, .legal-section, .legal-contact, .legal-others { padding: 14px; }
+.legal-card-title { margin: 0; color: var(--app-navy); font: 700 15px/1.3 var(--app-font); }
+.legal-toc ol { margin: 6px 0 0; padding: 0; list-style: none; }
+.legal-toc button {
+  display: flex; align-items: baseline; gap: 8px; width: 100%; padding: 6px 0; border: 0; background: none; color: var(--app-navy);
+  font: 600 13.5px/1.35 var(--app-font); text-align: left; cursor: pointer;
+}
+.legal-toc-number { flex: none; width: 26px; color: var(--app-brand); font-weight: 700; text-align: right; }
+.legal-section { display: flex; flex-direction: column; gap: 10px; scroll-margin-top: 12px; }
+.legal-section h3 { margin: 0; color: var(--app-navy); font: 700 17px/1.3 var(--app-font); outline: none; }
+.legal-section-body { display: flex; flex-direction: column; gap: 10px; color: rgba(36, 45, 56, 0.85); font: 400 15px/1.55 var(--app-font); overflow-wrap: anywhere; }
+.legal-section-body > * { margin: 0; }
+.legal-section-body h3 { margin-top: 4px; color: var(--app-navy); font: 700 14.5px/1.35 var(--app-font); }
+.legal-section-body ul { display: flex; flex-direction: column; gap: 6px; padding: 0; list-style: none; }
+.legal-section-body li { position: relative; padding-left: 16px; }
+.legal-section-body li::before { content: '•'; position: absolute; left: 0; color: var(--app-brand); font-weight: 700; }
+.legal-section-body dl { display: flex; flex-direction: column; gap: 10px; }
+.legal-section-body dt { color: var(--app-text-secondary); font: 600 12.5px/1.3 var(--app-font); }
+.legal-section-body dd { margin: 2px 0 0; color: var(--app-navy); font: 600 14px/1.35 var(--app-font); }
+.legal-section-body a { color: var(--app-brand); }
+.legal-contact { display: flex; flex-direction: column; gap: 8px; }
+.legal-contact-email { margin: 0; color: var(--app-text-secondary); font: 400 12.5px/1.3 var(--app-font); }
+.legal-others { display: flex; flex-direction: column; gap: 8px; }
+.legal-others a { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; color: var(--app-navy); font: 600 14.5px/1.3 var(--app-font); text-decoration: none; }
+.legal-others a .icon { width: 16px; height: 16px; color: var(--app-text-muted); }
+.legal-toc button:focus-visible, .legal-others a:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; border-radius: 8px; }
+
+/* ——— Préférences (PreferencesView) : sections de l'app, 14 entre elles ——— */
+.preference-project { display: flex; flex-direction: column; gap: 2px; }
+.preference-project-title { color: var(--app-navy); font: 700 14.5px/1.3 var(--app-font); }
+.preference-project-line { color: var(--app-text-secondary); font: 400 12.5px/1.35 var(--app-font); }
+.preference-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--app-navy); font: 600 14px/1.3 var(--app-font); }
+.preference-line span + span { color: var(--app-text-secondary); font-weight: 400; }
+.preference-note { margin: 0; color: var(--app-text-secondary); font: 400 12.5px/1.35 var(--app-font); }
+
+/* Pastille d'état de l'app (NidaloPill) : 22 de haut, 11,5 gras, marges 9, teinte .app-tone-* (pieces-app.css). */
+.app-pill {
+  display: inline-flex; flex: none; align-items: center; height: 22px; padding: 0 9px; border-radius: 11px; background: var(--tone-bg);
+  color: var(--tone-ink); font: 700 11.5px/1 var(--app-font); white-space: nowrap;
+}
+
+/* ——— Mes recherches dans Mon compte (SavedSearchCard, isNidalo) : carte de 22 à l'ombre, marges 14, 12 d'écart ;
+   carré bleu de 40 (coins 13, icône 19) ; nom 16 gras, ligne de 13, critères de 12,5 ; pastilles et date de 12 ;
+   « Voir les N résultats » 42 de haut, coins 12, bleu pâle, 14 demi-gras. ——— */
+.saved-searches-screen .saved-searches { gap: 12px; }
+.saved-search.is-nidalo { display: flex; flex-direction: column; gap: 12px; padding: 14px; font-family: var(--app-font); }
+.saved-search.is-nidalo .saved-search-top { align-items: flex-start; }
+.saved-search-tile { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 13px; background: var(--app-brand-soft); color: var(--app-brand); }
+.saved-search-tile .icon { width: 19px; height: 19px; }
+.saved-search.is-nidalo .saved-search-text { display: flex; flex-direction: column; gap: 3px; }
+.saved-search.is-nidalo .saved-search-text h3 { color: var(--app-navy); font: 700 16px/1.25 var(--app-font); }
+.saved-search.is-nidalo .saved-search-text p { margin: 0; color: var(--app-text-secondary); font: 400 13px/1.3 var(--app-font); }
+.saved-search.is-nidalo .saved-search-text .saved-search-criteria { color: var(--app-text-muted); font-size: 12.5px; }
+.saved-search-meta.is-pills { flex-wrap: nowrap; gap: 6px; margin: 0; overflow: hidden; color: var(--app-text-muted); font: 400 12px/1 var(--app-font); }
+.saved-search-meta.is-pills .seen { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.saved-search.is-nidalo .run-button { gap: 6px; height: 42px; margin-top: 0; font: 600 14px/1 var(--app-font); color: var(--app-brand); }
+.saved-search.is-nidalo .run-button .icon { width: 15px; height: 15px; }
+
+/* ——— Ligne d'annonce de Mon compte (NidaloListingRow, AppListingRow dans parts.tsx) ——— */
+.app-listing-row { display: flex; align-items: center; gap: 12px; min-width: 0; color: var(--app-navy); font-family: var(--app-font); }
+.app-listing-photo { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 84px; height: 84px; overflow: hidden; border-radius: 16px; background: #F1F0EC; color: rgba(36, 45, 56, 0.35); }
+.app-listing-photo.is-dimmed { opacity: 0.5; }
+.app-listing-photo img { width: 100%; height: 100%; object-fit: cover; }
+.app-listing-photo .icon { width: 24px; height: 24px; }
+.app-listing-text { display: flex; flex: 1; min-width: 0; flex-direction: column; align-items: flex-start; gap: 3px; }
+.app-listing-price { color: var(--app-navy); font: 700 16px/20px var(--app-font); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.app-listing-price span { margin-left: 2px; font-size: 12.5px; }
+.app-listing-type { max-width: 100%; overflow: hidden; color: var(--app-navy); font: 600 13.5px/18px var(--app-font); text-overflow: ellipsis; white-space: nowrap; }
+.app-listing-location { max-width: 100%; overflow: hidden; color: var(--app-text-secondary); font: 400 12.5px/16px var(--app-font); text-overflow: ellipsis; white-space: nowrap; }
+.app-listing-text .hlc-facts { align-self: stretch; margin: 0; }
+.app-listing-text .hlc-facts:empty { display: none; }
+.app-listing-pills { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 2px; }
+
+/* Liste non lue (ProErrorState) : message rouge de 14 centré, « Réessayer » de 200 au plus, 14 d'écart, 70 plus bas. */
+.load-failure { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 70px 16px 0; font-family: var(--app-font); text-align: center; }
+.load-failure p { margin: 0; color: var(--red); font: 400 14px/1.4 var(--app-font); }
+.load-failure .btn { width: 100%; max-width: 200px; }
+
+/* Listes Pro (ProWorkRow, ProContactRow, ProWorkComponents.swift) : marges 14 × 12, vignette 54 coins 12 ou avatar 48,
+   titre 15 gras, ligne 13 grise, état 12,5 semibold, chevron 16 gris clair ; séparateur #F2F0EC décalé de 82 (ventes,
+   mandats, opportunités) ou de 74 (contacts) ; carte de 16 bordée (spaceCard). */
+.contacts-list, .sales-list { padding: 0; overflow: hidden; }
+.contacts-list li + li .contact-row, .sales-list li + li .sale-row { border-top: 0; }
+.contacts-list li + li::before, .sales-list li + li::before { content: ''; display: block; height: 1px; margin-left: 74px; background: #F2F0EC; }
+.sales-list li + li::before { margin-left: 82px; }
+.contact-row, .sale-row { gap: 12px; padding: 12px 14px; color: var(--app-navy); font-family: var(--app-font); }
+.contact-row:hover, .sale-row:hover { background: #FAF9F6; }
+.contact-row-text, .sale-row-text { gap: 3px; }
+.contact-row-top { gap: 6px; }
+.contact-row-name, .sale-row-title { font: 700 15px/1.3 var(--app-font); }
+.contact-row-date { color: var(--app-text-secondary); font: 400 12px/1.3 var(--app-font); font-variant-numeric: tabular-nums; }
+.contact-row-line, .sale-row-line { overflow: hidden; color: var(--app-text-secondary); font: 400 13px/1.35 var(--app-font); opacity: 1; text-overflow: ellipsis; white-space: nowrap; }
+.contact-row-listing { color: var(--app-brand); font: 500 12.5px/1.3 var(--app-font); }
+.contact-new { height: 20px; padding: 0 8px; background: var(--app-brand); color: #FFFFFF; font: 700 11px/1 var(--app-font); }
+.sale-row-stage { overflow: hidden; color: var(--app-text-secondary); font: 600 12.5px/1.3 var(--app-font); text-overflow: ellipsis; white-space: nowrap; }
+.sale-row-stage.is-active { color: var(--app-brand); }
+.sale-row-stage.is-signed { color: var(--green); }
+.sale-row-stage.is-cancelled { color: var(--red); }
+.sale-thumb.is-small { width: 54px; height: 54px; border-radius: 12px; background: var(--app-brand-soft); color: var(--app-brand); }
+.sale-thumb.is-small .icon { width: 23px; height: 23px; }
+.contact-row .row-chevron, .sale-row .row-chevron { flex: none; width: 16px; height: 16px; color: #A7AEB5; }
+
+/* Recherche des contacts (searchField) : 46 de haut, coins 12, loupe de 18 gris clair, croix « Effacer la recherche ». */
+.contacts-search { gap: 10px; height: 46px; border-color: var(--app-border); border-radius: 12px; color: var(--app-text-muted); }
+.contacts-search input { color: var(--app-navy); font-family: var(--app-font); font-weight: 500; }
+.contacts-search input::-webkit-search-cancel-button { display: none; -webkit-appearance: none; appearance: none; }
+.contacts-search-clear { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 32px; height: 32px; margin-right: -8px; border: 0; border-radius: 50%; background: none; color: var(--app-text-muted); cursor: pointer; }
+.contacts-search-clear .icon { width: 16px; height: 16px; }
+.contacts-intro { color: var(--app-text-secondary); font: 400 14px/1.45 var(--app-font); }
+
+/* Filtres des listes (SelectableChip) : 34 de haut, 11 semibold, marges 13, bleu plein une fois choisi ; la rangée défile
+   sans barre. Les choix des formulaires (ProChoiceField) gardent 38 de haut et 13 semibold. */
+:is(.my-listings-tabs, .contacts-filters, .sales-filters, .stats-periods) .select-chip { height: 34px; padding: 0 13px; border-color: var(--app-border); color: var(--app-navy); font: 600 11px/1 var(--app-font); }
+.select-chip { border-color: var(--app-border); color: var(--app-navy); font: 600 13px/1 var(--app-font); }
+.select-chip.is-selected { background: var(--app-brand); color: #FFFFFF; }
+.stats-periods { overflow-x: auto; scrollbar-width: none; }
+.stats-periods::-webkit-scrollbar { display: none; }
+
+/* « Déposer une annonce » (NidaloPrimaryButtonStyle) : 56 de haut, coins 18, 16 gras. */
+.my-listings-screen .deposit-button { height: 56px; border-radius: 18px; font: 700 16px/1 var(--app-font); }
+
+/* Biens consultés sur téléphone (ViewedListingsView) : « Vider » en texte de 15 gras bleu ; une carte à l'ombre par
+   bien, marges 10, 12 d'écart entre les cartes ; croix de 16 gris clair dans un cadre de 36 (44 au toucher). */
+.viewed-clear { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; border: 0; background: none; color: var(--app-brand); font: 700 15px/1 var(--app-font); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.viewed-clear:active { opacity: 0.6; }
+.viewed-list { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.viewed-row { display: flex; align-items: center; gap: 4px; padding: 10px; }
+.viewed-link { flex: 1; min-width: 0; color: inherit; text-decoration: none; -webkit-tap-highlight-color: transparent; }
+.viewed-link:focus-visible { outline: 2px solid var(--app-brand); outline-offset: 4px; border-radius: 16px; }
+.viewed-remove { position: relative; display: inline-flex; flex: none; align-items: center; justify-content: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: none; color: var(--app-text-muted); cursor: pointer; }
+.viewed-remove::after { content: ''; position: absolute; inset: -4px; }
+.viewed-remove .icon { width: 16px; height: 16px; }
+.viewed-remove:hover { background: #F4F3F0; }
+.viewed-screen .app-unavailable { padding-top: 80px; }

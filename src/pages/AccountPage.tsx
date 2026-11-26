@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { HidesTabBar } from '../components/HidesTabBar';
 import { Page } from '../components/Layout';
 import { SignInCard } from '../components/account/SignInCard';
 import { authMessage, isNetworkError, isNewAccount, linkErrorMessage, openLink, providerMessage, takeProviderReturn } from '../lib/account/auth';
@@ -25,12 +26,15 @@ import { ProjectEditor } from './account/ProjectEditor';
 import { Reports } from './account/Reports';
 import { Sales } from './account/Sales';
 import { SavedSearchesList } from './account/SavedSearchesList';
-import { ScreenHeader, Spinner } from './account/parts';
-import { DeleteAccountScreen, LegalScreen, PrivacyScreen, SecurityScreen, SoonScreen } from './account/Screens';
+import { LegalTextScreen, legalTextKey } from './account/LegalText';
+import { PreferencesScreen } from './account/Preferences';
+import { LoadFailure, ScreenHeader, Spinner } from './account/parts';
+import { AccountTypeScreen, DeleteAccountScreen, HelpScreen, LegalScreen, PrivacyScreen, SecurityScreen, SoonScreen } from './account/Screens';
 import { Statistics } from './account/Statistics';
 import { InvitationIntro, Team } from './account/Team';
 import { ViewedListings } from './account/ViewedListings';
 import { VisitRequestDetail } from './account/VisitRequestDetail';
+import { ListingRequestsScreen } from './listing/ListingRequestsScreen';
 import '../styles/account.css';
 
 // Mon compte (Features/Profile/ProfileView.swift) : la carte de connexion, le choix du profil d'un compte neuf,
@@ -105,8 +109,9 @@ function AccountContent() {
     if (token) rememberInvitation(token);
   }, [invitation]);
 
-  // Rien tant que la session n'est pas connue : la carte ne clignote pas.
-  if (session.status === 'loading' || !link.checked) return <Spinner />;
+  // Rien tant que la session n'est pas connue, comme le fond vide de l'app : la carte ne clignote pas. Pendant l'échange
+  // du code d'un lien (e-mail, Google ou Apple), l'attente reste affichée.
+  if (session.status === 'loading' || !link.checked) return params.has('code') ? <Spinner /> : null;
   // Comme la cloche de l'app, l'écran Notifications s'ouvre aussi sans compte, avec son message.
   if (view === 'notifications' && session.status === 'signedOut' && !link.error) return <NotificationsScreen signedIn={false} />;
   // Retour de Google ou d'Apple sans connexion : le message sur l'accueil, sous les boutons ; lien d'e-mail refusé :
@@ -122,15 +127,15 @@ function AccountContent() {
   }
   if (recovery) return <SignInCard recovery onPasswordSaved={() => refresh((n) => n + 1)} />;
   if (account.status === 'error') {
+    // Compte non lu : la coupure de l'app (« Pas de connexion Internet ») hors ligne, sinon le message, avec « Réessayer ».
     return (
       <div className="space">
         <ScreenHeader title="Mon compte" back="/" />
-        <p className="signin-error" role="alert">{account.message}</p>
-        <button type="button" className="btn btn-light" onClick={() => void loadAccount(true)}>Réessayer</button>
+        <LoadFailure message={account.message} onRetry={() => void loadAccount(true)} />
       </div>
     );
   }
-  if (account.status !== 'ready') return <Spinner />;
+  if (account.status !== 'ready') return null;
   const current = account.account;
   // Invitation ouverte avant de se connecter (ou de créer son compte) : elle s'ouvre maintenant, à son adresse, avant
   // « Quel est votre profil ? » pour un compte tout neuf.
@@ -144,18 +149,27 @@ function AccountContent() {
   switch (view) {
     case 'informations': return <MyInfo account={current} />;
     case 'annonces': return <MyListings />;
-    case 'recherches': return <div className="space"><ScreenHeader title="Mes recherches" /><SavedSearchesList /></div>;
+    case 'recherches': return <div className="space saved-searches-screen"><ScreenHeader title="Mes recherches" /><SavedSearchesList /></div>;
     case 'confidentialite': return <PrivacyScreen account={current} />;
-    case 'legal': return <LegalScreen />;
+    // Informations légales, et chaque texte ouvert dans Mon compte (`&texte=conditions`), comme l'app.
+    case 'legal': {
+      const text = legalTextKey(params.get('texte'));
+      return text ? <LegalTextScreen text={text} /> : <LegalScreen />;
+    }
     case 'securite': return <SecurityScreen />;
     case 'supprimer': return <DeleteAccountScreen />;
+    case 'type': return <AccountTypeScreen account={current} />;
+    case 'aide': return <HelpScreen />;
+    case 'preferences': return <PreferencesScreen />;
+    // « Mes visites » (professionnel) : toutes les demandes de visite envoyées et reçues, en trois onglets.
+    case 'visites': return <><HidesTabBar /><ListingRequestsScreen listingId={null} me={current.profile.id} onClose={() => window.location.assign(PATHS.account)} /></>;
     // Notifications, Mon agenda et Ajouter une visite : les écrans de l'app, sur ordinateur et sur téléphone.
     case 'notifications': return <NotificationsScreen signedIn />;
     case 'agenda': return <AgendaScreen />;
     case 'ajouter-visite': return <AddVisit fromAgenda={params.get('depuis') === 'agenda'} />;
-    // Mon projet et Biens consultés : sur ordinateur ; sur téléphone, « bientôt ».
-    case 'projet': return desktop ? <ProjectEditor /> : <SoonScreen screen="projet" />;
-    case 'consultes': return desktop ? <ViewedListings /> : <SoonScreen screen="consultes" />;
+    // Mon projet et Biens consultés : les écrans de l'app, sur téléphone et sur ordinateur.
+    case 'projet': return <ProjectEditor />;
+    case 'consultes': return <ViewedListings />;
     case 'demande-visite': return <VisitRequestDetail requestId={params.get('id')} />;
     case 'bientot': return <SoonScreen screen={params.get('ecran')} />;
     // Profil agence : la page de l'agence et son formulaire, sur téléphone et sur ordinateur.

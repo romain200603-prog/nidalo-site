@@ -13,13 +13,15 @@ import { useStore } from '../../lib/account/session';
 import { loadMemberAgency } from '../../lib/account/team';
 import { cardContent } from '../../lib/cardContent';
 import { accountPath, AGENCY_FORM_PATH, AGENCY_PATH, TEAM_PATH } from '../../lib/paths';
-import { ScreenHeader, Spinner, Toast } from './parts';
+import { AppSection, LoadFailure, ScreenHeader, Spinner, Toast } from './parts';
 
 // « Profil agence » de Mon compte : la page de l'agence telle que les autres la voient
 // (Features/ListingDetail/PublisherViews.swift, AgencyProfileView) avec « Modifier », et son formulaire
 // (Features/Profile/ProfessionalOnboardingView.swift). Sans fiche agence, le formulaire s'ouvre directement : c'est
 // aussi « Passer en professionnel » sur le site. Un membre de l'équipe d'une agence (responsable ou agent) voit la page de
-// cette agence, sans « Modifier » : seul son gérant la modifie.
+// cette agence, sans « Modifier » : seul son gérant la modifie. La page s'appelle « Agence », comme dans l'app ; le
+// formulaire reprend ses sections (Entreprise, Agence). La raison sociale et le secteur couvert restent dans l'app :
+// l'app les garde sur l'iPhone et ne les envoie pas au serveur (ProfessionalStore.save).
 
 type LoadState = { status: 'loading' } | { status: 'error' } | { status: 'ready'; agency: AgencyRecord | null; member: boolean };
 
@@ -64,9 +66,8 @@ export function AgencyProfile({ account, editing }: { account: Account; editing:
   if (state.status === 'error') {
     return (
       <div className="space">
-        <ScreenHeader title="Profil agence" />
-        <p className="signin-error" role="alert">Impossible de charger votre fiche agence. Réessayez dans un instant.</p>
-        <button type="button" className="btn btn-light" onClick={() => void load()}>Réessayer</button>
+        <ScreenHeader title="Agence" />
+        <LoadFailure message={'Impossible de charger votre fiche agence. Réessayez dans un instant.'} onRetry={() => void load()} />
       </div>
     );
   }
@@ -122,7 +123,7 @@ function AgencyView({ agency, toast, member = false }: { agency: AgencyRecord; t
   return (
     <div className="space agency-page">
       <Toast text={toast} />
-      <ScreenHeader title="Profil agence" action={member ? undefined : <a className="nav-text-button" href={AGENCY_FORM_PATH}>Modifier</a>} />
+      <ScreenHeader title="Agence" action={member ? undefined : <a className="nav-text-button" href={AGENCY_FORM_PATH}>Modifier</a>} />
       <section className="agency-head space-card">
         <AgencyLogo name={agency.agency_name} url={avatarUrl(agency.logo_path)} size={88} />
         <h2 className="agency-name">{agency.agency_name}</h2>
@@ -262,7 +263,7 @@ function AgencyEditor({ account, agency, onSaved }: { account: Account; agency: 
     <div className="space agency-form-screen">
       <ScreenHeader title="Compte professionnel" onBack={() => (dirty ? setLeaving(true) : window.location.assign(backPath))} />
       <form ref={formRef} className="info-form" noValidate onSubmit={(event) => { event.preventDefault(); void save(); }}>
-        <section className="agency-status space-card">
+        <section className="agency-status app-card">
           <span className="agency-status-icon"><Icon name="badgeCheck" /></span>
           <div>
             <h2>{agency ? 'Vérification en attente' : 'Votre activité professionnelle'}</h2>
@@ -274,8 +275,7 @@ function AgencyEditor({ account, agency, onSaved }: { account: Account; agency: 
           </div>
         </section>
 
-        <section className="info-card space-card">
-          <h2 className="field-group-title">Entreprise</h2>
+        <AppSection title="Entreprise" className="agency-section">
           {field('SIREN (9 chiffres)', 'siren', { inputMode: 'numeric' })}
           {field('SIRET (facultatif, 14 chiffres)', 'siret', { inputMode: 'numeric' })}
           {field('N° de carte professionnelle (facultatif)', 'cardNumber')}
@@ -283,10 +283,9 @@ function AgencyEditor({ account, agency, onSaved }: { account: Account; agency: 
           <TextInput label="Garantie financière : organisme garant (facultatif)" value={form.financialGuarantor} onChange={(value) => update('financialGuarantor', value)} maxLength={200} />
           <TextInput label="RCP : assureur (facultatif)" value={form.liabilityInsurer} onChange={(value) => update('liabilityInsurer', value)} maxLength={120} />
           <TextInput label="RCP : n° de contrat (facultatif)" value={form.liabilityPolicy} onChange={(value) => update('liabilityPolicy', value)} maxLength={60} />
-        </section>
+        </AppSection>
 
-        <section className="info-card space-card">
-          <h2 className="field-group-title">Agence</h2>
+        <AppSection title="Agence" className="agency-section">
           <div className="agency-logo-row">
             <span className="agency-logo-preview" aria-hidden="true">
               {currentLogo ? <img src={currentLogo} alt="" width={56} height={56} /> : <Icon name="store" />}
@@ -326,7 +325,7 @@ function AgencyEditor({ account, agency, onSaved }: { account: Account; agency: 
               onChange={(event) => update('about', event.target.value)}
             />
           </label>
-        </section>
+        </AppSection>
 
         <p className="field-hint agency-app-hint">
           La raison sociale, le secteur couvert et les justificatifs (Kbis, carte professionnelle, attestation RCP) se renseignent dans l&apos;app iPhone.

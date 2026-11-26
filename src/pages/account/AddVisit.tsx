@@ -1,9 +1,10 @@
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Icon } from '../../components/Icon';
 import type { IconName } from '../../components/iconPaths';
 import { PageHeader } from '../../components/PageHeader';
 import { InfoLine } from '../../components/FilterControls';
 import { PlaceField } from '../../components/PlaceField';
+import { useSheetDrag } from '../../components/useSheetDrag';
 import {
   agendaStore, createVisit, CUSTOM_REMINDER_CHOICES, defaultVisitStart, DEFAULT_REMINDERS, directionsUrl, downloadVisitCalendar, durationLabel, fullLabel,
   googleMapsUrl, itemFromNewVisit, loadAgenda, reminderLabel, remindersSummary, upcomingVisitForListing, VISIT_DURATIONS, visitAddressFor,
@@ -87,6 +88,10 @@ function ListingPicker({ open, conversations, onChoose, onManualAddress, onClose
   onClose: () => void;
 }) {
   const titleId = useId();
+  // Sur téléphone, la feuille de l'app (domiaSheet) : posée en bas, presque toute la hauteur, tirée vers le bas pour
+  // la fermer depuis son en-tête ; sur ordinateur, la fenêtre au centre.
+  const head = useRef<HTMLDivElement>(null);
+  useSheetDrag(head, onClose, open);
   const mineState = useStore(myListingsStore);
   const favoritesState = useStore(favoritesStore);
   const [favorites, setFavorites] = useState<Choice[]>([]);
@@ -161,7 +166,8 @@ function ListingPicker({ open, conversations, onChoose, onManualAddress, onClose
   return (
     <Modal open={open} onClose={onClose} className="dsc-picker" labelledBy={titleId}>
       <div className="dsc-picker-body">
-        <div className="dsc-picker-head">
+        <div ref={head} className="dsc-picker-head" data-sheet-grab>
+          <span className="alert-grabber" aria-hidden="true" />
           <h2 id={titleId}>Bien concerné</h2>
           <button type="button" className="dsc-button dsc-button-quiet" onClick={onClose}>Fermer</button>
         </div>

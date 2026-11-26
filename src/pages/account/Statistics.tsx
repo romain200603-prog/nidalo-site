@@ -10,7 +10,7 @@ import {
 import { formatDate } from '../../lib/format';
 import { photoUrl, sortedPhotos } from '../../lib/listings';
 import { listingPath } from '../../lib/paths';
-import { EmptyState, ScreenHeader, Spinner } from './parts';
+import { EmptyState, LoadFailure, ScreenHeader, Spinner } from './parts';
 
 // « Statistiques » de l'espace professionnel : sur 7 ou 30 jours, le total puis chaque annonce publiée.
 
@@ -56,8 +56,7 @@ export function Statistics() {
     return (
       <div className="space">
         <ScreenHeader title="Statistiques" />
-        <p className="signin-error" role="alert">{failed}</p>
-        <button type="button" className="btn btn-light" onClick={() => { void loadMyListings(); setAttempt((n) => n + 1); }}>Réessayer</button>
+        <LoadFailure message={failed} onRetry={() => { void loadMyListings(); setAttempt((n) => n + 1); }} />
       </div>
     );
   }

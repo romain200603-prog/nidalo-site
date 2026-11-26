@@ -10,7 +10,7 @@ import { formatArea } from '../../lib/format';
 import { shareListing } from '../../lib/listing/share';
 import { photoUrl, sortedPhotos, type ListingRow } from '../../lib/listings';
 import { accountPath } from '../../lib/paths';
-import { EmptyState, ScreenHeader, Spinner, Toast } from './parts';
+import { EmptyState, LoadFailure, ScreenHeader, Spinner, Toast } from './parts';
 
 // « Outils de diffusion » de l'espace professionnel : chaque annonce en ligne avec son lien, son QR code, un texte
 // prêt pour les réseaux sociaux et une affiche à imprimer pour la vitrine.
@@ -47,10 +47,7 @@ export function Diffusion() {
       <Toast text={toast} />
       <ScreenHeader title="Outils de diffusion" />
       {state.status === 'error' ? (
-        <>
-          <p className="signin-error" role="alert">{state.message}</p>
-          <button type="button" className="btn btn-light" onClick={() => void loadMyListings()}>Réessayer</button>
-        </>
+        <LoadFailure message={state.message} onRetry={() => void loadMyListings()} />
       ) : state.status !== 'ready' ? (
         <Spinner />
       ) : online.length === 0 ? (
@@ -102,7 +99,7 @@ function DiffusionCard({ row, onLink, onOpen }: { row: ListingRow; onLink: () =>
         <button type="button" className="diffusion-tool" onClick={onLink}><Icon name="link" />Lien</button>
         <button type="button" className="diffusion-tool" onClick={() => onOpen('qr')}><Icon name="scan" />QR code</button>
         <button type="button" className="diffusion-tool" onClick={() => onOpen('text')}><Icon name="messageSquareText" />Texte</button>
-        <a className="diffusion-tool" href={posterPath(row.id)} target="_blank" rel="noopener"><Icon name="fileText" />Affiche</a>
+        <a className="diffusion-tool" href={posterPath(row.id)}><Icon name="fileText" />Affiche</a>
       </div>
     </article>
   );

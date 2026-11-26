@@ -12,7 +12,7 @@ import { formatPrice } from '../../lib/format';
 import { parisDay } from '../../lib/listing/views';
 import { photoUrl, sortedPhotos, type ListingRow } from '../../lib/listings';
 import { accountPath, conversationPath, listingPath, NEW_SALE_PATH, salePath, SALES_PATH } from '../../lib/paths';
-import { EmptyState, ScreenHeader, Spinner, Toast } from './parts';
+import { EmptyState, LoadFailure, ScreenHeader, Spinner, Toast } from './parts';
 
 // « Mes ventes » de l'espace professionnel : les offres acceptées à suivre, la liste des ventes (en cours, signées,
 // annulées), la fiche d'une vente (ses étapes jusqu'à l'acte) et son formulaire.
@@ -55,8 +55,7 @@ export function Sales({ saleId, screen }: { saleId: string | null; screen: strin
     return (
       <div className="space">
         <ScreenHeader title="Mes ventes" />
-        <p className="signin-error" role="alert">{state.message}</p>
-        <button type="button" className="btn btn-light" onClick={() => void loadSales()}>Réessayer</button>
+        <LoadFailure message={state.message} onRetry={() => void loadSales()} />
       </div>
     );
   }

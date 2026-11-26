@@ -5064,8 +5064,8 @@ try {
           ['Type de compte', 'Particulier', null]]);
       // Dans l'ordre de l'app ; « Notifications » est la ligne du site, gardée.
       expectSame(E, 'paramètres et assistance', await spaceRows(page, '#parametres-et-assistance'),
-        [['Notifications', null, '/compte/?vue=notifications'], ['Alertes sur cet iPhone', null, null], ['Préférences', null, null],
-          ['Aide et assistance', null, '/aide/'], ['Informations légales', null, '/compte/?vue=legal']]);
+        [['Notifications', null, '/compte/?vue=notifications'], ['Alertes sur cet iPhone', null, null], ['Préférences', null, '/compte/?vue=preferences'],
+          ['Aide et assistance', null, '/compte/?vue=aide'], ['Informations légales', null, '/compte/?vue=legal']]);
       expectSame(E, 'bas de la colonne', [await textOf(page, '.dsp-logout'), await textOf(page, '.dsp-delete'), await page.getAttribute('.dsp-delete', 'href')],
         ['Se déconnecter', 'Supprimer mon compte', '/compte/?vue=supprimer']);
       // Ce que l'app garde sur l'iPhone : « Dans l'app iPhone pour l'instant », sans rien envoyer.
@@ -5073,7 +5073,7 @@ try {
       const spaceMark = space.calls.length;
       await page.click('.dsp-dossier-button');
       await iphoneOnly(page, E, 'Mon dossier immobilier');
-      for (const title of ['Mon bail de location', 'Quittances de loyer', 'États des lieux', 'Offres et compromis', 'Documents à signer', 'Alertes sur cet iPhone', 'Préférences']) {
+      for (const title of ['Mon bail de location', 'Quittances de loyer', 'États des lieux', 'Offres et compromis', 'Documents à signer', 'Alertes sur cet iPhone']) {
         await page.locator('.dsp .app-row', { hasText: title }).click();
         await iphoneOnly(page, E, title);
       }
@@ -5542,7 +5542,7 @@ try {
       await page.click('.dsp-delete');
       await page.waitForURL(`${base}/compte/?vue=supprimer`, { timeout: 8000 }).catch(() => problems.push(`Supprimer mon compte : ouvre ${page.url()}`));
       await page.waitForSelector('.delete-card');
-      expectSame('Supprimer mon compte', 'écran', [await textOf(page, '.delete-card h2'), await textOf(page, '.delete-card .danger-button')],
+      expectSame('Supprimer mon compte', 'écran', [await textOf(page, '.delete-card h2'), await textOf(page, '.delete-card .app-button-danger')],
         ['Supprimer mon compte ?', 'Supprimer définitivement']);
       // Les textes de l'app (n° 31, 125, 32), les fichiers de l'iPhone devenus ce que ce navigateur garde.
       expectSame('Supprimer mon compte', 'textes', [await textOf(page, '.delete-card p:not(.delete-note)'), await textsOf(page, '.delete-card .delete-note')], [
@@ -5553,12 +5553,12 @@ try {
       ]);
       // Connexion et sécurité, Confidentialité et données : les textes de l'app (n° 33, 123, et la carte de l'app).
       await page.goto(`${base}/compte/?vue=securite`, { waitUntil: 'networkidle' });
-      await page.waitForSelector('.soon-card');
-      expectSame('Connexion et sécurité', 'texte', await textOf(page, '.soon-card p'), 'Compte créé avec une adresse e-mail : pour changer de mot de passe, '
+      await page.waitForSelector('.placeholder-state');
+      expectSame('Connexion et sécurité', 'texte', await textOf(page, '.placeholder-state p'), 'Compte créé avec une adresse e-mail : pour changer de mot de passe, '
         + 'déconnectez-vous, puis touchez « Mot de passe oublié » sur l\'écran de connexion. Compte Apple ou Google : votre mot de passe se gère chez Apple ou Google.');
       await page.goto(`${base}/compte/?vue=confidentialite`, { waitUntil: 'networkidle' });
-      await page.waitForSelector('.privacy-card');
-      expectSame('Confidentialité et données', 'carte', [await textOf(page, '.privacy-card h2'), await textOf(page, '.privacy-card p')], ['Aucun suivi publicitaire',
+      await page.waitForSelector('.info-tile-card');
+      expectSame('Confidentialité et données', 'carte', [await textOf(page, '.info-tile-card h2'), await textOf(page, '.info-tile-card p')], ['Aucun suivi publicitaire',
         'Nidalo n\'affiche aucune publicité et n\'utilise aucun outil de mesure d\'audience ni aucun traceur. Nidalo ne vend ni ne loue vos données.']);
 
       // Se déconnecter : la confirmation de l'app ; « Annuler » ne fait rien, « Se déconnecter » ferme la session.
@@ -5568,7 +5568,7 @@ try {
       await page.click('.dsp-logout');
       expectSame(D, 'confirmation', [await dialogTitle(page), await textOf(page, 'dialog.alert-dialog[open] .alert-body p'),
         await page.$$eval('dialog.alert-dialog[open] .alert-actions button', (buttons) => buttons.map((button) => [button.textContent, button.className]))],
-      ['Se déconnecter ?', 'Vous pourrez vous reconnecter à tout moment.', [['Se déconnecter', 'btn btn-danger'], ['Annuler', 'btn btn-light']]]);
+      ['Se déconnecter ?', 'Vous pourrez vous reconnecter à tout moment. Les données de ce navigateur restent enregistrées.', [['Se déconnecter', 'btn btn-danger'], ['Annuler', 'btn btn-light']]]);
       await alertButton(page, 'Annuler');
       await page.waitForSelector('dialog.alert-dialog[open]', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${D} : la confirmation reste ouverte`));
       await page.waitForTimeout(300);
@@ -5620,8 +5620,8 @@ try {
       await context.close();
     }
 
-    // À 1023 px : la page du téléphone ; Mon projet et Biens consultés y sont « bientôt » (Mon agenda et Ajouter une
-    // visite y ont leur écran : vérifiés plus bas, sur téléphone).
+    // À 1023 px : la page du téléphone ; Mon projet et Biens consultés y ont la page de l'app (étape 5), comme Mon agenda
+    // et Ajouter une visite (vérifiés plus bas, sur téléphone).
     {
       const context = await browser.newContext({ viewport: { width: 1023, height: 768 }, locale: 'fr-FR' });
       await mock(context, { signedIn: true });
@@ -5631,11 +5631,14 @@ try {
       expectSame('Mon espace 1023', 'lien Mon agenda', await page.$$eval('a.app-row', (rows) => rows.filter((row) => row.querySelector('.app-row-title')?.textContent === 'Mon agenda')
         .map((row) => row.getAttribute('href'))), ['/compte/?vue=agenda']);
       await page.close();
-      // Mon projet masque la barre d'onglets, comme dans l'app (hidesTabBar) ; Biens consultés la garde.
-      for (const [view, title, tabBar] of [['projet', 'Mon projet immobilier', false], ['consultes', 'Biens consultés', true]]) {
+      // Mon projet masque la barre d'onglets, comme dans l'app (hidesTabBar) ; Biens consultés la garde. L'en-tête de
+      // l'app, sans celui de l'ordinateur ; plus d'écran « bientôt ».
+      for (const [view, title, tabBar, selector] of [['projet', 'Mon projet immobilier', false, '.dsc-project-screen.is-phone .project-intro'],
+        ['consultes', 'Biens consultés', true, '.viewed-screen .app-unavailable']]) {
         page = await open(context, `/compte/?vue=${view}`, `${view} 1023`);
-        await page.waitForSelector('.soon-state');
-        expectSame(`${view} 1023`, 'écran « bientôt »', [await textOf(page, '.soon-state h2'), await page.locator('.dsc').count(), await page.locator('.tabbar').isVisible()], [title, 0, tabBar]);
+        await page.waitForSelector(selector, { timeout: 8000 }).catch(() => problems.push(`${view} 1023 : page de l'app absente`));
+        expectSame(`${view} 1023`, 'page de l\'app', [await textOf(page, '.screen-header h1'), await page.locator('.soon-state').count(), await page.locator('.dsc-head').count(),
+          await page.locator('.tabbar').isVisible()], [title, 0, 0, tabBar]);
         await page.close();
       }
       await context.close();
@@ -5740,12 +5743,14 @@ try {
       await tallShot(page, `ajouter-visite-telephone${suffix}.png`);
       await page.click('.dsc-choose');
       await page.waitForSelector('dialog.dsc-picker[open] .dsc-picker-section', { timeout: 8000 });
-      await page.waitForTimeout(300);
-      expectSame(V, 'feuille Bien concerné [gauche, droite, dans la hauteur, sections]', await page.evaluate(() => {
+      // Feuille de l'app (domiaSheet, étape 5) : posée en bas sur toute la largeur, une fois montée.
+      await page.waitForFunction(() => document.querySelector('dialog.dsc-picker[open]')?.getAnimations().every((animation) => animation.playState === 'finished'),
+        null, { timeout: 8000 }).catch(() => undefined);
+      expectSame(V, 'feuille Bien concerné [gauche, droite, dans la hauteur, collée en bas, sections]', await page.evaluate(() => {
         const box = document.querySelector('dialog.dsc-picker[open]').getBoundingClientRect();
-        return [Math.round(box.left), Math.round(box.right), box.top >= 0 && box.bottom <= window.innerHeight,
+        return [Math.round(box.left), Math.round(box.right), box.top >= 0 && box.bottom <= window.innerHeight + 0.5, Math.abs(box.bottom - window.innerHeight) < 1,
           [...document.querySelectorAll('dialog.dsc-picker[open] .dsc-picker-section h3')].map((title) => title.textContent)];
-      }), [16, screenWidth - 16, true, ['Mes annonces', 'Mes favoris', 'Biens de mes conversations']]);
+      }), [0, screenWidth, true, true, ['Mes annonces', 'Mes favoris', 'Biens de mes conversations']]);
       await phoneFits(page, `${V}, feuille Bien concerné`);
       await page.screenshot({ path: join(out, `ajouter-visite-feuille-telephone${suffix}.png`) });
       await page.click('dialog.dsc-picker[open] .dsc-picker-section[aria-label="Biens de mes conversations"] .dsc-picker-row');
@@ -6056,9 +6061,11 @@ try {
         ['États des lieux', null, soon('etats'), 'teal'], ['Offres et compromis', null, soon('offres'), 'amber'], ['Documents à signer', null, soon('signature'), 'amber'],
         ['Mon dossier immobilier', null, soon('dossier'), 'teal']]],
       ['Compte et sécurité', [['Connexion et sécurité', null, '/compte/?vue=securite', 'gray'], ['Confidentialité et données', null, '/compte/?vue=confidentialite', 'gray'],
-        ['Type de compte', 'Particulier', null, 'gray']]],
-      ['Paramètres et assistance', [['Notifications', null, '/compte/?vue=notifications', 'gray'], ['Préférences', null, soon('preferences'), 'gray'],
-        ['Aide et assistance', null, '/aide/', 'gray'], ['Informations légales', null, '/compte/?vue=legal', 'gray']]],
+        ['Type de compte', 'Particulier', '/compte/?vue=type', 'gray']]],
+      // Comme l'app : la cloche de l'en-tête remplace la ligne « Notifications » ; « Alertes sur cet iPhone » reste dans
+      // l'app ; Préférences, Aide et assistance et les textes légaux s'ouvrent dans Mon compte.
+      ['Paramètres et assistance', [['Préférences', null, '/compte/?vue=preferences', 'gray'],
+        ['Aide et assistance', null, '/compte/?vue=aide', 'gray'], ['Informations légales', null, '/compte/?vue=legal', 'gray']]],
     ]);
     // Mesures de l'app : lignes de 64 px au moins, carré d'icône de 40, carte du profil de 105 (nom, e-mail et pastille,
     // plus hauts que la photo de 64, marges de 16 et bord), « Se déconnecter » de 52, rien ne dépasse de l'écran.
@@ -6286,9 +6293,21 @@ try {
       await page.screenshot({ path: join(out, 'haut-telephone-conversation.png') });
       await chatPhone.close();
     }
-    // Retour d'une page que l'app n'a pas : la page précédente du site (Informations légales), sinon l'accueil.
+    // Informations légales (étape 5) : les textes s'ouvrent dans Mon compte, comme dans l'app, avec le retour vers la liste.
     page = await open(context, '/compte/?vue=legal', `${T} retour`);
-    await page.click('a[href="/conditions/"]');
+    expectSame(`${T} textes légaux`, 'liste', await page.$$eval('.app-menu-group', (groups) => groups.map((group) => [group.querySelector('.app-section-label')?.textContent ?? null,
+      [...group.querySelectorAll('.app-row')].map((row) => [row.querySelector('.app-row-title')?.textContent ?? null, row.getAttribute('href')])])),
+    [['Textes', [['Conditions d’utilisation', '/compte/?vue=legal&texte=conditions'], ['Politique de confidentialité', '/compte/?vue=legal&texte=confidentialite'],
+      ['Mentions légales', '/compte/?vue=legal&texte=mentions']]]]);
+    await page.click('a.app-row[href="/compte/?vue=legal&texte=conditions"]');
+    await page.waitForSelector('.legal-text-screen .legal-section', { timeout: 8000 }).catch(() => problems.push(`${T} : le texte des conditions ne s'ouvre pas`));
+    expectSame(`${T} textes légaux`, 'texte ouvert', [await textOf(page, '.screen-header h1'), await page.getAttribute('.screen-header > .app-round', 'href'),
+      await textOf(page, '.legal-text-head h2'), await textOf(page, '.legal-toc .legal-card-title'), (await textOf(page, '.legal-section h3'))?.startsWith('1. ') ?? false,
+      await textOf(page, '.legal-contact .app-button-primary'), await page.locator('.legal-others a').count()],
+    ['Conditions', '/compte/?vue=legal', 'Conditions d’utilisation', 'Sommaire', true, 'Écrire à l\'éditeur', 2]);
+    // Retour d'une page que l'app n'a pas : la page précédente du site (Informations légales), sinon l'accueil.
+    await page.goto(`${base}/compte/?vue=legal`, { waitUntil: 'networkidle' });
+    await page.evaluate(() => window.location.assign('/conditions/'));
     await page.waitForURL(`${base}/conditions/`, { timeout: 8000 }).catch(() => problems.push(`${T} : « Conditions » ne s'ouvre pas`));
     await page.click('.phone-page-head .app-round');
     await page.waitForURL(`${base}/compte/?vue=legal`, { timeout: 8000 }).catch(() => problems.push(`${T} : le retour des conditions mène à ${page.url()}`));
@@ -6353,8 +6372,9 @@ try {
     page = await open(member, '/compte/', N);
     await page.waitForSelector('.app-space .app-row');
     await checkTabBarBadge(page, live.state, N);
-    await page.click('a.app-row[href="/compte/?vue=notifications"]');
-    await page.waitForURL(`${base}/compte/?vue=notifications`, { timeout: 8000 }).catch(() => problems.push(`${N} : la ligne Notifications ouvre ${page.url()}`));
+    // La cloche de l'en-tête (la ligne « Notifications » de l'app est remplacée par elle).
+    await page.click('.app-space-header .app-round[href="/compte/?vue=notifications"]');
+    await page.waitForURL(`${base}/compte/?vue=notifications`, { timeout: 8000 }).catch(() => problems.push(`${N} : la cloche ouvre ${page.url()}`));
     await page.waitForSelector('.notification-row');
     const rowsOf = () => page.$$eval('.notification-row', (links) => links.map((link) => [link.getAttribute('href'), Boolean(link.querySelector('.notification-dot'))]));
     const rows = await rowsOf();

@@ -16,7 +16,7 @@ import { parisDay } from '../../lib/listing/views';
 import { photoUrl, sortedPhotos, type ListingRow } from '../../lib/listings';
 import { telHref } from '../../lib/messages/format';
 import { accountPath, listingPath, NEW_OPPORTUNITY_PATH, OPPORTUNITIES_PATH, opportunityPath } from '../../lib/paths';
-import { EmptyState, ScreenHeader, Spinner, Toast } from './parts';
+import { EmptyState, LoadFailure, ScreenHeader, Spinner, Toast } from './parts';
 
 // « Mes opportunités » de l'espace professionnel : les pistes à suivre (acheteurs, vendeurs, locataires), la fiche
 // d'une opportunité (son étape, changée d'un geste, la personne, le projet, la relance, la note) et son formulaire.
@@ -60,8 +60,7 @@ export function Opportunities({ opportunityId, screen }: { opportunityId: string
     return (
       <div className="space">
         <ScreenHeader title="Mes opportunités" />
-        <p className="signin-error" role="alert">{state.message}</p>
-        <button type="button" className="btn btn-light" onClick={() => void loadOpportunities()}>Réessayer</button>
+        <LoadFailure message={state.message} onRetry={() => void loadOpportunities()} />
       </div>
     );
   }
