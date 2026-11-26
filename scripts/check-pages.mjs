@@ -1632,26 +1632,26 @@ const SAVED_SELECT = 'id,user_id,name,query,alerts_enabled,created_at,last_notif
 
 /** Cartes de la grille des favoris, telles qu'affichées. */
 function favoriteCardsShown(page) {
-  return page.$$eval('.dfav-grid .dfav-card', (cards) => cards.map((card) => {
+  return page.$$eval('.favorites-list .favorite-card', (cards) => cards.map((card) => {
     const text = (selector) => card.querySelector(selector)?.textContent.replace(/\s+/g, ' ').trim() ?? null;
-    const pill = card.querySelector('.dfav-yield');
+    const pill = card.querySelector('.favorite-yield');
     return {
-      title: text('.dfav-title'), href: card.querySelector('.dfav-title a')?.getAttribute('href') ?? null, details: text('.dfav-details'), price: text('.dfav-price'),
-      perMeter: text('.dfav-per-meter'), dpe: text('.dfav-dpe-letter'), yield: text('.dfav-yield'), tone: pill ? (pill.classList.contains('is-good') ? 'vert' : 'orange') : null,
-      counter: text('.dfav-counter'), noPhoto: text('.dfav-no-photo'),
-      buttons: [...card.querySelectorAll('.dfav-actions button')].map((button) => [button.getAttribute('aria-label'), button.getAttribute('aria-pressed')]),
+      title: text('.favorite-title'), href: card.querySelector('.favorite-title a')?.getAttribute('href') ?? null, details: text('.favorite-details'), price: text('.favorite-price'),
+      perMeter: text('.favorite-per-meter'), dpe: text('.favorite-dpe-letter'), yield: text('.favorite-yield'), tone: pill ? (pill.classList.contains('tone-positive') ? 'vert' : 'orange') : null,
+      counter: text('.favorite-counter'), noPhoto: text('.favorite-no-photo'),
+      buttons: [...card.querySelectorAll('.favorite-heart, .favorite-compare')].map((button) => [button.getAttribute('aria-label'), button.getAttribute('aria-pressed')]),
     };
   }));
 }
-const favoriteTitles = (page) => page.$$eval('.dfav-grid .dfav-card .dfav-title', (els) => els.map((el) => el.textContent));
+const favoriteTitles = (page) => page.$$eval('.favorites-list .favorite-card .favorite-title', (els) => els.map((el) => el.textContent));
 
 /** Attend les cartes affichées (titres, dans l'ordre) et le nombre « N biens sauvegardés ». */
 async function waitForFavorites(page, titles, total, name) {
   try {
-    await page.waitForFunction(([wanted, count]) => JSON.stringify([...document.querySelectorAll('.dfav-grid .dfav-card .dfav-title')].map((el) => el.textContent)) === JSON.stringify(wanted)
-      && (document.querySelector('.dfav-total')?.textContent ?? null) === count, [titles, total], { timeout: 8000 });
+    await page.waitForFunction(([wanted, count]) => JSON.stringify([...document.querySelectorAll('.favorites-list .favorite-card .favorite-title')].map((el) => el.textContent)) === JSON.stringify(wanted)
+      && (document.querySelector('.favorites-total')?.textContent ?? null) === count, [titles, total], { timeout: 8000 });
   } catch {
-    const shown = await page.evaluate(() => document.querySelector('.dfav-total')?.textContent ?? null);
+    const shown = await page.evaluate(() => document.querySelector('.favorites-total')?.textContent ?? null);
     problems.push(`${name} : cartes ${JSON.stringify(await favoriteTitles(page))} et « ${shown} » au lieu de ${JSON.stringify(titles)} et « ${total} »`);
   }
 }
@@ -1660,7 +1660,7 @@ async function waitForFavorites(page, titles, total, name) {
 async function favoritePhotosLoaded(page, count, name) {
   try {
     await page.waitForFunction((wanted) => {
-      const images = [...document.querySelectorAll('.dfav-photo')].map((photo) => photo.querySelector('img')).filter(Boolean);
+      const images = [...document.querySelectorAll('.favorite-photo')].map((photo) => photo.querySelector('img')).filter(Boolean);
       return images.length === wanted && images.every((image) => image.complete && image.naturalWidth > 0);
     }, count, { timeout: 10000 });
   } catch {
@@ -1828,7 +1828,7 @@ async function waitForSearchCountsIn(page, container, name) {
 async function waitForSearchCounts(page, name) {
   try {
     await page.waitForFunction(() => {
-      const buttons = [...document.querySelectorAll('.dfav-searches .run-button')];
+      const buttons = [...document.querySelectorAll('.favorites-searches .run-button')];
       return buttons.length > 0 && buttons.every((button) => !button.textContent.includes('Relancer la recherche'));
     }, null, { timeout: 8000 });
   } catch {
@@ -2218,13 +2218,17 @@ try {
   // Ordinateur
   const desktop = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, locale: 'fr-FR' });
   await mock(desktop);
-  // Accueil : sections, menu d'un critère, montant saisi, puis la recherche.
+  // Accueil (étape 7b : celui du téléphone, élargi) : sections, Résidentiel ouvert dans la carte des catégories, menu
+  // d'un critère, montant saisi, puis la recherche.
   let page = await open(desktop, '/', 'accueil-ordinateur');
-  await page.waitForSelector('.home-search-card');
-  await page.waitForSelector('.home-section');
-  const yieldChip = await page.locator('.opportunity-card .home-yield').first().textContent().catch(() => null);
+  await page.waitForSelector('.home-category');
+  await page.waitForSelector('.home-app-section');
+  const yieldChip = await page.locator('.opportunity-card .hlc-yield').first().textContent().catch(() => null);
   if (yieldChip?.replace(/\s/g, ' ') !== '5,5 % brut') problems.push(`accueil : rendement de l'opportunité « ${yieldChip} » au lieu de « 5,5 % brut »`);
   await page.screenshot({ path: join(out, 'accueil-ordinateur.png'), fullPage: true });
+  await page.click('.home-category .mode-tab >> nth=0');
+  await page.waitForSelector('.home-category-filters');
+  await page.waitForTimeout(600);
   await page.click('.criterion-tile >> nth=0');
   await page.waitForSelector('dialog.selection-dialog[open]');
   await page.screenshot({ path: join(out, 'accueil-menu-ordinateur.png') });
@@ -2253,19 +2257,22 @@ try {
   await page.waitForSelector('.listing-card, .state');
   await page.close();
 
+  // Votre recherche (étape 7b : l'écran du téléphone dans le grand conteneur) ; « Carte » ouvre la carte plein écran,
+  // un clic sur une vignette choisit le bien (sa fiche dans le panneau du bas), « Retour » rend la liste.
   page = await open(desktop, '/recherche/?mode=buy', 'recherche-ordinateur');
   await page.waitForSelector('.listing-card');
   await page.screenshot({ path: join(out, 'recherche-ordinateur-liste.png') });
-  await page.click('.view-toggle button[aria-label="Afficher sur la carte"]');
+  await page.click('.map-open');
   await page.waitForSelector('.map-marker', { timeout: 15000 });
   await page.waitForTimeout(400);
   await page.screenshot({ path: join(out, 'recherche-ordinateur.png') });
-  await page.click('.map-marker');
-  await page.waitForSelector('.map-preview');
+  await page.click('.map-marker .map-marker-button');
+  await page.waitForSelector('.map-marker.is-selected');
+  await page.waitForSelector('.map-panel .map-card.is-selected', { timeout: 4000 }).catch(() => problems.push('carte ordinateur : la fiche du bien choisi n\'est pas dans le panneau'));
   await page.screenshot({ path: join(out, 'recherche-ordinateur-apercu.png') });
-  await page.click('.map-close');
+  await page.click('.map-back');
   await page.waitForSelector('.map-column:not(.is-open)', { state: 'attached' });
-  await page.fill('.place-field input', 'lyo');
+  await page.fill('.search-app-top .place-field input', 'lyo');
   await page.waitForSelector('.place-list li');
   await page.screenshot({ path: join(out, 'recherche-suggestions.png'), clip: { x: 0, y: 0, width: 720, height: 520 } });
   await page.keyboard.press('ArrowDown');
@@ -2275,11 +2282,15 @@ try {
   await page.click('.filters-button');
   await page.waitForSelector('dialog.filters-dialog[open]');
   await checkApplyButton(page, 'filtres ordinateur');
-  // Une page complète sur ordinateur (demande de Romain du 7 novembre), plus une fenêtre au milieu de l'écran.
-  expectSame('filtres ordinateur', 'page complète (x, y, largeur, hauteur)', await page.$eval('dialog.filters-dialog', (dialog) => {
+  // Plein écran comme la feuille de l'app (étape 7b), le contenu sur la colonne de 720 au milieu (16 dedans) ; mesuré
+  // une fois la feuille montée du bas.
+  await page.waitForFunction(() => document.querySelector('dialog.filters-dialog')?.getAnimations().every((animation) => animation.playState !== 'running'), null, { timeout: 4000 }).catch(() => undefined);
+  expectSame('filtres ordinateur', 'plein écran (x, y, largeur, hauteur)', await page.$eval('dialog.filters-dialog', (dialog) => {
     const box = dialog.getBoundingClientRect();
     return [box.x, box.y, box.width, box.height];
   }), [0, 0, 1440, 900]);
+  expectSame('filtres ordinateur', 'en-tête et « Afficher » sur la colonne (x, largeur)', await page.$$eval('dialog[open] :is(.filters-header, .filters-apply .btn)',
+    (items) => items.map((item) => [Math.round(item.getBoundingClientRect().x), Math.round(item.getBoundingClientRect().width)])), [[376, 688], [376, 688]]);
   // Ordre de l'app : en-tête, pavés des catégories, localisation, pastilles, critères.
   expectSame('filtres ordinateur', 'ordre', await page.$eval('dialog[open] .filters-scroll', (scroll) => [...scroll.querySelectorAll('.filters-header, .filters-modes, .filter-card')]
     .slice(0, 3).map((el) => el.querySelector('h3')?.textContent ?? el.classList[el.classList.length - 1])), ['filters-header', 'filters-modes', 'Localisation']);
@@ -2378,10 +2389,13 @@ try {
 
   // Étape 2, avec le compte de test (serveur simulé).
   const signed = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, locale: 'fr-FR' });
-  await mock(signed, { signedIn: true });
+  const signedServer = await mock(signed, { signedIn: true });
+  // L'accueil du téléphone sur ordinateur (étape 7b) : plus de « Bonjour Claire », la cloche dit les non lues du compte.
   page = await open(signed, '/', 'accueil-connecte');
-  await page.waitForFunction(() => document.querySelector('h1')?.textContent?.includes('Bonjour Claire'), null, { timeout: 8000 })
-    .catch(async () => problems.push(`accueil connecté : titre « ${await page.textContent('h1')} »`));
+  const homeUnread = expectedBadges(signedServer.state).notifications;
+  const homeBell = homeUnread > 0 ? `Notifications, ${homeUnread} non lues` : 'Notifications';
+  await page.waitForFunction((label) => document.querySelector('.home-app-bell')?.getAttribute('aria-label') === label, homeBell, { timeout: 8000 })
+    .catch(async () => problems.push(`accueil connecté : cloche « ${await page.getAttribute('.home-app-bell', 'aria-label')} » au lieu de « ${homeBell} »`));
   await page.close();
   // Sur ordinateur, « Mon espace » de la maquette 5 (.dsp, voir « Mon espace sur ordinateur » plus bas).
   page = await open(signed, '/compte/', 'compte-espace');
@@ -2454,21 +2468,21 @@ try {
   }
 
   // Favoris : deux annonces chargées, une retirée, la recherche dans les favoris, l'onglet Recherches.
-  // À 1440 px, la page de l'ordinateur (maquette 4, classes .dfav-*) ; voir aussi « Favoris sur ordinateur » plus bas.
+  // À 1440 px, la page du téléphone dans le grand conteneur (étape 7b) ; voir aussi « Favoris sur ordinateur » plus bas.
   page = await open(signed, '/favoris/', 'favoris-connecte');
-  await page.waitForSelector('.dfav-card');
-  await page.waitForSelector('.dfav-missing');
-  const favoriteCount = await page.locator('.dfav-card').count();
+  await page.waitForSelector('.favorite-card');
+  await page.waitForSelector('.missing-card');
+  const favoriteCount = await page.locator('.favorite-card').count();
   if (favoriteCount !== 2) problems.push(`Favoris : ${favoriteCount} cartes au lieu de 2`);
-  const total = (await page.textContent('.dfav-total'))?.trim();
+  const total = (await page.textContent('.favorites-total'))?.trim();
   if (total !== '2 biens sauvegardés') problems.push(`Favoris : compteur « ${total} »`);
   await page.screenshot({ path: join(out, 'favoris-connecte-ordinateur.png'), fullPage: true });
-  await page.fill('.dfav-field input', 'villeur');
-  await page.waitForFunction(() => document.querySelector('.dfav-total')?.textContent?.trim() === '1 sur 2 biens', null, { timeout: 4000 })
-    .catch(async () => problems.push(`Favoris : recherche « villeur », compteur « ${await page.textContent('.dfav-total')} »`));
+  await page.fill('.favorites-field input', 'villeur');
+  await page.waitForFunction(() => document.querySelector('.favorites-total')?.textContent?.trim() === '1 sur 2 biens', null, { timeout: 4000 })
+    .catch(async () => problems.push(`Favoris : recherche « villeur », compteur « ${await page.textContent('.favorites-total')} »`));
   await page.screenshot({ path: join(out, 'favoris-recherche-ordinateur.png') });
-  await page.click('.dfav .fav-tab >> nth=1');
-  await page.waitForSelector('.dfav-searches .saved-search');
+  await page.click('.favorites-wrap .fav-tab >> nth=1');
+  await page.waitForSelector('.favorites-searches .saved-search');
   if (!page.url().includes('onglet=recherches')) problems.push(`Favoris : l'onglet Recherches n'est pas dans l'adresse (${page.url()})`);
   await page.screenshot({ path: join(out, 'favoris-recherches-ordinateur.png'), fullPage: true });
   await page.close();
@@ -2528,16 +2542,16 @@ try {
     await mock(guest);
     page = await open(guest, '/', `barre-${width}-sans-compte`);
     await page.waitForSelector('.tabbar');
-    await page.waitForSelector('.home-section');
-    await checkChrome(page, `accueil ${width} sans compte`, { signedIn: false, current: '/' });
+    await page.waitForSelector('.home-app-section');
+    await checkChrome(page, `accueil ${width} sans compte`, { signedIn: false, current: '/', footer: 1180 });
     await page.locator('.tabbar').screenshot({ path: join(out, `barre-onglets-${width}-sans-compte.png`) });
     await page.locator('footer.footer').screenshot({ path: join(out, `pied-de-page-${width}.png`) });
     await page.screenshot({ path: join(out, `accueil-${width}-sans-compte.png`), fullPage: true });
     await page.close();
-    // Recherche (demande de Romain du 7 novembre) : les catégories du milieu changent la recherche ; la liste sur toute
-    // la largeur en 3 colonnes, la carte fermée au départ ; la bascule « liste / carte » de l'app ouvre la carte sur toute
-    // la fenêtre au-dessus de la barre d'onglets, « Liste » ou Échap la referment ; la barre d'onglets reste en bas quand
-    // la page défile ; le pied de page à la largeur du grand conteneur (page `wide`).
+    // Recherche (étape 7b : Votre recherche du téléphone dans le grand conteneur) : les catégories changent la recherche ;
+    // les cartes sur 3 colonnes à 1440 (2 à 1024), la carte fermée au départ ; la capsule « Carte » ouvre la carte sur
+    // toute la fenêtre comme sur le téléphone (barre d'onglets comprise), « Retour » ou Échap la referment ; la barre
+    // d'onglets reste en bas quand la page défile ; le pied de page à la largeur du grand conteneur (page `wide`).
     page = await open(guest, '/recherche/?mode=invest', `recherche-${width}`);
     await page.waitForSelector('.listing-card');
     await checkChrome(page, `recherche ${width}`, { signedIn: false, current: '/', footer: 1180 });
@@ -2546,31 +2560,38 @@ try {
     await page.waitForSelector('.listing-card');
     const start = await page.evaluate(() => ({
       map: getComputedStyle(document.querySelector('.map-column')).display,
-      pill: getComputedStyle(document.querySelector('.map-open')).display,
-      toggle: getComputedStyle(document.querySelector('.view-toggle')).display,
+      pill: getComputedStyle(document.querySelector('.map-open')).display !== 'none',
       columns: getComputedStyle(document.querySelector('.results-list')).gridTemplateColumns.split(' ').length,
       column: Math.round(document.querySelector('.search-column').getBoundingClientRect().width),
+      lefts: ['.search-app-top', '.search-head .mode-tabs-search', '.results-head', '.results-list'].map((selector) => Math.round(document.querySelector(selector).getBoundingClientRect().left)),
     }));
-    expectSame(`recherche ${width}`, 'au départ', start, { map: 'none', pill: 'none', toggle: 'flex', columns: 3, column: Math.min(width, 1200 + 2 * margin) });
+    // Les bords du téléphone (rangée du haut à 0 avec ses 16 dedans, pavés à 27 comme l'app, titre et cartes à 16),
+    // décalés au bord du grand conteneur.
+    const shift = (width - Math.min(width, 1180)) / 2;
+    expectSame(`recherche ${width}`, 'au départ', start, { map: 'none', pill: true, columns: width === 1440 ? 3 : 2, column: Math.min(width, 1180), lefts: [0, 27, 16, 16].map((left) => left + shift) });
     await page.mouse.wheel(0, 600);
     await page.waitForTimeout(300);
     const scrolled = await page.evaluate(() => [window.scrollY, innerHeight - document.querySelector('.tabbar').getBoundingClientRect().bottom]);
     if (scrolled[0] <= 0 || scrolled[1] !== 0) problems.push(`recherche ${width} : après défilement de ${scrolled[0]} px, barre d'onglets à ${scrolled[1]} px du bas`);
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: join(out, `recherche-${width}.png`) });
-    await page.click('.view-toggle button[aria-label="Afficher sur la carte"]');
+    await page.click('.map-open');
     await page.waitForSelector('.map-column.is-open .map-marker', { timeout: 15000 });
     await page.waitForTimeout(400);
     const opened = await page.evaluate(() => {
       const box = document.querySelector('.map-column').getBoundingClientRect();
-      return [box.top, box.bottom, box.left, box.right === document.documentElement.clientWidth, document.querySelector('.tabbar').getBoundingClientRect().top, location.search.includes('vue=carte')];
+      const top = document.querySelector('.map-app-top').getBoundingClientRect();
+      const panel = document.querySelector('.map-panel').getBoundingClientRect();
+      return [box.top, box.bottom, box.left, box.right === document.documentElement.clientWidth, location.search.includes('vue=carte'),
+        [Math.round(top.left), Math.round(top.width)], [Math.round(panel.left + panel.width / 2), Math.round(panel.width)]];
     });
-    expectSame(`recherche ${width}`, 'carte ouverte [haut, bas, gauche, largeur, barre d\'onglets, adresse]', opened, [0, height - 46, 0, true, height - 46, true]);
+    expectSame(`recherche ${width}`, 'carte ouverte [haut, bas, gauche, largeur, adresse, ligne du haut, panneau]', opened,
+      [0, height, 0, true, true, [width / 2 - 346, 692], [width / 2, 720]]);
     await page.screenshot({ path: join(out, `recherche-carte-${width}.png`) });
-    await page.click('.map-close');
+    await page.click('.map-back');
     await page.waitForFunction(() => !document.querySelector('.map-column.is-open') && !location.search.includes('vue=carte'), null, { timeout: 4000 })
-      .catch(() => problems.push(`recherche ${width} : « Liste » ne referme pas la carte`));
-    await page.click('.view-toggle button[aria-label="Afficher sur la carte"]');
+      .catch(() => problems.push(`recherche ${width} : « Retour » ne referme pas la carte`));
+    await page.click('.map-open');
     await page.waitForSelector('.map-column.is-open');
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => !document.querySelector('.map-column.is-open'), null, { timeout: 4000 })
@@ -2618,21 +2639,22 @@ try {
 
     // Avec le compte de test : la pastille Messages de la barre d'onglets (n° 44), comme sur téléphone : lue à
     // l'ouverture de la page et au retour sur l'onglet, sans temps réel hors de la page Messages et de l'écran
-    // Notifications ; plus de cloche ni d'initiales dans le cadre (la cloche est celle de l'accueil et de Mon compte).
+    // Notifications ; plus de cloche ni d'initiales dans le cadre (la cloche est celle de l'accueil et de Mon compte :
+    // depuis l'étape 7b, l'accueil du téléphone sur ordinateur aussi, qui lit les notifications non lues).
     const member = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR' });
     const live = await mock(member, { signedIn: true });
     let asked = badgeRequests.length;
     page = await open(member, '/', `accueil-${width}-connecte`);
-    await page.waitForFunction(() => document.querySelector('h1')?.textContent?.includes('Bonjour Claire'), null, { timeout: 8000 }).catch(() => undefined);
-    await page.waitForSelector('.home-section');
+    await page.waitForSelector('.home-app-section');
+    await page.waitForFunction(() => /non lues/.test(document.querySelector('.home-app-bell')?.getAttribute('aria-label') ?? ''), null, { timeout: 8000 }).catch(() => undefined);
     await checkTabBarBadge(page, live.state, `accueil ${width} connecté`);
-    await checkChrome(page, `accueil ${width} connecté`, { signedIn: true, current: '/' });
+    await checkChrome(page, `accueil ${width} connecté`, { signedIn: true, current: '/', footer: 1180 });
     const conversationsCall = badgeRequests.slice(asked).find((request) => request.table === 'rpc/my_conversations');
     if (!conversationsCall || conversationsCall.method !== 'POST' || JSON.stringify(conversationsCall.body) !== '{}') {
       problems.push(`pastille Messages : my_conversations appelée ${JSON.stringify(conversationsCall)} au lieu d'un POST sans paramètre`);
     }
-    expectSame(`accueil ${width} connecté`, 'lectures des pastilles et temps réel', [[...new Set(badgeRequests.slice(asked).map((request) => request.table))], live.followed()],
-      [['rpc/my_conversations'], []]);
+    expectSame(`accueil ${width} connecté`, 'lectures des pastilles et temps réel', [[...new Set(badgeRequests.slice(asked).map((request) => request.table))].sort(), live.followed()],
+      [['notifications', 'rpc/my_conversations'], []]);
     await page.locator('.tabbar').screenshot({ path: join(out, `barre-onglets-${width}-connecte.png`) });
     await page.screenshot({ path: join(out, `accueil-${width}-connecte.png`), fullPage: true });
     // Retour sur l'onglet : les non-lus sont relus, comme l'app au retour au premier plan (message reçu, conversation lue
@@ -2720,159 +2742,130 @@ try {
     await member.close();
   }
 
-  // Accueil sur ordinateur (maquette 1), à 1440 × 900 et 1024 × 768, avec les annonces inventées : bonjour, ordre
-  // des sections de l'app (vide = absente), une seule ligne par section (4 cartes, 3 sous 1280 px) alors que les
-  // annonces lues en remplissent davantage, projet du compte, fiche ouverte dans l'onglet puis « Vus récemment »,
-  // « Plus de critères ». Captures pour Romain : 1-accueil-*.png.
+  // Accueil sur ordinateur (étape 7b) : l'accueil du téléphone élargi, à 1440 × 900 et 1024 × 768, avec les annonces
+  // inventées. Le bandeau bleu de l'app (#1F5BC6) sur toute la largeur de la fenêtre ; barre du haut, carte des
+  // catégories, titres et première carte de chaque rangée au bord gauche du grand conteneur (1180, 16 dedans) ; les
+  // rangées restent des rangées d'une ligne, qui montrent plus de cartes et défilent à la molette et à la souris sans
+  // ouvrir l'annonce ; les catégories ouvrent leurs champs dans la carte ; « Plus de critères » ouvre les filtres plein
+  // écran, Échap les referme ; une fiche ouverte puis le retour la met en tête de « Vus récemment ». Sections, cartes
+  // et barre du haut : vérifiées avec celles du téléphone, plus bas. Captures : 1-accueil-*.png.
   const HOME_PROJECT = {
     real_estate_projects: [{ ...ACCOUNT.real_estate_projects[0], criteria: { residential: { maxBudget: 300000, propertyTypes: ['apartment'], location: { place: 'Lyon' } } } }],
   };
-  const homeSections = (p) => p.locator('.dhome-section h2').allTextContents();
-  // Annonces d'une section, par leur identifiant (les grandes cartes de l'app montrent le type et la surface, pas le titre).
-  const sectionCards = (p, id) => p.locator(`section:has(> .dhome-inner #${id}) article a.stretched`)
-    .evaluateAll((links) => links.map((link) => new URL(link.href).searchParams.get('id')));
-  // Cartes d'une section : lues (dans la page), affichées, et nombre de lignes qu'elles occupent.
-  const sectionRow = (p, id) => p.evaluate((sectionId) => {
-    const section = document.getElementById(sectionId)?.closest('section');
-    const cards = [...(section?.querySelectorAll('article') ?? [])];
-    const shown = cards.filter((card) => card.getClientRects().length > 0);
-    return { total: cards.length, shown: shown.length, rows: new Set(shown.map((card) => Math.round(card.getBoundingClientRect().top))).size };
+  const railState = (p, id) => p.evaluate((sectionId) => {
+    const rail = document.getElementById(sectionId)?.closest('section')?.querySelector('.home-app-carousel');
+    return rail ? { left: Math.round(rail.scrollLeft), page: Math.round(window.scrollY) } : null;
   }, id);
-  // Même carte dans toutes les sections (HomeListingCard, étape 2 du site comme l'app) : 4 par ligne, 3 sous 1280 px ;
-  // une section qui lit moins de biens remplit sa ligne avec ce qu'elle a ; au moins une section en lit plus qu'elle
-  // n'en affiche.
-  const checkOneRow = async (p, width, label, ids) => {
-    let hidden = false;
-    for (const id of ids) {
-      const { total, shown, rows } = await sectionRow(p, id);
-      const wanted = Math.min(width >= 1280 ? 4 : 3, total);
-      if (total > shown) hidden = true;
-      if (rows !== 1 || shown !== wanted) {
-        problems.push(`accueil ${width} ${label} : ${id} affiche ${shown} carte(s) sur ${rows} ligne(s), ${total} dans la page, au lieu d'une ligne de ${wanted}`);
-      }
-    }
-    if (!hidden) problems.push(`accueil ${width} ${label} : aucune section ne lit plus de biens qu'elle n'en affiche`);
-  };
   for (const [width, height] of [[1440, 900], [1024, 768]]) {
+    const A = `accueil ${width}`;
+    const edge = (width - Math.min(width, 1180)) / 2 + 16;
     const guest = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR' });
     await mock(guest, { listingRows: HOME_LISTINGS });
-    page = await open(guest, '/', `accueil-${width}-maquette-sans-compte`);
-    await page.waitForSelector('.dhome .opportunity-card');
+    page = await open(guest, '/', `accueil-${width}-elargi`);
+    await page.waitForSelector('.opportunity-card');
     await page.waitForSelector('#similaires');
-    const welcome = await page.textContent('h1');
-    if (welcome !== 'Bienvenue sur Nidalo') problems.push(`accueil ${width} sans compte : « ${welcome} » au lieu de « Bienvenue sur Nidalo »`);
-    const guestSections = await homeSections(page);
-    const guestWanted = ['Opportunités du moment', 'Selon votre recherche', 'Nouvelles annonces', 'Baisses de prix'];
-    if (JSON.stringify(guestSections) !== JSON.stringify(guestWanted)) problems.push(`accueil ${width} sans compte : sections ${JSON.stringify(guestSections)} au lieu de ${JSON.stringify(guestWanted)}`);
-    await checkOneRow(page, width, 'sans compte', ['opportunites', 'similaires', 'nouveautes', 'baisses']);
+    await page.waitForTimeout(400);
+    const layout = await page.evaluate(() => {
+      const box = (element) => element.getBoundingClientRect();
+      const home = document.querySelector('.home-app');
+      const rails = [...document.querySelectorAll('.home-app-section .home-app-carousel')].filter((rail) => rail.querySelector('article'));
+      return {
+        band: [Math.round(box(home).left), Math.round(box(home).width) === document.documentElement.clientWidth, getComputedStyle(home).backgroundImage.includes('rgb(31, 91, 198)')],
+        lefts: [...new Set([...[document.querySelector('.home-app-top'), document.querySelector('.home-category'), ...rails.map((rail) => rail.querySelector('article'))]
+          .map((element) => Math.round(box(element).left)),
+          ...[...document.querySelectorAll('.home-app-section .home-section-header')].map((header) => Math.round(box(header).left + parseFloat(getComputedStyle(header).paddingLeft)))])],
+        rows: [...new Set(rails.map((rail) => new Set([...rail.querySelectorAll('article')].map((card) => Math.round(box(card).top))).size))],
+        shown: Math.min(...rails.filter((rail) => rail.querySelectorAll('article').length >= 5).map((rail) => {
+          const right = box(rail).right - parseFloat(getComputedStyle(rail).paddingRight);
+          return [...rail.querySelectorAll('article')].filter((card) => box(card).right <= right + 0.5).length;
+        })),
+        overflowX: document.documentElement.scrollWidth - innerWidth,
+      };
+    });
+    expectSame(A, 'élargi [bandeau, bords gauches, lignes par rangée, cartes entières, débord]', layout,
+      { band: [0, true, true], lefts: [edge], rows: [1], shown: width === 1440 ? 4 : 3, overflowX: 0 });
     const noPhoto = await page.locator('section:has(#opportunites) .home-no-photo').count();
-    if (noPhoto < 1 || await page.getByText('Photos à venir').count()) problems.push(`accueil ${width} : annonce sans photo mal affichée`);
+    if (noPhoto < 1 || await page.getByText('Photos à venir').count()) problems.push(`${A} : annonce sans photo mal affichée`);
     await page.mouse.move(0, 0);
     await page.waitForTimeout(300);
-    if (width === 1440) await page.screenshot({ path: join(out, '1-accueil-1440-sans-compte.png'), fullPage: true });
-    await page.screenshot({ path: join(out, `accueil-maquette-${width}-sans-compte.png`), fullPage: true });
-    // « Plus de critères » ouvre les filtres du site, sur la catégorie choisie, en page complète (demande de Romain du
-    // 7 novembre) ; Retour (navigateur) ou Échap la referment sans quitter l'accueil.
-    for (const how of ['Retour', 'Échap']) {
-      await page.click('.dhome-more');
-      await page.waitForSelector('dialog.filters-dialog[open]');
-      expectSame(`accueil ${width}`, `« Plus de critères » en page complète (${how})`, await page.$eval('dialog.filters-dialog', (dialog) => {
-        const box = dialog.getBoundingClientRect();
-        return [box.x, box.y, box.width, box.height, box.width === innerWidth && box.height === innerHeight];
-      }), [0, 0, width, height, true]);
-      if (how === 'Retour') await page.goBack();
-      else await page.keyboard.press('Escape');
-      await page.waitForSelector('dialog.filters-dialog[open]', { state: 'detached', timeout: 4000 })
-        .catch(() => problems.push(`accueil ${width} : ${how} ne referme pas « Plus de critères »`));
-      expectSame(`accueil ${width}`, `après ${how}`, [new URL(page.url()).pathname, await page.evaluate(() => Boolean(window.history.state?.nidaloCriteres))], ['/', false]);
-    }
-    // Les 4 catégories (demande de Romain du 7 novembre) : le lieu seul sur sa ligne, de toute la largeur, puis les
-    // critères en blocs en dessous, deux par ligne comme dans l'app, sans texte coupé.
+    await page.screenshot({ path: join(out, `1-accueil-${width}-sans-compte.png`), fullPage: true });
+    // Molette sur une rangée : elle défile de côté, pas la page ; la souris la fait glisser sans ouvrir l'annonce (la
+    // rangée qui déborde le plus, ramenée au début avant chaque essai).
+    const railId = await page.evaluate(() => ['opportunites', 'similaires', 'nouveautes', 'baisses'].map((id) => {
+      const strip = document.getElementById(id)?.closest('section')?.querySelector('.home-app-carousel');
+      return [id, strip ? strip.scrollWidth - strip.clientWidth : 0];
+    }).sort((a, b) => b[1] - a[1])[0][0]);
+    const rail = page.locator(`section:has(#${railId}) .home-app-carousel`);
+    const railStart = async () => {
+      await rail.evaluate((strip) => { strip.scrollLeft = 0; });
+      await rail.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(700);
+      return [await railState(page, railId), await rail.boundingBox()];
+    };
+    let [before, railBox] = await railStart();
+    await page.mouse.move(railBox.x + railBox.width / 2, railBox.y + railBox.height / 2);
+    await page.mouse.wheel(0, 120);
+    await page.waitForTimeout(700);
+    const wheeled = await railState(page, railId);
+    if (!(wheeled.left > before.left) || wheeled.page !== before.page) problems.push(`${A} : molette sur la rangée ${railId} ${JSON.stringify(before)} → ${JSON.stringify(wheeled)}`);
+    [before, railBox] = await railStart();
+    await page.mouse.move(railBox.x + railBox.width / 2, railBox.y + 80);
+    await page.mouse.down();
+    await page.mouse.move(railBox.x + railBox.width / 2 - 150, railBox.y + 80, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(700);
+    const dragged = await railState(page, railId);
+    if (!(dragged.left > before.left) || new URL(page.url()).pathname !== '/') problems.push(`${A} : glissé à la souris sur ${railId} ${JSON.stringify(before)} → ${JSON.stringify(dragged)}, ${page.url()}`);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    // Les 4 catégories : le lieu sur toute la largeur de la carte, puis les champs de la catégorie deux par ligne, sans
+    // texte coupé ; « Plus de critères » ouvre les filtres plein écran sur la catégorie, Échap les referme sur l'accueil.
     for (const [index, name] of [[0, 'Résidentiel'], [1, 'Location'], [2, 'Investir'], [3, 'Hôtels']]) {
-      await page.click(`.dhome-search .mode-tab >> nth=${index}`);
-      const layout = await page.evaluate(() => {
-        const place = document.querySelector('.dhome-place').getBoundingClientRect();
-        const grid = document.querySelector('.dhome-tiles').getBoundingClientRect();
-        const tiles = [...document.querySelectorAll('.dhome-tiles > .criterion-tile')].map((el) => el.getBoundingClientRect());
+      await page.click(`.home-category .mode-tab >> nth=${index}`);
+      await page.waitForSelector('.home-category-fields');
+      await page.waitForTimeout(600);
+      const fields = await page.evaluate(() => {
+        const place = document.querySelector('.home-category-place').getBoundingClientRect();
+        const card = document.querySelector('.home-category').getBoundingClientRect();
+        const tiles = [...document.querySelectorAll('.home-category-fields > .criterion-tile, .home-category-fields .criterion-tile')].map((el) => el.getBoundingClientRect());
         return {
-          placeAbove: tiles.every((tile) => tile.top >= place.bottom),
-          placeFullWidth: Math.round(place.width) === Math.round(grid.width),
-          enoughTiles: tiles.length >= 4,
-          rowsOfTwo: new Set(tiles.map((tile) => Math.round(tile.top))).size === Math.ceil(tiles.length / 2),
-          columns: new Set(tiles.map((tile) => Math.round(tile.left))).size,
-          clipped: [...document.querySelectorAll('.dhome-tiles .criterion-label, .dhome-tiles .criterion-value')].filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.textContent),
+          placeAbove: tiles.every((tile) => tile.top >= place.bottom), placeInCard: place.left >= card.left && place.right <= card.right && place.width > card.width - 60,
+          rowsOfTwo: new Set(tiles.map((tile) => Math.round(tile.top))).size === Math.ceil(tiles.length / 2), columns: new Set(tiles.map((tile) => Math.round(tile.left))).size,
+          clipped: [...document.querySelectorAll('.home-category-fields .criterion-label, .home-category-fields .criterion-value')].filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.textContent),
         };
       });
-      expectSame(`accueil ${width} ${name}`, 'lieu puis critères en blocs', layout, { placeAbove: true, placeFullWidth: true, enoughTiles: true, rowsOfTwo: true, columns: 2, clipped: [] });
-      if (name === 'Investir') await page.locator('.dhome-search').screenshot({ path: join(out, `accueil-maquette-${width}-investir.png`) });
+      expectSame(`${A} ${name}`, 'lieu puis champs de la catégorie', fields, { placeAbove: true, placeInCard: true, rowsOfTwo: true, columns: 2, clipped: [] });
+      if (name === 'Investir') await page.locator('.home-category').screenshot({ path: join(out, `1-accueil-${width}-investir.png`) });
     }
     const hotelButton = (await page.textContent('.home-search-button'))?.trim();
-    if (hotelButton !== 'Rechercher des hôtels') problems.push(`accueil ${width} : bouton « ${hotelButton} » en Hôtels`);
+    if (hotelButton !== 'Rechercher un hôtel') problems.push(`${A} : bouton « ${hotelButton} » en Hôtels`);
+    await page.click('.home-more');
+    await page.waitForSelector('dialog.filters-dialog[open]');
+    await page.waitForTimeout(600);
+    expectSame(A, '« Plus de critères » plein écran [x, y, largeur, hauteur, catégorie]', await page.$eval('dialog.filters-dialog', (dialog) => {
+      const box = dialog.getBoundingClientRect();
+      return [box.x, box.y, box.width, box.height, dialog.querySelector('.mode-tab[aria-checked="true"] .mode-name')?.textContent ?? null];
+    }), [0, 0, width, height, 'Hôtels']);
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('dialog.filters-dialog[open]', { state: 'detached', timeout: 4000 }).catch(() => problems.push(`${A} : Échap ne referme pas « Plus de critères »`));
+    expectSame(A, 'après Échap', new URL(page.url()).pathname, '/');
     await page.close();
     await guest.close();
 
-    // Avec le compte de test : prénom, projet (Lyon, appartement, 300 000 €), puis une fiche ouverte dans l'onglet.
+    // Avec le compte de test : une fiche ouverte dans l'onglet, puis le retour : elle passe en tête de « Vus récemment ».
     const member = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR' });
-    const homeServer = await mock(member, { signedIn: true, listingRows: HOME_LISTINGS, account: HOME_PROJECT });
-    page = await open(member, '/', `accueil-${width}-maquette-connecte`);
-    await page.waitForFunction(() => document.querySelector('h1')?.textContent === 'Bonjour Claire', null, { timeout: 8000 }).catch(() => undefined);
-    const hello = await page.textContent('h1');
-    if (hello !== 'Bonjour Claire') problems.push(`accueil ${width} connecté : « ${hello} » au lieu de « Bonjour Claire »`);
-    await page.waitForSelector('#similaires');
-    const projectRead = homeServer.requests.find((request) => request.table === 'real_estate_projects' && request.search.includes('criteria'));
-    if (!projectRead || !projectRead.search.includes(`user_id=eq.${USER_ID}`) || !projectRead.search.includes('limit=1')) problems.push(`accueil ${width} : projet lu ${projectRead?.search}`);
-    const budget = (await page.textContent('.criterion-tile >> nth=0 >> .criterion-value'))?.replace(/\s/g, ' ');
-    if (budget !== '300 000 €') problems.push(`accueil ${width} : budget du projet « ${budget} » au lieu de « 300 000 € »`);
-    const similar = await sectionCards(page, 'similaires');
-    const similarWanted = [HOME_LISTINGS[0], HOME_LISTINGS[3], HOME_LISTINGS[5], HOME_LISTINGS[6], HOME_LISTINGS[7]].map((row) => row.id);
-    if (JSON.stringify(similar) !== JSON.stringify(similarWanted)) problems.push(`accueil ${width} : biens similaires ${JSON.stringify(similar)} au lieu de ${JSON.stringify(similarWanted)}`);
-    if (await page.locator('#consultes').count()) problems.push(`accueil ${width} : « Vus récemment » affiché sans fiche ouverte`);
-    // Fiche ouverte dans le même onglet, puis retour : elle passe en tête de « Vus récemment ».
-    await Promise.all([page.waitForURL(/\/annonce\/\?id=/), page.click('.opportunity-card h3 a >> nth=0')]);
+    await mock(member, { signedIn: true, listingRows: HOME_LISTINGS, account: HOME_PROJECT });
+    page = await open(member, '/', `accueil-${width}-connecte-consultes`);
+    await page.waitForSelector('.opportunity-card');
+    const opened = await page.$eval('.opportunity-card a.stretched', (link) => new URL(link.href).searchParams.get('id'));
+    await Promise.all([page.waitForURL(/\/annonce\/\?id=/), page.click('.opportunity-card a.stretched >> nth=0')]);
     await page.waitForLoadState('networkidle');
     await page.goBack({ waitUntil: 'networkidle' });
     await page.waitForSelector('#consultes', { timeout: 8000 }).catch(() => undefined);
-    const viewedFirst = await sectionCards(page, 'consultes');
-    if (viewedFirst[0] !== HOME_LISTINGS[0].id) problems.push(`accueil ${width} : consultés ${JSON.stringify(viewedFirst)} après la fiche « ${HOME_LISTINGS[0].id} »`);
-    // Trois autres fiches (une de plus que la ligne affichée), puis l'accueil complet pour la capture.
-    for (const row of [HOME_LISTINGS[6], HOME_LISTINGS[5], HOME_LISTINGS[2]]) {
-      await page.goto(`${base}/annonce/?id=${row.id}`, { waitUntil: 'networkidle' });
-    }
-    await page.goto(`${base}/`, { waitUntil: 'networkidle' });
-    await page.waitForSelector('#consultes');
-    await page.waitForSelector('#similaires');
-    await page.mouse.move(0, 0);
-    await page.waitForTimeout(300);
-    const memberSections = await homeSections(page);
-    if (JSON.stringify(memberSections) !== JSON.stringify(['Opportunités du moment', 'Vus récemment', 'Selon votre recherche', 'Nouvelles annonces', 'Baisses de prix'])) {
-      problems.push(`accueil ${width} connecté : sections ${JSON.stringify(memberSections)}`);
-    }
-    const viewed = await sectionCards(page, 'consultes');
-    const viewedWanted = [HOME_LISTINGS[2], HOME_LISTINGS[5], HOME_LISTINGS[6], HOME_LISTINGS[0]].map((row) => row.id);
-    if (JSON.stringify(viewed) !== JSON.stringify(viewedWanted)) problems.push(`accueil ${width} : consultés ${JSON.stringify(viewed)} au lieu de ${JSON.stringify(viewedWanted)}`);
-    await checkOneRow(page, width, 'connecté', ['opportunites', 'consultes', 'similaires', 'nouveautes', 'baisses']);
-    // Toutes les sections : la grande carte de l'accueil de l'app (HomeListingCard), la même qu'au téléphone, de la
-    // largeur de sa colonne, en grille ; plus de petite carte en liste.
-    expectSame(`accueil ${width} connecté`, 'cartes des sections', [await page.$$eval('.dhome-section article', (articles) => [...new Set(articles
-      .filter((article) => article.getClientRects().length > 0).map((article) => `${article.classList[0]} ${article.parentElement.className}`))]),
-    await page.locator('.dhome-list, .compact-card').count()], [['home-listing-card dhome-grid'], 0]);
-    await checkChrome(page, `accueil maquette ${width} connecté`, { signedIn: true, current: '/' });
-    await page.mouse.move(0, 0);
-    await page.waitForTimeout(300);
-    await page.screenshot({ path: join(out, `1-accueil-${width}.png`), fullPage: true });
+    const viewedFirst = await page.locator('section:has(#consultes) article a.stretched').evaluateAll((links) => links.map((link) => new URL(link.href).searchParams.get('id')));
+    if (viewedFirst[0] !== opened) problems.push(`${A} : consultés ${JSON.stringify(viewedFirst)} après la fiche « ${opened} »`);
     await page.close();
     await member.close();
   }
-
-  // Nom du compte tiré de l'adresse e-mail : « Bonjour », sans prénom (greetingName, HomeView.swift:328).
-  const mailName = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'fr-FR' });
-  await mock(mailName, { signedIn: true, account: { profiles: [{ ...ACCOUNT.profiles[0], display_name: 'claire.martin' }] } });
-  page = await open(mailName, '/', 'accueil-nom-e-mail');
-  await page.waitForSelector('.dhome .home-section');
-  await page.waitForTimeout(400);
-  const plain = await page.textContent('h1');
-  if (plain !== 'Bonjour') problems.push(`accueil, nom tiré de l'e-mail : « ${plain} » au lieu de « Bonjour »`);
-  await mailName.close();
 
   // « Rechercher des biens » ouvre la même adresse /recherche/ que l'accueil du téléphone, pour les mêmes choix.
   const searchUrl = async (context, name) => {
@@ -2905,11 +2898,13 @@ try {
   // Opportunités du moment et Selon votre recherche (le rendement si l'annonce a ses chiffres), rien pour Vus
   // récemment, « Nouveau » et cœur pour Nouvelles annonces, baisse et ancien prix barré sans cœur pour Baisses de prix.
   // Avec les lectures de l'ordinateur (projet du compte, fiches consultées, biens similaires) ; avec le compte, la
-  // cloche (point rouge des non lues) et « Reprendre ma recherche ». Pas d'en-tête bleu sous 1024 px.
-  // Captures : accueil-telephone-app-*.png.
-  for (const signedIn of [false, true]) {
-    const H = `accueil téléphone ${signedIn ? 'connecté' : 'sans compte'}`;
-    const phoneHome = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
+  // cloche (point rouge des non lues) et « Reprendre ma recherche ». Pas d'en-tête bleu sous 1024 px. Les mêmes
+  // vérifications sur ordinateur (étape 7b : l'écran du téléphone élargi), à 1440 × 900 et 1024 × 768.
+  // Captures : accueil-telephone-app-*.png, 1-accueil-1440.png et 1-accueil-1024.png.
+  for (const [screen, signedIn] of [['téléphone', false], ['téléphone', true], [1440, false], [1440, true], [1024, false], [1024, true]]) {
+    const H = `accueil ${screen} ${signedIn ? 'connecté' : 'sans compte'}`;
+    const phoneHome = await browser.newContext(screen === 'téléphone' ? { ...devices['iPhone 13'], locale: 'fr-FR' }
+      : { viewport: { width: screen, height: screen === 1440 ? 900 : 768 }, deviceScaleFactor: 2, locale: 'fr-FR' });
     const phoneServer = await mock(phoneHome, { signedIn, listingRows: HOME_LISTINGS, account: HOME_PROJECT });
     // Biens consultés du compte, gardés dans ce navigateur (une liste par compte, n° 114) : lus seulement avec ce compte
     // connecté. L'ancienne liste de l'onglet (sessionStorage) n'est plus lue.
@@ -2919,7 +2914,7 @@ try {
         sessionStorage.setItem('nidalo.consultes', JSON.stringify([id]));
       } catch { /* indisponible */ }
     }, [homeId(7), USER_ID]);
-    page = await open(phoneHome, '/', `accueil-telephone-lectures-${signedIn ? 'connecte' : 'sans-compte'}`);
+    page = await open(phoneHome, '/', `accueil-${screen === 'téléphone' ? 'telephone' : screen}-lectures-${signedIn ? 'connecte' : 'sans-compte'}`);
     if (signedIn) await page.waitForSelector('#consultes', { timeout: 8000 }).catch(() => undefined);
     await page.waitForSelector('#similaires', { timeout: 8000 }).catch(() => undefined);
     if (signedIn) await page.waitForSelector('.home-resume', { timeout: 8000 }).catch(() => undefined);
@@ -2999,7 +2994,11 @@ try {
         await page.textContent('.home-resume-title'), (await page.textContent('.home-resume-summary'))?.replace(/\s/g, ' '),
       ], ['Reprendre ma recherche', 'Lyon · Appartement · ≤ 300 k€']);
     } else if (await page.locator('.home-resume').count()) problems.push(`${H} : « Reprendre ma recherche » sans compte`);
-    await page.screenshot({ path: join(out, `accueil-telephone-app-${signedIn ? 'connecte' : 'sans-compte'}.png`), fullPage: true });
+    if (screen === 'téléphone') await page.screenshot({ path: join(out, `accueil-telephone-app-${signedIn ? 'connecte' : 'sans-compte'}.png`), fullPage: true });
+    else if (signedIn) {
+      await checkChrome(page, H, { signedIn: true, current: '/', footer: 1180 });
+      await page.screenshot({ path: join(out, `1-accueil-${screen}.png`), fullPage: true });
+    }
     await phoneHome.close();
   }
 
@@ -5169,14 +5168,43 @@ try {
     await chatGuest.close();
   }
 
-  // Favoris sur ordinateur (maquette 4), à 1440 × 900 et 1024 × 768, avec le compte de test et des annonces inventées :
-  // une vente, une location, un investissement loué (rendement), un hôtel et une annonce retirée. Contenu et actions de
-  // l'app (FavoritesView.swift, SavedSearchesView.swift). Captures pour Romain : 4-favoris-*.png.
+  // Favoris sur ordinateur (étape 7b : la page du téléphone élargie au grand conteneur de 1180, les cartes 3 par ligne à
+  // 1440 et 2 à 1024), à 1440 × 900 et 1024 × 768, avec le compte de test et des annonces inventées : une vente, une
+  // location, un investissement loué (rendement), un hôtel et une annonce retirée. Contenu et actions de l'app
+  // (FavoritesView.swift, SavedSearchesView.swift). Captures : 4-favoris-*.png.
   const favContext = async (width, height, listingRows, account, signedIn = true, refuse = []) => {
     const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, locale: 'fr-FR' });
     const mocked = await mock(context, { signedIn, listingRows, account, refuse });
     return { context, server: mocked };
   };
+  /** Taille, graisse et police des textes de la page des favoris. */
+  const favoriteFonts = (p) => p.evaluate(() => {
+    const font = (selector) => {
+      const element = document.querySelector(selector);
+      if (!element) return null;
+      const style = getComputedStyle(element);
+      // Inter du site sans rien de plus ; la police du système (pavés des catégories de l'app) : « système ».
+      if (style.fontFamily.startsWith('-apple-system')) return `${style.fontSize} ${style.fontWeight} système`;
+      return `${style.fontSize} ${style.fontWeight}${style.fontFamily.startsWith('"Nidalo Inter"') ? '' : ` ${style.fontFamily}`}`;
+    };
+    return {
+      titre: font('.favorites-head h1'), 'sous-titre': font('.favorites-subtitle'), onglet: font('.favorites-wrap .fav-tab'), champ: font('.favorites-field input'),
+      catégorie: font('.favorites-categories .mode-name'), nombre: font('.favorites-total'), tri: font('.favorites-sort'), 'titre de carte': font('.favorite-title'),
+      infos: font('.favorite-details'), prix: font('.favorite-price'), 'prix au m²': font('.favorite-per-meter'), rendement: font('.favorite-yield'),
+      'plus disponible': font('.missing-title'), Retirer: font('.missing-remove'),
+    };
+  });
+  let phoneFavFonts;
+  {
+    const context = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
+    await mock(context, { signedIn: true, listingRows: FAV_LISTINGS, account: FAV_ACCOUNT });
+    page = await open(context, '/favoris/', 'favoris téléphone, polices');
+    await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', 'favoris téléphone, polices');
+    await page.waitForSelector('.missing-card');
+    phoneFavFonts = await favoriteFonts(page);
+    await page.close();
+    await context.close();
+  }
   for (const [width, height] of [[1440, 900], [1024, 768]]) {
     const F = `favoris ${width}`;
     // Au plus près de la maquette : un investissement loué, un studio, une annonce retirée ; comparaison vide.
@@ -5184,14 +5212,14 @@ try {
       const { context, server: mockupServer } = await favContext(width, height, MOCKUP_LISTINGS, MOCKUP_ACCOUNT);
       page = await open(context, '/favoris/', `${F} maquette`);
       await waitForFavorites(page, ['Appartement 2 pièces – Annemasse', 'Studio avec vue dégagée'], '2 biens sauvegardés', `${F} maquette`);
-      await page.waitForSelector('.dfav-missing');
+      await page.waitForSelector('.missing-card');
       await page.waitForSelector('.fav-tab-dot');
       await favoritePhotosLoaded(page, 2, `${F} maquette`);
       await checkTabBarBadge(page, mockupServer.state, `${F} maquette`);
       await favShot(page, `4-favoris-${width}.png`);
       if (width === 1440) {
-        await page.click('.dfav .fav-tab >> nth=1');
-        await page.waitForSelector('.dfav-searches .saved-search');
+        await page.click('.favorites-wrap .fav-tab >> nth=1');
+        await page.waitForSelector('.favorites-searches .saved-search');
         await waitForSearchCounts(page, `${F} maquette`);
         await favShot(page, '4-favoris-recherches-1440.png');
       }
@@ -5204,74 +5232,64 @@ try {
     await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', F);
     await page.waitForSelector('.fav-tab-dot');
     await favoritePhotosLoaded(page, 3, F);
-    await checkChrome(page, F, { signedIn: true, current: '/favoris/' });
+    await checkChrome(page, F, { signedIn: true, current: '/favoris/', footer: 1180 });
     await checkTabBarBadge(page, favServer.state, F);
-    expectSame(F, 'en-tête', [await textOf(page, '.dfav-titles h1'), await textOf(page, '.dfav-titles p'), await page.getAttribute('.dfav-compare', 'aria-label'),
-      await page.isDisabled('.dfav-compare'), await page.locator('.dfav-compare-count').count(), await page.getAttribute('.tabbar a[href="/favoris/"]', 'aria-current')],
+    expectSame(F, 'en-tête', [await textOf(page, '.favorites-head h1'), await textOf(page, '.favorites-subtitle'), await page.getAttribute('.favorites-head .compare-button', 'aria-label'),
+      await page.isDisabled('.favorites-head .compare-button'), await page.locator('.favorites-head .compare-button-count').count(), await page.getAttribute('.tabbar a[href="/favoris/"]', 'aria-current')],
     ['Vos favoris', 'Retrouvez vos biens favoris et vos recherches', 'Comparer vos favoris', false, 0, 'page']);
     // Onglets de l'app (FavoritesTabs, demande du 17/11) : un seul sélecteur, la pastille bleue sous l'onglet choisi.
-    expectSame(F, 'onglets', await page.$$eval('.dfav .fav-tab', (els) => els.map((el) => [el.querySelector('.fav-tab-title')?.textContent ?? null, el.querySelector('.fav-tab-count')?.textContent ?? null,
+    expectSame(F, 'onglets', await page.$$eval('.favorites-wrap .fav-tab', (els) => els.map((el) => [el.querySelector('.fav-tab-title')?.textContent ?? null, el.querySelector('.fav-tab-count')?.textContent ?? null,
       el.getAttribute('aria-label'), el.getAttribute('aria-pressed'), Boolean(el.querySelector('.fav-tab-dot'))])),
     [['Favoris', null, null, 'true', false], ['Recherches', '(2)', 'Recherches, 2, nouveautés', 'false', true]]);
-    expectSame(F, 'recherche, filtres et tri', [await page.getAttribute('.dfav-field input', 'placeholder'), await page.getAttribute('.dfav-field input', 'aria-label'),
-      await page.getAttribute('.dfav-filters', 'aria-label'), await page.getAttribute('.dfav-sort select', 'aria-label'), await page.textContent('.dfav-sort > span'),
-      await page.$$eval('.dfav-sort option', (els) => els.map((el) => [el.value, el.textContent]))],
+    expectSame(F, 'recherche, filtres et tri', [await page.getAttribute('.favorites-field input', 'placeholder'), await page.getAttribute('.favorites-field input', 'aria-label'),
+      await page.getAttribute('.favorites-filters', 'aria-label'), await page.getAttribute('.favorites-sort select', 'aria-label'), await page.textContent('.favorites-sort > span'),
+      await page.$$eval('.favorites-sort option', (els) => els.map((el) => [el.value, el.textContent]))],
     ['Ville, code postal, type de bien', 'Rechercher dans vos favoris', 'Filtres', 'Trier par', 'Pertinence',
       [['relevance', 'Pertinence'], ['priceAscending', 'Prix croissant'], ['priceDescending', 'Prix décroissant'], ['recentlyAdded', 'Ajout le plus récent']]]);
     // Catégories : les pavés de l'app avec « Tous » en premier (ModeSegmentedControl(selectionOrAll:)).
-    expectSame(F, 'catégories', await page.$$eval('.dfav-categories .mode-tab', (els) => els.map((el) => [el.textContent.trim(), el.getAttribute('aria-checked')])),
+    expectSame(F, 'catégories', await page.$$eval('.favorites-categories .mode-tab', (els) => els.map((el) => [el.textContent.trim(), el.getAttribute('aria-checked')])),
       [['Tous', 'true'], ['Résidentiel', 'false'], ['Location', 'false'], ['Investir', 'false'], ['Hôtels', 'false']]);
     expectSame(F, 'cartes', await favoriteCardsShown(page), FAV_CARDS);
     // L'annonce retirée vient après les cartes, comme dans l'app.
-    expectSame(F, 'grille', await page.$$eval('.dfav-grid > *', (els) => els.map((el) => el.className)), ['dfav-card', 'dfav-card', 'dfav-card', 'dfav-card', 'dfav-missing']);
-    expectSame(F, 'annonce plus disponible', [await textOf(page, '.dfav-missing-title'), await textOf(page, '.dfav-missing-text'), await textOf(page, '.dfav-missing-remove')],
+    expectSame(F, 'grille', await page.$$eval('.favorites-list > *', (els) => els.map((el) => el.className)), ['favorite-card', 'favorite-card', 'favorite-card', 'favorite-card', 'missing-cards']);
+    expectSame(F, 'annonce plus disponible', [await textOf(page, '.missing-title'), await textOf(page, '.missing-subtitle'), await textOf(page, '.missing-remove')],
       ['Annonce plus disponible', 'Le vendeur l\'a retirée, vendue ou louée.', 'Retirer']);
+    // La page du téléphone dans le grand conteneur : titres, champ, pavés et cartes au même bord gauche que la liste ;
+    // 3 cartes par ligne à 1440 (2 à 1024), toutes de la même hauteur, photos comprises (sans hauteur écrite ici).
     const favLayout = await page.evaluate(() => {
       const box = (element) => element.getBoundingClientRect();
-      const items = [...document.querySelectorAll('.dfav-grid > *')].map(box);
-      const field = box(document.querySelector('.dfav-field'));
-      const middle = (rect) => Math.round(rect.top + rect.height / 2);
+      const cards = [...document.querySelectorAll('.favorites-list > .favorite-card')].map(box);
+      const lefts = ['.favorites-head h1', '.favorites-subtitle', '.favorites-wrap .fav-tabs', '.favorites-field', '.favorites-categories', '.favorites-toolbar', '.favorites-list']
+        .map((selector) => Math.round(box(document.querySelector(selector)).left));
       return {
-        content: Math.round(box(document.querySelector('.dfav-inner')).width), columns: getComputedStyle(document.querySelector('.dfav-grid')).gridTemplateColumns.split(' ').length,
-        widths: [...new Set(items.map((rect) => Math.round(rect.width)))], heights: new Set(items.map((rect) => Math.round(rect.height))).size,
-        photos: [...new Set([...document.querySelectorAll('.dfav-photo')].map((photo) => Math.round(box(photo).height)))], field: Math.round(field.width),
-        tilesBelowField: box(document.querySelector('.dfav-categories')).top >= field.bottom && Math.round(box(document.querySelector('.dfav-categories')).width) === 480,
-        overflowX: document.documentElement.scrollWidth - innerWidth, footer: Boolean(document.querySelector('footer.footer')),
+        list: [Math.round(box(document.querySelector('.favorites-list')).left), Math.round(box(document.querySelector('.favorites-list')).width)],
+        columns: getComputedStyle(document.querySelector('.favorites-list')).gridTemplateColumns.split(' ').length, lefts: [...new Set(lefts)],
+        widths: [...new Set(cards.map((rect) => Math.round(rect.width)))], heights: new Set(cards.map((rect) => Math.round(rect.height))).size,
+        photos: new Set([...document.querySelectorAll('.favorite-photo')].map((photo) => Math.round(box(photo).height))).size,
+        overflowX: document.documentElement.scrollWidth - innerWidth, footer: Math.round(box(document.querySelector('footer.footer .wrap')).width),
       };
     });
-    expectSame(F, 'mise en page', favLayout, {
-      content: width === 1440 ? 1200 : 960, columns: 3, widths: [width === 1440 ? 384 : 307], heights: 1, photos: [220], field: 420, tilesBelowField: true, overflowX: 0, footer: true,
-    });
+    expectSame(F, 'mise en page', favLayout, width === 1440
+      ? { list: [146, 1148], columns: 3, lefts: [146], widths: [373], heights: 1, photos: 1, overflowX: 0, footer: 1180 }
+      : { list: [16, 992], columns: 2, lefts: [16], widths: [489], heights: 1, photos: 1, overflowX: 0, footer: 1024 });
     // Tailles de la maquette (titre 36/700, textes 15, titres de carte 17/700) et police Inter partout, boutons compris.
-    const favFonts = await page.evaluate(() => {
-      const font = (selector) => {
-        const style = getComputedStyle(document.querySelector(selector));
-        // Inter du site sans rien de plus ; la police du système (pavés des catégories de l'app) : « système ».
-        if (style.fontFamily.startsWith('-apple-system')) return `${style.fontSize} ${style.fontWeight} système`;
-        return `${style.fontSize} ${style.fontWeight}${style.fontFamily.startsWith('"Nidalo Inter"') ? '' : ` ${style.fontFamily}`}`;
-      };
-      return {
-        titre: font('.dfav-titles h1'), 'sous-titre': font('.dfav-titles p'), onglet: font('.dfav .fav-tab'), champ: font('.dfav-field input'), catégorie: font('.dfav-categories .mode-name'),
-        nombre: font('.dfav-total'), tri: font('.dfav-sort'), 'titre de carte': font('.dfav-title'), infos: font('.dfav-details'), prix: font('.dfav-price strong'),
-        'prix au m²': font('.dfav-per-meter'), rendement: font('.dfav-yield'), 'plus disponible': font('.dfav-missing-title'), Retirer: font('.dfav-missing-remove'),
-      };
-    });
-    expectSame(F, 'polices', favFonts, {
-      titre: '36px 700', 'sous-titre': '15px 400', onglet: '15px 600', champ: '15px 400', catégorie: '13px 600 système', nombre: '15px 600', tri: '15px 600', 'titre de carte': '17px 700',
-      infos: '15px 400', prix: '20px 700', 'prix au m²': '14px 500', rendement: '14px 600', 'plus disponible': '18px 700', Retirer: '15px 600',
-    });
+    // Les polices du téléphone, inchangées (titres, onglets, champ, cartes) ; les noms des pavés des catégories à leurs
+    // 13 px, que l'iPhone 13 rapetisse parce qu'ils n'y tiennent pas.
+    expectSame(F, 'polices (celles du téléphone)', await favoriteFonts(page), { ...phoneFavFonts, catégorie: '13px 600 système' });
     await favShot(page, `favoris-${width}.png`);
-    await page.click('.dfav .fav-tab >> nth=1');
-    await page.waitForSelector('.dfav-searches .saved-search');
+    await page.click('.favorites-wrap .fav-tab >> nth=1');
+    await page.waitForSelector('.favorites-searches .saved-search');
     await waitForSearchCounts(page, F);
     if (page.url() !== `${base}/favoris/?onglet=recherches`) problems.push(`${F} : adresse de l'onglet Recherches ${page.url()}`);
-    expectSame(F, 'onglet Recherches', [await page.$$eval('.dfav .fav-tab', (els) => els.map((el) => el.getAttribute('aria-pressed'))), await page.locator('.dfav-tools, .dfav-grid').count()],
+    expectSame(F, 'onglet Recherches', [await page.$$eval('.favorites-wrap .fav-tab', (els) => els.map((el) => el.getAttribute('aria-pressed'))), await page.locator('.favorites-search, .favorites-list').count()],
       [['false', 'true'], 0]);
-    expectSame(F, 'recherches', await page.$$eval('.dfav-searches .saved-search', (cards) => cards.map((card) => [card.querySelector('h3')?.textContent ?? null,
+    // Les recherches enregistrées 2 par ligne dans le grand conteneur (étape 7b), comme les cartes de la liste.
+    const searchTop = await page.$eval('.favorites-searches .saved-search', (card) => Math.round(card.getBoundingClientRect().top));
+    expectSame(F, 'recherches', await page.$$eval('.favorites-searches .saved-search', (cards) => cards.map((card) => [card.querySelector('h3')?.textContent ?? null,
       card.querySelector('.saved-search-text p')?.textContent.replace(/\s+/g, ' ') ?? null, card.querySelector('.alerts-on, .alerts-off')?.textContent.trim() ?? null,
-      Math.round(card.getBoundingClientRect().width)])),
-    [[ACCOUNT.saved_searches[0].name, 'Résidentiel · Lyon et alentours · Jusqu\'à 300 000 €', 'Alertes actives', width === 1440 ? 588 : 470],
-      [ACCOUNT.saved_searches[1].name, 'Investir · Jusqu\'à 250 000 €', 'Alertes désactivées', width === 1440 ? 588 : 470]]);
+      Math.round(card.getBoundingClientRect().width), Math.round(card.getBoundingClientRect().top)])),
+    [[ACCOUNT.saved_searches[0].name, 'Résidentiel · Lyon et alentours · Jusqu\'à 300 000 €', 'Alertes actives', width === 1440 ? 568 : 490, searchTop],
+      [ACCOUNT.saved_searches[1].name, 'Investir · Jusqu\'à 250 000 €', 'Alertes désactivées', width === 1440 ? 568 : 490, searchTop]]);
     await favShot(page, `favoris-recherches-${width}.png`);
     await page.close();
 
@@ -5280,52 +5298,52 @@ try {
       // Recherche dans les favoris (avec ses suggestions), catégories, tris et filtres : les cartes, leur ordre et le nombre.
       page = await open(favDesk, '/favoris/', `${B} recherche`);
       await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : recherche`);
-      await page.fill('.dfav-field input', 'villeur');
+      await page.fill('.favorites-field input', 'villeur');
       await waitForFavorites(page, [FAV_T2], '1 sur 4 biens', `${B} : « villeur »`);
-      expectSame(B, 'suggestions de « villeur »', await page.$$eval('.dfav-suggestions button', (els) => els.map((el) => [...el.querySelectorAll('.dfav-suggestion-text > span')]
+      expectSame(B, 'suggestions de « villeur »', await page.$$eval('.favorites-suggestions button', (els) => els.map((el) => [...el.querySelectorAll('.favorites-suggestion-text > span')]
         .map((span) => span.textContent))), [['Villeurbanne', '69100 · Ville']]);
-      await page.click('.dfav-suggestions button');
-      expectSame(B, 'suggestion choisie', [await page.inputValue('.dfav-field input'), await page.locator('.dfav-suggestions').count()], ['Villeurbanne', 0]);
+      await page.click('.favorites-suggestions button');
+      expectSame(B, 'suggestion choisie', [await page.inputValue('.favorites-field input'), await page.locator('.favorites-suggestions').count()], ['Villeurbanne', 0]);
       await waitForFavorites(page, [FAV_T2], '1 sur 4 biens', `${B} : « Villeurbanne »`);
-      await page.click('.dfav-clear');
+      await page.click('.favorites-clear');
       await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : recherche effacée`);
       for (const text of ['hôtel', 'HOTEL', '69007']) {
-        await page.fill('.dfav-field input', text);
+        await page.fill('.favorites-field input', text);
         await waitForFavorites(page, [text === '69007' ? FAV_STUDIO : FAV_HOTEL], '1 sur 4 biens', `${B} : « ${text} »`);
       }
-      await page.fill('.dfav-field input', 'zzz');
-      await page.waitForSelector('.dfav .account-empty');
-      expectSame(B, 'aucun favori ne correspond', [await textOf(page, '.dfav .account-empty h2'), await textOf(page, '.dfav .account-empty p'), await textOf(page, '.dfav .account-empty button'),
-        await textOf(page, '.dfav-total'), await page.locator('.dfav-missing').count()], ['Aucun favori ne correspond', 'Modifiez la recherche, la catégorie ou les filtres.', 'Tout afficher', '0 sur 4 biens', 0]);
-      await page.click('.dfav .account-empty button');
+      await page.fill('.favorites-field input', 'zzz');
+      await page.waitForSelector('.favorites-wrap .account-empty');
+      expectSame(B, 'aucun favori ne correspond', [await textOf(page, '.favorites-wrap .account-empty h2'), await textOf(page, '.favorites-wrap .account-empty p'), await textOf(page, '.favorites-wrap .account-empty button'),
+        await textOf(page, '.favorites-total'), await page.locator('.missing-card').count()], ['Aucun favori ne correspond', 'Modifiez la recherche, la catégorie ou les filtres.', 'Tout afficher', '0 sur 4 biens', 0]);
+      await page.click('.favorites-wrap .account-empty button');
       await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : « Tout afficher »`);
-      if (await page.inputValue('.dfav-field input')) problems.push(`${B} : « Tout afficher » garde la recherche`);
+      if (await page.inputValue('.favorites-field input')) problems.push(`${B} : « Tout afficher » garde la recherche`);
       for (const [chip, titles] of [['Résidentiel', [FAV_FLAT]], ['Location', [FAV_STUDIO]], ['Investir', [FAV_T2]], ['Hôtels', [FAV_HOTEL]], ['Tous', FAV_ALL]]) {
-        await page.locator('.dfav-categories .mode-tab', { hasText: chip }).click();
+        await page.locator('.favorites-categories .mode-tab', { hasText: chip }).click();
         await waitForFavorites(page, titles, titles.length === 4 ? '4 biens sauvegardés' : `${titles.length} sur 4 biens`, `${B} : catégorie ${chip}`);
-        expectSame(B, `catégorie ${chip}`, await page.$$eval('.dfav-categories .mode-tab[aria-checked="true"]', (els) => els.map((el) => el.textContent.trim())), [chip]);
+        expectSame(B, `catégorie ${chip}`, await page.$$eval('.favorites-categories .mode-tab[aria-checked="true"]', (els) => els.map((el) => el.textContent.trim())), [chip]);
       }
       for (const [sort, short, titles] of [['priceAscending', 'Prix ↑', [FAV_STUDIO, FAV_T2, FAV_FLAT, FAV_HOTEL]], ['priceDescending', 'Prix ↓', [FAV_HOTEL, FAV_FLAT, FAV_T2, FAV_STUDIO]],
         ['recentlyAdded', 'Récents', [FAV_STUDIO, FAV_HOTEL, FAV_T2, FAV_FLAT]], ['relevance', 'Pertinence', FAV_ALL]]) {
-        await page.selectOption('.dfav-sort select', sort);
+        await page.selectOption('.favorites-sort select', sort);
         await waitForFavorites(page, titles, '4 biens sauvegardés', `${B} : tri ${sort}`);
-        expectSame(B, `tri ${sort}`, await page.textContent('.dfav-sort > span'), short);
+        expectSame(B, `tri ${sort}`, await page.textContent('.favorites-sort > span'), short);
       }
       // Recherche, catégorie et tri ensemble : les favoris qui correspondent, dans l'ordre du tri.
-      await page.selectOption('.dfav-sort select', 'priceDescending');
-      await page.fill('.dfav-field input', 'lyon');
+      await page.selectOption('.favorites-sort select', 'priceDescending');
+      await page.fill('.favorites-field input', 'lyon');
       await waitForFavorites(page, [FAV_FLAT, FAV_STUDIO], '2 sur 4 biens', `${B} : « lyon », prix décroissant`);
       // Les suggestions du champ couvrent les pavés, juste dessous : on quitte le champ avant de choisir la catégorie.
-      await page.locator('.dfav-field input').blur();
-      await page.waitForSelector('.dfav-suggestions', { state: 'detached', timeout: 4000 }).catch(() => problems.push(`${B} : les suggestions restent après avoir quitté le champ`));
-      await page.locator('.dfav-categories .mode-tab', { hasText: 'Location' }).click();
+      await page.locator('.favorites-field input').blur();
+      await page.waitForSelector('.favorites-suggestions', { state: 'detached', timeout: 4000 }).catch(() => problems.push(`${B} : les suggestions restent après avoir quitté le champ`));
+      await page.locator('.favorites-categories .mode-tab', { hasText: 'Location' }).click();
       await waitForFavorites(page, [FAV_STUDIO], '1 sur 4 biens', `${B} : « lyon », Location`);
-      await page.fill('.dfav-field input', '');
-      await page.locator('.dfav-categories .mode-tab', { hasText: 'Tous' }).click();
-      await page.selectOption('.dfav-sort select', 'relevance');
+      await page.fill('.favorites-field input', '');
+      await page.locator('.favorites-categories .mode-tab', { hasText: 'Tous' }).click();
+      await page.selectOption('.favorites-sort select', 'relevance');
       await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : tout affiché`);
       // Filtres : ouverts sur la catégorie de la pastille (« Tous » : Résidentiel) ; appliqués aux favoris chargés.
-      await page.click('.dfav-filters');
+      await page.click('.favorites-filters');
       await page.waitForSelector('dialog.filters-dialog[open]');
       expectSame(B, 'filtres : catégorie', await textOf(page, 'dialog[open] .mode-tab[aria-checked="true"]'), 'Résidentiel');
       await page.locator('dialog[open]').getByRole('group', { name: 'Pièces minimum et maximum' }).getByRole('button', { name: '3', exact: true }).click();
@@ -5334,9 +5352,9 @@ try {
       await page.click('dialog[open] .filters-apply .btn');
       await page.waitForSelector('dialog.filters-dialog', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${B} : les filtres restent ouverts`));
       await waitForFavorites(page, [FAV_FLAT], '1 sur 4 biens', `${B} : filtre « 3 pièces »`);
-      expectSame(B, 'filtres appliqués', [await page.getAttribute('.dfav-filters', 'aria-label'), await textOf(page, '.dfav-filters-count'),
-        await page.$$eval('.dfav-categories .mode-tab[aria-checked="true"]', (els) => els.map((el) => el.textContent.trim()))], ['Filtres, 1 actifs', '1', ['Résidentiel']]);
-      await page.locator('.dfav-categories .mode-tab', { hasText: 'Tous' }).click();
+      expectSame(B, 'filtres appliqués', [await page.getAttribute('.favorites-filters', 'aria-label'), await textOf(page, '.favorites-filters-count'),
+        await page.$$eval('.favorites-categories .mode-tab[aria-checked="true"]', (els) => els.map((el) => el.textContent.trim()))], ['Filtres, 1 actifs', '1', ['Résidentiel']]);
+      await page.locator('.favorites-categories .mode-tab', { hasText: 'Tous' }).click();
       // « Tous » garde les filtres posés (FavoritesView : filteredIDs) : seuls les favoris qui y correspondent restent.
       await waitForFavorites(page, [FAV_FLAT], '1 sur 4 biens', `${B} : filtre gardé sur « Tous »`);
       await page.close();
@@ -5347,31 +5365,31 @@ try {
       page = await open(favDesk, '/favoris/', `${B} comparer`);
       await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : comparer`);
       const compareWrites = writes.length;
-      const favCard = (title) => page.locator('.dfav-card', { has: page.locator('.dfav-title', { hasText: title }) });
+      const favCard = (title) => page.locator('.favorite-card', { has: page.locator('.favorite-title', { hasText: title }) });
       const comparedIds = () => page.evaluate(() => { try { return JSON.parse(sessionStorage.getItem('nidalo.comparer') ?? 'null'); } catch { return 'illisible'; } });
-      const roundButton = () => page.evaluate(() => [document.querySelector('.dfav-compare')?.getAttribute('aria-label') ?? null, document.querySelector('.dfav-compare-count')?.textContent ?? null]);
-      const pressedCards = () => page.$$eval('.dfav-card', (cards) => cards.filter((card) => card.querySelector('.dfav-card-compare')?.getAttribute('aria-pressed') === 'true')
-        .map((card) => card.querySelector('.dfav-title')?.textContent ?? null));
-      await favCard(FAV_FLAT).locator('.dfav-card-compare').click();
+      const roundButton = () => page.evaluate(() => [document.querySelector('.favorites-head .compare-button')?.getAttribute('aria-label') ?? null, document.querySelector('.favorites-head .compare-button-count')?.textContent ?? null]);
+      const pressedCards = () => page.$$eval('.favorite-card', (cards) => cards.filter((card) => card.querySelector('.favorite-compare')?.getAttribute('aria-pressed') === 'true')
+        .map((card) => card.querySelector('.favorite-title')?.textContent ?? null));
+      await favCard(FAV_FLAT).locator('.favorite-compare').click();
       await waitForCompareNotice(page, { text: 'Ajouté à la comparaison', action: 'Voir' }, `${B} : ajout`);
-      expectSame(B, 'après un ajout', [await comparedIds(), await roundButton(), await pressedCards(), await favCard(FAV_FLAT).locator('.dfav-card-compare').getAttribute('aria-label'),
+      expectSame(B, 'après un ajout', [await comparedIds(), await roundButton(), await pressedCards(), await favCard(FAV_FLAT).locator('.favorite-compare').getAttribute('aria-label'),
         await page.getAttribute('.app-toast-action', 'aria-label'), page.url()],
       [{ ids: [favId(1)], referenceId: favId(1) }, ['Comparer, 1 bien', '1'], [FAV_FLAT], 'Retirer de la comparaison', 'Voir', `${base}/favoris/`]);
-      await favCard(FAV_FLAT).locator('.dfav-card-compare').click();
+      await favCard(FAV_FLAT).locator('.favorite-compare').click();
       await waitForCompareNotice(page, { text: 'Retiré de la comparaison', action: null }, `${B} : retrait`);
       expectSame(B, 'après un retrait', [await comparedIds(), await roundButton(), await pressedCards()], [{ ids: [], referenceId: null }, ['Comparer vos favoris', null], []]);
       // Tous les favoris comptent, pas seulement la catégorie affichée (FavoritesView : sorted(listings)).
-      await page.selectOption('.dfav-sort select', 'priceAscending');
-      await page.locator('.dfav-categories .mode-tab', { hasText: 'Hôtels' }).click();
+      await page.selectOption('.favorites-sort select', 'priceAscending');
+      await page.locator('.favorites-categories .mode-tab', { hasText: 'Hôtels' }).click();
       await waitForFavorites(page, [FAV_HOTEL], '1 sur 4 biens', `${B} : Hôtels, prix croissant`);
-      await page.click('.dfav-compare');
+      await page.click('.favorites-head .compare-button');
       await page.waitForURL(`${base}/comparer/`).catch(() => problems.push(`${B} : le bouton rond n'ouvre pas /comparer/ (${page.url()})`));
       expectSame(B, 'bouton rond, comparaison vide', await comparedIds(), { ids: [favId(2), favId(3), favId(1)], referenceId: favId(2) });
       await page.goto(`${base}/favoris/`, { waitUntil: 'networkidle' });
       await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : retour aux favoris`);
       expectSame(B, 'trois biens comparés', [await roundButton(), await pressedCards()], [['Comparer, 3 biens', '3'], [FAV_T2, FAV_FLAT, FAV_STUDIO]]);
       // Un quatrième : refusé, « 3 biens maximum, retirez-en un » avec « Gérer » ; la comparaison ne change pas.
-      await favCard(FAV_HOTEL).locator('.dfav-card-compare').click();
+      await favCard(FAV_HOTEL).locator('.favorite-compare').click();
       await waitForCompareNotice(page, { text: '3 biens maximum, retirez-en un', action: 'Gérer' }, `${B} : quatrième bien`);
       expectSame(B, 'quatrième bien', [await comparedIds(), await pressedCards(), await page.getAttribute('.app-toast-action', 'aria-label')],
         [{ ids: [favId(2), favId(3), favId(1)], referenceId: favId(2) }, [FAV_T2, FAV_FLAT, FAV_STUDIO], 'Gérer']);
@@ -5381,14 +5399,14 @@ try {
       await page.goto(`${base}/favoris/`, { waitUntil: 'networkidle' });
       await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : retour après « Gérer »`);
       // Retirer la référence la passe au premier qui reste ; l'hôtel a ensuite sa place.
-      await favCard(FAV_STUDIO).locator('.dfav-card-compare').click();
+      await favCard(FAV_STUDIO).locator('.favorite-compare').click();
       await waitForCompareNotice(page, { text: 'Retiré de la comparaison', action: null }, `${B} : retrait du studio`);
-      await favCard(FAV_HOTEL).locator('.dfav-card-compare').click();
+      await favCard(FAV_HOTEL).locator('.favorite-compare').click();
       await waitForCompareNotice(page, { text: 'Ajouté à la comparaison (3 biens)', action: 'Voir' }, `${B} : ajout de l'hôtel`);
       expectSame(B, 'comparaison changée', [await comparedIds(), await roundButton(), await pressedCards()],
         [{ ids: [favId(3), favId(1), favId(4)], referenceId: favId(3) }, ['Comparer, 3 biens', '3'], [FAV_T2, FAV_FLAT, FAV_HOTEL]]);
       // Comparaison commencée : le bouton rond l'ouvre telle quelle.
-      await page.click('.dfav-compare');
+      await page.click('.favorites-head .compare-button');
       await page.waitForURL(`${base}/comparer/`).catch(() => problems.push(`${B} : le bouton rond n'ouvre pas /comparer/ (${page.url()})`));
       expectSame(B, 'bouton rond, comparaison commencée', await comparedIds(), { ids: [favId(3), favId(1), favId(4)], referenceId: favId(3) });
       if (writes.length !== compareWrites) problems.push(`${B} : la comparaison a écrit au serveur ${JSON.stringify(writes.slice(compareWrites))}`);
@@ -5401,7 +5419,7 @@ try {
       page = await open(favDesk, '/favoris/', `${B} cœur`);
       await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : cœur`);
       let mark = writes.length;
-      await favCard(FAV_FLAT).locator('.dfav-heart').click();
+      await favCard(FAV_FLAT).locator('.favorite-heart').click();
       await waitForFavorites(page, [FAV_T2, FAV_STUDIO, FAV_HOTEL], '3 biens sauvegardés', `${B} : après le cœur`);
       await waitForRemovalNotice(page, `${B} : cœur`);
       await page.waitForTimeout(2500);
@@ -5410,34 +5428,34 @@ try {
       if (page.url() !== `${base}/favoris/`) problems.push(`${B} : le cœur a ouvert ${page.url()}`);
       // « Annuler » : le favori revient à sa place, rien ne part.
       mark = writes.length;
-      await favCard(FAV_STUDIO).locator('.dfav-heart').click();
+      await favCard(FAV_STUDIO).locator('.favorite-heart').click();
       await waitForFavorites(page, [FAV_T2, FAV_HOTEL], '2 biens sauvegardés', `${B} : retrait du studio`);
       await waitForRemovalNotice(page, `${B} : retrait du studio`);
       await page.click('.app-toast-action');
       await waitForFavorites(page, [FAV_T2, FAV_STUDIO, FAV_HOTEL], '3 biens sauvegardés', `${B} : « Annuler »`);
       await page.waitForSelector('.app-toast', { state: 'detached', timeout: 4000 }).catch(() => problems.push(`${B} : le message reste après « Annuler »`));
       expectSame(B, '« Annuler » : ordre « Ajout le plus récent »', await (async () => {
-        await page.selectOption('.dfav-sort select', 'recentlyAdded');
+        await page.selectOption('.favorites-sort select', 'recentlyAdded');
         await page.waitForTimeout(200);
         const titles = await favoriteTitles(page);
-        await page.selectOption('.dfav-sort select', 'relevance');
+        await page.selectOption('.favorites-sort select', 'relevance');
         return titles;
       })(), [FAV_STUDIO, FAV_HOTEL, FAV_T2]);
       await page.waitForTimeout(4500);
       expectSame(B, '« Annuler » : rien d\'envoyé', writes.slice(mark), []);
       // Deux retraits de suite : le premier part au second ; « Annuler » ne remet que le dernier.
       mark = writes.length;
-      await favCard(FAV_STUDIO).locator('.dfav-heart').click();
+      await favCard(FAV_STUDIO).locator('.favorite-heart').click();
       await waitForRemovalNotice(page, `${B} : premier de deux retraits`);
-      await favCard(FAV_HOTEL).locator('.dfav-heart').click();
+      await favCard(FAV_HOTEL).locator('.favorite-heart').click();
       await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${favId(2)}` }, null]], `${B} : second retrait`);
       await waitForFavorites(page, [FAV_T2], '1 bien sauvegardé', `${B} : deux retraits`);
       await page.click('.app-toast-action');
       await waitForFavorites(page, [FAV_T2, FAV_HOTEL], '2 biens sauvegardés', `${B} : « Annuler » après deux retraits`);
       // « Retirer » d'une annonce plus disponible : même message ; page cachée : le retrait part tout de suite.
       mark = writes.length;
-      await page.click('.dfav-missing-remove');
-      await page.waitForSelector('.dfav-missing', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${B} : « Retirer » laisse l'annonce plus disponible`));
+      await page.click('.missing-remove');
+      await page.waitForSelector('.missing-card', { state: 'detached', timeout: 8000 }).catch(() => problems.push(`${B} : « Retirer » laisse l'annonce plus disponible`));
       await waitForRemovalNotice(page, `${B} : « Retirer »`);
       expectSame(B, '« Retirer » : rien d\'envoyé tout de suite', writes.slice(mark), []);
       await page.evaluate(() => {
@@ -5446,7 +5464,7 @@ try {
       });
       await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${GONE_ID}` }, null]], `${B} : « Retirer », page cachée`);
       await page.waitForSelector('.app-toast', { state: 'detached', timeout: 4000 }).catch(() => problems.push(`${B} : le message reste quand la page est cachée`));
-      expectSame(B, 'après les retraits', [await favoriteTitles(page), await textOf(page, '.dfav-total')], [[FAV_T2, FAV_HOTEL], '2 biens sauvegardés']);
+      expectSame(B, 'après les retraits', [await favoriteTitles(page), await textOf(page, '.favorites-total')], [[FAV_T2, FAV_HOTEL], '2 biens sauvegardés']);
       await page.close();
       {
         // Le serveur refuse le retrait : le favori revient à sa place (FavoritesStore.send → restore).
@@ -5454,7 +5472,7 @@ try {
         page = await open(refusing, '/favoris/', `${B} retrait refusé`);
         await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : retrait refusé`);
         mark = writes.length;
-        await page.locator('.dfav-card', { has: page.locator('.dfav-title', { hasText: FAV_FLAT }) }).locator('.dfav-heart').click();
+        await page.locator('.favorite-card', { has: page.locator('.favorite-title', { hasText: FAV_FLAT }) }).locator('.favorite-heart').click();
         await waitForFavorites(page, [FAV_T2, FAV_STUDIO, FAV_HOTEL], '3 biens sauvegardés', `${B} : retrait refusé, carte partie`);
         await expectWrites(mark, [['DELETE', 'favorites', { listing_id: `eq.${favId(1)}` }, null]], `${B} : retrait refusé`);
         await waitForFavorites(page, FAV_ALL, '4 biens sauvegardés', `${B} : retrait refusé, carte revenue`);
@@ -5465,10 +5483,10 @@ try {
       // Onglet Recherches : les actions de SavedSearchesView, envoyées comme l'app (AccountStore.save, deleteSearch,
       // markSearchViewed) : nom, critères et alertes ensemble, mise à jour par l'id.
       page = await open(favDesk, '/favoris/?onglet=recherches', `${B} recherches`);
-      await page.waitForSelector('.dfav-searches .saved-search');
+      await page.waitForSelector('.favorites-searches .saved-search');
       await waitForSearchCounts(page, `${B} : recherches`);
       const [lyon, invest] = ACCOUNT.saved_searches;
-      const searchCard = (n) => page.locator('.dfav-searches .saved-search').nth(n);
+      const searchCard = (n) => page.locator('.favorites-searches .saved-search').nth(n);
       const openMenu = async (n) => {
         await searchCard(n).locator('.round-menu').click();
         await searchCard(n).locator('.menu-popover').waitFor({ timeout: 8000 });
@@ -5483,7 +5501,7 @@ try {
       await page.fill('dialog[open] .dialog-field', 'Lyon centre');
       await page.locator('dialog[open]').getByRole('button', { name: 'Renommer', exact: true }).click();
       await expectWrites(mark, saved({ name: 'Lyon centre', query: lyon.query, alerts_enabled: true }), `${B} : renommer`);
-      await page.waitForFunction(() => document.querySelector('.dfav-searches .saved-search h3')?.textContent === 'Lyon centre', null, { timeout: 8000 })
+      await page.waitForFunction(() => document.querySelector('.favorites-searches .saved-search h3')?.textContent === 'Lyon centre', null, { timeout: 8000 })
         .catch(() => problems.push(`${B} : le nouveau nom n'est pas affiché`));
       mark = writes.length;
       await openMenu(0);
@@ -5513,9 +5531,9 @@ try {
       expectSame(B, 'supprimer', await dialogTitle(page), 'Supprimer cette recherche ?');
       await alertButton(page, `Supprimer « ${invest.name} »`);
       await expectWrites(mark, [['DELETE', 'saved_searches', { id: `eq.${invest.id}` }, null]], `${B} : supprimer`);
-      await page.waitForFunction(() => document.querySelectorAll('.dfav-searches .saved-search').length === 1, null, { timeout: 8000 })
+      await page.waitForFunction(() => document.querySelectorAll('.favorites-searches .saved-search').length === 1, null, { timeout: 8000 })
         .catch(() => problems.push(`${B} : la recherche supprimée reste affichée`));
-      expectSame(B, 'après la suppression', [await textOf(page, '.dfav .fav-tab-count'), await textOf(page, '.dfav-searches .saved-search h3')], ['(1)', 'Lyon centre']);
+      expectSame(B, 'après la suppression', [await textOf(page, '.favorites-wrap .fav-tab-count'), await textOf(page, '.favorites-searches .saved-search h3')], ['(1)', 'Lyon centre']);
       // Voir les résultats : la recherche est vue (last_viewed_at), puis ses résultats s'ouvrent.
       mark = writes.length;
       await searchCard(0).locator('.run-button').click();
@@ -5534,18 +5552,18 @@ try {
     // catégories ; rien à comparer. Aucune recherche enregistrée : le même état, avec sa carte « 6 annonces ».
     const { context } = await favContext(1440, 900, FAV_LISTINGS, { favorites: [], saved_searches: [] });
     page = await open(context, '/favoris/', 'favoris vide');
-    await page.waitForSelector('.dfav .fav-empty');
-    expectSame('favoris vide', 'texte', [await textOf(page, '.dfav .fav-empty h2'), await textOf(page, '.dfav .fav-empty p'), await textOf(page, '.dfav .fav-empty a'),
-      await page.getAttribute('.dfav .fav-empty a', 'href'), await page.isDisabled('.dfav-compare'), await page.locator('.dfav-toolbar, .dfav-tools, .dfav-categories').count(),
-      await page.locator('.dfav .fav-empty .fav-ghost').count(), await page.getAttribute('.dfav .fav-empty-drawing', 'aria-hidden')],
+    await page.waitForSelector('.favorites-wrap .fav-empty');
+    expectSame('favoris vide', 'texte', [await textOf(page, '.favorites-wrap .fav-empty h2'), await textOf(page, '.favorites-wrap .fav-empty p'), await textOf(page, '.favorites-wrap .fav-empty a'),
+      await page.getAttribute('.favorites-wrap .fav-empty a', 'href'), await page.isDisabled('.favorites-head .compare-button'), await page.locator('.favorites-toolbar, .favorites-search, .favorites-categories').count(),
+      await page.locator('.favorites-wrap .fav-empty .fav-ghost').count(), await page.getAttribute('.favorites-wrap .fav-empty-drawing', 'aria-hidden')],
     ['Aucun favori pour l\'instant', 'Touchez le cœur d\'une annonce pour la retrouver ici et la comparer.', 'Rechercher un bien', '/recherche/', true, 0, 2, 'true']);
-    expectSame('favoris vide', 'onglets', await page.$$eval('.dfav .fav-tab', (els) => els.map((el) => [el.textContent.trim(), el.getAttribute('aria-label')])),
+    expectSame('favoris vide', 'onglets', await page.$$eval('.favorites-wrap .fav-tab', (els) => els.map((el) => [el.textContent.trim(), el.getAttribute('aria-label')])),
       [['Favoris', null], ['Recherches', 'Recherches, 0']]);
     await favShot(page, 'favoris-vide-1440.png');
-    await page.click('.dfav .fav-tab >> nth=1');
-    await page.waitForSelector('.dfav-searches .fav-empty');
-    expectSame('recherches vides', 'texte', [await textOf(page, '.dfav-searches .fav-empty h2'), await textOf(page, '.dfav-searches .fav-empty p'),
-      await textOf(page, '.dfav-searches .fav-empty-search-count'), await textOf(page, '.dfav-searches .fav-empty-save'), await page.getAttribute('.dfav-searches .fav-empty a', 'href')],
+    await page.click('.favorites-wrap .fav-tab >> nth=1');
+    await page.waitForSelector('.favorites-searches .fav-empty');
+    expectSame('recherches vides', 'texte', [await textOf(page, '.favorites-searches .fav-empty h2'), await textOf(page, '.favorites-searches .fav-empty p'),
+      await textOf(page, '.favorites-searches .fav-empty-search-count'), await textOf(page, '.favorites-searches .fav-empty-save'), await page.getAttribute('.favorites-searches .fav-empty a', 'href')],
     ['Aucune recherche enregistrée', 'Touchez Enregistrer sur une recherche pour la retrouver ici, avec ses nouveautés.', '6 annonces', 'Enregistrer', '/recherche/']);
     await favShot(page, 'favoris-recherches-vides-1440.png');
     await page.close();
@@ -5557,7 +5575,7 @@ try {
     page = await open(context, '/favoris/', 'favoris sans compte');
     await page.waitForSelector('.signin-card');
     await checkSignInScreen(page, 'favoris sans compte');
-    expectSame('favoris sans compte', 'page', [await page.locator('.dfav').count(), guestServer.requests.filter((request) => ['favorites', 'saved_searches'].includes(request.table)).length], [0, 0]);
+    expectSame('favoris sans compte', 'page', [await page.locator('.favorites-list, .favorites-searches').count(), guestServer.requests.filter((request) => ['favorites', 'saved_searches'].includes(request.table)).length], [0, 0]);
     await page.close();
     await context.close();
   }
@@ -5567,7 +5585,8 @@ try {
     await mock(context, { signedIn: true, listingRows: FAV_LISTINGS, account: FAV_ACCOUNT });
     page = await open(context, '/favoris/', 'favoris 1023');
     await page.waitForSelector('.favorite-card');
-    expectSame('favoris 1023', 'page du téléphone', [await page.locator('.favorite-card').count(), await page.locator('.dfav').count()], [4, 0]);
+    expectSame('favoris 1023', 'page du téléphone', [await page.locator('.favorite-card').count(),
+      await page.$eval('.favorites-list', (list) => getComputedStyle(list).gridTemplateColumns.split(' ').length)], [4, 2]);
     await page.close();
     await context.close();
   }

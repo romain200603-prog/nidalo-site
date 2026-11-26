@@ -2634,47 +2634,57 @@ try {
   expectJSON('comparer', 'comparaison gardée dans l’onglet', JSON.parse(await page.evaluate(() => sessionStorage.getItem('nidalo.comparer'))), { ids: [FICHE, SALE, LEASED], referenceId: FICHE });
   await page.click('.app-toast:not(.is-leaving) .app-toast-action');
   await waitForAddress(page, `${base}/comparer/`);
-  await page.waitForSelector('.cmp-table');
+  await page.waitForSelector('.cmpm-columns');
   await page.waitForLoadState('networkidle');
   expect('comparer', 'titre de la page', await page.title(), 'Comparer · Nidalo');
-  expect('comparer', 'biens comparés', await page.$$eval('.cmp-head .cmp-title', (els) => els.map((el) => el.textContent).join(' | ')), 'Appartement 3 pièces | Appartement lumineux avec balcon | T2 vendu loué près du métro');
-  expect('comparer', 'référence', await page.$$eval('.cmp-head', (els) => els.map((el) => (el.classList.contains('is-reference') ? 'R' : '-')).join('')), 'R--');
-  await checkColumn(page, 'comparer', '.cmp');
+  expect('comparer', 'biens comparés', await page.$$eval('.cmpm-column .cmpm-title', (els) => els.map((el) => el.textContent).join(' | ')), 'Appartement 3 pièces | Appartement lumineux avec balcon | T2 vendu loué près du métro');
+  expect('comparer', 'référence', await page.$$eval('.cmpm-column', (els) => els.map((el) => (el.classList.contains('is-reference') ? 'R' : '-')).join('')), 'R--');
+  // Étape 7b : l'écran Comparer du téléphone dans le grand conteneur (1180), sans barre d'onglets ; rien ne déborde
+  // (texte mesuré lui-même : les zones de toucher agrandies par ::after dépassent exprès de leur bouton).
+  expectJSON('comparer', 'grand conteneur [en-tête, tableau, centrés, barre d\'onglets, débordements]', await page.evaluate(() => {
+    const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+    const bad = ['NaN', 'undefined', 'null', 'Infinity', '[object'].filter((text) => document.body.innerText.includes(text));
+    const textWidth = (el) => { const range = document.createRange(); range.selectNodeContents(el); return range.getBoundingClientRect().width; };
+    const clipped = [...document.querySelectorAll('.cmpm button, .cmpm a, .cmpm-value-text, .cmpm-city')].filter((el) => textWidth(el) > el.getBoundingClientRect().width + 1)
+      .map((el) => el.textContent.trim().slice(0, 40));
+    return [Math.round(box('.cmpm-header').width), Math.round(box('.cmpm-content').width), ['.cmpm-header', '.cmpm-content'].every((selector) => Math.abs(box(selector).left + box(selector).width / 2 - innerWidth / 2) <= 1),
+      getComputedStyle(document.querySelector('.tabbar')).display, document.documentElement.scrollWidth - innerWidth, bad, clipped];
+  }), [1180, 1180, true, 'none', 0, [], []]);
   await fullShot(page, '2-comparer-1440.png');
-  await page.click('.cmp-make-reference >> nth=0');
-  expect('comparer', 'nouvelle référence', await page.$$eval('.cmp-head', (els) => els.map((el) => (el.classList.contains('is-reference') ? 'R' : '-')).join('')), '-R-');
-  await page.click('.cmp-head >> nth=2 >> .cmp-remove');
-  await page.waitForFunction(() => document.querySelectorAll('.cmp-head').length === 2);
-  if (!(await page.$('.cmp-add'))) problems.push('comparer: « Ajouter un bien » absent avec deux biens');
-  await page.click('.cmp-clear');
+  await page.click('.cmpm-make-reference >> nth=0');
+  expect('comparer', 'nouvelle référence', await page.$$eval('.cmpm-column', (els) => els.map((el) => (el.classList.contains('is-reference') ? 'R' : '-')).join('')), '-R-');
+  await page.click('.cmpm-column >> nth=2 >> .cmpm-remove');
+  await page.waitForFunction(() => document.querySelectorAll('.cmpm-column').length === 2);
+  if (!(await page.$('.cmpm-add'))) problems.push('comparer: « Ajouter un bien » absent avec deux biens');
+  await page.click('.cmpm-clear');
   expect('comparer', 'fenêtre pour vider', await dialogTitle(page), 'Vider la comparaison ?');
   // « Vider » est destructif dans l'app (CompareView) : bouton rouge, et le triangle d'alerte en tête de la fenêtre.
   expect('comparer', 'boutons pour vider', JSON.stringify(await page.$$eval('dialog[open] .alert-actions .btn', (els) => els.map((el) => [el.textContent, el.className]))),
     JSON.stringify([['Vider', 'btn btn-danger'], ['Annuler', 'btn btn-light']]));
   await page.click('dialog[open] .alert-actions .btn-danger');
-  await page.waitForSelector('.cmp-empty');
+  await page.waitForSelector('.cmpm-empty');
   expectJSON('comparer', 'comparaison vidée', JSON.parse(await page.evaluate(() => sessionStorage.getItem('nidalo.comparer'))), { ids: [], referenceId: null });
   await page.screenshot({ path: join(out, 'comparer-vide-1440.png') });
   // Une annonce qui n'existe plus quitte la comparaison ; un serveur qui ne répond pas laisse « Réessayer » et le bien.
   await page.evaluate(([gone, kept]) => sessionStorage.setItem('nidalo.comparer', JSON.stringify({ ids: [gone, kept], referenceId: gone })), [UNKNOWN, FICHE]);
   await page.reload({ waitUntil: 'networkidle' });
-  await page.waitForSelector('.cmp-table');
-  expect('comparer-introuvable', 'biens comparés', await page.$$eval('.cmp-head .cmp-title', (els) => els.map((el) => el.textContent).join(' | ')), 'Appartement 3 pièces');
+  await page.waitForSelector('.cmpm-columns');
+  expect('comparer-introuvable', 'biens comparés', await page.$$eval('.cmpm-column .cmpm-title', (els) => els.map((el) => el.textContent).join(' | ')), 'Appartement 3 pièces');
   expectJSON('comparer-introuvable', 'annonce retirée de la comparaison', JSON.parse(await page.evaluate(() => sessionStorage.getItem('nidalo.comparer'))), { ids: [FICHE], referenceId: FICHE });
   await page.close();
   page = await open(member, '/comparer/', 'comparer-erreur', {
     expectedStatus: 500,
     init: `sessionStorage.setItem('nidalo.comparer', ${JSON.stringify(JSON.stringify({ ids: [BROKEN], referenceId: BROKEN }))});`,
   });
-  await page.waitForSelector('.cmp-error');
+  await page.waitForSelector('.cmpm-center .app-offline');
   // L'état commun « Pas de connexion Internet » de l'app (n° 64).
-  expect('comparer-erreur', 'message', await page.textContent('.cmp-error h2'), 'Pas de connexion Internet');
-  if (await page.$('.cmp-table')) problems.push('comparer-erreur: tableau affiché sans aucun bien');
+  expect('comparer-erreur', 'message', await page.textContent('.cmpm-center .app-offline h2'), 'Pas de connexion Internet');
+  if (await page.$('.cmpm-columns')) problems.push('comparer-erreur: tableau affiché sans aucun bien');
   const brokenBefore = brokenRequests;
-  await page.click('.cmp-error .app-offline-retry');
+  await page.click('.cmpm-center .app-offline-retry');
   for (let i = 0; i < 30 && brokenRequests <= brokenBefore; i += 1) await page.waitForTimeout(100);
   if (brokenRequests <= brokenBefore) problems.push('comparer-erreur: « Réessayer » ne redemande pas le bien');
-  await page.waitForSelector('.cmp-error');
+  await page.waitForSelector('.cmpm-center .app-offline');
   expectJSON('comparer-erreur', 'bien gardé dans la comparaison', JSON.parse(await page.evaluate(() => sessionStorage.getItem('nidalo.comparer'))), { ids: [BROKEN], referenceId: BROKEN });
   await page.screenshot({ path: join(out, 'comparer-erreur-1440.png') });
   await page.close();

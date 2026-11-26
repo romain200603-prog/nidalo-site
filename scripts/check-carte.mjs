@@ -592,16 +592,17 @@ if (!before) {
   await mapReady(page, N);
   await page.screenshot({ path: join(out, 'carte-ordinateur.png') });
   if (!before) {
-    // Tracé à la souris : le bandeau en haut au centre à la place de « Liste », sans zoom ; l'outil en bas au centre, à
-    // 24 px du bas de la carte, au-dessus de la barre d'onglets (46 px).
+    // Tracé à la souris (étape 7b : l'écran du téléphone, élargi) : le bandeau à la place de la ligne du haut, sur la
+    // colonne de 720 (14 de ses bords), sans zoom ; l'outil en bas au centre, à 12 px du bas de la fenêtre (la carte
+    // couvre la barre d'onglets).
     await page.click('.zone-pencil');
     await page.waitForSelector('.zone-banner');
     const banner = await box(page, '.zone-banner');
     const tools = await box(page, '.zone-tools');
     expectSame(N, 'tracé', {
-      text: tidy(await page.textContent('.zone-banner-text')), center: Math.round(banner[0] + banner[2] / 2), width: banner[2], list: await page.locator('.map-close').count(),
+      text: tidy(await page.textContent('.zone-banner-text')), center: Math.round(banner[0] + banner[2] / 2), width: banner[2], top: await page.locator('.map-app-top').count(),
       zoom: await page.$eval('.map-column .maplibregl-ctrl-top-right', (el) => getComputedStyle(el).visibility), tools: [Math.round(tools[0] + tools[2] / 2), 900 - tools[1] - tools[3]],
-    }, { text: 'Tracez votre zone à la souris', center: 720, width: 480, list: 0, zoom: 'hidden', tools: [720, 24 + 46] });
+    }, { text: 'Tracez votre zone à la souris', center: 720, width: 692, top: 0, zoom: 'hidden', tools: [720, 12] });
     await page.screenshot({ path: join(out, 'zone-trace-ordinateur.png') });
     // La molette ne bouge pas la carte pendant le tracé.
     const shown = await anchors(page);
@@ -615,12 +616,12 @@ if (!before) {
     await page.waitForSelector('.zone-card');
     await expectCard(page, N);
     const card = await box(page, '.zone-card');
-    expectSame(N, 'carte de validation au centre, en bas', [Math.round(card[0] + card[2] / 2), card[2], 900 - card[1] - card[3]], [720, 420, 24 + 46]);
+    expectSame(N, 'carte de validation sur la colonne, en bas', [Math.round(card[0] + card[2] / 2), card[2], 900 - card[1] - card[3]], [720, 692, 8]);
     await page.screenshot({ path: join(out, 'zone-validation-ordinateur.png') });
-    // Échap : rien n'est posé, « Liste » revient ; la molette zoome de nouveau.
+    // Échap : rien n'est posé, la ligne du haut revient ; la molette zoome de nouveau.
     await page.keyboard.press('Escape');
     await page.waitForSelector('.zone-card', { state: 'detached', timeout: 3000 }).catch(() => problems.push(`${N} : Échap ne referme pas l'ajustement`));
-    expectSame(N, 'Échap', [new URL(page.url()).searchParams.has('dessin'), await page.locator('.map-close').count(), await page.locator('.map-column.is-open').count()], [false, 1, 1]);
+    expectSame(N, 'Échap', [new URL(page.url()).searchParams.has('dessin'), await page.locator('.map-app-top').count(), await page.locator('.map-column.is-open').count()], [false, 1, 1]);
     const still = await anchors(page);
     await page.mouse.move(700, 500);
     await page.mouse.wheel(0, -400);
@@ -661,9 +662,9 @@ if (!before) {
   await page.screenshot({ path: join(out, 'zone-ville-ordinateur.png') });
   if (!before) {
     const hexagon = HEXAGON.map(([latitude, longitude]) => ({ latitude, longitude }));
-    // La pastille à 16 px du haut de la fenêtre : plus de barre du haut au-dessus de la carte.
+    // La pastille sous la ligne du haut (64 du haut de la fenêtre), au bord de la colonne de 720 (14 dedans).
     expectSame(N, 'zone sur une ville : biens, pastille', [await shownCount(page), await box(page, '.zone-chip .criterion-chip').then((b) => b && b.slice(0, 2))],
-      [salesInside(hexagon), [16, 16]]);
+      [salesInside(hexagon), [374, 64]]);
     await page.click('.map-round[aria-label="Vue plan"]');
     await page.waitForTimeout(500);
     await page.screenshot({ path: join(out, 'zone-ville-plan-ordinateur.png') });
@@ -679,7 +680,7 @@ if (!before) {
   await context.close();
 }
 
-// MARK: - Ordinateur 1024 : le bandeau entre la pastille et les commandes
+// MARK: - Ordinateur 1024 : le bandeau sur la colonne, au-dessus des commandes
 
 if (!before) {
   const N = 'carte 1024';
@@ -694,7 +695,8 @@ if (!before) {
   const banner = await box(page, '.zone-banner');
   const tools = await box(page, '.map-column .map-tools');
   const zoom = await box(page, '.map-column .maplibregl-ctrl-top-right');
-  expectTrue(N, 'bandeau à gauche des commandes et du zoom', banner[0] + banner[2] <= Math.min(tools[0], zoom[0]) - 12, JSON.stringify([banner, tools, zoom]));
+  expectTrue(N, 'bandeau au-dessus des commandes et du zoom', banner[1] + banner[3] <= Math.min(tools[1], zoom[1]) - 10, JSON.stringify([banner, tools, zoom]));
+  expectSame(N, 'bandeau sur la colonne de 720', [banner[0], banner[2]], [166, 692]);
   expectSame(N, 'bandeau', tidy(await page.textContent('.zone-banner-text')), 'Ajustez votre zone');
   await page.screenshot({ path: join(out, 'zone-ajuster-1024.png') });
   await context.close();
@@ -707,7 +709,7 @@ if (!before) {
   const state = newState({ signedIn: true, saved: [ZONE_SEARCH] });
   const { context, page } = await open(DESKTOP, state);
   await page.goto(`${base}/favoris/?onglet=recherches`);
-  await page.waitForSelector('.dfav-searches .saved-search', { timeout: 8000 }).catch(() => problems.push(`${N} : la liste ne s'affiche pas`));
+  await page.waitForSelector('.favorites-searches .saved-search', { timeout: 8000 }).catch(() => problems.push(`${N} : la liste ne s'affiche pas`));
   await page.waitForFunction(() => /Voir les \d+ résultats/.test(document.querySelector('.saved-search .run-button')?.textContent ?? ''), null, { timeout: 6000 })
     .catch(() => undefined);
   expectSame(N, 'ligne de la recherche', [tidy(await page.textContent('.saved-search-text p')), tidy(await page.textContent('.saved-search .run-button'))],
@@ -796,25 +798,28 @@ if (!before) {
 }
 
 {
-  // Accueil (ordinateur) : « Autour de moi » sous le champ du lieu.
+  // Accueil (ordinateur, l'accueil du téléphone depuis l'étape 7b) : « Autour de moi » sous le champ du lieu de la
+  // carte des catégories, ouverte sur Résidentiel.
   const N = 'lieu accueil';
   const { context, page } = await open(DESKTOP, newState(), { recents: { owner: null, items: [RECENT_ANNECY] } });
   await page.goto(`${base}/`);
-  await page.waitForSelector('.dhome-place input');
+  await page.waitForSelector('.home-category .mode-tab-buy');
+  await page.click('.home-category .mode-tab-buy');
+  await page.waitForSelector('.home-category-place input');
   await page.waitForTimeout(500);
-  await page.click('.dhome-place input');
+  await page.click('.home-category-place input');
   await page.waitForTimeout(400);
   await page.screenshot({ path: join(out, 'lieu-accueil-ordinateur.png') });
   if (!before) {
-    expectSame(N, 'raccourcis', await texts(page, '.dhome-place .place-shortcuts .place-shortcut-name'), ['Autour de moi', 'Annecy']);
-    // Un lieu choisi remplace la zone dessinée (comme dans l'app).
+    expectSame(N, 'raccourcis', await texts(page, '.home-category-place .place-shortcuts .place-shortcut-name'), ['Autour de moi', 'Annecy']);
+    // Un lieu choisi remplace la zone dessinée (comme dans l'app) ; hors saisie, le champ dit « Zone dessinée ».
     await page.goto(`${base}/recherche/?mode=buy&dessin=${dessin(HEXAGON)}`);
-    await page.waitForSelector('.search-place-row input');
+    await page.waitForSelector('.search-app-top .place-field-app input');
     await page.waitForTimeout(400);
-    expectSame(N, 'zone sous le champ', tidy(await page.textContent('.search-place-label').catch(() => '')), 'Zone dessinée');
-    await page.fill('.search-place-row input', 'Lyon');
-    await page.waitForSelector('.search-place-row [role="option"]', { timeout: 5000 }).catch(() => problems.push(`${N} : pas de suggestion`));
-    await page.click('.search-place-row [role="option"] >> nth=0');
+    expectSame(N, 'zone dans le champ', tidy(await page.textContent('.search-app-top .place-field-idle').catch(() => '')), 'Zone dessinée');
+    await page.fill('.search-app-top .place-field-app input', 'Lyon');
+    await page.waitForSelector('.search-app-top [role="option"]', { timeout: 5000 }).catch(() => problems.push(`${N} : pas de suggestion`));
+    await page.click('.search-app-top [role="option"] >> nth=0');
     await waitForUrl(page, () => new URLSearchParams(location.search).get('lieu') === 'Lyon', N, 'le lieu choisi n\'est pas cherché');
     expectSame(N, 'le lieu remplace la zone', new URL(page.url()).searchParams.has('dessin'), false);
   }
