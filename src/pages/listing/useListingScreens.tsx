@@ -9,7 +9,6 @@ import { canMakeOffer } from '../../lib/listing/offers';
 import type { Profitability } from '../../lib/listing/profitability';
 import type { Publisher } from '../../lib/listing/publisher';
 import type { ListingRow, PhotoRow } from '../../lib/listings';
-import { isDesktop } from '../../lib/desktop';
 import { conversationPath, listingPath, listingScreenFromParams, wantsVideoVisit, type ListingScreen } from '../../lib/paths';
 import { AlertDialog } from './Dialogs';
 import { ListingRequestsScreen } from './ListingRequestsScreen';
@@ -18,13 +17,12 @@ import { ProfileScreen } from './ProfileScreen';
 import { useListingAccount } from './useListingAccount';
 import { VisitRequestScreen } from './VisitRequestScreen';
 
-// Actions de la fiche qui demandent un compte (ListingDetailView.swift), communes à l'ordinateur (DesktopListing) et
-// au téléphone (ListingView) : « Envoyer un message » ouvre (ou crée) la conversation avec le vendeur dans Messages ;
-// « Demander une visite » et « Faire une offre » ont leur propre adresse (&vue=visite, &vue=offre). Sans compte, la
-// connexion d'abord ; sa propre annonce n'en a pas. Si la conversation ne s'ouvre pas (message, offre), la fenêtre
-// « Impossible d'ouvrir la conversation » (n° 68), commune aux deux tailles. Le profil du vendeur ou de l'agence
-// (« Voir le profil ») a aussi son adresse (&vue=profil), sans compte ; « Voir les demandes » de sa propre annonce, la
-// sienne (&vue=demandes).
+// Actions de la fiche (ListingView) qui demandent un compte (ListingDetailView.swift) : « Envoyer un message » ouvre
+// (ou crée) la conversation avec le vendeur dans Messages ; « Demander une visite » et « Faire une offre » ont leur
+// propre adresse (&vue=visite, &vue=offre). Sans compte, la connexion d'abord ; sa propre annonce n'en a pas. Si la
+// conversation ne s'ouvre pas (message, offre), la fenêtre « Impossible d'ouvrir la conversation » (n° 68). Le profil
+// du vendeur ou de l'agence (« Voir le profil ») a aussi son adresse (&vue=profil), sans compte ; « Voir les
+// demandes » de sa propre annonce, la sienne (&vue=demandes).
 
 const sameId = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
@@ -215,11 +213,11 @@ export function useListingScreens(row: ListingRow, mode: SearchMode | null) {
       firstLayout.current = false;
       return;
     }
-    // « Faire une offre » sur téléphone : une feuille sur la fiche, qui reste où elle était.
-    const sheet = shown === 'offre' && !isDesktop();
+    // « Faire une offre » : une feuille sur la fiche (au centre sur ordinateur), qui reste où elle était.
+    const sheet = shown === 'offre';
     if (!sheet) window.scrollTo(0, shown ? 0 : listingScroll.current);
-    // L'écran ouvert reçoit le focus sur son titre (ou, sur téléphone, sur son retour rond, le premier élément de
-    // l'écran poussé), sauf si un de ses champs l'a déjà (le montant de l'offre).
+    // L'écran ouvert reçoit le focus sur son titre (l'offre) ou sur son retour rond, le premier élément de l'écran
+    // poussé, sauf si un de ses champs l'a déjà (le montant de l'offre).
     const opened = shown ? document.querySelector<HTMLElement>('.dl-screen, .listing-profile, .app-requests') : null;
     if (opened && !opened.contains(document.activeElement)) {
       opened.querySelector<HTMLElement>('h1[tabindex], .app-page-header .app-round')?.focus({ preventScroll: true });

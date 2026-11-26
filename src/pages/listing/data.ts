@@ -6,7 +6,7 @@ import type { SearchMode } from '../../lib/labels';
 import { hotelOf, num, rentalDetails } from '../../lib/listing/fields';
 import { comparePath, PATHS } from '../../lib/paths';
 
-// Données de la fiche partagées par le téléphone et l'ordinateur (sorties de ListingPage.tsx telles quelles).
+// Données de la fiche (sorties de ListingPage.tsx telles quelles).
 
 /** Retour : la recherche d'où l'on vient (même site), sinon la recherche. */
 export function backTarget(): { href: string; label: string; fromSearch: boolean } {

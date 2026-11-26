@@ -8,11 +8,10 @@ import '../../styles/pieces-app.css';
 
 // Barre de contact « Duo » de l'annonce d'un autre (ListingContactBar.swift, demande de Romain du 19 novembre 2026) :
 // « Appeler » (capsule blanche) et « Envoyer un message » (capsule bleue, « Message » si le libellé n'y tient pas).
-// Téléphone et tablette : flottante en bas de l'écran sur un dégradé, avec l'arrivée en ronds qui montent puis se
-// déplient, le reflet une fois, et le repli en ronds quand on descend la fiche. Ordinateur : les deux mêmes capsules,
-// côte à côte dans la colonne de droite, dépliées d'emblée et sans repli. Partout : l'appui qui s'enfonce, la
-// sonnerie et les ondes d'« Appeler », la bulle qui grossit et les trois points si la conversation tarde plus de
-// 0,15 s. « Réduire les animations » (prefers-reduced-motion) : comme l'app, barre dépliée en fondu, sans reflet,
+// Flottante en bas de l'écran sur un dégradé (sur ordinateur, à la largeur de la colonne), avec l'arrivée en ronds qui
+// montent puis se déplient, le reflet une fois, et le repli en ronds quand on descend la fiche ; l'appui qui
+// s'enfonce, la sonnerie et les ondes d'« Appeler », la bulle qui grossit et les trois points si la conversation
+// tarde plus de 0,15 s. « Réduire les animations » (prefers-reduced-motion) : comme l'app, barre dépliée en fondu, sans reflet,
 // ondes, rotation ni repli ; l'appui ne change que la couleur. Les actions sont celles de la fiche, inchangées.
 
 const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
@@ -75,9 +74,7 @@ type Sizes = { inner: number; callText: number; fullText: number; shortText: num
 /** Pictogramme (21 px) et 8 px avant le texte. */
 const ICON_AND_GAP = 21 + 8;
 
-export function ContactCapsules({ floating, collapsed = false, playsArrival = true, onArrived, onCall, callHref, callTitle, onMessage, opening, isRental }: {
-  /** Téléphone et tablette : barre flottante (arrivée, repli au défilement). Ordinateur : dans la colonne de droite. */
-  floating: boolean;
+export function ContactCapsules({ collapsed = false, playsArrival = true, onArrived, onCall, callHref, onMessage, opening, isRental }: {
   /** Barre repliée en ronds (la fiche descend). */
   collapsed?: boolean;
   /** L'arrivée se joue une fois par ouverture de la fiche : après un écran de la fiche, la barre revient dépliée. */
@@ -87,8 +84,6 @@ export function ContactCapsules({ floating, collapsed = false, playsArrival = tr
   onCall: () => void;
   /** Le numéro du vendeur, quand il le communique (tel:…) : « Appeler » l'appelle. */
   callHref: string | null;
-  /** Le numéro écrit, en bulle d'aide sur ordinateur. */
-  callTitle?: string;
   onMessage: () => void;
   /** La conversation avec le vendeur s'ouvre (isOpeningConversation) : les points dans la bulle après 0,15 s. */
   opening: boolean;
@@ -98,14 +93,14 @@ export function ContactCapsules({ floating, collapsed = false, playsArrival = tr
   const reduced = useReducedMotion();
   // L'arrivée lit « Réduire les animations » une fois, à l'apparition de la barre (comme arrive() dans l'app).
   const [start] = useState(() => {
-    if (!floating || !playsArrival) return { duo: ARRIVED, reducedRise: false };
+    if (!playsArrival) return { duo: ARRIVED, reducedRise: false };
     const reduce = reducedMotionQuery()?.matches ?? false;
     return { duo: reduce ? RISING : WAITING, reducedRise: reduce };
   });
   const { reducedRise } = start;
   const [duo, setDuo] = useState<Duo>(start.duo);
   /** Arrivée et reflet finis (data-arrived, que lisent les vérifications du site). */
-  const [settled, setSettled] = useState(() => floating && !playsArrival);
+  const [settled, setSettled] = useState(() => !playsArrival);
   const [sizes, setSizes] = useState<Sizes>({ inner: 0, callText: 0, fullText: 0, shortText: 0 });
   const [pressed, setPressed] = useState<'call' | 'message' | null>(null);
   const [showsDots, setShowsDots] = useState(false);
@@ -147,12 +142,6 @@ export function ContactCapsules({ floating, collapsed = false, playsArrival = tr
       if (!band || reducedMotionQuery()?.matches || typeof band.animate !== 'function') return;
       band.animate([{ left: '-70px', visibility: 'visible' }, { left: '100%', visibility: 'visible' }], { duration: ms(DUO_DURATIONS.shine), easing: SWING });
     };
-    if (!floating) {
-      // Ordinateur : les capsules sont déjà dépliées dans la colonne ; seul le reflet passe, au même moment.
-      at(DUO_ARRIVAL.shine, passShine);
-      at(DUO_ARRIVAL.shineEnd, () => setSettled(true));
-      return () => timers.forEach((timer) => window.clearTimeout(timer));
-    }
     if (!playsArrival) return undefined;
     arrivedRef.current?.();
     if (reducedRise) {
@@ -179,7 +168,7 @@ export function ContactCapsules({ floating, collapsed = false, playsArrival = tr
 
   // Repli en ronds (0,35 s, texte en 0,28 s) ou dépli (0,40 s), en Morph. Pas de repli avec « Réduire les animations ».
   useEffect(() => {
-    if (!floating || reduced) return;
+    if (reduced) return;
     setDuo((current) => {
       if (collapsed) {
         if (current.folded && current.textFolded) return current;
@@ -190,7 +179,7 @@ export function ContactCapsules({ floating, collapsed = false, playsArrival = tr
       return { ...current, folded: false, textFolded: false, callWidthTime: DUO_DURATIONS.refold, messageWidthTime: DUO_DURATIONS.refold,
         callTextTime: DUO_DURATIONS.refold, messageTextTime: DUO_DURATIONS.refold };
     });
-  }, [collapsed, floating, reduced]);
+  }, [collapsed, reduced]);
 
   // Points dans la bulle seulement après 0,15 s d'attente réelle ; retirés dès que l'ouverture finit (ou échoue).
   useEffect(() => {
@@ -282,11 +271,11 @@ export function ContactCapsules({ floating, collapsed = false, playsArrival = tr
     <div className="duo-row" ref={row} data-arrived={settled ? 'oui' : undefined}>
       <span className="duo-slot duo-slot-call" style={slot(duo.callRisen)}>
         {callHref ? (
-          <a className={callClass} style={callStyle} href={callHref} title={callTitle} aria-label="Appeler" onClick={ring} {...press('call')}>
+          <a className={callClass} style={callStyle} href={callHref} aria-label="Appeler" onClick={ring} {...press('call')}>
             {callContent}
           </a>
         ) : (
-          <button type="button" className={callClass} style={callStyle} title={callTitle} aria-label="Appeler" onClick={() => { ring(); onCall(); }} {...press('call')}>
+          <button type="button" className={callClass} style={callStyle} aria-label="Appeler" onClick={() => { ring(); onCall(); }} {...press('call')}>
             {callContent}
           </button>
         )}
@@ -323,11 +312,10 @@ export function ContactCapsules({ floating, collapsed = false, playsArrival = tr
 }
 
 /**
- * La barre flottante du téléphone et de la tablette : le dégradé des 112 derniers pixels de l'écran, sans toucher, et
- * les capsules, repliées en ronds quand on descend la fiche (12 px dans le même sens), dépliées quand on remonte, en
- * haut ou tout en bas.
+ * La barre flottante : le dégradé des 112 derniers pixels de l'écran, sans toucher, et les capsules, repliées en ronds
+ * quand on descend la fiche (12 px dans le même sens), dépliées quand on remonte, en haut ou tout en bas.
  */
-export function ContactBar(props: Omit<Parameters<typeof ContactCapsules>[0], 'floating' | 'collapsed' | 'callTitle'>) {
+export function ContactBar(props: Omit<Parameters<typeof ContactCapsules>[0], 'collapsed'>) {
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
     let state = CONTACT_BAR_SCROLL;
@@ -348,7 +336,7 @@ export function ContactBar(props: Omit<Parameters<typeof ContactCapsules>[0], 'f
   return (
     <nav className="action-bar duo-bar" aria-label="Contacter">
       <span className="duo-fade" aria-hidden="true" />
-      <ContactCapsules {...props} floating collapsed={collapsed} />
+      <ContactCapsules {...props} collapsed={collapsed} />
     </nav>
   );
 }

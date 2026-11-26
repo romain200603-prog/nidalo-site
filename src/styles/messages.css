@@ -4,9 +4,7 @@
    la liste puis la conversation avec une flèche retour. La barre du haut du site ne change pas. */
 
 /* Les écrans « Faire une offre » et « Demande de visite » de la fiche s'ouvrent aussi dans la conversation : leurs
-   styles d'ordinateur et de téléphone sont repris ici par @import (ceux du téléphone, communs avec la page d'une
-   annonce, sont dans ecrans-fiche-telephone.css). */
-@import './ordinateur-fiche.css';
+   styles, communs avec la page d'une annonce, sont repris ici par @import (ecrans-fiche-telephone.css). */
 @import './ecrans-fiche-telephone.css';
 
 /* Couleurs et mesures de la page. Sous 1024 px, les jetons de l'ordinateur (--d-…) que la page et les écrans de la
