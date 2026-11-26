@@ -825,12 +825,14 @@ try {
     await mock(context, state);
     const page = await open(context, '/compte/?vue=annonces', N);
     await page.waitForSelector('.my-listing');
-    await page.click('.my-listing .round-menu');
+    // Le menu « … » de Mes annonces (étape 5) : des boutons de menu qui ouvrent l'assistant.
+    await page.click('.my-listing .my-listing-menu .dsc-menu-button');
     expectSame(N, 'Mes annonces', [await page.getAttribute('.deposit-button', 'href'),
-      await page.$$eval('.my-listing-actions a', (els) => els.map((el) => [el.textContent.trim(), el.getAttribute('href')]))], ['/publier/', [
-      ['Voir', `/annonce/?id=${ONLINE_ID}`], ['Modifier', `/publier/?annonce=${ONLINE_ID}`], ['Modifier l\'annonce', `/publier/?annonce=${ONLINE_ID}`],
-      ['Mettre à jour les photos', `/publier/?annonce=${ONLINE_ID}&etape=photos`]]]);
-    await page.click('.menu-popover a:text("Modifier l\'annonce")');
+      await page.$$eval('.my-listing-actions a', (els) => els.map((el) => [el.textContent.trim(), el.getAttribute('href')])),
+      await page.$$eval('.my-listing-menu [role=menuitem]', (els) => els.map((el) => el.textContent.trim()))], ['/publier/', [
+      ['Voir', `/annonce/?id=${ONLINE_ID}`], ['Modifier', `/publier/?annonce=${ONLINE_ID}`]],
+      ['Modifier l\'annonce', 'Mettre à jour les photos', 'Suspendre', 'Supprimer']]);
+    await page.getByRole('menuitem', { name: 'Modifier l\'annonce' }).click();
     await page.waitForSelector('.dpub .dsc-card');
     await waitStep(page, 2, 'Informations principales', N);
     expectSame(N, 'ouverture', [...await head(page), await page.getAttribute('.ppub-pill', 'aria-label'), await textOf(page, '.ppub-pill'),
@@ -848,8 +850,8 @@ try {
     // « Mettre à jour les photos » : l'annonce s'ouvre sur ses photos ; la seconde est retirée à l'enregistrement.
     await page.goto(`${base}/compte/?vue=annonces`, { waitUntil: 'networkidle' });
     await page.waitForSelector('.my-listing');
-    await page.click('.my-listing .round-menu');
-    await page.click('.menu-popover a:text("Mettre à jour les photos")');
+    await page.click('.my-listing .my-listing-menu .dsc-menu-button');
+    await page.getByRole('menuitem', { name: 'Mettre à jour les photos' }).click();
     await page.waitForSelector('.dpub-photo img');
     await waitStep(page, 5, 'Photos', N);
     await imagesLoaded(page, '.dpub-photo img', 2, `${N} photos`);
