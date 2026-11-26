@@ -20,7 +20,6 @@ import { agendaSubtitle, onlineSubtitle, savedSearchesSubtitle, viewedSubtitle }
 import { loadTeam, memberAgency, ROLE_LABELS, teamStore, teamSubtitle } from '../../lib/account/team';
 import { currentUserId, useStore } from '../../lib/account/session';
 import { notificationsLabel } from '../../lib/badges';
-import { useDesktop } from '../../lib/desktop';
 import { requestsInTab, type DetailRequestRow } from '../../lib/listing/requestDetail';
 import { parisDay } from '../../lib/listing/views';
 import { fetchVisitRequests } from '../../lib/listing/visits';
@@ -39,7 +38,6 @@ import '../../styles/compte-app.css';
 type Dialog = 'logout' | null;
 
 export function Hub({ account }: { account: Account }) {
-  const desktop = useDesktop();
   const moderator = useStore(moderatorStore);
   const notifications = useStore(notificationsStore);
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -63,15 +61,14 @@ export function Hub({ account }: { account: Account }) {
     }
   }, [isPro]);
 
-  // Cloche du grand titre : les notifications non lues font le point rouge. Lues une fois, sans temps réel, sous
-  // 1024 px ; au-dessus, la barre du haut du site a sa cloche et la page n'en montre pas d'autre.
+  // Cloche du grand titre : les notifications non lues font le point rouge. Lues une fois à l'ouverture, et au retour
+  // par « Précédent » (page gardée en mémoire par le navigateur), sans temps réel.
   useEffect(() => {
-    if (desktop) return undefined;
     void loadNotifications();
     const onShow = (event: PageTransitionEvent) => { if (event.persisted) void loadNotifications(); };
     window.addEventListener('pageshow', onShow);
     return () => window.removeEventListener('pageshow', onShow);
-  }, [desktop]);
+  }, []);
   const unread = notifications.status === 'ready' ? unreadNotificationCount(notifications.items) : 0;
 
   /** Connexion et sécurité, Confidentialité et données, Type de compte et, pour un modérateur, Signalements. */
@@ -95,9 +92,7 @@ export function Hub({ account }: { account: Account }) {
   return (
     <div className="app-space">
       <LargeHeader className="app-space-header" title={isPro ? 'Espace professionnel' : 'Mon espace'}
-        trailing={desktop ? undefined : (
-          <RoundButton icon="bell" label={notificationsLabel(unread)} href={accountPath('notifications')} dot={unread > 0} />
-        )} />
+        trailing={<RoundButton icon="bell" label={notificationsLabel(unread)} href={accountPath('notifications')} dot={unread > 0} />} />
       {isPro ? (
         <ProSpace securityRows={securityRows} settingsRows={settingsRows} />
       ) : (

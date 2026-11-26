@@ -2,7 +2,7 @@
 // Profil agence : un particulier passe en professionnel en remplissant la fiche agence (erreurs d'abord, puis la
 // fiche, ses détails, le compte et le logo, dans l'ordre de l'app) ; un professionnel ouvre sa page agence, la modifie,
 // change son logo (l'ancien est retiré) ; un refus du serveur s'affiche sans quitter le formulaire ; « Passer en
-// professionnel » mène au formulaire depuis Mon compte, Mes informations et l'espace sur ordinateur.
+// professionnel » mène au formulaire depuis Mon compte (sur téléphone et sur ordinateur) et Mes informations.
 // Outils de diffusion : les annonces en ligne seulement, avec leur lien copié, leur QR code (PNG téléchargé), leur
 // texte copié et leur affiche A4 (une seule page en PDF) ; rien n'est écrit sur le serveur.
 // Mes contacts : les personnes qui ont écrit, demandé une visite ou fait une offre sur mes annonces (pas celles à
@@ -1238,15 +1238,27 @@ try {
     await context.close();
   }
 
-  // 5. Ordinateur, particulier : Mon espace › Type de compte › Passer en professionnel ouvre le formulaire.
+  // 5. Ordinateur, particulier : Mon compte, l'écran du téléphone dans la colonne de 720 px (688 de contenu), avec sa
+  //    cloche ; Type de compte › Passer en professionnel ouvre le formulaire, comme sur téléphone.
   {
-    const N = 'mon espace (ordinateur)';
+    const N = 'mon compte (ordinateur)';
     const state = newState();
     const context = await desktop();
     await mock(context, state);
     const page = await open(context, '/compte/', N);
-    await page.getByRole('button', { name: /Type de compte/ }).click();
-    await dialog(page).getByRole('button', { name: 'Passer en professionnel' }).click();
+    await page.locator('.app-space .space-profile').waitFor();
+    expectSame(N, 'écran du téléphone', await page.evaluate(() => {
+      const wrap = document.querySelector('.account-wrap');
+      const style = getComputedStyle(wrap);
+      return [document.querySelector('.app-space-header h1')?.textContent, !!document.querySelector('.app-space-header a.app-round[href="/compte/?vue=notifications"]'),
+        Math.round(wrap.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)), document.querySelectorAll('.dsp, .dsp-aside').length];
+    }), ['Mon espace', true, 688, 0]);
+    await page.getByRole('link', { name: /Type de compte/ }).first().click();
+    await page.waitForURL('**/compte/?vue=type');
+    await page.locator('.menu-page-button').click();
+    const link = dialog(page).getByRole('link', { name: 'Passer en professionnel' });
+    expectSame(N, 'lien du choix', await link.getAttribute('href').catch(() => null), FORM_PATH);
+    await link.click();
     await page.waitForURL(`**${FORM_PATH}`, { timeout: 8000 }).catch(() => problems.push(`${N} : adresse ${page.url()}`));
     await page.locator('.agency-status h2').waitFor();
     expectSame(N, 'écritures', writeNames(writesSince(state, 0)), []);
@@ -1652,8 +1664,9 @@ try {
     await context.close();
   }
 
-  // 11. Ordinateur : la même page (les cinq chiffres sur une ligne) ; un serveur sans la fonction (avant sa mise en
-  //     ligne) : un message et « Réessayer » ; un compte sans annonce publiée : la page vide.
+  // 11. Ordinateur : la page du téléphone dans la colonne de 720 px (688 de contenu, deux chiffres par ligne, le dernier
+  //     sur toute la largeur) ; un serveur sans la fonction (avant sa mise en ligne) : un message et « Réessayer » ; un
+  //     compte sans annonce publiée : la page vide.
   {
     const N = 'statistiques (ordinateur)';
     const state = newState({ pro: true, listings: [SALE, RENT, DRAFT], contacts: true });
@@ -1668,7 +1681,14 @@ try {
     await page.getByRole('button', { name: 'Réessayer' }).click();
     await page.locator('.stats-listing').first().waitFor();
     const tops = await page.$$eval('.stats-total', (els) => els.map((el) => Math.round(el.getBoundingClientRect().top)));
-    expectSame(N, 'chiffres sur une ligne', [tops.length, new Set(tops).size], [5, 1]);
+    expectSame(N, 'chiffres deux par ligne', [tops.length, new Set(tops).size], [5, 3]);
+    expectSame(N, 'colonne', await page.evaluate(() => {
+      const wrap = document.querySelector('.account-wrap');
+      const style = getComputedStyle(wrap);
+      const totals = document.querySelector('.stats-totals').getBoundingClientRect().width;
+      return [Math.round(wrap.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)),
+        Math.round(document.querySelector('.stats-total:last-child').getBoundingClientRect().width) === Math.round(totals)];
+    }), [688, true]);
     expectSame(N, 'annonces', (await statsSummary(page)).listings.map((item) => item[0]), [SALE.title, RENT.title]);
     await shot(page, 'statistiques-ordinateur.png');
     await context.close();

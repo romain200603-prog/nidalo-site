@@ -4,9 +4,8 @@ import { Icon } from '../../components/Icon';
 import type { IconName } from '../../components/iconPaths';
 import { GroupCard, SectionLabel } from '../../components/MenuRows';
 import { PageHeader } from '../../components/PageHeader';
-import { startLiveBadges, startLiveNotifications } from '../../lib/badges';
+import { startLiveNotifications } from '../../lib/badges';
 import { useStore } from '../../lib/account/session';
-import { useDesktop } from '../../lib/desktop';
 import {
   markAllNotificationsRead, markNotificationRead, NOTIFICATION_DAY_TITLES, notificationGroups, notificationPhoto, notificationsStore,
   notificationTarget, notificationTimeLabel, notificationTone, unreadNotificationCount, type NidaloNotification, type NotificationKind,
@@ -17,7 +16,7 @@ import { Spinner } from './parts';
 // Centre de notifications, comme l'app (NotificationsView, Features/Home/HomeView.swift) : en-tête de page poussée avec
 // « Tout lire », notifications réunies par jour (Aujourd'hui, Hier, Cette semaine, Plus anciennes) dans des cartes de
 // groupe ; chaque ligne avec son point bleu si elle n'est pas lue, son carré d'icône teinté, l'heure, le texte et la
-// photo du bien. Le même écran sur téléphone et, dans la colonne de 640 px, sur ordinateur.
+// photo du bien. Le même écran sur toutes les largeurs.
 
 /** Icône de chaque sorte, celles de NotificationRow. */
 const KIND_ICONS: Record<NotificationKind, IconName> = {
@@ -93,16 +92,14 @@ function NotificationItem({ item, time, photo }: { item: NidaloNotification; tim
 
 export function NotificationsScreen({ signedIn }: { signedIn: boolean }) {
   const state = useStore(notificationsStore);
-  const desktop = useDesktop();
   const [photos, setPhotos] = useState<Map<string, string>>(() => new Map());
   const asked = useRef(new Set<string>());
 
   useEffect(() => {
     if (!signedIn) return undefined;
-    // Sur ordinateur, lecture et temps réel partagés avec les pastilles de la barre du haut ; sur téléphone, sans
-    // pastilles, les notifications seules.
-    return desktop ? startLiveBadges() : startLiveNotifications();
-  }, [signedIn, desktop]);
+    // Les notifications seules, lues puis suivies en direct (pas de pastilles à tenir à jour).
+    return startLiveNotifications();
+  }, [signedIn]);
 
   // Première photo de chaque bien, lue une fois (la liste ne l'attend pas).
   const listingIds = signedIn ? [...new Set(state.items.flatMap((item) => (item.listingId ? [item.listingId.toLowerCase()] : [])))].join(',') : '';
