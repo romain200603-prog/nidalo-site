@@ -7,8 +7,8 @@ import { ENERGY_CLASSES, type EnergyClass } from '../../lib/search';
 import type { PublishDraft } from '../../lib/publish/draft';
 import { useFitTexts } from '../listing/fitText';
 
-// Contrôles de Publier sur ordinateur, comme l'app (FormControls.swift, TextInput, ErrorLine, EnergyClassChoice et
-// IndicatorsCard de Features/Publish), dans le style des formulaires de Mon espace (.dsc).
+// Contrôles de Publier, comme l'app (FormControls.swift, TextInput, ErrorLine, EnergyClassChoice et IndicatorsCard de
+// Features/Publish), sur la base des formulaires des écrans de Mon compte (.dsc), aux mesures de l'app.
 
 const EMPTY = 'Non renseigné';
 

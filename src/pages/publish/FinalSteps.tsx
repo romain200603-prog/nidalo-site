@@ -3,7 +3,6 @@ import { InfoLine } from '../../components/FilterControls';
 import { Icon } from '../../components/Icon';
 import { ListingCard } from '../../components/ListingCard';
 import { cardContent } from '../../lib/cardContent';
-import { useDesktop } from '../../lib/desktop';
 import { accountPath, listingPath } from '../../lib/paths';
 import { descriptionIsOptional, missingRequiredFields, STEP_TITLES, type PublishStep, type RequiredField } from '../../lib/publish/draft';
 import { missingLabel, previewRow, recapRows, stepsToComplete, type Guide } from '../../lib/publish/flow';
@@ -98,7 +97,6 @@ export function ReviewStep({ draft, onEdit, onFix, onFixStep, errorMessage }: {
   onFixStep: (target: Guide) => void;
   errorMessage: string | null;
 }) {
-  const desktop = useDesktop();
   const missing = missingRequiredFields(draft);
   const steps = stepsToComplete(draft);
   return (
@@ -135,8 +133,8 @@ export function ReviewStep({ draft, onEdit, onFix, onFixStep, errorMessage }: {
               <dd>
                 <span>{row.value}</span>
                 <button type="button" className="dpub-recap-edit" aria-label={`Modifier ${row.title}`} onClick={() => onEdit(row.step)}>
-                  {/* Le crayon seul de l'app sur téléphone ; l'ordinateur garde le sien. */}
-                  <Icon name={desktop ? 'pen' : 'pencil'} />
+                  {/* Le crayon seul de l'app. */}
+                  <Icon name="pencil" />
                 </button>
               </dd>
             </div>
@@ -149,23 +147,18 @@ export function ReviewStep({ draft, onEdit, onFix, onFixStep, errorMessage }: {
 }
 
 /**
- * Écran affiché quand la publication est confirmée par le serveur (PublishSuccessView). Sur téléphone (`phone`), la
- * page entière de l'app : la coche verte pleine de 64, le titre et la phrase au milieu, les trois boutons en bas.
+ * Écran affiché quand la publication est confirmée par le serveur (PublishSuccessView), sur toutes les largeurs : la
+ * page entière de l'app, la coche verte pleine de 64, le titre et la phrase au milieu, les trois boutons en bas.
  */
-export function SuccessView({ listingId, title, editing, back, phone = false }: {
+export function SuccessView({ listingId, title, editing, back }: {
   listingId: string;
   title: string;
   editing: boolean;
   back: string;
-  phone?: boolean;
 }) {
   return (
     <div className="dpub-success">
-      {phone ? (
-        <CheckCircleFill className="dpub-success-check" />
-      ) : (
-        <span className="dpub-success-icon" aria-hidden="true"><Icon name="circleCheck" /></span>
-      )}
+      <CheckCircleFill className="dpub-success-check" />
       <h1>{editing ? 'Modifications enregistrées' : 'Annonce publiée'}</h1>
       <p>
         {editing

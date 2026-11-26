@@ -1,325 +1,324 @@
-/* « Publier une annonce » sur téléphone (moins de 1024 px) : l'assistant plein écran de l'app (PublishFlowView,
-   PublishFinalSteps, PublishMediaStep, FormControls), sans barre d'onglets. En haut, l'en-tête fixe (ronds gris de 36,
-   titre de 20 gras, « Étape 2 sur 7 · … » de 13, pastille « Brouillon » de 36, barre d'étapes touchable) ; au milieu,
-   l'étape (cartes de 16, 14 d'écart, 16 de marge) ; en bas, la barre blanche à ombre légère avec « Retour » (130 au
-   plus) et « Continuer » de 52. Les pièces de l'ordinateur (.dsc, ordinateur-publier.css) sont reprises aux mesures de
-   l'app. Le pied de page du site reste sous l'assistant. */
-@media (max-width: 1023.98px) {
-  /* ——— Cadre : toute la largeur, au moins la hauteur de l'écran (la barre du bas reste en bas) ——— */
-  .account-wrap:has(> .dpub-flow, > .dpub > .dpub-success) { max-width: none; padding: 0; }
-  .dpub-flow { gap: 0; min-height: 100vh; min-height: 100dvh; padding: 0; font-family: var(--app-font); }
-  .dpub-flow > .dpub-steps { flex: 1 0 auto; width: 100%; max-width: 672px; margin: 0 auto; padding: 12px 16px 24px; }
+/* « Publier une annonce » (PublishFlowView, PublishFinalSteps, PublishMediaStep, FormControls de l'app) : l'assistant
+   plein écran de l'app sur toutes les largeurs, sans barre d'onglets. En haut, l'en-tête fixe (ronds gris de 36, titre
+   de 20 gras, « Étape 2 sur 7 · … » de 13, pastille « Brouillon » de 36, barre d'étapes touchable) ; au milieu, l'étape
+   (cartes de 16, 14 d'écart, 16 de marge) ; en bas, la barre blanche à ombre légère avec « Retour » (130 au plus) et
+   « Continuer » de 52. Les pièces des écrans de Mon compte (.dsc, ecrans-compte.css) sont reprises aux mesures de
+   l'app. Le pied de page du site reste sous l'assistant. À partir de 1024 px, le même écran élargi dans la colonne de
+   720 px (fin du fichier). */
+/* ——— Cadre : toute la largeur, au moins la hauteur de l'écran (la barre du bas reste en bas) ——— */
+.account-wrap:has(> .dpub-flow, > .dpub > .dpub-success) { max-width: none; padding: 0; }
+.dpub-flow { gap: 0; min-height: 100vh; min-height: 100dvh; padding: 0; font-family: var(--app-font); }
+.dpub-flow > .dpub-steps { flex: 1 0 auto; width: 100%; max-width: 672px; margin: 0 auto; padding: 12px 16px 24px; }
 
-  /* ——— En-tête (PublishFlowView.header) : 8 au-dessus, 10 en dessous, 10 entre la ligne et la barre d'étapes ——— */
-  .ppub-head { position: sticky; top: 0; z-index: 6; display: flex; flex-direction: column; gap: 10px; padding: 8px 16px 10px; background: var(--app-page); }
-  .ppub-head > * { width: 100%; max-width: 640px; margin: 0 auto; }
-  .ppub-head-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
-  /* Retour (BackButton) et croix : ronds de 36 sur le gris des segments, icône de 18 ; 44 de zone de toucher. */
-  .ppub-round {
-    position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px;
-    margin: 0; padding: 0; border: 0; border-radius: 50%; background: var(--app-segment); color: var(--app-navy); cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .ppub-round::after { content: ''; position: absolute; inset: -4px; }
-  .ppub-round .icon { width: 18px; height: 18px; }
-  /* Titres : 2 d'écart ; le Spacer(minLength: 4) de l'app entre les titres et la pastille (12 + 4 + 12). */
-  .ppub-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; margin-right: 16px; }
-  .ppub-titles h1 { margin: 0; overflow: hidden; color: var(--app-navy); font: 700 20px/1.21 var(--app-font); text-overflow: ellipsis; white-space: nowrap; }
-  .ppub-titles p { margin: 0; color: var(--app-text-secondary); font: 500 13px/1.21 var(--app-font); }
-  .dpub:has(> .dpub-steps.is-sliding) .ppub-titles p { animation: app-fade-in var(--app-duration) var(--app-ease) both; }
-  /* « Brouillon » / « Enregistrer » : 13 gras bleu sur bleu pâle, capsule de 36, 12 de chaque côté ; 44 de zone. */
-  .ppub-pill {
-    position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; height: 36px; margin: 0; padding: 0 12px;
-    border: 0; border-radius: 999px; background: var(--app-brand-soft); color: var(--app-brand); font: 700 13px/1 var(--app-font);
-    white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent;
-  }
-  .ppub-pill::after { content: ''; position: absolute; inset: -4px 0; }
-  .ppub-pill:disabled { opacity: 0.5; cursor: default; }
-  .ppub-pill .dpub-spinner { width: 16px; height: 16px; color: var(--app-brand); }
-  .ppub-head :is(.ppub-round, .ppub-pill):focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
-
-  /* Barre d'étapes touchable (StepProgressBar avec onSelect) : un segment par étape, 4 d'écart, 4 de haut (6 pour
-     l'étape en cours), bleu jusqu'à l'étape la plus loin atteinte ; chaque segment atteint s'ouvre d'un toucher sur
-     44 de haut, qui débordent de 10 au-dessus et au-dessous (la barre prend 24). */
-  .ppub-head .dpub-progress { display: flex; gap: 4px; height: 24px; margin: 0 auto; }
-  .ppub-head .dpub-progress > * {
-    flex: 1 1 0; min-width: 0; display: flex; align-items: center; height: 44px; margin: -10px 0; padding: 0; border: 0; background: none;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .ppub-head .dpub-progress > button { cursor: pointer; }
-  .ppub-head .dpub-progress > button:focus-visible { outline: 2px solid var(--app-brand); outline-offset: -8px; border-radius: 8px; }
-  .ppub-head .dpub-progress > * > span {
-    flex: 1; height: 4px; border-radius: 999px; background: var(--app-segment);
-    transition: background-color var(--app-duration) var(--app-ease), height var(--app-duration) var(--app-ease);
-  }
-  .ppub-head .dpub-progress > .is-done > span { background: var(--app-brand); }
-  .ppub-head .dpub-progress > .is-current > span { height: 6px; }
-
-  /* « Brouillon enregistré » : capsule verte de 44, coche pleine, 14 gras blanc, 8 sous le haut de l'écran ; elle
-     descend du haut en apparaissant. */
-  .dpub-flow > .dsc-saved {
-    top: calc(env(safe-area-inset-top) + 8px); gap: 8px; height: 44px; padding: 0 16px; background: var(--app-yield-green); box-shadow: none;
-    font: 700 14px/1 var(--app-font); animation: ppub-notice-in 0.35s var(--app-ease) both;
-  }
-  .dpub-flow > .dsc-saved .ppub-check { width: 16px; height: 16px; }
-  .ppub-check circle { fill: currentColor; }
-  .ppub-check path { fill: none; stroke: var(--app-yield-green); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
-
-  /* ——— Passage d'une étape à l'autre (StepSlide.tsx) : l'étape glisse de toute la largeur de l'écran ——— */
-  .dpub-flow > .dpub-steps.is-sliding { overflow-x: clip; }
-  .dpub-step, .dpub-step-copy { display: flex; flex-direction: column; gap: 14px; }
-  .dpub-step-exit { position: fixed; z-index: 4; overflow: hidden; pointer-events: none; }
-  .dpub-step-exit:empty { display: none; }
-  .dpub-step-copy { position: absolute; margin: 0; }
-  .dpub-step-copy * { animation: none !important; transition: none !important; }
-  .dpub-step.is-entering.is-forward { animation: ppub-step-from-right var(--app-duration) var(--app-ease) both; }
-  .dpub-step.is-entering.is-back { animation: ppub-step-from-left var(--app-duration) var(--app-ease) both; }
-  .dpub-step-copy.is-forward { animation: ppub-step-to-left var(--app-duration) var(--app-ease) both; }
-  .dpub-step-copy.is-back { animation: ppub-step-to-right var(--app-duration) var(--app-ease) both; }
-
-  /* ——— Barre du bas (actionBar) : blanche, ombre bleu marine à 6 % vers le haut ; 10 au-dessus, 6 au-dessous ——— */
-  .dpub-flow > .dsc-action-bar {
-    position: sticky; bottom: 0; z-index: 5; align-items: stretch; gap: 8px; margin: 0; padding: 10px 16px calc(6px + env(safe-area-inset-bottom));
-    border: 0; background: #FFFFFF; box-shadow: 0 -2px 20px rgba(36, 45, 56, 0.06);
-  }
-  .dpub-flow > .dsc-action-bar > * { width: 100%; max-width: 640px; margin: 0 auto; }
-  .dpub-flow .dsc-action-buttons { display: flex; gap: 10px; }
-  .dpub-flow .dsc-action-buttons > .dsc-button { flex: 1 1 0; min-width: 0; padding: 0 12px; }
-  /* « Retour » : 130 au plus (frame(maxWidth: 130)), « Continuer » prend le reste. */
-  .dpub-flow .dsc-action-buttons > .dsc-button-light { flex: 0 1 130px; }
-  /* Pendant un envoi, le bouton garde sa couleur avec la roue blanche ; atténué à 50 % quand il manque quelque chose. */
-  .dpub-flow .dsc-action-buttons > .dsc-button:disabled { opacity: 1; }
-  .dpub-flow .dsc-action-buttons > .dsc-button.is-dimmed { opacity: 0.5; }
-  .dpub-button-text { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dpub-progress-text { color: var(--app-text-secondary); font-size: 13px; font-weight: 500; text-align: center; }
-
-  /* Boutons de l'app (DomiaPrimaryButtonStyle, DomiaSecondaryButtonStyle) : 52 de haut, rayon 12, 15 semi-gras ; le
-     bleu foncé quand on appuie sur le bouton plein, 85 % pour le bouton clair. */
-  .dpub-flow .dsc-button, .dpub-success .dsc-button {
-    gap: 8px; height: 52px; border-radius: 12px; font: 600 15px/1.2 var(--app-font);
-    transition: background-color var(--app-press-duration) var(--app-ease), opacity var(--app-press-duration) var(--app-ease);
-  }
-  .dpub-flow .dsc-button .icon, .dpub-success .dsc-button .icon { width: 17px; height: 17px; stroke-width: 2.4; }
-  :is(.dpub-flow, .dpub-success) .dsc-button-primary { background: var(--app-brand); }
-  :is(.dpub-flow, .dpub-success) .dsc-button-primary:hover:not(:disabled) { background: var(--app-brand); }
-  :is(.dpub-flow, .dpub-success) .dsc-button-primary:active:not(:disabled) { background: var(--app-brand-pressed); }
-  :is(.dpub-flow, .dpub-success) .dsc-button-light, :is(.dpub-flow, .dpub-success) .dsc-button-light:hover:not(:disabled) {
-    background: var(--app-brand-soft); color: var(--app-brand);
-  }
-  :is(.dpub-flow, .dpub-success) .dsc-button-light:active:not(:disabled) { opacity: 0.85; }
-  .dpub-flow .dsc-button:disabled { opacity: 0.5; }
-  /* Boutons clairs d'une carte (« Choisir des photos », « Rédiger à partir de mes informations ») : toute la largeur. */
-  .dpub-flow .dsc-card .dsc-small-row { display: flex; }
-  .dpub-flow .dsc-card .dsc-small-row > .dsc-button { flex: 1; min-width: 0; padding: 0 14px; }
-
-  /* ——— Cartes et champs (SectionCard, FieldLabel, AmountField, TextInput, ChoiceChip, InfoLine, ErrorLine) ——— */
-  .dpub-flow .dsc-card { gap: 14px; padding: 18px; border: 1px solid var(--app-border); border-radius: 16px; background: #FFFFFF; }
-  .dpub-flow .dsc-card-title { color: var(--app-navy); font: 700 18px/1.21 var(--app-font); }
-  .dpub-flow :is(.field-label, .number-field label, .dsc-label, .dsc-field label) { color: var(--app-text-secondary); font-size: 13px; font-weight: 600; }
-  .dpub-flow :is(.dsc-field, .number-field) { gap: 6px; }
-  .dpub-flow .dsc-field-block { gap: 6px; }
-  .dpub-flow .dsc-choices { gap: 8px; }
-  .dpub-flow .field-error { font-size: 12px; font-weight: 500; }
-  .dpub-flow .dpub-error { margin: 0; }
-  .dpub-flow .dsc-note { color: var(--app-text-secondary); font-size: 13px; font-weight: 500; line-height: 1.35; }
-  /* Montant : fond de champ, contour fin ; bleu de 1,5 pendant la saisie, rouge de 1,5 en erreur. */
-  .dpub-flow .number-input { gap: 8px; height: 48px; padding: 0 14px; border: 1px solid var(--app-field-border); border-radius: 12px; background: var(--app-field); }
-  .dpub-flow .number-input:focus-within { border-color: var(--app-brand); box-shadow: inset 0 0 0 0.5px var(--app-brand); }
-  .dpub-flow .has-error .number-input { border-color: var(--red); box-shadow: inset 0 0 0 0.5px var(--red); }
-  /* Un « Non renseigné » trop long pour un champ étroit se termine par « … », comme dans l'app. */
-  .dpub-flow .number-input input { color: var(--app-navy); font-size: 15px; font-weight: 600; text-overflow: ellipsis; }
-  .dpub-flow .number-input input::placeholder { color: var(--app-text-muted); }
-  .dpub-flow .number-input .unit { color: var(--app-text-secondary); font-size: 13px; font-weight: 500; }
-  /* « R+ » devant le nombre d'étages, 2 avant le nombre. */
-  .dpub-flow .number-input .prefix { flex: none; margin-right: -6px; color: var(--app-text-secondary); font-size: 13px; font-weight: 500; }
-  /* Texte (TextInput) et adresse : fond blanc, contour de la carte, rouge de 1,5 en erreur. */
-  .dpub-flow .dsc-input, .dpub-flow .place-field input {
-    height: 48px; padding: 0 14px; border: 1px solid var(--app-border); border-radius: 12px; background: #FFFFFF; color: var(--app-navy);
-    font: 600 15px/1.2 var(--app-font); text-overflow: ellipsis;
-  }
-  /* Adresse remplie : la croix qui l'efface garde sa place à droite. */
-  .dpub-flow .place-field input:not(:placeholder-shown) { padding-right: 44px; }
-  .dpub-flow :is(.dsc-input, .place-field input)::placeholder { color: var(--app-placeholder); font-weight: 600; }
-  .dpub-flow :is(.dsc-input, .place-field input):focus { border-color: var(--app-brand); box-shadow: inset 0 0 0 0.5px var(--app-brand); }
-  .dpub-flow :is(.dsc-field.has-error .dsc-input, .dpub-place.has-error .place-field input) { border-color: var(--red); box-shadow: inset 0 0 0 0.5px var(--red); }
-  .dpub-flow .place-field-clear { top: 5px; }
-  .dpub-flow .place-list { top: 54px; }
-  /* Code postal de 130 et ville, 10 d'écart. */
-  .dpub-postal-row { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 10px; align-items: start; }
-  /* Pastilles : 40 de haut, fond de champ et contour fin ; bleu pâle bordé de 1,5 quand elle est choisie. */
-  .dpub-flow .choice-chip {
-    min-height: 40px; padding: 0 12px; border: 1px solid var(--app-field-border); border-radius: 12px; background: var(--app-field); color: var(--app-navy);
-    font-size: 13.5px; font-weight: 600;
-  }
-  .dpub-flow .choice-chip:hover:not([aria-pressed="true"]) { background: var(--app-field); }
-  .dpub-flow .choice-chip[aria-pressed="true"] { padding: 0 11.5px; border: 1.5px solid var(--app-brand); background: var(--app-brand-soft); color: var(--app-brand); }
-  /* Pièces et chambres : cinq pastilles à 6 d'écart ; « Studio » rapetisse pour tenir dans la sienne (jusqu'à 85 %, comme
-     l'app), avec 8 de marge au lieu de 12 puisque le contour prend sa place ici (pas dans l'app). */
-  .dpub-choices-rooms { gap: 6px; }
-  .dpub-flow .dpub-choices-rooms > .choice-chip { padding: 0 8px; }
-  .dpub-flow .dpub-choices-rooms > .choice-chip[aria-pressed="true"] { padding: 0 7.5px; }
-  .dpub-chip-title { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dpub-choices-wide { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
-  .dpub-choices-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .dpub-flow .energy-step { min-height: 36px; }
-  .dpub-flow .feature-toggle { min-height: 31px; }
-  .dpub-flow .feature-toggle > .icon { color: var(--app-navy); }
-  .dpub-flow .feature-title { color: var(--app-navy); font-size: 14px; font-weight: 500; }
-  .dpub-flow .feature-title.field-label { color: var(--app-text-secondary); font-size: 13px; font-weight: 600; }
-  .dpub-flow .date-input { height: 48px; }
-  .dpub-flow .info-line { padding: 10px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 500; }
-  .dpub-flow .info-line .icon { margin-top: 2.5px; }
-
-  /* « Disponibilité » d'une location (RentalAvailabilityChoice) : la date sur une ligne, libellé de 14 semi-gras. */
-  .dpub-availability { display: flex; flex-direction: column; gap: 8px; }
-  .dpub-availability-date { display: flex; align-items: center; justify-content: space-between; gap: 12px; animation: app-fade-in var(--app-duration) var(--app-ease) both; }
-  .dpub-availability-date label { color: var(--app-navy); font-size: 14px; font-weight: 600; }
-  .dpub-availability-date .date-input { flex: none; width: 180px; }
-
-  /* Indicateurs calculés (IndicatorsCard) : titre de 14 semi-gras, valeur de 15 gras, formule de 12 grise (3 d'écart). */
-  .dpub-indicator { display: flex; flex-direction: column; gap: 3px; }
-  .dpub-indicator-top { display: flex; align-items: baseline; gap: 8px; }
-  .dpub-indicator-title { color: var(--app-navy); font-size: 14px; font-weight: 600; }
-  .dpub-hypothesis {
-    flex: none; display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 999px; background: #FEF3E2; color: #B45309;
-    font-size: 10.5px; font-weight: 700;
-  }
-  .dpub-indicator-value { flex: none; margin-left: auto; padding-left: 6px; color: var(--app-navy); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .dpub-indicator-value.is-empty { color: var(--app-text-muted); }
-  .dpub-indicator-formula { color: var(--app-text-secondary); font-size: 12px; font-weight: 500; line-height: 1.3; }
-
-  /* ——— Étape 1, catégorie et type (PublishCategoryTile, PublishTypeTile), comme sur ordinateur ——— */
-  .dpub-category { display: flex; flex-direction: column; font-family: var(--app-font); }
-  .dpub-category-head { display: flex; flex-direction: column; gap: 6px; }
-  .dpub-category-head h2 { color: var(--app-navy); font-size: 26px; font-weight: 700; line-height: 1.21; }
-  .dpub-category-head p { color: var(--app-text-secondary); font-size: 15px; font-weight: 500; line-height: 1.21; }
-  .dpub-nowrap { white-space: nowrap; }
-  .dpub-category-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 20px; }
-  .dpub-category-tile {
-    --tile-soft: var(--app-brand-soft); --tile-ink: var(--app-brand); --tile-shadow: rgba(60, 92, 176, 0.18);
-    position: relative; display: flex; flex-direction: column; align-items: flex-start; min-width: 0; height: 112px; margin: 0;
-    padding: 14px; border: 0; border-radius: 22px; background: #FFFFFF; box-shadow: 0 4px 20px transparent; color: var(--app-navy);
-    font-family: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
-    transition: background-color var(--app-duration) var(--app-ease), box-shadow var(--app-duration) var(--app-ease);
-  }
-  .dpub-category-tile.is-rental { --tile-soft: #E3F1EF; --tile-ink: #2C7A72; --tile-shadow: rgba(44, 122, 114, 0.18); }
-  .dpub-category-tile.is-investment { --tile-soft: #E6F0EA; --tile-ink: #2F7A4E; --tile-shadow: rgba(47, 122, 78, 0.18); }
-  .dpub-category-tile.is-hotel { --tile-soft: #F8EED8; --tile-ink: #946B1E; --tile-shadow: rgba(148, 107, 30, 0.18); }
-  .dpub-category-tile::before, .dpub-type-tile::before {
-    content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px var(--app-border); pointer-events: none;
-    transition: box-shadow var(--app-duration) var(--app-ease);
-  }
-  .dpub-category-tile[aria-pressed="true"] { box-shadow: 0 4px 20px var(--tile-shadow); }
-  .dpub-category-tile[aria-pressed="true"]::before { box-shadow: inset 0 0 0 2px var(--tile-ink); }
-  .dpub-category-icon {
-    display: inline-flex; flex: none; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 14px;
-    background: var(--tile-soft); color: var(--tile-ink);
-  }
-  .dpub-category-icon .icon { width: 22px; height: 22px; }
-  .dpub-category-title, .dpub-category-subtitle { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dpub-category-title { margin-top: auto; font-size: 15px; font-weight: 700; line-height: 1.21; }
-  .dpub-category-subtitle { padding-top: 2px; color: var(--app-text-secondary); font-size: 12px; font-weight: 500; line-height: 1.21; }
-  .dpub-category-check {
-    position: absolute; top: 10px; right: 10px; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
-    border-radius: 50%; background: var(--tile-ink); color: #FFFFFF; opacity: 0; transform: scale(0);
-    transition: opacity var(--app-duration) var(--app-ease), transform var(--app-duration) var(--app-ease);
-  }
-  .dpub-category-check .icon { width: 14px; height: 14px; }
-  .dpub-category-tile[aria-pressed="true"] .dpub-category-check { opacity: 1; transform: none; }
-  .dpub-types { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; animation: app-fade-in var(--app-duration) var(--app-ease) both; }
-  .dpub-types-title { color: var(--app-text-muted); font-size: 12px; font-weight: 700; letter-spacing: 0.6px; line-height: 1.21; text-transform: uppercase; }
-  .dpub-types-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .dpub-type-tile {
-    position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 54px; margin: 0; padding: 8px 11px;
-    border: 0; border-radius: 16px; background: #FFFFFF; color: var(--app-navy); font-family: inherit; text-align: left; cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    transition: background-color var(--app-duration) var(--app-ease), color var(--app-duration) var(--app-ease);
-  }
-  .dpub-type-tile[aria-pressed="true"] { background: var(--app-brand-soft); color: var(--app-brand); }
-  .dpub-type-tile[aria-pressed="true"]::before { box-shadow: inset 0 0 0 2px var(--app-brand); }
-  .dpub-type-icon {
-    display: inline-flex; flex: none; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 10px;
-    background: #F5F4F0; color: var(--app-text-dark);
-    transition: background-color var(--app-duration) var(--app-ease), color var(--app-duration) var(--app-ease);
-  }
-  .dpub-type-icon .icon { width: 18px; height: 18px; }
-  .dpub-type-tile[aria-pressed="true"] .dpub-type-icon { background: #FFFFFF; color: var(--app-brand); }
-  .dpub-type-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-  .dpub-type-title, .dpub-type-detail { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
-  .dpub-type-title { font-size: 14px; font-weight: 600; line-height: 1.21; }
-  .dpub-type-detail { color: var(--app-text-secondary); font-size: 11px; font-weight: 500; line-height: 1.21; transition: color var(--app-duration) var(--app-ease); }
-  .dpub-type-tile[aria-pressed="true"] .dpub-type-detail { color: var(--app-brand); }
-  .dpub-category-info { margin-top: 14px; animation: app-fade-in var(--app-duration) var(--app-ease) both; }
-
-  /* ——— Photos (PublishMediaStep) : trois colonnes, 8 d'écart, carrés à coins de 12 ——— */
-  .dpub-photos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
-  .dpub-photo { position: relative; aspect-ratio: 1; }
-  .dpub-photo > img { display: block; width: 100%; height: 100%; border-radius: 12px; background: var(--app-segment); object-fit: cover; }
-  /* « Principale » : 10,5 gras blanc sur le bleu, capsule de 20, à 5 du bord. */
-  .dpub-photo-main {
-    position: absolute; left: 5px; top: 5px; display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 999px;
-    background: var(--app-brand); color: #FFFFFF; font-size: 10.5px; font-weight: 700; line-height: 1;
-  }
-  /* « … » : rond blanc à 90 % de 28, points de 13 gras, à 5 du bord ; 44 de zone de toucher. */
-  .dpub-photo > .dsc-menu { position: absolute; right: 5px; top: 5px; }
-  .dpub-photo-menu {
-    position: relative; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0;
-    border-radius: 50%; background: rgba(255, 255, 255, 0.9); color: var(--app-navy); cursor: pointer; -webkit-tap-highlight-color: transparent;
-  }
-  .dpub-photo-menu::after { content: ''; position: absolute; inset: -8px; }
-  .dpub-photo-menu .icon { width: 15px; height: 15px; stroke-width: 2.6; }
-  .dpub-importing { display: flex; align-items: center; gap: 8px; color: var(--app-text-secondary); font-size: 13px; font-weight: 500; }
-  .dpub-importing .spinner { width: 20px; height: 20px; }
-
-  /* ——— Description et aperçu (PublishDescriptionStep) ——— */
-  .dpub-propose { align-self: flex-start; padding: 2px 0; border: 0; background: none; color: var(--app-brand); font: 700 13px/1.3 var(--app-font); text-align: left; cursor: pointer; }
-  /* Texte de 15 medium, 160 de haut au moins, fond blanc, coins de 12 (TextEditor et ses marges). */
-  .dpub-flow .dpub-textarea {
-    height: auto; min-height: 160px; padding: 16px 13px; border: 1px solid var(--app-border); border-radius: 12px; background: #FFFFFF;
-    color: var(--app-navy); font: 500 15px/1.35 var(--app-font); resize: vertical;
-  }
-  .dpub-flow .dsc-field.has-error .dpub-textarea { border-color: var(--red); box-shadow: inset 0 0 0 0.5px var(--red); }
-  .dpub-preview { width: 100%; }
-  .dpub-preview .listing-card { width: 100%; }
-
-  /* ——— Vérification (PublishReviewStep) : lignes sans filet, 14 d'écart ——— */
-  .dpub-missing { display: flex; flex-direction: column; gap: 14px; margin: 0; padding: 0; list-style: none; }
-  .dpub-missing > li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; color: var(--red); font-size: 14px; font-weight: 600; }
-  .dpub-link {
-    position: relative; flex: none; padding: 0; border: 0; background: none; color: var(--app-brand); font: 700 13px/1.3 var(--app-font); cursor: pointer;
-  }
-  .dpub-link::after { content: ''; position: absolute; inset: -12px -8px; }
-  /* Récapitulatif : intitulé de 13 gris, valeur de 13,5 grasse à droite, crayon bleu de 13. */
-  .dpub-recap { display: flex; flex-direction: column; gap: 14px; margin: 0; }
-  .dpub-recap-row { display: flex; align-items: baseline; gap: 8px; }
-  .dpub-recap-row dt { flex: none; color: var(--app-text-secondary); font-size: 13px; font-weight: 500; }
-  .dpub-recap-row dd { flex: 1; min-width: 0; display: flex; align-items: baseline; justify-content: flex-end; gap: 8px; margin: 0; }
-  .dpub-recap-row dd > span { min-width: 0; color: var(--app-navy); font-size: 13.5px; font-weight: 700; text-align: right; overflow-wrap: anywhere; }
-  .dpub-recap-edit {
-    position: relative; flex: none; display: inline-flex; align-self: center; align-items: center; justify-content: center; width: 16px; height: 16px;
-    padding: 0; border: 0; background: none; color: var(--app-brand); cursor: pointer;
-  }
-  .dpub-recap-edit::after { content: ''; position: absolute; inset: -14px -10px; }
-  .dpub-recap-edit .icon { width: 13px; height: 13px; stroke-width: 2.4; }
-
-  /* ——— Confirmation (PublishSuccessView) : toute la page, 24 de marge et 18 d'écart ; la coche, le titre et la
-     phrase au milieu de la place, les trois boutons en bas ——— */
-  .dpub:has(> .dpub-success) { padding: 0; }
-  .dpub-success {
-    display: flex; flex-direction: column; align-items: stretch; gap: 18px; min-height: 100vh; min-height: 100dvh;
-    padding: 24px 24px calc(24px + env(safe-area-inset-bottom)); background: var(--app-page); font-family: var(--app-font); text-align: center;
-  }
-  .dpub-success-check { align-self: center; width: 64px; height: 64px; margin-top: auto; color: var(--app-yield-green); }
-  .dpub-success-check path { stroke: #FFFFFF; stroke-width: 2; }
-  .dpub-success h1 { color: var(--app-navy); font-size: 24px; font-weight: 700; line-height: 1.21; }
-  .dpub-success p { margin-bottom: auto; color: var(--app-text-secondary); font-size: 14px; font-weight: 500; line-height: 1.35; }
-  .dpub-success-actions { display: flex; flex-direction: column; align-items: stretch; gap: 18px; }
-  .dpub-success-actions .dsc-button-quiet {
-    position: relative; align-self: center; height: auto; padding: 0; background: none; color: var(--app-brand); font: 700 14px/1.21 var(--app-font);
-  }
-  .dpub-success-actions .dsc-button-quiet:hover { background: none; text-decoration: none; }
-  .dpub-success-actions .dsc-button-quiet::after { content: ''; position: absolute; inset: -13px -12px; }
+/* ——— En-tête (PublishFlowView.header) : 8 au-dessus, 10 en dessous, 10 entre la ligne et la barre d'étapes ——— */
+.ppub-head { position: sticky; top: 0; z-index: 6; display: flex; flex-direction: column; gap: 10px; padding: 8px 16px 10px; background: var(--app-page); }
+.ppub-head > * { width: 100%; max-width: 640px; margin: 0 auto; }
+.ppub-head-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+/* Retour (BackButton) et croix : ronds de 36 sur le gris des segments, icône de 18 ; 44 de zone de toucher. */
+.ppub-round {
+  position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px;
+  margin: 0; padding: 0; border: 0; border-radius: 50%; background: var(--app-segment); color: var(--app-navy); cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
+.ppub-round::after { content: ''; position: absolute; inset: -4px; }
+.ppub-round .icon { width: 18px; height: 18px; }
+/* Titres : 2 d'écart ; le Spacer(minLength: 4) de l'app entre les titres et la pastille (12 + 4 + 12). */
+.ppub-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; margin-right: 16px; }
+.ppub-titles h1 { margin: 0; overflow: hidden; color: var(--app-navy); font: 700 20px/1.21 var(--app-font); text-overflow: ellipsis; white-space: nowrap; }
+.ppub-titles p { margin: 0; color: var(--app-text-secondary); font: 500 13px/1.21 var(--app-font); }
+.dpub:has(> .dpub-steps.is-sliding) .ppub-titles p { animation: app-fade-in var(--app-duration) var(--app-ease) both; }
+/* « Brouillon » / « Enregistrer » : 13 gras bleu sur bleu pâle, capsule de 36, 12 de chaque côté ; 44 de zone. */
+.ppub-pill {
+  position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; height: 36px; margin: 0; padding: 0 12px;
+  border: 0; border-radius: 999px; background: var(--app-brand-soft); color: var(--app-brand); font: 700 13px/1 var(--app-font);
+  white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.ppub-pill::after { content: ''; position: absolute; inset: -4px 0; }
+.ppub-pill:disabled { opacity: 0.5; cursor: default; }
+.ppub-pill .dpub-spinner { width: 16px; height: 16px; color: var(--app-brand); }
+.ppub-head :is(.ppub-round, .ppub-pill):focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+
+/* Barre d'étapes touchable (StepProgressBar avec onSelect) : un segment par étape, 4 d'écart, 4 de haut (6 pour
+   l'étape en cours), bleu jusqu'à l'étape la plus loin atteinte ; chaque segment atteint s'ouvre d'un toucher sur
+   44 de haut, qui débordent de 10 au-dessus et au-dessous (la barre prend 24). */
+.ppub-head .dpub-progress { display: flex; gap: 4px; height: 24px; margin: 0 auto; }
+.ppub-head .dpub-progress > * {
+  flex: 1 1 0; min-width: 0; display: flex; align-items: center; height: 44px; margin: -10px 0; padding: 0; border: 0; background: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.ppub-head .dpub-progress > button { cursor: pointer; }
+.ppub-head .dpub-progress > button:focus-visible { outline: 2px solid var(--app-brand); outline-offset: -8px; border-radius: 8px; }
+.ppub-head .dpub-progress > * > span {
+  flex: 1; height: 4px; border-radius: 999px; background: var(--app-segment);
+  transition: background-color var(--app-duration) var(--app-ease), height var(--app-duration) var(--app-ease);
+}
+.ppub-head .dpub-progress > .is-done > span { background: var(--app-brand); }
+.ppub-head .dpub-progress > .is-current > span { height: 6px; }
+
+/* « Brouillon enregistré » : capsule verte de 44, coche pleine, 14 gras blanc, 8 sous le haut de l'écran ; elle
+   descend du haut en apparaissant. */
+.dpub-flow > .dsc-saved {
+  top: calc(env(safe-area-inset-top) + 8px); gap: 8px; height: 44px; padding: 0 16px; background: var(--app-yield-green); box-shadow: none;
+  font: 700 14px/1 var(--app-font); animation: ppub-notice-in 0.35s var(--app-ease) both;
+}
+.dpub-flow > .dsc-saved .ppub-check { width: 16px; height: 16px; }
+.ppub-check circle { fill: currentColor; }
+.ppub-check path { fill: none; stroke: var(--app-yield-green); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ——— Passage d'une étape à l'autre (StepSlide.tsx) : l'étape glisse de toute la largeur de l'écran ——— */
+.dpub-flow > .dpub-steps.is-sliding { overflow-x: clip; }
+.dpub-step, .dpub-step-copy { display: flex; flex-direction: column; gap: 14px; }
+.dpub-step-exit { position: fixed; z-index: 4; overflow: hidden; pointer-events: none; }
+.dpub-step-exit:empty { display: none; }
+.dpub-step-copy { position: absolute; margin: 0; }
+.dpub-step-copy * { animation: none !important; transition: none !important; }
+.dpub-step.is-entering.is-forward { animation: ppub-step-from-right var(--app-duration) var(--app-ease) both; }
+.dpub-step.is-entering.is-back { animation: ppub-step-from-left var(--app-duration) var(--app-ease) both; }
+.dpub-step-copy.is-forward { animation: ppub-step-to-left var(--app-duration) var(--app-ease) both; }
+.dpub-step-copy.is-back { animation: ppub-step-to-right var(--app-duration) var(--app-ease) both; }
+
+/* ——— Barre du bas (actionBar) : blanche, ombre bleu marine à 6 % vers le haut ; 10 au-dessus, 6 au-dessous ——— */
+.dpub-flow > .dsc-action-bar {
+  position: sticky; bottom: 0; z-index: 5; align-items: stretch; gap: 8px; margin: 0; padding: 10px 16px calc(6px + env(safe-area-inset-bottom));
+  border: 0; background: #FFFFFF; box-shadow: 0 -2px 20px rgba(36, 45, 56, 0.06);
+}
+.dpub-flow > .dsc-action-bar > * { width: 100%; max-width: 640px; margin: 0 auto; }
+.dpub-flow .dsc-action-buttons { display: flex; gap: 10px; }
+.dpub-flow .dsc-action-buttons > .dsc-button { flex: 1 1 0; min-width: 0; padding: 0 12px; }
+/* « Retour » : 130 au plus (frame(maxWidth: 130)), « Continuer » prend le reste. */
+.dpub-flow .dsc-action-buttons > .dsc-button-light { flex: 0 1 130px; }
+/* Pendant un envoi, le bouton garde sa couleur avec la roue blanche ; atténué à 50 % quand il manque quelque chose. */
+.dpub-flow .dsc-action-buttons > .dsc-button:disabled { opacity: 1; }
+.dpub-flow .dsc-action-buttons > .dsc-button.is-dimmed { opacity: 0.5; }
+.dpub-button-text { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dpub-progress-text { color: var(--app-text-secondary); font-size: 13px; font-weight: 500; text-align: center; }
+
+/* Boutons de l'app (DomiaPrimaryButtonStyle, DomiaSecondaryButtonStyle) : 52 de haut, rayon 12, 15 semi-gras ; le
+   bleu foncé quand on appuie sur le bouton plein, 85 % pour le bouton clair. */
+.dpub-flow .dsc-button, .dpub-success .dsc-button {
+  gap: 8px; height: 52px; border-radius: 12px; font: 600 15px/1.2 var(--app-font);
+  transition: background-color var(--app-press-duration) var(--app-ease), opacity var(--app-press-duration) var(--app-ease);
+}
+.dpub-flow .dsc-button .icon, .dpub-success .dsc-button .icon { width: 17px; height: 17px; stroke-width: 2.4; }
+:is(.dpub-flow, .dpub-success) .dsc-button-primary { background: var(--app-brand); }
+:is(.dpub-flow, .dpub-success) .dsc-button-primary:hover:not(:disabled) { background: var(--app-brand); }
+:is(.dpub-flow, .dpub-success) .dsc-button-primary:active:not(:disabled) { background: var(--app-brand-pressed); }
+:is(.dpub-flow, .dpub-success) .dsc-button-light, :is(.dpub-flow, .dpub-success) .dsc-button-light:hover:not(:disabled) {
+  background: var(--app-brand-soft); color: var(--app-brand);
+}
+:is(.dpub-flow, .dpub-success) .dsc-button-light:active:not(:disabled) { opacity: 0.85; }
+.dpub-flow .dsc-button:disabled { opacity: 0.5; }
+/* Boutons clairs d'une carte (« Choisir des photos », « Rédiger à partir de mes informations ») : toute la largeur. */
+.dpub-flow .dsc-card .dsc-small-row { display: flex; }
+.dpub-flow .dsc-card .dsc-small-row > .dsc-button { flex: 1; min-width: 0; padding: 0 14px; }
+
+/* ——— Cartes et champs (SectionCard, FieldLabel, AmountField, TextInput, ChoiceChip, InfoLine, ErrorLine) ——— */
+.dpub-flow .dsc-card { gap: 14px; padding: 18px; border: 1px solid var(--app-border); border-radius: 16px; background: #FFFFFF; }
+.dpub-flow .dsc-card-title { color: var(--app-navy); font: 700 18px/1.21 var(--app-font); }
+.dpub-flow :is(.field-label, .number-field label, .dsc-label, .dsc-field label) { color: var(--app-text-secondary); font-size: 13px; font-weight: 600; }
+.dpub-flow :is(.dsc-field, .number-field) { gap: 6px; }
+.dpub-flow .dsc-field-block { gap: 6px; }
+.dpub-flow .dsc-choices { gap: 8px; }
+.dpub-flow .field-error { font-size: 12px; font-weight: 500; }
+.dpub-flow .dpub-error { margin: 0; }
+.dpub-flow .dsc-note { color: var(--app-text-secondary); font-size: 13px; font-weight: 500; line-height: 1.35; }
+/* Montant : fond de champ, contour fin ; bleu de 1,5 pendant la saisie, rouge de 1,5 en erreur. */
+.dpub-flow .number-input { gap: 8px; height: 48px; padding: 0 14px; border: 1px solid var(--app-field-border); border-radius: 12px; background: var(--app-field); }
+.dpub-flow .number-input:focus-within { border-color: var(--app-brand); box-shadow: inset 0 0 0 0.5px var(--app-brand); }
+.dpub-flow .has-error .number-input { border-color: var(--red); box-shadow: inset 0 0 0 0.5px var(--red); }
+/* Un « Non renseigné » trop long pour un champ étroit se termine par « … », comme dans l'app. */
+.dpub-flow .number-input input { color: var(--app-navy); font-size: 15px; font-weight: 600; text-overflow: ellipsis; }
+.dpub-flow .number-input input::placeholder { color: var(--app-text-muted); }
+.dpub-flow .number-input .unit { color: var(--app-text-secondary); font-size: 13px; font-weight: 500; }
+/* « R+ » devant le nombre d'étages, 2 avant le nombre. */
+.dpub-flow .number-input .prefix { flex: none; margin-right: -6px; color: var(--app-text-secondary); font-size: 13px; font-weight: 500; }
+/* Texte (TextInput) et adresse : fond blanc, contour de la carte, rouge de 1,5 en erreur. */
+.dpub-flow .dsc-input, .dpub-flow .place-field input {
+  height: 48px; padding: 0 14px; border: 1px solid var(--app-border); border-radius: 12px; background: #FFFFFF; color: var(--app-navy);
+  font: 600 15px/1.2 var(--app-font); text-overflow: ellipsis;
+}
+/* Adresse remplie : la croix qui l'efface garde sa place à droite. */
+.dpub-flow .place-field input:not(:placeholder-shown) { padding-right: 44px; }
+.dpub-flow :is(.dsc-input, .place-field input)::placeholder { color: var(--app-placeholder); font-weight: 600; }
+.dpub-flow :is(.dsc-input, .place-field input):focus { border-color: var(--app-brand); box-shadow: inset 0 0 0 0.5px var(--app-brand); }
+.dpub-flow :is(.dsc-field.has-error .dsc-input, .dpub-place.has-error .place-field input) { border-color: var(--red); box-shadow: inset 0 0 0 0.5px var(--red); }
+.dpub-flow .place-field-clear { top: 5px; }
+.dpub-flow .place-list { top: 54px; }
+/* Code postal de 130 et ville, 10 d'écart. */
+.dpub-postal-row { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 10px; align-items: start; }
+/* Pastilles : 40 de haut, fond de champ et contour fin ; bleu pâle bordé de 1,5 quand elle est choisie. */
+.dpub-flow .choice-chip {
+  min-height: 40px; padding: 0 12px; border: 1px solid var(--app-field-border); border-radius: 12px; background: var(--app-field); color: var(--app-navy);
+  font-size: 13.5px; font-weight: 600;
+}
+.dpub-flow .choice-chip:hover:not([aria-pressed="true"]) { background: var(--app-field); }
+.dpub-flow .choice-chip[aria-pressed="true"] { padding: 0 11.5px; border: 1.5px solid var(--app-brand); background: var(--app-brand-soft); color: var(--app-brand); }
+/* Pièces et chambres : cinq pastilles à 6 d'écart ; « Studio » rapetisse pour tenir dans la sienne (jusqu'à 85 %, comme
+   l'app), avec 8 de marge au lieu de 12 puisque le contour prend sa place ici (pas dans l'app). */
+.dpub-choices-rooms { gap: 6px; }
+.dpub-flow .dpub-choices-rooms > .choice-chip { padding: 0 8px; }
+.dpub-flow .dpub-choices-rooms > .choice-chip[aria-pressed="true"] { padding: 0 7.5px; }
+.dpub-chip-title { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dpub-choices-wide { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.dpub-choices-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.dpub-flow .energy-step { min-height: 36px; }
+.dpub-flow .feature-toggle { min-height: 31px; }
+.dpub-flow .feature-toggle > .icon { color: var(--app-navy); }
+.dpub-flow .feature-title { color: var(--app-navy); font-size: 14px; font-weight: 500; }
+.dpub-flow .feature-title.field-label { color: var(--app-text-secondary); font-size: 13px; font-weight: 600; }
+.dpub-flow .date-input { height: 48px; }
+.dpub-flow .info-line { padding: 10px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 500; }
+.dpub-flow .info-line .icon { margin-top: 2.5px; }
+
+/* « Disponibilité » d'une location (RentalAvailabilityChoice) : la date sur une ligne, libellé de 14 semi-gras. */
+.dpub-availability { display: flex; flex-direction: column; gap: 8px; }
+.dpub-availability-date { display: flex; align-items: center; justify-content: space-between; gap: 12px; animation: app-fade-in var(--app-duration) var(--app-ease) both; }
+.dpub-availability-date label { color: var(--app-navy); font-size: 14px; font-weight: 600; }
+.dpub-availability-date .date-input { flex: none; width: 180px; }
+
+/* Indicateurs calculés (IndicatorsCard) : titre de 14 semi-gras, valeur de 15 gras, formule de 12 grise (3 d'écart). */
+.dpub-indicator { display: flex; flex-direction: column; gap: 3px; }
+.dpub-indicator-top { display: flex; align-items: baseline; gap: 8px; }
+.dpub-indicator-title { color: var(--app-navy); font-size: 14px; font-weight: 600; }
+.dpub-hypothesis {
+  flex: none; display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 999px; background: #FEF3E2; color: #B45309;
+  font-size: 10.5px; font-weight: 700;
+}
+.dpub-indicator-value { flex: none; margin-left: auto; padding-left: 6px; color: var(--app-navy); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.dpub-indicator-value.is-empty { color: var(--app-text-muted); }
+.dpub-indicator-formula { color: var(--app-text-secondary); font-size: 12px; font-weight: 500; line-height: 1.3; }
+
+/* ——— Étape 1, catégorie et type (PublishCategoryTile, PublishTypeTile), comme sur ordinateur ——— */
+.dpub-category { display: flex; flex-direction: column; font-family: var(--app-font); }
+.dpub-category-head { display: flex; flex-direction: column; gap: 6px; }
+.dpub-category-head h2 { color: var(--app-navy); font-size: 26px; font-weight: 700; line-height: 1.21; }
+.dpub-category-head p { color: var(--app-text-secondary); font-size: 15px; font-weight: 500; line-height: 1.21; }
+.dpub-nowrap { white-space: nowrap; }
+.dpub-category-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 20px; }
+.dpub-category-tile {
+  --tile-soft: var(--app-brand-soft); --tile-ink: var(--app-brand); --tile-shadow: rgba(60, 92, 176, 0.18);
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; min-width: 0; height: 112px; margin: 0;
+  padding: 14px; border: 0; border-radius: 22px; background: #FFFFFF; box-shadow: 0 4px 20px transparent; color: var(--app-navy);
+  font-family: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--app-duration) var(--app-ease), box-shadow var(--app-duration) var(--app-ease);
+}
+.dpub-category-tile.is-rental { --tile-soft: #E3F1EF; --tile-ink: #2C7A72; --tile-shadow: rgba(44, 122, 114, 0.18); }
+.dpub-category-tile.is-investment { --tile-soft: #E6F0EA; --tile-ink: #2F7A4E; --tile-shadow: rgba(47, 122, 78, 0.18); }
+.dpub-category-tile.is-hotel { --tile-soft: #F8EED8; --tile-ink: #946B1E; --tile-shadow: rgba(148, 107, 30, 0.18); }
+.dpub-category-tile::before, .dpub-type-tile::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px var(--app-border); pointer-events: none;
+  transition: box-shadow var(--app-duration) var(--app-ease);
+}
+.dpub-category-tile[aria-pressed="true"] { box-shadow: 0 4px 20px var(--tile-shadow); }
+.dpub-category-tile[aria-pressed="true"]::before { box-shadow: inset 0 0 0 2px var(--tile-ink); }
+.dpub-category-icon {
+  display: inline-flex; flex: none; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 14px;
+  background: var(--tile-soft); color: var(--tile-ink);
+}
+.dpub-category-icon .icon { width: 22px; height: 22px; }
+.dpub-category-title, .dpub-category-subtitle { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dpub-category-title { margin-top: auto; font-size: 15px; font-weight: 700; line-height: 1.21; }
+.dpub-category-subtitle { padding-top: 2px; color: var(--app-text-secondary); font-size: 12px; font-weight: 500; line-height: 1.21; }
+.dpub-category-check {
+  position: absolute; top: 10px; right: 10px; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
+  border-radius: 50%; background: var(--tile-ink); color: #FFFFFF; opacity: 0; transform: scale(0);
+  transition: opacity var(--app-duration) var(--app-ease), transform var(--app-duration) var(--app-ease);
+}
+.dpub-category-check .icon { width: 14px; height: 14px; }
+.dpub-category-tile[aria-pressed="true"] .dpub-category-check { opacity: 1; transform: none; }
+.dpub-types { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; animation: app-fade-in var(--app-duration) var(--app-ease) both; }
+.dpub-types-title { color: var(--app-text-muted); font-size: 12px; font-weight: 700; letter-spacing: 0.6px; line-height: 1.21; text-transform: uppercase; }
+.dpub-types-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.dpub-type-tile {
+  position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 54px; margin: 0; padding: 8px 11px;
+  border: 0; border-radius: 16px; background: #FFFFFF; color: var(--app-navy); font-family: inherit; text-align: left; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--app-duration) var(--app-ease), color var(--app-duration) var(--app-ease);
+}
+.dpub-type-tile[aria-pressed="true"] { background: var(--app-brand-soft); color: var(--app-brand); }
+.dpub-type-tile[aria-pressed="true"]::before { box-shadow: inset 0 0 0 2px var(--app-brand); }
+.dpub-type-icon {
+  display: inline-flex; flex: none; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 10px;
+  background: #F5F4F0; color: var(--app-text-dark);
+  transition: background-color var(--app-duration) var(--app-ease), color var(--app-duration) var(--app-ease);
+}
+.dpub-type-icon .icon { width: 18px; height: 18px; }
+.dpub-type-tile[aria-pressed="true"] .dpub-type-icon { background: #FFFFFF; color: var(--app-brand); }
+.dpub-type-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.dpub-type-title, .dpub-type-detail { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.dpub-type-title { font-size: 14px; font-weight: 600; line-height: 1.21; }
+.dpub-type-detail { color: var(--app-text-secondary); font-size: 11px; font-weight: 500; line-height: 1.21; transition: color var(--app-duration) var(--app-ease); }
+.dpub-type-tile[aria-pressed="true"] .dpub-type-detail { color: var(--app-brand); }
+.dpub-category-info { margin-top: 14px; animation: app-fade-in var(--app-duration) var(--app-ease) both; }
+
+/* ——— Photos (PublishMediaStep) : trois colonnes, 8 d'écart, carrés à coins de 12 ——— */
+.dpub-photos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.dpub-photo { position: relative; aspect-ratio: 1; }
+.dpub-photo > img { display: block; width: 100%; height: 100%; border-radius: 12px; background: var(--app-segment); object-fit: cover; }
+/* « Principale » : 10,5 gras blanc sur le bleu, capsule de 20, à 5 du bord. */
+.dpub-photo-main {
+  position: absolute; left: 5px; top: 5px; display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 999px;
+  background: var(--app-brand); color: #FFFFFF; font-size: 10.5px; font-weight: 700; line-height: 1;
+}
+/* « … » : rond blanc à 90 % de 28, points de 13 gras, à 5 du bord ; 44 de zone de toucher. */
+.dpub-photo > .dsc-menu { position: absolute; right: 5px; top: 5px; }
+.dpub-photo-menu {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0;
+  border-radius: 50%; background: rgba(255, 255, 255, 0.9); color: var(--app-navy); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.dpub-photo-menu::after { content: ''; position: absolute; inset: -8px; }
+.dpub-photo-menu .icon { width: 15px; height: 15px; stroke-width: 2.6; }
+.dpub-importing { display: flex; align-items: center; gap: 8px; color: var(--app-text-secondary); font-size: 13px; font-weight: 500; }
+.dpub-importing .spinner { width: 20px; height: 20px; }
+
+/* ——— Description et aperçu (PublishDescriptionStep) ——— */
+.dpub-propose { align-self: flex-start; padding: 2px 0; border: 0; background: none; color: var(--app-brand); font: 700 13px/1.3 var(--app-font); text-align: left; cursor: pointer; }
+/* Texte de 15 medium, 160 de haut au moins, fond blanc, coins de 12 (TextEditor et ses marges). */
+.dpub-flow .dpub-textarea {
+  height: auto; min-height: 160px; padding: 16px 13px; border: 1px solid var(--app-border); border-radius: 12px; background: #FFFFFF;
+  color: var(--app-navy); font: 500 15px/1.35 var(--app-font); resize: vertical;
+}
+.dpub-flow .dsc-field.has-error .dpub-textarea { border-color: var(--red); box-shadow: inset 0 0 0 0.5px var(--red); }
+.dpub-preview { width: 100%; }
+.dpub-preview .listing-card { width: 100%; }
+
+/* ——— Vérification (PublishReviewStep) : lignes sans filet, 14 d'écart ——— */
+.dpub-missing { display: flex; flex-direction: column; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.dpub-missing > li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; color: var(--red); font-size: 14px; font-weight: 600; }
+.dpub-link {
+  position: relative; flex: none; padding: 0; border: 0; background: none; color: var(--app-brand); font: 700 13px/1.3 var(--app-font); cursor: pointer;
+}
+.dpub-link::after { content: ''; position: absolute; inset: -12px -8px; }
+/* Récapitulatif : intitulé de 13 gris, valeur de 13,5 grasse à droite, crayon bleu de 13. */
+.dpub-recap { display: flex; flex-direction: column; gap: 14px; margin: 0; }
+.dpub-recap-row { display: flex; align-items: baseline; gap: 8px; }
+.dpub-recap-row dt { flex: none; color: var(--app-text-secondary); font-size: 13px; font-weight: 500; }
+.dpub-recap-row dd { flex: 1; min-width: 0; display: flex; align-items: baseline; justify-content: flex-end; gap: 8px; margin: 0; }
+.dpub-recap-row dd > span { min-width: 0; color: var(--app-navy); font-size: 13.5px; font-weight: 700; text-align: right; overflow-wrap: anywhere; }
+.dpub-recap-edit {
+  position: relative; flex: none; display: inline-flex; align-self: center; align-items: center; justify-content: center; width: 16px; height: 16px;
+  padding: 0; border: 0; background: none; color: var(--app-brand); cursor: pointer;
+}
+.dpub-recap-edit::after { content: ''; position: absolute; inset: -14px -10px; }
+.dpub-recap-edit .icon { width: 13px; height: 13px; stroke-width: 2.4; }
+
+/* ——— Confirmation (PublishSuccessView) : toute la page, 24 de marge et 18 d'écart ; la coche, le titre et la
+   phrase au milieu de la place, les trois boutons en bas ——— */
+.dpub:has(> .dpub-success) { padding: 0; }
+.dpub-success {
+  display: flex; flex-direction: column; align-items: stretch; gap: 18px; min-height: 100vh; min-height: 100dvh;
+  padding: 24px 24px calc(24px + env(safe-area-inset-bottom)); background: var(--app-page); font-family: var(--app-font); text-align: center;
+}
+.dpub-success-check { align-self: center; width: 64px; height: 64px; margin-top: auto; color: var(--app-yield-green); }
+.dpub-success-check path { stroke: #FFFFFF; stroke-width: 2; }
+.dpub-success h1 { color: var(--app-navy); font-size: 24px; font-weight: 700; line-height: 1.21; }
+.dpub-success p { margin-bottom: auto; color: var(--app-text-secondary); font-size: 14px; font-weight: 500; line-height: 1.35; }
+.dpub-success-actions { display: flex; flex-direction: column; align-items: stretch; gap: 18px; }
+.dpub-success-actions .dsc-button-quiet {
+  position: relative; align-self: center; height: auto; padding: 0; background: none; color: var(--app-brand); font: 700 14px/1.21 var(--app-font);
+}
+.dpub-success-actions .dsc-button-quiet:hover { background: none; text-decoration: none; }
+.dpub-success-actions .dsc-button-quiet::after { content: ''; position: absolute; inset: -13px -12px; }
 
 @keyframes ppub-step-from-right { from { opacity: 0; transform: translateX(calc(100% + 32px)); } }
 @keyframes ppub-step-from-left { from { opacity: 0; transform: translateX(calc(-100% - 32px)); } }
@@ -328,7 +327,7 @@
 @keyframes ppub-notice-in { from { opacity: 0; transform: translate(-50%, -100%); } }
 
 /* « Réduire les animations » : des fondus seulement, comme l'app (NidaloMotion.fade, 0,25 s). */
-@media (max-width: 1023.98px) and (prefers-reduced-motion: reduce) {
+@media (prefers-reduced-motion: reduce) {
   .dpub-step.is-entering.is-forward, .dpub-step.is-entering.is-back { animation: app-fade-in 0.25s ease-in-out both; }
   .dpub-step-copy.is-forward, .dpub-step-copy.is-back { animation: app-fade-out 0.25s ease-in-out both; }
   .dpub:has(> .dpub-steps.is-sliding) .ppub-titles p { animation: app-fade-in 0.25s ease-in-out both; }
@@ -339,4 +338,27 @@
   }
   .dpub-category-check { transform: none; transition: opacity 0.25s ease-in-out; }
   .dpub-types, .dpub-category-info, .dpub-availability-date { animation: app-fade-in 0.25s ease-in-out both; }
+}
+
+/* ——— Ordinateur (à partir de 1024 px) : le même écran, élargi dans la colonne de 720 px (les 16 de marge de l'écran
+   comprises), la page de chaque côté ; l'en-tête et la barre du bas (« Retour », « Continuer ») à la largeur de la
+   colonne, la confirmation aussi ——— */
+@media (min-width: 1024px) {
+  .account-wrap:has(> .dpub-flow, > .dpub > .dpub-success) { max-width: var(--app-column); }
+  .dpub-flow > .dpub-steps, .ppub-head > *, .dpub-flow > .dsc-action-bar > * { max-width: none; }
+  /* Chargement, annonce introuvable, hors connexion : la même colonne ; l'en-tête et la carte des écrans de Mon compte
+     aux mesures du téléphone (ecrans-compte.css, moins de 1024 px). */
+  .dpub-root > .account-wrap { max-width: var(--app-column); }
+  .dpub:has(> .dsc-empty) { gap: 14px; padding: 4px 0 32px; }
+  .dpub > .dsc-head { gap: 12px; margin-bottom: 2px; }
+  .dpub > .dsc-head .dsc-back { width: 42px; height: 42px; }
+  .dpub > .dsc-head .dsc-titles { gap: 2px; padding-top: 6px; }
+  .dpub > .dsc-head .dsc-titles h1 { font-size: 22px; line-height: 28px; }
+  .dpub > .dsc-empty { padding: 32px 18px; }
+  /* Menu « … » d'une photo : 220 de large, comme sur le téléphone. */
+  .dpub .dsc-menu-list { min-width: 220px; }
+  /* À la souris, une tuile de catégorie ou de type pas encore choisie se teinte au survol (comme avant). */
+  @media (hover: hover) {
+    .dpub-category-tile:not([aria-pressed="true"]):hover, .dpub-type-tile:not([aria-pressed="true"]):hover { background: #FAF9F7; }
+  }
 }
