@@ -9,6 +9,7 @@ import { MapBottomPanel } from '../components/MapBottomPanel';
 import { LoadErrorState, OfflineState } from '../components/OfflineState';
 import { PlaceField } from '../components/PlaceField';
 import { SearchNoResults } from '../components/SearchNoResults';
+import { SearchSplit } from '../components/SearchSplit';
 import { useRailScroll } from '../components/useRailScroll';
 import { SaveSearchButton, SaveSearchSheet, useSavedSearchFor } from '../components/account/SaveSearchButton';
 import {
@@ -510,7 +511,7 @@ export function SearchPage() {
           </div>
 
           {/* Les résultats ; sur ordinateur, la colonne de gauche, qui défile seule. */}
-          <div className="search-results">
+          <div className="search-results" id={desktop ? 'search-list' : undefined}>
             <p className="visually-hidden" aria-live="polite">{statusText}</p>
             {showsHeader && (
               <div className="results-head">
@@ -558,6 +559,9 @@ export function SearchPage() {
             )}
           </div>
         </div>
+
+        {/* Ordinateur : la barre à faire glisser entre la liste et la carte, pour agrandir l'une ou l'autre. */}
+        {desktop && <SearchSplit />}
 
         {/* La carte : plein écran sur le téléphone (« Carte »), toujours à droite de la liste sur ordinateur. */}
         <div className={`map-column${mapOpen && !desktop ? ' is-open' : ''}${zoneEditing ? ` is-editing-zone is-zone-${zoneEditing.step}` : postedZone ? ' has-zone' : ''}${panelHeight === 'large' && !zoneEditing && !desktop ? ' is-panel-large' : ''}${editingPlace && !desktop ? ' is-editing-place' : ''}`}

@@ -1,8 +1,8 @@
 /* Votre recherche sur ordinateur (version ordinateur, étape 2 ; maquette 04-resultats-liste-carte.html) : sous l'en-tête
    du site, un bandeau blanc sur toute la largeur (retour, catégories, lieu, « Filtres », puis la zone dessinée et les
    critères actifs) ; dessous, jusqu'au bas de la fenêtre, la liste à gauche (58 %, elle défile seule, cartes sur 2
-   colonnes tant qu'une carte garde 280 px) et la carte à droite (42 %, 360 px au moins), toujours visibles ; pas de pied
-   de page. Seulement à partir de 1024 px : en dessous, recherche-app.css, app.css et carte-*.css restent seuls et rien ne
+   colonnes tant qu'une carte garde 280 px) et la carte à droite (42 %, 360 px au moins), toujours visibles, avec entre
+   les deux une barre à faire glisser pour agrandir l'une ou l'autre ; pas de pied de page. Seulement à partir de 1024 px : en dessous, recherche-app.css, app.css et carte-*.css restent seuls et rien ne
    change. Mesures de la maquette à 1440 px ; couleurs et police du site (pieces-app.css, app.css, ordinateur.css) ; gris
    des textes : --app-text-dark (#5B6571, contraste AA) à la place du #68707C de la maquette. Toutes les règles commencent
    par .search-layout (ou la page qui le contient) : elles passent devant celles du téléphone. */
@@ -14,9 +14,30 @@
   .page-fill:has(> main > .search-layout) > .site-header { position: sticky; }
   main > .search-layout {
     flex: 1; min-height: 0;
-    grid-template-columns: minmax(0, 58fr) minmax(360px, 42fr); grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-columns: minmax(380px, var(--search-list, 58fr)) minmax(360px, var(--search-map, 42fr));
+    grid-template-rows: auto auto minmax(0, 1fr);
   }
   .search-layout .search-column { display: contents; }
+
+  /* ——— Barre entre la liste et la carte (SearchSplit) : à faire glisser pour agrandir l'une ou l'autre ; le partage
+     choisi arrive dans --search-list et --search-map (58 / 42 au départ ; liste de 380 px et carte de 360 au moins).
+     Prise de 14 px de large sur toute la hauteur, à cheval sur le trait de gauche de la carte ; poignée de 6 × 44 au
+     milieu, grise, bleue au survol, pendant le glissement et au clavier. ——— */
+  .search-layout .search-split {
+    grid-column: 2; grid-row: 3; justify-self: start; position: relative; z-index: 2;
+    width: 14px; margin-left: -5px; cursor: col-resize; touch-action: none;
+  }
+  .search-layout .search-split::after {
+    content: ""; position: absolute; top: 50%; left: 2px; width: 6px; height: 44px; margin-top: -22px;
+    border-radius: 3px; background: #8B939F; box-shadow: 0 0 0 2px #FFFFFF, 0 2px 8px rgba(36, 45, 56, 0.18);
+    transition: background-color var(--app-duration) var(--app-ease);
+  }
+  .search-layout .search-split:hover::after, .search-layout.is-resizing .search-split::after { background: var(--app-brand); }
+  .search-layout .search-split:focus-visible { outline: none; }
+  .search-layout .search-split:focus-visible::after { background: var(--app-brand); outline: 3px solid var(--app-brand); outline-offset: 2px; }
+  /* Pendant le glissement : la flèche double partout, ni texte sélectionné, ni carte déplacée. */
+  .search-layout.is-resizing { cursor: col-resize; user-select: none; -webkit-user-select: none; }
+  .search-layout.is-resizing :is(.search-results, .map-column) { pointer-events: none; }
 
   /* ——— Bandeau du haut, première ligne : 14 au-dessus, 12 dessous, 24 des bords, 12 entre les éléments ——— */
   .search-layout .search-app-top {
