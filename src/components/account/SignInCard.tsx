@@ -19,13 +19,15 @@ import {
 import { recoveryStore } from '../../lib/account/session';
 import { PATHS } from '../../lib/paths';
 import '../../styles/connexion-app.css';
+import '../../styles/connexion-ordinateur.css';
 
 // Écran de connexion de l'app (Features/Account/AuthView.swift) : l'accueil sur le fond clair avec le lancement en
 // boucle, « Continuer avec Apple / Google / l'e-mail », puis les étapes par e-mail dans la feuille blanche (se
 // connecter, créer un compte, mot de passe oublié, e-mail envoyé, nouveau mot de passe). Apple et Google ouvrent la page
 // du service, qui revient sur Mon compte. Sur toutes les largeurs, l'écran prend toute la page, sans barre d'onglets ni
-// pied de page (dans la colonne de 720 px à partir de 1024 px), et sa croix ramène à la page d'avant ; dans la fenêtre
-// d'une action (`onClose`), le même écran.
+// pied de page, et sa croix ramène à la page d'avant ; dans la fenêtre d'une action (`onClose`), le même écran. À partir
+// de 1024 px (maquette 13-connexion.html, connexion-ordinateur.css) : le même écran dans une colonne de 440 px, centrée
+// dans la fenêtre ; rien ne change dans le code.
 // L'étape « Vérifiez votre e-mail » (code à 6 chiffres) de l'app n'est pas reprise : les e-mails ne contiennent qu'un lien.
 
 type Props = {

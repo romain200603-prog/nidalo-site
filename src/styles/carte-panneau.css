@@ -152,12 +152,8 @@
 .results-map-attribution a { color: inherit; text-decoration: none; }
 .results-map-attribution a:hover { text-decoration: underline; }
 .map-column.is-editing-place .results-map-attribution { opacity: 0; pointer-events: none; }
-/* Ordinateur (à partir de 1024 px) : le panneau sur la colonne de 720 au milieu de l'écran, la mention des sources au
-   bord de la colonne (--map-side, app.css). */
-@media (min-width: 1024px) {
-  .map-panel { left: max(0px, calc((100% - var(--app-column)) / 2)); right: max(0px, calc((100% - var(--app-column)) / 2)); }
-  .results-map-attribution { left: var(--map-side); }
-}
+/* Ordinateur (à partir de 1024 px) : pas de panneau, la liste est à côté de la carte ; la mention des sources en bas à
+   droite de la carte (recherche-ordinateur.css). */
 @media (prefers-reduced-motion: reduce) {
   .results-map-attribution { transition: opacity 0.2s ease; }
 }

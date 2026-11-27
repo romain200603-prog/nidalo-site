@@ -22,6 +22,7 @@ import { useSession, useStore } from '../lib/account/session';
 import { formatCardPrice, shortFacts, yieldTone } from '../lib/cardContent';
 import { fillCompareIfEmpty, useCompare } from '../lib/compare';
 import { formatFraction, formatPrice } from '../lib/format';
+import { useDesktop } from '../lib/desktop';
 import { DPE_COLORS } from '../lib/labels';
 import { sortedPhotos } from '../lib/listings';
 import { comparePath, listingPath, PATHS } from '../lib/paths';
@@ -32,11 +33,13 @@ import { EmptyState, Spinner } from './account/parts';
 import { filterCount, matchingIds, removeWithUndo, useFavoriteCards } from './favorites/data';
 import { FavoritesTabs } from './favorites/FavoritesTabs';
 import '../styles/account.css';
+import '../styles/favoris-ordinateur.css';
 
 // « Vos favoris » (Features/Favorites/FavoritesView.swift) : onglets Favoris et Recherches ; recherche, catégories,
 // filtres et tri sur les biens mis en cœur. Les filtres s'appliquent directement aux favoris chargés (même moteur
-// que la recherche), sans relancer une recherche complète. À partir de 1024 px, le même écran dans le grand conteneur
-// (1180 px), ses cartes sur 2 ou 3 colonnes.
+// que la recherche), sans relancer une recherche complète. À partir de 1024 px (maquette 08-favoris.html), sans onglets :
+// les biens favoris en grille à gauche, les recherches enregistrées dans une colonne à droite, le même bouton Comparer
+// en haut à droite avec son libellé (favoris-ordinateur.css).
 
 function FavoriteHeart({ onRemove }: { onRemove: () => void }) {
   return (
@@ -60,7 +63,8 @@ function FavoriteHeart({ onRemove }: { onRemove: () => void }) {
  * Carte d'un favori : grande photo (rendement, cœur et Comparer, compteur), puis prix, prix au m², DPE, titre, infos
  * clés et, sauf en Résidentiel, la petite ligne des cartes de l'accueil (HomeShortFactsLine).
  */
-function FavoriteListingCard({ card, onRemove }: { card: FavoriteCard; onRemove: () => void }) {
+function FavoriteListingCard({ card, onRemove, heading = 'h2' }: { card: FavoriteCard; onRemove: () => void; heading?: 'h2' | 'h3' }) {
+  const Heading = heading;
   const { row, content, grossYield } = card;
   const photos = sortedPhotos(row).slice(0, 10);
   const [page, setPage] = useState(0);
@@ -113,7 +117,7 @@ function FavoriteListingCard({ card, onRemove }: { card: FavoriteCard; onRemove:
             </span>
           )}
         </div>
-        <h2 className="favorite-title"><a className="stretched" href={href}>{row.title}</a></h2>
+        <Heading className="favorite-title"><a className="stretched" href={href}>{row.title}</a></Heading>
         <p className="favorite-details">{favoriteDetails(row, content.kind)}</p>
         {content.kind !== 'purchase' && shortFacts(content).length > 0 && <ShortFactsLine row={row} highlights={null} content={content} />}
       </div>
@@ -155,6 +159,7 @@ function FavoritesContent({ items, offline = false }: { items: Favorite[]; offli
   const [filterDrafts, setFilterDrafts] = useState<DraftsByMode>({});
   const [filterMode, setFilterMode] = useState<SearchDraft['mode']>('buy');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const desktop = useDesktop();
 
   useEffect(() => {
     void loadSavedSearches();
@@ -201,175 +206,219 @@ function FavoritesContent({ items, offline = false }: { items: Favorite[]; offli
     setFilterDrafts({});
   }
 
+  // Ordinateur : le libellé écrit (« Comparer vos favoris », ou le nombre de biens déjà comparés) à la place de la
+  // pastille ; mêmes conditions et même action que le bouton rond du téléphone.
+  const compareButton = (
+    <button
+      type="button"
+      className="compare-button"
+      aria-label={desktop ? undefined : compareLabel}
+      title={desktop ? undefined : compareLabel}
+      disabled={cards.length === 0 && compareCount === 0}
+      onClick={openCompare}
+    >
+      <Icon name="columns" />
+      {desktop ? <span>{compareLabel}</span>
+        : compareCount > 0 && <span className="compare-button-count" aria-hidden="true">{compareCount}</span>}
+    </button>
+  );
+
+  const searchesPanel = (
+    <div key="searches" className="favorites-searches fav-tab-panel">
+      <SavedSearchesList embedded counts={counts} />
+    </div>
+  );
+
+  const favoritesPanel = items.length === 0 && offline ? (
+    // Favoris du compte non lus : la coupure, pas « Aucun favori » (n° 54) ; « Réessayer » relit les favoris.
+    <div key="offline" className="fav-tab-panel fav-empty-place-favorites">
+      <OfflineState onRetry={() => void loadFavorites(true, true)} />
+    </div>
+  ) : items.length === 0 ? (
+    // Aucun favori : ni recherche, ni filtres, ni catégories (ils reviennent avec le premier favori).
+    <div key="empty" className="fav-tab-panel fav-empty-place-favorites">
+      <FavoritesEmptyState kind="favorites" />
+    </div>
+  ) : (
+    <div key="favorites" className="fav-tab-panel">
+      <div className="favorites-search">
+        <div className="favorites-field">
+          <Icon name="search" />
+          <input
+            type="text"
+            aria-label="Rechercher dans vos favoris"
+            placeholder="Ville, code postal, type de bien"
+            value={query}
+            autoComplete="off"
+            enterKeyHint="search"
+            onChange={(event) => setQuery(event.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => window.setTimeout(() => setFocused(false), 150)}
+          />
+          {query && (
+            <button type="button" className="favorites-clear" aria-label="Effacer la recherche" onClick={() => setQuery('')}>
+              <Icon name="x" />
+            </button>
+          )}
+        </div>
+        <button
+          type="button"
+          className={`favorites-filters${activeFilters > 0 ? ' is-active' : ''}`}
+          aria-label={activeFilters > 0 ? `Filtres, ${activeFilters} actifs` : 'Filtres'}
+          onClick={() => {
+            // Les filtres s'ouvrent sur la catégorie de la pastille active (« Tous » : Résidentiel).
+            setFilterMode(modeOfCategory(category) ?? 'buy');
+            setFiltersOpen(true);
+          }}
+        >
+          <Icon name="sliders" />
+          {desktop && <span className="favorites-filters-label">Filtres</span>}
+          {activeFilters > 0 && <span className="favorites-filters-count" aria-hidden="true">{activeFilters}</span>}
+        </button>
+      </div>
+      {suggestions.length > 0 && (
+        <ul className="favorites-suggestions" aria-label="Suggestions">
+          {suggestions.map((suggestion) => (
+            <li key={`${suggestion.kind}-${suggestion.value}`}>
+              <button
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  setQuery(suggestion.value);
+                  setFocused(false);
+                }}
+              >
+                <Icon name={suggestion.kind === 'city' ? 'pin' : 'house'} />
+                <span className="favorites-suggestion-text">
+                  <span>{suggestion.value}</span>
+                  <span className="favorites-suggestion-detail">{suggestion.detail}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Une pastille (sauf « Tous ») choisit aussi la catégorie des filtres (n° 53). */}
+      <ModeTabs includesAll mode={modeOfCategory(category)}
+        onChange={(mode) => {
+          setCategory(mode ? categoryOfMode(mode) : 'all');
+          if (mode) setFilterMode(mode);
+        }}
+        className="mode-tabs-card favorites-categories" />
+
+      {/* Filtres actifs (avec le lieu, que rien d'autre ne montre ici) : les retirer met à jour la liste. */}
+      {chips.length > 0 && (
+        <CriterionChipsRow chips={chips} className="favorites-criteria" onOpen={() => setFiltersOpen(true)}
+          onRemove={(id) => {
+            const chip = chips.find((entry) => entry.id === id);
+            if (chip && activeDraft) setFilterDrafts({ ...filterDrafts, [filterMode]: chip.remove(activeDraft) });
+          }} />
+      )}
+
+      {cards.length > 0 && (
+        <div className="favorites-toolbar">
+          <Icon name="heart" />
+          <span className="favorites-total" aria-live="polite">{savedCountText(shown.length, cards.length)}</span>
+          <label className="favorites-sort">
+            <Icon name="arrowUpDown" />
+            <span aria-hidden="true">{sortTitle.short}</span>
+            <Icon name="chevronDown" />
+            <select aria-label="Trier par" value={sort} onChange={(event) => setSort(event.target.value as FavoriteSort)}>
+              {FAVORITE_SORTS.map((entry) => <option key={entry.sort} value={entry.sort}>{entry.title}</option>)}
+            </select>
+          </label>
+        </div>
+      )}
+
+      <div className="favorites-list">
+        {loaded.status === 'loading' && <Spinner />}
+        {/* Fiches non lues : « Pas de connexion Internet » (n° 54) ; « Réessayer » les relit, avec la roue. */}
+        {loaded.status === 'error' && <OfflineState onRetry={retry} />}
+        {loaded.status === 'ready' && (
+          cards.length === 0 && loaded.missing.length > 0 ? (
+            <MissingCards ids={loaded.missing} />
+          ) : cards.length === 0 ? (
+            <FavoritesEmptyState kind="favorites" />
+          ) : shown.length === 0 ? (
+            <EmptyState
+              icon="search"
+              title="Aucun favori ne correspond"
+              text="Modifiez la recherche, la catégorie ou les filtres."
+              action={<button type="button" className="link-button" onClick={showAll}>Tout afficher</button>}
+            />
+          ) : (
+            <>
+              {shown.map((card) => (
+                <FavoriteListingCard key={card.row.id} card={card} onRemove={() => removeWithUndo(card.row.id)} heading={desktop ? 'h3' : 'h2'} />
+              ))}
+              <MissingCards ids={loaded.missing} />
+            </>
+          )
+        )}
+      </div>
+
+      {filtersOpen && (
+        <FiltersDialog
+          open
+          draft={filterDrafts[filterMode] ?? defaultDraft(filterMode)}
+          remembered={filterDrafts}
+          countAmong={(draft) => matchingIds(cards, draft).size}
+          onClose={() => setFiltersOpen(false)}
+          onApply={(draft, drafts) => {
+            setFiltersOpen(false);
+            setFilterDrafts({ ...drafts, [draft.mode]: draft });
+            setFilterMode(draft.mode);
+            // La catégorie choisie dans les filtres devient la pastille active.
+            setCategory(categoryOfMode(draft.mode));
+          }}
+        />
+      )}
+    </div>
+  );
+
+  // Ordinateur (maquette 08-favoris.html) : pas d'onglets ; les biens favoris à gauche, les recherches enregistrées dans
+  // une colonne à droite, chacun sous son titre et son nombre. Les recherches sont déjà lues au chargement de la page
+  // (useSearchCounts) : la colonne n'ajoute aucune requête.
+  if (desktop) {
+    return (
+      <>
+        <div className="favorites-head">
+          <div className="favorites-titles">
+            <h1>Vos favoris</h1>
+            <p className="favorites-subtitle">Retrouvez vos biens favoris et vos recherches.</p>
+          </div>
+          {compareButton}
+        </div>
+        <div className="favorites-columns">
+          <section className="favorites-column" aria-labelledby="favoris-biens">
+            <h2 id="favoris-biens" className="favorites-column-title">
+              <Icon name="heart" />Biens favoris{' '}
+              {items.length > 0 && <span className="favorites-column-count">{items.length}</span>}
+            </h2>
+            {favoritesPanel}
+          </section>
+          <section className="favorites-column is-searches" aria-labelledby="favoris-recherches">
+            <h2 id="favoris-recherches" className="favorites-column-title">
+              <Icon name="search" />Recherches enregistrées{' '}
+              {searchItems.length > 0 && <span className="favorites-column-count">{searchItems.length}</span>}
+            </h2>
+            {searchesPanel}
+          </section>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <div className="favorites-head">
         <h1>Vos favoris</h1>
-        <button
-          type="button"
-          className="compare-button"
-          aria-label={compareLabel}
-          title={compareLabel}
-          disabled={cards.length === 0 && compareCount === 0}
-          onClick={openCompare}
-        >
-          <Icon name="columns" />
-          {compareCount > 0 && <span className="compare-button-count" aria-hidden="true">{compareCount}</span>}
-        </button>
+        {compareButton}
       </div>
       <p className="favorites-subtitle">Retrouvez vos biens favoris et vos recherches</p>
       <FavoritesTabs tab={tab} onChange={changeTab} searchCount={searchItems.length} hasNews={hasNews} />
-
-      {tab === 'searches' ? (
-        <div key="searches" className="favorites-searches fav-tab-panel">
-          <SavedSearchesList embedded counts={counts} />
-        </div>
-      ) : items.length === 0 && offline ? (
-        // Favoris du compte non lus : la coupure, pas « Aucun favori » (n° 54) ; « Réessayer » relit les favoris.
-        <div key="offline" className="fav-tab-panel fav-empty-place-favorites">
-          <OfflineState onRetry={() => void loadFavorites(true, true)} />
-        </div>
-      ) : items.length === 0 ? (
-        // Aucun favori : ni recherche, ni filtres, ni catégories (ils reviennent avec le premier favori).
-        <div key="empty" className="fav-tab-panel fav-empty-place-favorites">
-          <FavoritesEmptyState kind="favorites" />
-        </div>
-      ) : (
-        <div key="favorites" className="fav-tab-panel">
-          <div className="favorites-search">
-            <div className="favorites-field">
-              <Icon name="search" />
-              <input
-                type="text"
-                aria-label="Rechercher dans vos favoris"
-                placeholder="Ville, code postal, type de bien"
-                value={query}
-                autoComplete="off"
-                enterKeyHint="search"
-                onChange={(event) => setQuery(event.target.value)}
-                onFocus={() => setFocused(true)}
-                onBlur={() => window.setTimeout(() => setFocused(false), 150)}
-              />
-              {query && (
-                <button type="button" className="favorites-clear" aria-label="Effacer la recherche" onClick={() => setQuery('')}>
-                  <Icon name="x" />
-                </button>
-              )}
-            </div>
-            <button
-              type="button"
-              className={`favorites-filters${activeFilters > 0 ? ' is-active' : ''}`}
-              aria-label={activeFilters > 0 ? `Filtres, ${activeFilters} actifs` : 'Filtres'}
-              onClick={() => {
-                // Les filtres s'ouvrent sur la catégorie de la pastille active (« Tous » : Résidentiel).
-                setFilterMode(modeOfCategory(category) ?? 'buy');
-                setFiltersOpen(true);
-              }}
-            >
-              <Icon name="sliders" />
-              {activeFilters > 0 && <span className="favorites-filters-count" aria-hidden="true">{activeFilters}</span>}
-            </button>
-          </div>
-          {suggestions.length > 0 && (
-            <ul className="favorites-suggestions" aria-label="Suggestions">
-              {suggestions.map((suggestion) => (
-                <li key={`${suggestion.kind}-${suggestion.value}`}>
-                  <button
-                    type="button"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => {
-                      setQuery(suggestion.value);
-                      setFocused(false);
-                    }}
-                  >
-                    <Icon name={suggestion.kind === 'city' ? 'pin' : 'house'} />
-                    <span className="favorites-suggestion-text">
-                      <span>{suggestion.value}</span>
-                      <span className="favorites-suggestion-detail">{suggestion.detail}</span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {/* Une pastille (sauf « Tous ») choisit aussi la catégorie des filtres (n° 53). */}
-          <ModeTabs includesAll mode={modeOfCategory(category)}
-            onChange={(mode) => {
-              setCategory(mode ? categoryOfMode(mode) : 'all');
-              if (mode) setFilterMode(mode);
-            }}
-            className="mode-tabs-card favorites-categories" />
-
-          {/* Filtres actifs (avec le lieu, que rien d'autre ne montre ici) : les retirer met à jour la liste. */}
-          {chips.length > 0 && (
-            <CriterionChipsRow chips={chips} className="favorites-criteria" onOpen={() => setFiltersOpen(true)}
-              onRemove={(id) => {
-                const chip = chips.find((entry) => entry.id === id);
-                if (chip && activeDraft) setFilterDrafts({ ...filterDrafts, [filterMode]: chip.remove(activeDraft) });
-              }} />
-          )}
-
-          {cards.length > 0 && (
-            <div className="favorites-toolbar">
-              <Icon name="heart" />
-              <span className="favorites-total" aria-live="polite">{savedCountText(shown.length, cards.length)}</span>
-              <label className="favorites-sort">
-                <Icon name="arrowUpDown" />
-                <span aria-hidden="true">{sortTitle.short}</span>
-                <Icon name="chevronDown" />
-                <select aria-label="Trier par" value={sort} onChange={(event) => setSort(event.target.value as FavoriteSort)}>
-                  {FAVORITE_SORTS.map((entry) => <option key={entry.sort} value={entry.sort}>{entry.title}</option>)}
-                </select>
-              </label>
-            </div>
-          )}
-
-          <div className="favorites-list">
-            {loaded.status === 'loading' && <Spinner />}
-            {/* Fiches non lues : « Pas de connexion Internet » (n° 54) ; « Réessayer » les relit, avec la roue. */}
-            {loaded.status === 'error' && <OfflineState onRetry={retry} />}
-            {loaded.status === 'ready' && (
-              cards.length === 0 && loaded.missing.length > 0 ? (
-                <MissingCards ids={loaded.missing} />
-              ) : cards.length === 0 ? (
-                <FavoritesEmptyState kind="favorites" />
-              ) : shown.length === 0 ? (
-                <EmptyState
-                  icon="search"
-                  title="Aucun favori ne correspond"
-                  text="Modifiez la recherche, la catégorie ou les filtres."
-                  action={<button type="button" className="link-button" onClick={showAll}>Tout afficher</button>}
-                />
-              ) : (
-                <>
-                  {shown.map((card) => (
-                    <FavoriteListingCard key={card.row.id} card={card} onRemove={() => removeWithUndo(card.row.id)} />
-                  ))}
-                  <MissingCards ids={loaded.missing} />
-                </>
-              )
-            )}
-          </div>
-
-          {filtersOpen && (
-            <FiltersDialog
-              open
-              draft={filterDrafts[filterMode] ?? defaultDraft(filterMode)}
-              remembered={filterDrafts}
-              countAmong={(draft) => matchingIds(cards, draft).size}
-              onClose={() => setFiltersOpen(false)}
-              onApply={(draft, drafts) => {
-                setFiltersOpen(false);
-                setFilterDrafts({ ...drafts, [draft.mode]: draft });
-                setFilterMode(draft.mode);
-                // La catégorie choisie dans les filtres devient la pastille active.
-                setCategory(categoryOfMode(draft.mode));
-              }}
-            />
-          )}
-        </div>
-      )}
+      {tab === 'searches' ? searchesPanel : favoritesPanel}
     </>
   );
 }
@@ -393,9 +442,11 @@ function FavoritesBody() {
 
 export function FavoritesPage() {
   useRailScroll();
+  const desktop = useDesktop();
   return (
     <Page section="favorites" wide>
-      <div className="wrap favorites-wrap">
+      {/* Ordinateur : le conteneur commun du site (1200 px au plus, marges de 32). */}
+      <div className={desktop ? 'favorites-wrap favorites-desk site-container' : 'wrap favorites-wrap'}>
         <FavoritesBody />
       </div>
     </Page>

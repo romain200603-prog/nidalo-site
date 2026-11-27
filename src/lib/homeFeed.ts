@@ -14,6 +14,11 @@ export type HomeFeed = {
   newest: ListingRow[];
   /** « Baisses de prix » : prix inférieur au précédent, du moins cher au plus cher. */
   priceDrops: ListingRow[];
+  /**
+   * « Hôtels à vendre » (accueil sur ordinateur) : l'hôtel à vendre le plus récent parmi les annonces déjà lues pour
+   * ces sections (aucune lecture de plus), celui que la recherche des hôtels montre en premier ; aucun s'il n'y en a pas.
+   */
+  hotel: ListingRow | null;
 };
 
 const FEED_LIMIT = 200;
@@ -32,7 +37,9 @@ export function homeFeedFrom(rows: ListingRow[], highlightsFor: (row: ListingRow
     .filter((row) => row.previous_price !== null && Number(row.previous_price) > Number(row.price) && Number(row.price) > 0)
     .sort((a, b) => Number(a.price) - Number(b.price))
     .slice(0, 8);
-  return { opportunities, newest, priceDrops };
+  const hotels = defaultDraft('hotel');
+  const hotel = sortResults(rows.filter((row) => matches(row, hotels, null)).map((row) => ({ row, highlights: null })), 'newest')[0]?.row ?? null;
+  return { opportunities, newest, priceDrops, hotel };
 }
 
 export async function loadHomeFeed(highlightsFor: (row: ListingRow) => Highlights | null): Promise<HomeFeed> {

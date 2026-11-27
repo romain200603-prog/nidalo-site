@@ -3,8 +3,8 @@
    de 20 gras, « Étape 2 sur 7 · … » de 13, pastille « Brouillon » de 36, barre d'étapes touchable) ; au milieu, l'étape
    (cartes de 16, 14 d'écart, 16 de marge) ; en bas, la barre blanche à ombre légère avec « Retour » (130 au plus) et
    « Continuer » de 52. Les pièces des écrans de Mon compte (.dsc, ecrans-compte.css) sont reprises aux mesures de
-   l'app. Le pied de page du site reste sous l'assistant. À partir de 1024 px, le même écran élargi dans la colonne de
-   720 px (fin du fichier). */
+   l'app. Le pied de page du site reste sous l'assistant. À partir de 1024 px, la mise en page de l'ordinateur
+   (publier-ordinateur.css, maquette 12) ; ici, seulement les écrans sans assistant (fin du fichier). */
 /* ——— Cadre : toute la largeur, au moins la hauteur de l'écran (la barre du bas reste en bas) ——— */
 .account-wrap:has(> .dpub-flow, > .dpub > .dpub-success) { max-width: none; padding: 0; }
 .dpub-flow { gap: 0; min-height: 100vh; min-height: 100dvh; padding: 0; font-family: var(--app-font); }
@@ -340,12 +340,9 @@
   .dpub-types, .dpub-category-info, .dpub-availability-date { animation: app-fade-in 0.25s ease-in-out both; }
 }
 
-/* ——— Ordinateur (à partir de 1024 px) : le même écran, élargi dans la colonne de 720 px (les 16 de marge de l'écran
-   comprises), la page de chaque côté ; l'en-tête et la barre du bas (« Retour », « Continuer ») à la largeur de la
-   colonne, la confirmation aussi ——— */
+/* ——— Ordinateur (à partir de 1024 px) : l'assistant et la confirmation ont leur mise en page (publier-ordinateur.css) ;
+   restent ici les écrans sans assistant, le menu d'une photo et le survol des tuiles ——— */
 @media (min-width: 1024px) {
-  .account-wrap:has(> .dpub-flow, > .dpub > .dpub-success) { max-width: var(--app-column); }
-  .dpub-flow > .dpub-steps, .ppub-head > *, .dpub-flow > .dsc-action-bar > * { max-width: none; }
   /* Chargement, annonce introuvable, hors connexion : la même colonne ; l'en-tête et la carte des écrans de Mon compte
      aux mesures du téléphone (ecrans-compte.css, moins de 1024 px). */
   .dpub-root > .account-wrap { max-width: var(--app-column); }

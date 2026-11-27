@@ -1238,8 +1238,9 @@ try {
     await context.close();
   }
 
-  // 5. Ordinateur, particulier : Mon compte, l'écran du téléphone dans la colonne de 720 px (688 de contenu), avec sa
-  //    cloche ; Type de compte › Passer en professionnel ouvre le formulaire, comme sur téléphone.
+  // 5. Ordinateur, particulier : Mon compte (étape 6, maquette 11) dans le conteneur commun (1136 px de contenu), sa
+  //    cloche ronde masquée au profit de celle de l'en-tête ; Type de compte › Passer en professionnel ouvre le
+  //    formulaire, comme sur téléphone.
   {
     const N = 'mon compte (ordinateur)';
     const state = newState();
@@ -1247,12 +1248,13 @@ try {
     await mock(context, state);
     const page = await open(context, '/compte/', N);
     await page.locator('.app-space .space-profile').waitFor();
-    expectSame(N, 'écran du téléphone', await page.evaluate(() => {
+    expectSame(N, 'page de l\'ordinateur', await page.evaluate(() => {
       const wrap = document.querySelector('.account-wrap');
       const style = getComputedStyle(wrap);
       return [document.querySelector('.app-space-header h1')?.textContent, !!document.querySelector('.app-space-header a.app-round[href="/compte/?vue=notifications"]'),
-        Math.round(wrap.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)), document.querySelectorAll('.dsp, .dsp-aside').length];
-    }), ['Mon espace', true, 688, 0]);
+        Math.round(wrap.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)), document.querySelectorAll('.dsp, .dsp-aside').length,
+        document.querySelector('.app-space-header .app-round')?.checkVisibility() ?? null, !!document.querySelector('.site-header-bell[href="/compte/?vue=notifications"]')];
+    }), ['Mon espace', true, 1136, 0, false, true]);
     await page.getByRole('link', { name: /Type de compte/ }).first().click();
     await page.waitForURL('**/compte/?vue=type');
     await page.locator('.menu-page-button').click();
@@ -1370,7 +1372,8 @@ try {
     await tab.emulateMedia({ media: 'print' });
     expectSame(N, 'impression', await tab.evaluate(() => [
       getComputedStyle(document.querySelector('.poster-screen > .screen-header')).display,
-      [...document.querySelectorAll('.footer, .tabbar')].every((el) => getComputedStyle(el).display === 'none'),
+      // Ni pied de page ni barre d'onglets du téléphone, ni en-tête ni pied de page de l'ordinateur (étape 0) sur le papier.
+      [...document.querySelectorAll('.footer, .tabbar, .site-header, .site-footer')].every((el) => getComputedStyle(el).display === 'none'),
       Math.round(document.querySelector('.poster').getBoundingClientRect().width / 96 * 25.4),
     ]), ['none', true, 210]);
     expectSame(N, 'écritures', writeNames(writesSince(state, 0)), []);

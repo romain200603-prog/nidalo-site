@@ -3,6 +3,7 @@ import { ChoiceChip, FeatureToggle, InfoLine } from '../../components/FilterCont
 import { Icon } from '../../components/Icon';
 import type { IconName } from '../../components/iconPaths';
 import { PlaceField } from '../../components/PlaceField';
+import { useDesktop } from '../../lib/desktop';
 import { scopeLabel } from '../../lib/listingJson';
 import { placeSuggestions, streetSuggestions, type PlaceSuggestion } from '../../lib/places';
 import {
@@ -91,14 +92,17 @@ export function CategoryStep({ draft, update, showsErrors }: StepProps) {
 /**
  * Carte d'une catégorie (PublishCategoryTile) : l'icône dans un carré à la teinte de la catégorie, le titre et le
  * sous-titre en bas. Choisie : bordure de 2 px et légère ombre à sa couleur, pastille ronde cochée en haut à droite.
+ * Sur ordinateur (≥ 1024 px), sans sous-titre : l'icône et le titre, qui nomme seul la carte.
  */
 function CategoryTile({ category, selected, onSelect }: { category: PublishCategory; selected: boolean; onSelect: () => void }) {
+  const desktop = useDesktop();
+  const title = CATEGORY_TITLES[category];
   return (
     <button type="button" className={`dpub-category-tile is-${category}`} aria-pressed={selected}
-      aria-label={`${CATEGORY_TITLES[category]}, ${CATEGORY_SUBTITLES[category]}`} onClick={onSelect}>
+      aria-label={desktop ? title : `${title}, ${CATEGORY_SUBTITLES[category]}`} onClick={onSelect}>
       <span className="dpub-category-icon"><Icon name={CATEGORY_ICONS[category]} /></span>
-      <span className="dpub-category-title">{CATEGORY_TITLES[category]}</span>
-      <span className="dpub-category-subtitle">{CATEGORY_SUBTITLES[category]}</span>
+      <span className="dpub-category-title">{title}</span>
+      {!desktop && <span className="dpub-category-subtitle">{CATEGORY_SUBTITLES[category]}</span>}
       <span className="dpub-category-check" aria-hidden="true"><Icon name="check" /></span>
     </button>
   );

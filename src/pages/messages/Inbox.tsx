@@ -4,6 +4,7 @@ import { Icon } from '../../components/Icon';
 import { LoadErrorState, OfflineState } from '../../components/OfflineState';
 import { appDate } from '../../lib/appDates';
 import { liveReload } from '../../lib/badges';
+import { useDesktop } from '../../lib/desktop';
 import { upcomingVisits, type ConversationVisit } from '../../lib/messages/api';
 import { keepNumbersTogether, rowTimeLabel, visitCardDate, visitRowDate } from '../../lib/messages/format';
 import {
@@ -16,12 +17,13 @@ import { Spinner } from '../account/parts';
 import { AccountPill } from './MessageInteractions';
 import { MessagingSearch } from './MessagingSearch';
 import { ConversationAvatar } from './parts';
-import { openOnClick, routePath } from './route';
+import { openOnClick, routePath, useRoute } from './route';
 
 // Liste des conversations, comme l'app (MessagesView.swift) : grand titre « Messages » et crayon « Nouveau message »,
 // champ « Rechercher un contact ou un bien » qui ouvre la recherche, les cinq filtres en capsules qui défilent sur une
 // ligne, la carte « Prochaine visite », puis « Toutes les conversations » dans une carte blanche ; la recherche s'ouvre
-// à sa place. Une conversation ouverte passe par-dessus : la liste reste dessous, avec son filtre et sa recherche.
+// à sa place. Une conversation ouverte passe par-dessus : la liste reste dessous, avec son filtre et sa recherche. À
+// partir de 1024 px, la liste reste à côté de la conversation, dont la ligne est marquée (aria-current, fond bleu clair).
 
 /** Texte de l'échec de lecture des conversations (MessagingStore.load, DomiaEmptyState.failed). */
 export const INBOX_FAILED = { title: 'Conversations indisponibles', message: 'Vos conversations n\'ont pas pu être chargées. Vérifiez votre connexion, puis réessayez.' };
@@ -37,6 +39,9 @@ export function Inbox({ inbox, visits, presence, me, onCompose }: {
 }) {
   const [filter, setFilter] = useState<InboxFilter>('all');
   const [searching, setSearching] = useState(false);
+  // Ordinateur : la conversation ouverte à côté de la liste.
+  const route = useRoute();
+  const current = useDesktop() ? route.conversationId : null;
   const conversations = inbox.status === 'ready' ? inbox.conversations : [];
   // Visites à venir liées à une conversation : filtre « Visites » et carte « Prochaine visite ».
   const upcoming = upcomingVisits(visits, new Date());
@@ -108,7 +113,7 @@ export function Inbox({ inbox, visits, presence, me, onCompose }: {
         </div>
 
         <h2 className="dm-list-title">Toutes les conversations</h2>
-        <InboxList inbox={inbox} shown={shown} filter={filter} presence={presence} me={me} />
+        <InboxList inbox={inbox} shown={shown} filter={filter} presence={presence} me={me} current={current} />
       </div>
     </aside>
   );
@@ -140,12 +145,14 @@ function NextVisitCard({ visit, conversation }: { visit: ConversationVisit; conv
   );
 }
 
-function InboxList({ inbox, shown, filter, presence, me }: {
+function InboxList({ inbox, shown, filter, presence, me, current }: {
   inbox: InboxState;
   shown: Conversation[];
   filter: InboxFilter;
   presence: Presence;
   me: string | null;
+  /** Ordinateur : la conversation ouverte à côté de la liste. */
+  current: string | null;
 }) {
   // Premier chargement : la roue de l'app, pas « Aucune conversation » (n° 209).
   if (inbox.status === 'loading') return <ListSkeleton />;
@@ -167,6 +174,7 @@ function InboxList({ inbox, shown, filter, presence, me }: {
             conversation={conversation}
             online={!conversation.isGroup && isOnline(presence, conversation.id, conversation.otherUserId)}
             me={me}
+            current={sameId(conversation.id, current)}
           />
         </li>
       ))}
@@ -184,7 +192,7 @@ export function ListSkeleton() {
  * « Particulier », heure (bleue s'il y a des non-lus), la petite maison et le bien (ou le rôle), puis le dernier message
  * et la pastille des non-lus (grise en sourdine), ou la cloche barrée d'une conversation en sourdine.
  */
-function ConversationRow({ conversation, online, me }: { conversation: Conversation; online: boolean; me: string | null }) {
+function ConversationRow({ conversation, online, me, current }: { conversation: Conversation; online: boolean; me: string | null; current: boolean }) {
   const unread = conversation.unreadCount > 0;
   const subtitle = conversation.counterpart.subtitle;
   const activity = lastActivity(conversation);
@@ -193,6 +201,7 @@ function ConversationRow({ conversation, online, me }: { conversation: Conversat
       className="dm-row"
       href={routePath({ conversationId: conversation.id })}
       onClick={openOnClick(conversation.id)}
+      aria-current={current ? 'true' : undefined}
     >
       <ConversationAvatar conversation={conversation} size={46} fontSize={15} online={online} />
       <span className="dm-row-main">

@@ -1,0 +1,185 @@
+/* Messages sur ordinateur (version ordinateur, étape 5 ; maquette 10-messages.html) : sous l'en-tête du site, une carte
+   blanche (1280 px au plus, 24 px au-dessus et dessous, 32 de chaque côté) jusqu'au bas de la fenêtre, sans pied de
+   page : la liste des conversations à gauche (400 px, 360 sous 1280 px), toujours visible, et la conversation ouverte à
+   droite (?c=…), avec ses écrans (détails, médias, groupe, communauté…). Chaque colonne défile seule. Sans ?c=, rien
+   n'est ouvert : la place de droite reste vide (« Choisissez une conversation » s'il y en a). Seulement à partir de
+   1024 px : en dessous, messages.css et messages-app.css restent seuls et rien ne change. Mesures de la maquette à
+   1440 px ; couleurs et police du site ; gris des textes : --app-text-dark (#5B6571, contraste AA) à la place du
+   #68707C de la maquette. Les mêmes éléments que sur téléphone ; sur ordinateur seulement (useDesktop), les composants
+   ajoutent la place vide, la ligne de la conversation ouverte (aria-current), le h1 masqué pendant la lecture et dans
+   la recherche, l'avatar de 46 de l'en-tête, « Voir l'annonce » et le h2 de « Faire une offre ». */
+
+@media (min-width: 1024px) {
+  /* ——— Page : la fenêtre sous l'en-tête, 640 px au moins, comme la maquette (une fenêtre plus basse fait défiler toute
+     la page, en-tête compris). La page reste « overflow: hidden » (messages.css) : « clip », qui laisserait l'en-tête
+     collé, change le chargement différé des photos sous la ligne de flottaison (requêtes différentes du site en
+     ligne). ——— */
+  .page-fill:has(> main > .dm) { min-height: 640px; }
+  .page-fill > main:has(> .dm) { justify-content: center; padding: 24px 32px; }
+
+  /* ——— La carte : deux colonnes, filet entre elles ——— */
+  .dm {
+    max-width: 1280px; grid-template-columns: 400px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
+    overflow: hidden; border: 1px solid var(--app-border); border-radius: 24px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(36, 45, 56, 0.04);
+  }
+  .dm > .dm-side, .dm.is-thread > .dm-side { grid-column: 1; grid-row: 1; display: flex; border-right: 1px solid var(--app-border); background: #FFFFFF; }
+  .dm > .dm-side.is-searching { background: var(--app-page); }
+  .dm > .dm-main, .dm > .dm-empty-pane { grid-column: 2; grid-row: 1; }
+
+  /* ——— Liste (toute la colonne défile, comme sur téléphone) : 22 px des bords ——— */
+  .dm > .dm-side > .dm-list-scroll { padding: 0 10px 10px; }
+  .dm-side .dm-list-scroll > .dm-side-top { padding: 22px 12px 14px; }
+  .dm-side .dm-side-head { align-items: flex-start; gap: 12px; }
+  .dm-side .dm-side-title { gap: 4px; }
+  .dm-side .dm-side-head h1 { font-size: 26px; font-weight: 800; line-height: 31px; letter-spacing: -0.02em; }
+  .dm-side .dm-side-sub { color: var(--app-text-dark); font-size: 14px; font-weight: 400; line-height: 21px; }
+  .dm-side .dm-compose { width: 44px; height: 44px; }
+  .dm-side .dm-compose .icon { width: 20px; height: 20px; }
+  /* Recherche : 46 de haut, fond de page, rayon 14 ; elle ouvre l'écran de recherche, comme sur téléphone. */
+  .dm-side .dm-search-open { gap: 10px; height: 46px; margin-top: 16px; padding: 0 14px; border-color: var(--d-field-border); border-radius: 14px; background: var(--app-page); }
+  .dm-side .dm-search-open > .icon { width: 18px; height: 18px; color: var(--app-text-dark); }
+  .dm-side .dm-search-open > span { color: var(--app-text-dark); }
+  .dm-side .dm-search-open:hover { border-color: #DAD7D1; }
+  /* Filtres : capsules de 34 sur deux lignes au besoin, le nombre après le titre. */
+  .dm-side .dm-tabs { flex-wrap: wrap; gap: 8px; margin: 14px 0 0; padding: 0; overflow: visible; }
+  .dm-side .dm-tab { gap: 5px; height: 34px; padding: 0 14px; border-color: var(--d-field-border); font-weight: 500; }
+  .dm-side .dm-tab:hover { border-color: #DAD7D1; }
+  .dm-side .dm-tab[aria-pressed="true"] { border-color: var(--app-brand); font-weight: 600; }
+  .dm-side .dm-tab-count { color: var(--app-text-dark); }
+  .dm-side .dm-tab[aria-pressed="true"] .dm-tab-count { color: rgba(255, 255, 255, 0.85); }
+  .dm-side .dm-next-visit { margin-top: 18px; }
+  /* « Toutes les conversations » : petites capitales grises. */
+  .dm-side .dm-list-title { margin: 0; padding: 6px 12px 8px; color: var(--app-text-dark); font-size: 13px; font-weight: 700; line-height: 19px; letter-spacing: 0.06em; text-transform: uppercase; }
+  /* Lignes sans carte ni trait : 12 px de marge, rayon 16 ; la conversation ouverte sur fond bleu clair. */
+  .dm-side .dm-list { gap: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+  .dm-side .dm-list > li + li::before { content: none; }
+  .dm .dm-side .dm-list > li > .dm-row { align-items: flex-start; gap: 12px; padding: 12px; border-radius: 16px; }
+  .dm-side .dm-row:hover { background: var(--m-hover); }
+  .dm .dm-side .dm-list > li > .dm-row[aria-current="true"] { background: var(--app-brand-soft); }
+  .dm-side .dm-row[aria-current="true"] .dm-presence { border-color: var(--app-brand-soft); }
+  .dm-side .dm-row-top { gap: 6px; }
+  .dm-side .dm-row-name { font-size: 15px; line-height: 21px; }
+  .dm-side .dm-account-pill { height: 18px; border-radius: 6px; }
+  .dm-side .dm-row-time { color: var(--app-text-dark); font-size: 13px; line-height: 18px; }
+  .dm-side .dm-row-time.is-unread { color: var(--app-brand); }
+  .dm-side .dm-row-listing { color: var(--app-text-dark); font-size: 13px; line-height: 19px; }
+  .dm-side .dm-row-preview { color: var(--app-text-dark); font-size: 14px; line-height: 20px; }
+  .dm-side .dm-row-preview.is-unread { color: var(--app-navy); }
+  .dm-side .dm-row-preview.is-visit { color: var(--m-green); }
+  .dm-side .dm-row-preview.is-file { color: var(--app-navy); }
+  .dm-side .dm-unread { min-width: 20px; height: 20px; line-height: 20px; }
+
+  /* ——— Place de droite sans conversation ouverte ——— */
+  .dm-empty-pane { display: flex; align-items: center; justify-content: center; min-width: 0; padding: 24px; background: #FFFFFF; }
+  .dm-empty-pane p { margin: 0; color: var(--app-text-dark); font-size: 15px; font-weight: 500; line-height: 22px; text-align: center; }
+
+  /* ——— Conversation : fond blanc ; plus de flèche retour (la liste est à côté) ——— */
+  .dm-main, .dm-main .dm-pane { background: #FFFFFF; }
+  .dm-main .dm-pane-screen { background: var(--d-bg); }
+  .dm-main .dm-back, .dm-main .dm-missing-top { display: none; }
+  .dm-main .dm-pane-top { margin-bottom: 0; padding-bottom: 0; background: #FFFFFF; }
+
+  /* En-tête : 16 / 24 px, avatar de 46, nom de 17, « En ligne » ou le sous-titre de 13 ; boutons ronds de 44 à filet. */
+  .dm-main .dm-pane-top .dm-head { gap: 14px; min-height: 0; padding: 16px 24px; border-bottom: 1px solid var(--app-border); background: #FFFFFF; }
+  .dm-main .dm-head .dm-head-who { gap: 14px; }
+  .dm-main .dm-head .dm-head-text { gap: 1px; }
+  .dm-main .dm-head .dm-head-name { gap: 8px; }
+  .dm-main .dm-head .dm-head-title { font-size: 17px; line-height: 22px; }
+  .dm-main .dm-head .dm-head-sub { color: var(--app-text-dark); font-size: 13px; line-height: 19px; }
+  .dm-main .dm-head .dm-head-sub.is-online { color: var(--app-yield-green); font-weight: 600; }
+  .dm-main .dm-head .dm-badge.is-compact { padding: 1px 7px; border-radius: 6px; font-size: 11px; line-height: 15px; }
+  .dm-main .dm-head .dm-badge.is-compact.is-pro { border-color: var(--app-brand-soft); background: var(--app-brand-soft); color: var(--app-brand); }
+  .dm-main .dm-head .dm-head-tools { gap: 8px; }
+  .dm-main .dm-capsule { gap: 8px; height: auto; border: 0; background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .dm-main .dm-capsule-line { display: none; }
+  .dm-main .dm-head :is(.dm-capsule-button, .dm-round) {
+    width: 44px; height: 44px; border: 1px solid var(--d-field-border); border-radius: 50%; background: #FFFFFF;
+  }
+  .dm-main .dm-head :is(.dm-capsule-button, .dm-round):hover { background: var(--d-hover); }
+  .dm-main .dm-head :is(.dm-capsule-button, .dm-round):focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+  .dm-main .dm-head :is(.dm-capsule-button, .dm-round) .icon { width: 19px; height: 19px; }
+  .dm-main .dm-head .dm-round.dm-head-add { width: 44px; }
+
+  /* Carte de l'annonce : filet, fond de page, photo de 64 × 48 ; à droite le prix et « Voir l'annonce › ». */
+  .dm-main .dm-banner-wrap { padding: 14px 24px 0; }
+  .dm-main .dm-banner { gap: 14px; padding: 10px 14px 10px 10px; border: 1px solid var(--app-border); border-radius: 16px; background: var(--app-page); box-shadow: none; }
+  .dm-main a.dm-banner:hover { border-color: #DAD7D1; }
+  .dm-main .dm-banner-photo { width: 64px; height: 48px; border-radius: 10px; }
+  .dm-main .dm-banner-text { gap: 0; }
+  .dm-main .dm-banner-title { font-size: 15px; font-weight: 600; line-height: 22px; }
+  .dm-main .dm-banner-line { color: var(--app-text-dark); font-size: 13px; line-height: 19px; }
+  .dm-main .dm-banner-end { flex-direction: row; align-items: center; gap: 14px; }
+  .dm-main .dm-banner-price { font-size: 16px; line-height: 22px; }
+  .dm-main .dm-banner-link { gap: 2px; font-size: 14px; font-weight: 600; line-height: 20px; white-space: nowrap; }
+  .dm-main .dm-banner-link .icon { width: 16px; height: 16px; stroke-width: 2.2; }
+
+  /* ——— Fil : 28 / 24 px (le fondu de 28 px en haut du fil reste celui du téléphone : le premier jour n'y est pas
+     pâli) ; reçus beiges, envoyés bleus (rayon 18, coin de 6), 62 % au plus, l'heure (et les coches) sous le texte,
+     dans la bulle ; le jour dans une capsule ——— */
+  .dm-main .dm-thread-inner { padding: 28px 24px 8px; }
+  .dm-main .dm-day-pill { top: 8px; }
+  .dm-main .dm-day-label { margin: 18px 0 0; padding: 4px 12px; border-radius: 999px; background: var(--app-segment); color: var(--app-text-dark); font-size: 12px; font-weight: 600; line-height: 18px; }
+  .dm-main .dm-day:first-child .dm-day-label { margin-top: 0; }
+  .dm-main .dm-msg { margin-top: 4px; }
+  .dm-main .dm-msg.starts-group, .dm-main .dm-system.starts-group { margin-top: 12px; }
+  .dm-main .dm-msg-line, .dm-main .dm-msg-context { max-width: 62%; }
+  .dm-main .dm-interactive, .dm-main .dm-msg.is-out .dm-interactive { max-width: 100%; }
+  .dm-main .dm-bubble { padding: 12px 14px; border-radius: 18px 18px 18px 6px; background: var(--app-segment); box-shadow: none; font-size: 15px; line-height: 22px; }
+  .dm-main .dm-bubble.is-out { border-radius: 18px 18px 6px 18px; background: var(--app-brand); }
+  .dm-main .dm-bubble .dm-meta-space { display: none; }
+  .dm-main .dm-bubble .dm-meta { position: static; display: flex; justify-content: flex-end; margin-top: 4px; color: var(--app-text-dark); font-size: 12px; line-height: 16px; }
+  .dm-main .dm-bubble.is-out .dm-meta, .dm-main .dm-bubble.is-out .dm-meta .dm-check { color: #DCE4F6; }
+  .dm-main .dm-caption { border-radius: 18px 18px 18px 6px; font-size: 15px; line-height: 22px; }
+  .dm-main .dm-caption:not(.is-out) { border-color: var(--app-segment); background: var(--app-segment); }
+  .dm-main .dm-caption.is-out { border-radius: 18px 18px 6px 18px; }
+  .dm-main .dm-voice:not(.is-out) { background: var(--app-segment); box-shadow: none; }
+
+  /* Conversation à deux : pas d'avatar à côté des messages reçus (la personne est dans l'en-tête), comme la
+     maquette ; un groupe les garde, pour savoir qui écrit. */
+  .dm-main .dm-pane:not(:has(.dm-head.is-group)) .dm-thread .dm-msg-avatar { display: none; }
+  .dm-main .dm-pane:not(:has(.dm-head.is-group)) .dm-thread :is(.dm-msg-context, .dm-msg-status, .dm-msg.is-card .dm-msg-status) { margin-left: 0; }
+  .dm-main .dm-pane:not(:has(.dm-head.is-group)) .dm-thread .dm-card-in-thread { max-width: 100%; margin-left: 0; }
+  .dm-main .dm-pane:not(:has(.dm-head.is-group)) .dm-thread .dm-msg.is-card .dm-offer { margin: 0; }
+
+  /* Visite confirmée : carte verte de 360 px, « Ajouter à l'agenda » en bleu, « Itinéraire » à filet (40 px). */
+  .dm-main .dm-thread .dm-event { width: 360px; max-width: 100%; padding: 14px 16px; border: 1px solid #CFE6D6; border-radius: 18px; background: #F2F9F4; }
+  .dm-main .dm-thread .dm-event-kind { gap: 6px; color: var(--m-green); font-size: 12px; font-weight: 700; line-height: 16px; letter-spacing: 0.08em; }
+  .dm-main .dm-thread .dm-event-kind .icon { width: 15px; height: 15px; }
+  .dm-main .dm-thread .dm-event-date { margin-top: 6px; font-size: 17px; font-weight: 700; line-height: 24px; }
+  .dm-main .dm-thread .dm-event-place { margin-top: 2px; color: var(--app-text-dark); font-size: 14px; line-height: 20px; }
+  .dm-main .dm-thread .dm-event-place .icon { width: 14px; height: 14px; }
+  .dm-main .dm-thread .dm-event-actions { gap: 8px; margin-top: 12px; }
+  .dm-main .dm-thread :is(.dm-event-button, .dm-event-added) { height: 40px; margin: 0; padding: 0 14px; border-radius: 12px; font-size: 14px; }
+  .dm-main .dm-thread .dm-event-button:not(.is-filled) { border: 1px solid var(--blue-border); background: #FFFFFF; color: var(--app-brand-pressed); }
+  .dm-main .dm-thread .dm-event-button:not(.is-filled):hover { background: var(--app-brand-soft); }
+
+  /* ——— Bas : réponses proposées (capsules de 36, sur plusieurs lignes au besoin), puis la barre d'écriture : cadre
+     blanc de rayon 18, « + » et envoi carrés de 44 (rayon 12) ——— */
+  .dm-main .dm-bottom { padding: 8px 24px 20px; border-top: 0; background: #FFFFFF; }
+  .dm-main .dm-quick { flex-wrap: wrap; margin: -5px -5px 7px; overflow: visible; }
+  .dm-main .dm-quick button { height: 36px; color: var(--app-brand-pressed); font-weight: 500; }
+  .dm-main .dm-reply-bar { margin: 0 0 8px; }
+  .dm-main .dm-composer { align-items: flex-end; gap: 10px; padding: 6px 6px 6px 8px; border: 1px solid var(--d-field-border); border-radius: 18px; background: #FFFFFF; }
+  .dm-main .dm-composer:has(textarea:focus) { border-color: var(--app-brand); box-shadow: 0 0 0 3px rgba(60, 92, 176, 0.14); }
+  .dm-main .dm-plus { width: 44px; height: 44px; margin: 0; border-radius: 12px; background: var(--app-segment); color: var(--app-navy); }
+  .dm-main .dm-plus:hover { background: #E9E6E0; }
+  .dm-main .dm-plus .icon { width: 20px; height: 20px; stroke-width: 2; }
+  .dm-main .dm-field, .dm-main .dm-field:focus-within { min-height: 44px; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
+  .dm-main .dm-field textarea { height: 44px; max-height: 110px; padding: 11px 0; font-size: 15px; line-height: 22px; }
+  .dm-main .dm-camera { width: 44px; height: 44px; border-radius: 12px; }
+  .dm-main .dm-camera:hover { background: var(--app-segment); color: var(--app-navy); }
+  .dm-main .dm-send { width: 44px; height: 44px; margin: 0; border-radius: 12px; }
+  .dm-main .dm-send .icon { width: 20px; height: 20px; }
+  .dm-main .dm-bottom-line { padding: 18px 24px 20px; }
+
+  /* ——— Écrans de la conversation (détails, médias, groupe, communauté, demandes, ajout) : le contenu sur 640 px au
+     plus, centré dans la place de droite ; « Faire une offre » sur 672 (base de messages.css) ——— */
+  .dm-main .dm-details { background: var(--app-page); }
+  .dm-main .dm-details-inner { width: min(640px, 100% - 48px); }
+  .dm-offer-host .dl-offer-screen .dl-screen-titles h2 { margin: 0; color: var(--app-navy); font: 700 20px/25px var(--app-font); outline: none; }
+}
+
+/* Fenêtre de 1024 à 1279 px : la liste sur 360 px, la conversation garde la place. */
+@media (min-width: 1024px) and (max-width: 1279.98px) {
+  .dm { grid-template-columns: 360px minmax(0, 1fr); }
+}

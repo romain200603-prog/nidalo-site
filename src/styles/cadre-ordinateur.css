@@ -1,0 +1,157 @@
+/* Cadre commun de l'ordinateur (version ordinateur, étape 0 ; maquettes 01-accueil.html et 08-favoris.html) : le
+   conteneur commun, l'en-tête collé en haut et le pied de page (grand sur l'accueil, fin ailleurs), à la place de la
+   barre d'onglets du bas. Seulement à partir de 1024 px : en dessous, Layout.tsx et entries/info.tsx n'affichent ni
+   l'en-tête ni ce pied de page, et rien ne change. Mesures de la maquette, couleurs de l'app (app.css, pieces-app.css). */
+
+@media (min-width: 1024px) {
+  :root {
+    /* Conteneur commun des pages de l'ordinateur : 1200 px au plus, centré, 32 px de marge de chaque côté. */
+    --site-width: 1200px;
+    --site-gutter: 32px;
+    /* En-tête : 72 px et son filet. Les barres collées des pages se placent dessous. */
+    --site-header-height: 73px;
+    /* Écart au-dessus du pied de page fin : celui de l'ancien pied de page (48 px), tant que la page n'est pas refaite ;
+       une page refaite le change (ses maquettes finissent par 72 px sous le contenu, puis le pied de page). */
+    --site-footer-gap: 48px;
+    /* Plus de barre d'onglets : la place qu'elle réservait est rendue (bas du corps de la page, pages pleine hauteur,
+       messages et capsule « Carte » posés au-dessus d'elle). */
+    --tabbar-height: 0px;
+    --tabbar-bottom: 0px;
+  }
+  /* Ancre, lien d'évitement ou champ atteint au clavier : jamais caché sous l'en-tête collé. */
+  html { scroll-padding-top: var(--site-header-height); }
+
+  .site-container { width: 100%; max-width: var(--site-width); margin-left: auto; margin-right: auto; padding-left: var(--site-gutter); padding-right: var(--site-gutter); }
+
+  /* Logo de l'app (BrandMark), comme dans la barre du haut de l'accueil : maison de 32 × 27, « NIDΛLO » très gras de 19,
+     lettres espacées de 26 % (sans l'espace après le « O » : la navigation commence 28 px après le logo). */
+  .site-brand-logo { display: block; flex: none; width: 32px; height: 27px; }
+  .site-brand-word { display: block; margin-right: -0.26em; color: #1B2235; font: 800 19px/23px var(--app-font-system); letter-spacing: 0.26em; white-space: nowrap; }
+
+  /* ——— En-tête : blanc, filet du bas, collé en haut ; logo, 28 px, navigation, puis à droite la cloche, « Publier une
+     annonce » et « Mon compte » (12 px entre eux), sur 72 px de haut. Au-dessus des menus des pages (30) quand la page
+     défile, sous les écrans posés par-dessus (40 et plus) ——— */
+  .site-header {
+    position: sticky; top: 0; z-index: 35; flex: none; background: #FFFFFF; border-bottom: 1px solid var(--border); color: var(--text); font-family: var(--app-font);
+    /* Sa largeur réelle (barre de défilement comprise) resserre l'en-tête plus bas, pour qu'il tienne sur une ligne. */
+    container: site-header / inline-size;
+  }
+  .site-header-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 28px; min-height: 72px; }
+  .site-header-brand { display: flex; flex: none; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
+  /* Pages d'information : l'en-tête est dans #header ; collé à toute la page, pas seulement à ce bloc. */
+  #header:has(> .site-header) { display: contents; }
+
+  /* Accueil, Favoris, Messages : icône de 19 et libellé de 15, 10 × 14 de marge, rayon 12 ; la page en cours sur le
+     bleu pâle, en bleu et semi-gras. */
+  .site-header-nav { display: flex; align-items: center; gap: 4px; }
+  .site-header-nav a {
+    display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px;
+    color: var(--text); font-size: 15px; font-weight: 500; line-height: 1.5; text-decoration: none; white-space: nowrap;
+  }
+  .site-header-nav a:hover { background: var(--d-hover); }
+  .site-header-nav a[aria-current="page"] { background: var(--blue-soft); color: var(--blue); font-weight: 600; }
+  .site-header-nav a:focus-visible { border-radius: 12px; }
+  .site-header-nav .icon { width: 19px; height: 19px; }
+  /* La maison redessinée de la barre d'onglets (encre de 16), dans la place d'une icône de 19. */
+  .site-header-nav .site-header-house { width: 16px; height: 14.648px; margin: 0 1.5px; }
+  /* Pastille des messages non lus : capsule rouge de 20, chiffre blanc de 12 gras (« 99+ » au-delà de 99). */
+  .site-header-badge {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
+    background: var(--red); color: #FFFFFF; font-size: 12px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums;
+  }
+
+  .site-header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-left: auto; }
+  /* Cloche : rond blanc de 44 à filet, icône de 20 ; le point rouge des notifications non lues de l'accueil. */
+  .site-header-bell {
+    position: relative; display: flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px;
+    border: 1px solid var(--border); border-radius: 999px; background: #FFFFFF; color: var(--text);
+  }
+  .site-header-bell .icon { width: 20px; height: 20px; }
+  .site-header-dot { position: absolute; left: 21.5px; top: 10.5px; width: 8px; height: 8px; border-radius: 50%; background: #E5484D; box-shadow: 0 0 0 2px #FFFFFF; }
+  /* « Publier une annonce » : bouton bleu de 44, rayon 12, « + » de 18 au trait épais. */
+  .site-header-publish {
+    display: flex; flex: none; align-items: center; gap: 8px; height: 44px; padding: 0 18px; border-radius: 12px;
+    background: var(--blue); color: #FFFFFF; font-size: 15px; font-weight: 600; line-height: 1; text-decoration: none; white-space: nowrap;
+  }
+  .site-header-publish:hover { background: var(--blue-press); color: #FFFFFF; }
+  .site-header-publish .icon { width: 18px; height: 18px; stroke-width: 2.4; }
+  /* « Mon compte » : capsule de 44 à filet, rond bleu pâle de 32 et son personnage ; sur Mon compte, la capsule bleu
+     pâle, le rond bleu plein (maquette 11-mon-compte.html). */
+  .site-header-account {
+    display: flex; flex: none; align-items: center; gap: 10px; height: 44px; padding: 0 14px 0 6px; border: 1px solid var(--border); border-radius: 999px;
+    color: var(--text); font-size: 15px; font-weight: 500; line-height: 1; text-decoration: none; white-space: nowrap;
+  }
+  .site-header-avatar { display: flex; flex: none; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: var(--blue-soft); color: var(--blue); }
+  .site-header-avatar .icon { width: 18px; height: 18px; }
+  .site-header-account[aria-current="page"] { border-color: var(--d-blue-line); background: var(--blue-soft); color: var(--blue-press); font-weight: 600; }
+  .site-header-account[aria-current="page"] .site-header-avatar { background: var(--blue); color: #FFFFFF; }
+  .site-header-bell:hover, .site-header-account:not([aria-current="page"]):hover { background: var(--d-hover); }
+  .site-header-bell:focus-visible, .site-header-account:focus-visible { border-radius: 999px; }
+  .site-header-publish:focus-visible { border-radius: 12px; }
+
+  /* ——— Pied de page ——— */
+  .site-footer { flex: none; margin-top: 80px; border-top: 1px solid var(--border); background: #FFFFFF; color: var(--text); font-family: var(--app-font); }
+  .site-footer :where(p) { margin: 0; }
+  .site-footer a { color: inherit; text-decoration: none; }
+  .site-footer a:hover { color: var(--blue); text-decoration: underline; }
+
+  /* Grand (accueil) : logo de 24 et sa phrase, puis Annonces, Mon espace et Informations (40 entre les colonnes) ; en bas,
+     après un filet, « © 2026 Nidalo » et l'avertissement sur les rendements. Gris de l'app lisible (#5B6571). */
+  .site-footer-inner { padding-top: 48px; padding-bottom: 28px; }
+  .site-footer-top { display: flex; flex-wrap: wrap; gap: 40px; }
+  .site-footer-brand { flex: 1 1 260px; min-width: 0; }
+  .site-footer-logo { display: flex; align-items: center; gap: 9px; }
+  .site-footer-logo .site-brand-logo { width: auto; height: 24px; }
+  .site-footer-logo .site-brand-word { font-size: 17.5px; line-height: 21px; }
+  .site-footer-tagline { max-width: 300px; margin-top: 14px; color: var(--app-text-dark); font-size: 14px; line-height: 1.6; }
+  .site-footer-column { flex: 0 1 180px; min-width: 0; }
+  .site-footer-column.is-wide { flex-basis: 260px; }
+  .site-footer-column h2 { margin: 0 0 12px; color: var(--app-text-dark); font-size: 13px; font-weight: 700; line-height: 1.5; letter-spacing: 0.08em; text-transform: uppercase; }
+  .site-footer-column ul { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; font-size: 15px; line-height: 1.5; }
+  .site-footer-bottom {
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 32px; margin-top: 40px; padding-top: 20px;
+    border-top: 1px solid var(--border); color: var(--app-text-dark); font-size: 13px; line-height: 1.6;
+  }
+  .site-footer-bottom p + p { flex: 1 1 480px; max-width: 760px; text-align: right; }
+
+  /* Fin (les autres pages) : une ligne de 14, « © 2026 Nidalo » puis les pages d'information, 24 entre eux. */
+  .site-footer.is-slim { margin-top: var(--site-footer-gap); }
+  .site-footer-line { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding-top: 22px; padding-bottom: 22px; color: var(--app-text-dark); font-size: 14px; line-height: 1.5; }
+  .site-footer-line nav { display: flex; flex-wrap: wrap; gap: 12px 24px; }
+
+  /* Écran de connexion plein écran et choix du profil d'un compte neuf (plus tard dans la version ordinateur) : comme
+     la barre d'onglets aujourd'hui, l'en-tête s'efface ; le pied de page aussi derrière l'écran de connexion. */
+  body:has(.auth.is-page:not([hidden] *)) :is(.site-header, .site-footer) { display: none; }
+  body:has(.app-profile-step) .site-header { display: none; }
+
+  /* Pages collées sous l'en-tête : la page Messages (pleine hauteur) garde toute la fenêtre sous l'en-tête. */
+  .page-fill > .site-header { position: relative; }
+}
+
+/* En-tête de moins de 1280 px de large : tout sur une ligne, espaces resserrés (même avec la pastille « 99+ ») ; encore
+   un peu plus sous 1020 px, quand une barre de défilement prend sa place dans une fenêtre de 1024 px. */
+@media (min-width: 1024px) {
+  @container site-header (max-width: 1279.98px) {
+    .site-header-row { column-gap: 16px; }
+    .site-header-nav { gap: 2px; }
+    .site-header-nav a { padding-left: 10px; padding-right: 10px; }
+    .site-header-actions { gap: 8px; }
+    .site-header-publish { padding: 0 14px; }
+  }
+  @container site-header (max-width: 1019.98px) {
+    .site-header-row { column-gap: 12px; }
+    .site-header-nav a { gap: 6px; }
+    .site-header-account { gap: 8px; padding-right: 12px; }
+  }
+}
+
+/* Entre 1024 et 1279 px : les quatre colonnes du grand pied de page côte à côte. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .site-footer-top { gap: 32px; }
+  .site-footer-brand { flex-basis: 200px; }
+}
+
+/* Impression (affiche d'une annonce, ou une page) : ni en-tête ni pied de page de l'ordinateur sur le papier. */
+@media print {
+  .site-header, .site-footer { display: none !important; }
+}

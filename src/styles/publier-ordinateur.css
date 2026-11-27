@@ -1,0 +1,158 @@
+/* « Publier une annonce » sur ordinateur (version ordinateur, étape 7 ; maquette 12-publier-etape-1.html), pour les sept
+   étapes, la vérification et la confirmation : l'en-tête simple sur toute la largeur (logo, titre, « Étape N sur 7 · … »,
+   « Brouillon » ou « Enregistrer », « Quitter ») avec la barre d'étapes du conteneur dessous, l'étape au milieu (896 px de
+   contenu), puis la barre blanche du bas avec « Continuer » à droite. Les éléments de l'assistant du téléphone
+   (PhoneParts.tsx, PublishPage.tsx, publier-telephone.css), restylés : mêmes champs, mêmes actions. Tout est sous
+   @media (min-width: 1024px). Mesures de la maquette ; couleurs et police du site ; gris des textes : --app-text-dark
+   (#5B6571, contraste AA) à la place du #68707C de la maquette. */
+
+@media (min-width: 1024px) {
+  /* ——— Page : l'assistant sur toute la largeur et toute la hauteur de la fenêtre, sans le pied de page du site (la
+     maquette n'en a pas : la barre du bas est celle de l'assistant). Chargement, annonce introuvable et connexion
+     gardent la colonne de 720 px et le pied de page (publier-telephone.css) ——— */
+  .account-wrap:has(> .dpub-flow, > .dpub > .dpub-success) { max-width: none; }
+  body:has(.dpub-flow, .dpub-success) .site-footer { display: none; }
+  /* Gris des textes de l'assistant (libellés, sous-titres, notes, unités, formules) lisibles : 5,9:1 sur le blanc. */
+  .dpub-flow, .dpub:has(> .dpub-success) { --app-text-secondary: var(--app-text-dark); }
+  /* Champ atteint au clavier : jamais caché sous l'en-tête (96 px) ni sous la barre du bas (87 px) collés. */
+  html:has(.dpub-flow) { scroll-padding-top: 112px; scroll-padding-bottom: 103px; }
+
+  /* ——— En-tête : blanc, filet du bas ; dans le conteneur (1200 px au plus, 32 px de marge), une ligne de 76 px (logo,
+     filet de 28, titres, pastille, « Quitter », 24 px entre eux), puis la barre d'étapes ——— */
+  .ppub-head { gap: 0; padding: 0; background: #FFFFFF; border-bottom: 1px solid var(--app-border); }
+  .ppub-head > * { max-width: var(--site-width); padding-left: var(--site-gutter); padding-right: var(--site-gutter); }
+  .ppub-head-row { gap: 24px; min-height: 76px; }
+  /* La flèche n'est pas affichée : « Quitter » ferme, et « Retour » (en bas, dès l'étape 2) revient en arrière. */
+  .ppub-head .ppub-back { display: none; }
+  /* Logo de 24 px de haut (celui du pied de page), puis le filet de 1 × 28, à 24 px du logo et des titres. */
+  .ppub-brand { flex: none; display: flex; align-items: center; gap: 9px; margin: 0; }
+  .ppub-brand .site-brand-logo { width: auto; height: 24px; }
+  .ppub-brand .site-brand-word { font-size: 17.5px; line-height: 21px; }
+  .ppub-brand::after { content: ''; flex: none; width: 1px; height: 28px; margin-left: 15px; background: var(--app-border); }
+  /* Titre de 17 gras (le h1 de la page), « Étape 2 sur 7 · … » de 13. */
+  .ppub-titles { gap: 0; margin-right: 0; }
+  .ppub-titles h1 { font-size: 17px; line-height: 1.5; }
+  .ppub-titles p { color: var(--app-text-dark); font-size: 13px; font-weight: 400; line-height: 1.5; }
+  /* « Brouillon » / « Enregistrer » : capsule de 42, 16 de marge, 15 gras bleu foncé sur bleu pâle, la disquette de 17
+     devant le mot (dessin Lucide « save », comme les icônes du site). */
+  .ppub-head .ppub-pill { gap: 8px; height: 42px; padding: 0 16px; color: var(--app-brand-pressed); font-size: 15px; transition: background-color 0.15s ease; }
+  .ppub-head .ppub-pill::before {
+    content: ''; flex: none; width: 17px; height: 17px; background: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z'/%3E%3Cpath d='M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7'/%3E%3Cpath d='M7 3v4a1 1 0 0 0 1 1h7'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z'/%3E%3Cpath d='M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7'/%3E%3Cpath d='M7 3v4a1 1 0 0 0 1 1h7'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+  /* Pendant l'enregistrement, la roue seule (sans la disquette). */
+  .ppub-head .ppub-pill:has(.spinner)::before { display: none; }
+  .ppub-head .ppub-pill .dpub-spinner { width: 18px; height: 18px; }
+  .ppub-head .ppub-pill:hover:not(:disabled) { background: #E2E8F6; }
+  /* « Quitter » (la croix du téléphone, même action) : capsule de 42 bordée, la croix de 14 devant le mot, 15 semi-gras. */
+  .ppub-head .dpub-close {
+    gap: 8px; width: auto; height: 42px; padding: 0 14px; border: 1px solid var(--app-field-border); border-radius: 999px; background: #FFFFFF;
+    color: var(--app-navy); font: 600 15px/1 var(--app-font); white-space: nowrap; transition: background-color 0.15s ease;
+  }
+  .ppub-head .dpub-close .icon { width: 14px; height: 14px; stroke-width: 2.6; }
+  .ppub-head .dpub-close:hover { background: var(--app-page); }
+  /* Barre d'étapes : sept traits de 5 sur toute la largeur du conteneur, 6 d'écart, 14 sous eux ; 7 pour l'étape en cours ;
+     chaque étape atteinte s'ouvre d'un clic, sur 25 px de haut. */
+  .ppub-head .dpub-progress { gap: 6px; height: 5px; margin-bottom: 14px; }
+  .ppub-head .dpub-progress > * { height: 25px; }
+  .ppub-head .dpub-progress > * > span { height: 5px; border-radius: 9px; background: var(--app-border); }
+  .ppub-head .dpub-progress > .is-done > span { background: var(--app-brand); }
+  .ppub-head .dpub-progress > .is-current > span { height: 7px; }
+  .ppub-head .dpub-progress > button:focus-visible { outline-offset: -4px; }
+
+  /* « Brouillon enregistré » : sous l'en-tête, au milieu. */
+  .dpub-flow > .dsc-saved { top: 108px; }
+
+  /* ——— L'étape : 896 px de contenu au milieu (960 px avec ses 32 px de marge), 44 px sous l'en-tête ——— */
+  .dpub-flow > .dpub-steps { max-width: 960px; padding: 44px 32px 32px; }
+  .dpub-step, .dpub-step-copy { gap: 16px; }
+  .dpub-flow .dsc-card { gap: 16px; padding: 24px; border-radius: 20px; }
+  .dpub-flow .dsc-card-title { font-size: 20px; line-height: 1.3; }
+  /* Code postal assez large pour « Non renseigné » (130 px sur le téléphone). */
+  .dpub-postal-row { grid-template-columns: 170px minmax(0, 1fr); }
+  /* Champ en erreur où l'on se trouve : il garde son contour rouge et prend l'anneau de focus du site (3 px bleus, 2 px
+     d'écart), sans quoi rien ne le distinguerait des autres champs en erreur. */
+  .dpub-flow .has-error .number-input:focus-within,
+  .dpub-flow :is(.dsc-field.has-error .dsc-input, .dsc-field.has-error .dpub-textarea, .dpub-place.has-error .place-field input):focus {
+    outline: 3px solid var(--app-brand); outline-offset: 2px;
+  }
+
+  /* Étape 1 : « Que souhaitez-vous publier ? » de 34 très gras, la phrase de 17, les quatre catégories sur une ligne
+     (200 px au moins chacune, 14 d'écart ; l'icône et le titre, sans sous-titre : MainSteps.tsx), puis « Type de bien »
+     et ses tuiles de 64. */
+  .dpub-category-head { gap: 8px; }
+  .dpub-category-head h2 { font-size: 34px; font-weight: 800; line-height: 1.15; letter-spacing: -0.02em; }
+  .dpub-category-head p { color: var(--app-text-dark); font-size: 17px; font-weight: 400; line-height: 1.5; }
+  .dpub-category-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-top: 28px; }
+  .dpub-category-tile {
+    --tile-shadow: rgba(60, 92, 176, 0.14); height: auto; padding: 22px 21px; border-radius: 20px;
+    transition: background-color var(--app-duration) var(--app-ease), box-shadow var(--app-duration) var(--app-ease);
+  }
+  .dpub-category-tile.is-rental { --tile-shadow: rgba(44, 122, 114, 0.14); }
+  .dpub-category-tile.is-investment { --tile-shadow: rgba(47, 122, 78, 0.14); }
+  .dpub-category-tile.is-hotel { --tile-shadow: rgba(148, 107, 30, 0.14); }
+  /* Choisie : la teinte très pâle de sa catégorie, bordure de 2 à sa couleur, ombre de 26. */
+  .dpub-category-tile[aria-pressed="true"] { background: color-mix(in srgb, var(--tile-ink) 4%, #FFFFFF); box-shadow: 0 10px 26px var(--tile-shadow); }
+  .dpub-category-icon { width: 52px; height: 52px; border-radius: 15px; }
+  .dpub-category-icon .icon { width: 24px; height: 24px; }
+  .dpub-category-title { margin-top: 14px; font-size: 18px; line-height: 1.5; }
+  .dpub-category-check { top: 16px; right: 16px; width: 28px; height: 28px; }
+  .dpub-category-check .icon { width: 15px; height: 15px; stroke-width: 3; }
+  .dpub-types { gap: 12px; margin-top: 32px; }
+  .dpub-types-title { color: var(--app-text-dark); font-size: 13px; letter-spacing: 0.08em; line-height: 1.5; }
+  /* Trois par ligne : les trois types d'un logement sur une ligne (la maquette), les six d'une location ou d'un
+     investissement sur deux. */
+  .dpub-types-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .dpub-type-tile { gap: 14px; min-height: 64px; padding: 8px 17px; }
+  .dpub-type-tile[aria-pressed="true"] { background: color-mix(in srgb, var(--app-brand) 4%, #FFFFFF); color: var(--app-brand-pressed); }
+  .dpub-type-icon { width: 38px; height: 38px; border-radius: 11px; }
+  .dpub-type-icon .icon { width: 20px; height: 20px; }
+  .dpub-type-title { font-size: 16px; line-height: 1.3; }
+  .dpub-type-tile[aria-pressed="true"] .dpub-type-title { font-weight: 700; }
+  .dpub-type-detail { color: var(--app-text-dark); font-size: 13px; line-height: 1.3; }
+  .dpub-type-tile[aria-pressed="true"] .dpub-type-detail { color: var(--app-brand-pressed); }
+  .dpub-category-info { margin-top: 32px; }
+
+  /* Photos : quatre par ligne. */
+  .dpub-photos { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  /* Aperçu dans les résultats : la carte à la taille de celles des résultats, pas étirée sur toute la colonne. */
+  .dpub-preview { max-width: 380px; }
+
+  /* ——— Barre du bas : blanche, filet du haut, sur toute la largeur ; les boutons de 54 à droite de la colonne de 896 px,
+     12 d'écart (« Retour » puis « Continuer », « Publier mon annonce » ou « Enregistrer les modifications », 240 au moins),
+     l'icône après le mot ; l'envoi des photos à gauche ——— */
+  .dpub-flow > .dsc-action-bar {
+    flex-direction: row; align-items: center; justify-content: flex-end; gap: 12px;
+    padding: 16px max(var(--site-gutter), calc((100% - 896px) / 2)); border-top: 1px solid var(--app-border); box-shadow: none;
+  }
+  .dpub-flow > .dsc-action-bar > * { width: auto; max-width: none; margin: 0; }
+  .dpub-flow > .dsc-action-bar > .dpub-progress-text { flex: 1; min-width: 0; color: var(--app-text-dark); font-size: 14px; text-align: left; }
+  .dpub-flow .dsc-action-buttons { gap: 12px; }
+  .dpub-flow .dsc-action-buttons > .dsc-button, .dpub-flow .dsc-action-buttons > .dsc-button-light {
+    flex: none; height: 54px; padding: 0 24px; border-radius: 14px; font-size: 16px; font-weight: 700;
+  }
+  .dpub-flow .dsc-action-buttons > .dsc-button-primary { min-width: 240px; }
+  .dpub-flow .dsc-action-buttons > .dsc-button .icon { width: 18px; height: 18px; }
+  .dpub-flow .dsc-action-buttons > .dsc-button-primary .icon { order: 1; }
+  .dpub-flow .dsc-action-buttons > .dsc-button-primary:hover:not(:disabled) { background: var(--app-brand-pressed); }
+  .dpub-flow .dsc-action-buttons > .dsc-button-light:hover:not(:disabled) { background: #E2E8F6; }
+
+  /* ——— Confirmation : l'en-tête réduit au logo, la coche, le titre et la phrase au milieu de la place, les trois liens
+     dans la barre du bas, « Voir l'annonce » à droite ——— */
+  .dpub:has(> .dpub-success) { gap: 0; }
+  .dpub:has(> .dpub-success) .ppub-brand::after { display: none; }
+  .dpub-success { gap: 0; min-height: calc(100vh - 77px); min-height: calc(100dvh - 77px); padding: 0; }
+  .dpub-success-check { margin-top: auto; }
+  .dpub-success h1 { margin-top: 20px; padding: 0 var(--site-gutter); font-size: 34px; font-weight: 800; line-height: 1.15; letter-spacing: -0.02em; }
+  .dpub-success p { align-self: center; max-width: 640px; margin: 10px 0 auto; padding: 0 var(--site-gutter); color: var(--app-text-dark); font-size: 17px; font-weight: 400; line-height: 1.5; }
+  .dpub-success-actions {
+    flex-direction: row-reverse; align-items: center; justify-content: flex-start; gap: 12px; margin-top: 44px;
+    padding: 16px max(var(--site-gutter), calc((100% - 896px) / 2)); border-top: 1px solid var(--app-border); background: #FFFFFF;
+  }
+  .dpub-success-actions .dsc-button { flex: none; height: 54px; padding: 0 24px; border-radius: 14px; font-size: 16px; font-weight: 700; }
+  .dpub-success-actions .dsc-button-primary { min-width: 240px; }
+  .dpub-success-actions .dsc-button .icon { width: 18px; height: 18px; }
+  .dpub-success-actions .dsc-button-quiet { align-self: auto; height: 54px; padding: 0 16px; font-size: 16px; }
+  .dpub-success-actions .dsc-button-quiet::after { inset: 0; }
+}

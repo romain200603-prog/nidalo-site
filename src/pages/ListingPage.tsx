@@ -6,6 +6,7 @@ import { Page } from '../components/Layout';
 import { OfflineState } from '../components/OfflineState';
 import { requireAccount } from '../lib/account/gate';
 import { cardKind } from '../lib/cardContent';
+import { useDesktop } from '../lib/desktop';
 import { formatArea, formatPrice } from '../lib/format';
 import { fetchListing, ListingNotFound, placeLine, sortedPhotos, UUID_PATTERN, type ListingRow } from '../lib/listings';
 import { listingConversation } from '../lib/listing/conversation';
@@ -29,6 +30,7 @@ import { Spinner } from './account/parts';
 import { ActionBar } from './listing/ActionBar';
 import { HotelSection, ProfitabilityCard, RentalCostCard } from './listing/CategoryCards';
 import { backTarget, coordinateOf, hotelPerformanceOf, rentalCostOf, toggleListingCompare } from './listing/data';
+import { ContactButtons, FactsCard, OwnerButtons, PriceCard, TitleBar } from './listing/DesktopLayout';
 import { AlertDialog, NoPhoneDialog } from './listing/Dialogs';
 import { Gallery } from './listing/Gallery';
 import { LocationSection } from './listing/Location';
@@ -41,8 +43,11 @@ import { useListingScreens } from './listing/useListingScreens';
 // Fiche d'une annonce (ListingDetailView.swift), à toutes les tailles : mêmes sections, dans le même ordre ; écrire au
 // vendeur, demander une visite et faire une offre (useListingScreens), les deux écrans à leur propre adresse
 // (&vue=visite, &vue=offre) ; en bas, la barre de contact « Duo » (ou la barre blanche de sa propre annonce), et la
-// visite se demande sur la carte « Aucune visite prévue ». Ordinateur (≥ 1024 px) : le même écran, dans la colonne de
-// 720 px (listing.css).
+// visite se demande sur la carte « Aucune visite prévue ». Ordinateur (≥ 1024 px, maquettes 05 et 06,
+// fiche-ordinateur.css) : les mêmes pièces dans le conteneur du site, une seule fois chacune : en haut le retour, la
+// catégorie, le titre et « Partager », « Favori », « Comparer » (DesktopLayout.tsx) ; les photos en grille ; à gauche les
+// chiffres clés puis les sections ; à droite, collés sous l'en-tête, le prix et les actions de la barre du bas (qui
+// n'est pas affichée), la carte des visites et « Votre interlocuteur ».
 
 type State = { status: 'loading' } | { status: 'notFound' } | { status: 'error' } | { status: 'offline' } | { status: 'ready'; row: ListingRow };
 
@@ -65,6 +70,7 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
   /** L'arrivée de la barre Duo est jouée : une fois par ouverture de la fiche, pas au retour d'un de ses écrans. */
   const arrived = useRef(false);
   const isRental = row.transaction === 'rent';
+  const desktop = useDesktop();
 
   const kind = cardKind(row, mode);
   const photos = useMemo(() => sortedPhotos(row), [row]);
@@ -122,6 +128,7 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
   const phone = publisher?.phone?.trim();
 
   const fees = feesLabel(row);
+  const facts = headerFacts(row, kind);
 
   // ——— État de l'offre et des visites (lus avec le compte) ———
   const now = new Date();
@@ -129,6 +136,15 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
   const offerLabel = offerStateLabel(account.offers, conversation, now);
   const upcoming = isOwn ? null : nextVisit(account.visits, row.id, now);
   const request = isOwn || upcoming ? null : openRequest(account.requests, row.id, me, now);
+  const onOffer = !isOwn && row.transaction === 'sale' ? makeOffer : null;
+  const offerState = offerLabel && conversation ? { label: offerLabel, href: conversationPath(conversation.id) } : null;
+  const owner = isOwn ? { onRequests: openRequests, onManage: () => window.location.assign(publishPath(row.id)) } : null;
+  const backLink = { href: back.href, label: back.label, onClick: onBack };
+  // « Votre interlocuteur » : dans les sections sur téléphone, dans la colonne de droite sur ordinateur (une seule fois).
+  const publisherCard = publisher && (
+    <PublisherCard publisher={publisher} fees={fees} activeCount={activeCount} onOpenProfile={openProfile}
+      onContact={isOwn ? undefined : contactSeller} isRental={isRental} />
+  );
 
   // « Demander une visite » ou « Faire une offre » ouvert : l'écran seul, à la place de la fiche.
   const opened = renderScreen({ photo: photos[0], recipientName: publisher?.name ?? (isRental ? 'Le propriétaire' : 'Le vendeur'), profitability, publisher });
@@ -136,41 +152,62 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
   if (opened && shown !== 'offre') return <div className="listing listing-screen">{opened}</div>;
 
   return (
-    <div className="listing">
+    <div className={desktop ? `listing listing-desk site-container${kind === 'hotel' ? ' listing-desk-hotel' : ''}` : 'listing'}>
+      {desktop && (
+        <TitleBar back={backLink} kind={kind} category={CATEGORY_LABELS[kind]} condition={saleCondition(row)} title={row.title} location={place}
+          listingId={row.id} onShare={share} onCompare={() => toggleListingCompare(row.id, mode)} />
+      )}
       <div className="listing-gallery-wrap">
         <Gallery photos={photos} propertyType={row.property_type} onShare={share} onCompare={() => toggleListingCompare(row.id, mode)}
-          listingId={row.id} back={{ href: back.href, label: back.label, onClick: onBack }} />
+          listingId={row.id} back={backLink} desktop={desktop} />
       </div>
       <div className="wrap listing-body">
         <div className="listing-aside">
           <div className="listing-aside-inner">
-            <HeaderCard
-              category={CATEGORY_LABELS[kind]}
-              price={formatPrice(price)}
-              priceSecondary={priceSecondary(row)}
-              priceNote={priceFeesNote(row)}
-              condition={saleCondition(row)}
-              title={row.title}
-              location={place}
-              facts={headerFacts(row, kind)}
-              onOffer={!isOwn && row.transaction === 'sale' ? makeOffer : null}
-              offerState={offerLabel && conversation ? { label: offerLabel, href: conversationPath(conversation.id) } : null}
-              offerBusy={opening}
-            />
-            <ActionBar
-              onMessage={contactSeller}
-              onCall={() => setNotice('noPhone')}
-              callHref={phone ? telHref(phone) : null}
-              busy={opening}
-              isRental={isRental}
-              playsArrival={!arrived.current}
-              onArrived={() => { arrived.current = true; }}
-              owner={isOwn ? { onRequests: openRequests, onManage: () => window.location.assign(publishPath(row.id)) } : null}
-            />
-            {!isOwn && <VisitCard upcoming={upcoming} request={request} now={now} isRental={isRental} onRequest={requestVisit} />}
+            {desktop ? (
+              <PriceCard price={formatPrice(price)} priceSecondary={priceSecondary(row)} isRental={isRental} grossYield={profitabilityCard?.grossYield ?? null}
+                priceNote={priceFeesNote(row)} onOffer={onOffer} offerState={offerState} offerBusy={opening}>
+                {owner ? <OwnerButtons onRequests={owner.onRequests} onManage={owner.onManage} /> : (
+                  <ContactButtons onMessage={contactSeller} onCall={() => setNotice('noPhone')} callHref={phone ? telHref(phone) : null} busy={opening}
+                    isRental={isRental} />
+                )}
+              </PriceCard>
+            ) : (
+              <HeaderCard
+                category={CATEGORY_LABELS[kind]}
+                price={formatPrice(price)}
+                priceSecondary={priceSecondary(row)}
+                priceNote={priceFeesNote(row)}
+                condition={saleCondition(row)}
+                title={row.title}
+                location={place}
+                facts={facts}
+                onOffer={onOffer}
+                offerState={offerState}
+                offerBusy={opening}
+              />
+            )}
+            {!desktop && (
+              <ActionBar
+                onMessage={contactSeller}
+                onCall={() => setNotice('noPhone')}
+                callHref={phone ? telHref(phone) : null}
+                busy={opening}
+                isRental={isRental}
+                playsArrival={!arrived.current}
+                onArrived={() => { arrived.current = true; }}
+                owner={owner}
+              />
+            )}
+            {!isOwn && (
+              <VisitCard upcoming={upcoming} request={request} now={now} isRental={isRental} onRequest={requestVisit}
+                requestLabel={desktop ? 'Demander une visite' : undefined} />
+            )}
+            {desktop && publisherCard}
           </div>
         </div>
         <div className="listing-main">
+          {desktop && <FactsCard facts={facts} />}
           {(rentalCost || hotel || profitabilityCard) && (
             <div className="listing-category">
               {rentalCost && <RentalCostCard cost={rentalCost} />}
@@ -182,10 +219,7 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
           {activity && <HotelActivity rows={activity.rows} showsNote={activity.showsNote} />}
           {row.description?.trim() && <Description text={row.description.trim()} />}
           <Features rows={featureRows(row)} />
-          {publisher && (
-            <PublisherCard publisher={publisher} fees={fees} activeCount={activeCount} onOpenProfile={openProfile}
-              onContact={isOwn ? undefined : contactSeller} isRental={isRental} />
-          )}
+          {!desktop && publisherCard}
           <Energy energyClass={energyLetter(row.energy_class)} climateClass={energyLetter(row.climate_class)} lines={energyLines(row)} />
           <LocationSection
             coordinate={coordinateOf(row)}
@@ -240,15 +274,27 @@ function ListingView({ row, mode }: { row: ListingRow; mode: SearchMode | null }
  */
 function Loading() {
   const back = useMemo(backTarget, []);
+  // Ordinateur : le retour en haut, comme sur la fiche, et la place des photos.
+  const desktop = useDesktop();
   return (
-    <div className="listing listing-loading" aria-busy="true">
+    <div className={desktop ? 'listing listing-desk listing-loading site-container' : 'listing listing-loading'} aria-busy="true">
+      {desktop && (
+        <div className="listing-head">
+          <a className="gallery-back listing-back" href={back.href} title={back.label}>
+            <Icon name="chevronLeft" />
+            Retour
+          </a>
+        </div>
+      )}
       <div className="listing-gallery-wrap">
         <div className="gallery gallery-loading">
-          <div className="gallery-bar">
-            <a className="gallery-back" href={back.href} aria-label="Retour" title={back.label}>
-              <Icon name="chevronLeft" />
-            </a>
-          </div>
+          {!desktop && (
+            <div className="gallery-bar">
+              <a className="gallery-back" href={back.href} aria-label="Retour" title={back.label}>
+                <Icon name="chevronLeft" />
+              </a>
+            </div>
+          )}
         </div>
       </div>
       <Spinner label="Chargement de l’annonce…" />

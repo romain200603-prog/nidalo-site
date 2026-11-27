@@ -8,13 +8,17 @@ import { ContentUnavailable } from './ContentUnavailable';
 import { Icon } from './Icon';
 import { PageHeader } from './PageHeader';
 import { SignInSheet } from './account/SignInSheet';
+import { SiteFooter, SiteHeader } from './SiteFrame';
 import { StrokeIcon } from './StrokeIcon';
 import { badgeText, messagesLabel, useTabBarBadge } from '../lib/badges';
 import { CONTACT_EMAIL } from '../lib/config';
+import { useDesktop } from '../lib/desktop';
 import { PATHS } from '../lib/paths';
 
-// Le cadre de toutes les pages, comme l'app sur toutes les largeurs : pas de barre en haut (chaque page commence comme
-// son écran de l'app), la barre d'onglets en bas, et le pied de page du web (mentions légales) au bas de chaque page.
+// Le cadre de toutes les pages. Sous 1024 px, comme l'app : pas de barre en haut (chaque page commence comme son écran
+// de l'app), la barre d'onglets en bas, et le pied de page du web (mentions légales) au bas de chaque page. À partir de
+// 1024 px (ordinateur) : l'en-tête en haut à la place de la barre d'onglets, et le pied de page de l'ordinateur
+// (SiteFrame.tsx).
 
 export type Section = 'home' | 'search' | 'favorites' | 'publish' | 'messages' | 'account' | 'other';
 
@@ -28,14 +32,21 @@ function isListingPage(): boolean {
 }
 
 /**
- * Barre d'onglets de l'app (AppTabBar.swift), sur toutes les largeurs : Accueil · Favoris · « + » Publier · Messages ·
- * Mon compte, chacun avec son libellé dessous, et la pastille des messages non lus sur Messages (« 99+ » au-delà de 99,
- * n° 44). La page Messages lit déjà ses non-lus en direct. Icônes de l'app : maison redessinée (encre de 18, trait de
- * 1,6), cœur Lucide de 24, carré bleu de 28 au « + » de 18, bulle message-square-text de 19,56, circle-user de 22. À
- * partir de 1024 px, son fond blanc couvre toute la fenêtre, ses cinq boutons dans la colonne de 720 px au centre.
+ * Pastille Messages du cadre, lue une fois pour la page avec les règles de la barre d'onglets (pas sur la page Messages,
+ * qui lit déjà ses non-lus en direct, ni sur la fiche d'une annonce) : la même valeur pour la barre d'onglets
+ * (téléphone) et l'en-tête (ordinateur).
  */
-export function TabBar({ section }: { section: Section }) {
-  const unread = useTabBarBadge(section !== 'messages' && !isListingPage());
+export function useShellBadge(section: Section): number {
+  return useTabBarBadge(section !== 'messages' && !isListingPage());
+}
+
+/**
+ * Barre d'onglets de l'app (AppTabBar.swift), sous 1024 px : Accueil · Favoris · « + » Publier · Messages · Mon compte,
+ * chacun avec son libellé dessous, et la pastille des messages non lus sur Messages (`unread`, de useShellBadge ;
+ * « 99+ » au-delà de 99, n° 44). Icônes de l'app : maison redessinée (encre de 18, trait de 1,6), cœur Lucide de 24,
+ * carré bleu de 28 au « + » de 18, bulle message-square-text de 19,56, circle-user de 22.
+ */
+export function TabBar({ section, unread }: { section: Section; unread: number }) {
   return (
     <nav className="tabbar" aria-label="Menu">
       <a href={PATHS.home} aria-current={current(section === 'home' || section === 'search')}>
@@ -118,31 +129,45 @@ export function PhonePageHeader({ title, back }: { title: string; back: string }
   );
 }
 
-/**
- * `wide` : page dont le corps est une collection d'annonces (recherche) : à partir de 1024 px, son pied de page à la
- * largeur du grand conteneur (1180 px) au lieu de la colonne (720 px).
- * `fill` : la page occupe la fenêtre au-dessus de la barre d'onglets, sans pied de page (Messages).
- * `phoneHeader` : page que l'app n'a pas, avec son retour et son titre (PhonePageHeader).
- */
-export function Page({ section, children, wide = false, fill = false, phoneHeader }: {
+type PageProps = {
   section: Section;
   children: ReactNode;
   wide?: boolean;
   fill?: boolean;
   phoneHeader?: { title: string; back: string };
-}) {
+};
+
+/**
+ * `wide` : page dont le corps est une collection d'annonces (accueil, recherche, favoris, comparer) : le pied de page du
+ * web de la recherche collé aux résultats (app.css).
+ * `fill` : la page occupe la fenêtre sous l'en-tête ou au-dessus de la barre d'onglets, sans pied de page (Messages).
+ * `phoneHeader` : page que l'app n'a pas, avec son retour et son titre (PhonePageHeader).
+ */
+export function Page(props: PageProps) {
   if (isFramed()) return <Framed />;
+  return <PageFrame {...props} />;
+}
+
+/**
+ * Le cadre d'une page. Ordinateur (≥ 1024 px) : l'en-tête, sauf dans l'assistant « Publier une annonce » (sa maquette
+ * lui donne son propre en-tête simple : plus tard) ; le grand pied de page sur l'accueil, le fin ailleurs. Sous 1024 px,
+ * rien ne change : le pied de page du web et la barre d'onglets. La pastille Messages est lue une seule fois, ici.
+ */
+function PageFrame({ section, children, wide = false, fill = false, phoneHeader }: PageProps) {
+  const desktop = useDesktop();
+  const unread = useShellBadge(section);
   return (
     <div className={fill ? 'page page-fill' : wide ? 'page page-wide' : 'page'}>
       <a className="skip-link" href="#contenu">
         Aller au contenu
       </a>
+      {desktop && section !== 'publish' && <SiteHeader section={section} unread={unread} />}
       <main id="contenu" tabIndex={-1}>
         {phoneHeader && <PhonePageHeader title={phoneHeader.title} back={phoneHeader.back} />}
         {children}
       </main>
-      {!fill && <Footer />}
-      <TabBar section={section} />
+      {!fill && (desktop ? <SiteFooter large={section === 'home'} /> : <Footer />)}
+      {!desktop && <TabBar section={section} unread={unread} />}
       <ToastHost />
       <SignInSheet />
     </div>

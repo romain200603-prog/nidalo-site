@@ -28,7 +28,7 @@ function Drawing() {
   );
 }
 
-export function SearchNoResults({ draft, savedSearch, onApply, onAlert, onEnableAlert, onClear }: {
+export function SearchNoResults({ draft, savedSearch, onApply, onAlert, onEnableAlert, onClear, onGrowZone = null }: {
   draft: SearchDraft;
   /** Recherche déjà enregistrée avec ces critères : son alerte décide du bouton. */
   savedSearch: SavedSearch | null;
@@ -38,6 +38,8 @@ export function SearchNoResults({ draft, savedSearch, onApply, onAlert, onEnable
   /** Recherche enregistrée sans alerte : l'alerte s'active. */
   onEnableAlert: (search: SavedSearch) => void;
   onClear: () => void;
+  /** Ordinateur, zone dessinée : « Agrandir la zone » du panneau de la carte du téléphone, après les pistes. */
+  onGrowZone?: (() => void) | null;
 }) {
   /** `null` pendant le calcul. */
   const [hints, setHints] = useState<Counted[] | null>(null);
@@ -86,6 +88,12 @@ export function SearchNoResults({ draft, savedSearch, onApply, onAlert, onEnable
           </ul>
         </>
       ))}
+      {onGrowZone && (
+        <button type="button" className="no-results-grow" onClick={onGrowZone}>
+          <Icon name="maximize" />
+          Agrandir la zone
+        </button>
+      )}
       {savedSearch?.alerts_enabled ? (
         <p className="no-results-alert-on"><Icon name="bell" />Alerte active pour cette recherche</p>
       ) : (

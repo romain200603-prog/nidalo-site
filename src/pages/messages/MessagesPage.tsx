@@ -3,6 +3,7 @@ import { Page } from '../../components/Layout';
 import { SignInCard } from '../../components/account/SignInCard';
 import { isNewAccount } from '../../lib/account/auth';
 import { useSession } from '../../lib/account/session';
+import { useDesktop } from '../../lib/desktop';
 import { sameId } from '../../lib/messages/inbox';
 import { MAX_PRESENCE_CHANNELS, usePresence } from '../../lib/messages/presence';
 import { openConversation, useMessaging } from '../../lib/messages/store';
@@ -17,10 +18,11 @@ import { NewConversationSheet } from './NewConversation';
 import { NoticeDialogs } from './parts';
 import { useRoute } from './route';
 
-// Page Messages, comme l'app sur toutes les largeurs (à partir de 1024 px, dans la colonne de 720 px au centre) : la
-// liste, ou la conversation de l'adresse (?c=…) poussée par-dessus avec une flèche retour, comme la pile de navigation
-// de l'app ; la page occupe la fenêtre au-dessus de la barre d'onglets, sans pied de page, et une conversation ouverte
-// cache cette barre (hidesTabBar). Rien n'est ouvert sans ?c= dans l'adresse.
+// Page Messages, comme l'app : sous 1024 px, la liste, ou la conversation de l'adresse (?c=…) poussée par-dessus avec
+// une flèche retour, comme la pile de navigation de l'app ; la page occupe la fenêtre au-dessus de la barre d'onglets,
+// sans pied de page, et une conversation ouverte cache cette barre (hidesTabBar). À partir de 1024 px (version
+// ordinateur, étape 5 : messages-ordinateur.css), les mêmes éléments côte à côte sous l'en-tête du site : la liste
+// toujours visible à gauche, la conversation à droite, ou une place vide. Rien n'est ouvert sans ?c= dans l'adresse.
 
 export function MessagesPage() {
   const session = useSession();
@@ -46,9 +48,14 @@ export function MessagesPage() {
 /** Session en cours de lecture : la page en gris, la liste et la conversation de l'adresse s'il y en a une. */
 function Starting() {
   const route = useRoute();
+  const desktop = useDesktop();
   return (
     <div className={`dm ${route.conversationId ? 'is-thread' : 'is-list'}`}>
-      <aside className="dm-side" aria-label="Conversations"><ListSkeleton /></aside>
+      <aside className="dm-side" aria-label="Conversations">
+        {/* Ordinateur : la liste reste à l'écran, le titre de la page aussi (masqué, le temps de la lecture). */}
+        {desktop && <h1 className="dm-visually-hidden">Messages</h1>}
+        <ListSkeleton />
+      </aside>
       {route.conversationId && <div className="dm-main"><PaneSkeleton /></div>}
     </div>
   );
@@ -56,6 +63,7 @@ function Starting() {
 
 function Messenger({ userId }: { userId: string }) {
   const route = useRoute();
+  const desktop = useDesktop();
   const { inbox, thread, offers, visits, visitRequests, blocked } = useMessaging(userId);
   const [composing, setComposing] = useState(false);
   const conversations = inbox.status === 'ready' ? inbox.conversations : [];
@@ -113,9 +121,17 @@ function Messenger({ userId }: { userId: string }) {
   return (
     <div className={`dm ${opened ? 'is-thread' : 'is-list'}`}>
       <Inbox inbox={inbox} visits={visits.value} presence={presence} me={userId} onCompose={() => setComposing(true)} />
-      {pane && <div className="dm-main">{pane}</div>}
+      {pane ? <div className="dm-main">{pane}</div> : desktop && <EmptyPane hint={conversations.length > 0} />}
       <NewConversationSheet open={composing} conversations={conversations} onClose={() => setComposing(false)} />
       <NoticeDialogs />
     </div>
   );
+}
+
+/**
+ * Ordinateur, sans conversation ouverte : la place de droite reste vide (rien ne s'ouvre de lui-même), avec
+ * « Choisissez une conversation » quand la liste en a.
+ */
+function EmptyPane({ hint }: { hint: boolean }) {
+  return <div className="dm-empty-pane">{hint && <p>Choisissez une conversation</p>}</div>;
 }

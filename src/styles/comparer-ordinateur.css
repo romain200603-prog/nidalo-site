@@ -1,0 +1,114 @@
+/* Comparer sur ordinateur (version ordinateur, étape 4 ; maquette 09-comparer.html) : la page du site, dans le conteneur
+   commun : « Comparer », son sous-titre et « Fermer » à droite ; dessous, un vrai tableau dans une carte blanche (rayon
+   24), une colonne par bien (trois au plus) : en-tête de colonne avec la photo, le titre, la ville et « Prendre en
+   référence », une ligne par critère, « Notre analyse » en bas ; la colonne du bien de référence sur un bleu très pâle.
+   « Ajouter un bien » et « Vider la comparaison » sous le tableau. Seulement à partir de 1024 px (ComparePage.tsx ne pose
+   .cmpd qu'à partir de là) : en dessous, comparer-app.css reste seul et rien ne change. Mesures de la maquette à
+   1440 px ; couleurs et police du site ; gris des textes : --app-text-dark (#5B6571, contraste AA) à la place du
+   #68707C de la maquette ; textes des écarts foncés comme ceux des étapes 2 et 3 (contraste AA sur leur pastille). */
+
+@media (min-width: 1024px) {
+  /* ——— Page : 40 au-dessus du titre, 72 sous le contenu avant le pied de page (pas d'écran plein écran ici) ——— */
+  .page:has(> main > .cmpd) { --site-footer-gap: 72px; }
+  .cmpm.cmpd { min-height: 0; padding-top: 40px; }
+
+  /* ——— En-tête : titre de 34 très gras, sous-titre de 16 ; « Fermer » : bouton blanc de 44 à filet (rayon 12) ——— */
+  .cmpd .cmpm-header { flex-wrap: wrap; align-items: flex-end; gap: 16px; padding: 0; }
+  .cmpd .cmpm-titles { flex: 1 1 360px; gap: 6px; }
+  .cmpd .cmpm-titles h1 { color: var(--app-navy); font: 800 34px/1.15 var(--app-font); letter-spacing: -0.02em; }
+  .cmpd .cmpm-titles p { color: var(--app-text-dark); font: 400 16px/1.5 var(--app-font); }
+  .cmpd .cmpm-close { gap: 8px; height: 44px; padding: 0 16px; border-color: var(--d-field-border); border-radius: 12px; font: 600 15px/1 var(--app-font); }
+  .cmpd .cmpm-close .icon { width: 15px; height: 15px; }
+  .cmpd .cmpm-close:hover { background: var(--d-hover); }
+  .cmpd .cmpm-close:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; border-radius: 12px; }
+
+  /* ——— État vide, roue, « Pas de connexion Internet » : dans une carte blanche, 24 sous l'en-tête ——— */
+  .cmpd .cmpm-center { flex: none; min-height: 320px; margin-top: 24px; padding: 56px 32px; border: 1px solid var(--app-border); border-radius: 24px; background: #FFFFFF; }
+  .cmpd .cmpm-empty h2 { font: 700 22px/1.3 var(--app-font); }
+  .cmpd .cmpm-empty p { max-width: 460px; color: var(--app-text-dark); font: 400 16px/1.5 var(--app-font); }
+  .cmpd .cmpm-discover:hover { background: var(--app-brand-pressed); }
+  .cmpd .app-offline p { color: var(--app-text-dark); }
+
+  /* ——— Contenu : la mention des natures différentes, le tableau, puis « Ajouter un bien » à gauche et « Vider » à droite ——— */
+  .cmpd .cmpm-content { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 20px 12px; margin-top: 24px; padding: 0; }
+  .cmpd .cmpm-content > :is(.cmpm-mixed, .cmpd-card) { flex: 1 0 100%; }
+  .cmpd .cmpm-mixed { gap: 8px; color: var(--app-text-dark); font: 400 15px/1.5 var(--app-font); }
+  .cmpd .cmpm-mixed .icon { width: 17px; height: 17px; margin-top: 3px; }
+  .cmpd .cmpm-add { gap: 8px; height: 44px; padding: 0 18px; border-radius: 12px; font: 600 15px/1 var(--app-font); }
+  .cmpd .cmpm-add .icon { width: 17px; height: 17px; }
+  .cmpd .cmpm-add:hover { background: #E4EAF6; }
+  .cmpd .cmpm-clear { height: 44px; margin-left: auto; padding: 0 16px; border-radius: 12px; font: 600 15px/1 var(--app-font); }
+  .cmpd .cmpm-clear:hover { background: #FCE9E9; }
+
+  /* ——— Tableau : colonne des critères de 26 % (22 % avec trois biens), les biens se partagent le reste ——— */
+  .cmpd-card { overflow: hidden; border: 1px solid var(--app-border); border-radius: 24px; background: #FFFFFF; }
+  .cmpd-table {
+    --cmpd-reference-bg: color-mix(in srgb, var(--app-brand-soft) 70%, #FFFFFF);
+    --cmpd-reference-line: color-mix(in srgb, var(--d-blue-line) 60%, #FFFFFF);
+    width: 100%; border-collapse: collapse; table-layout: fixed; color: var(--app-navy); font: 400 16px/1.5 var(--app-font);
+  }
+  .cmpd-criteria-col { width: 26%; }
+  .cmpd-table.has-3 .cmpd-criteria-col { width: 22%; }
+  .cmpd-table :is(th, td) { text-align: left; }
+  .cmpd-table .is-reference { border-left-color: var(--cmpd-reference-line); background: var(--cmpd-reference-bg); }
+
+  /* « Critères » : petites capitales grises de 13, en bas de sa case. */
+  .cmpd-criteria-head { padding: 20px 24px; vertical-align: bottom; color: var(--app-text-dark); font: 700 13px/1.5 var(--app-font); letter-spacing: 0.08em; text-transform: uppercase; }
+  /* En-tête d'un bien (18 de marge) : photo de 170 (rayon 16), « ★ Référence » en capsule bleue à 10 du coin, la croix
+     qui le retire dans un rond blanc de 32 ; titre de 18 gras (lien vers la fiche, toute la case l'ouvre comme sur le
+     téléphone), ville de 14, « Prendre en référence » en 14 gras bleu. */
+  .cmpd-item { position: relative; padding: 18px; border-left: 1px solid var(--app-border); vertical-align: top; font-weight: 400; }
+  .cmpd-photo { position: relative; display: block; height: 170px; overflow: hidden; border-radius: 16px; background: var(--app-segment); }
+  .cmpd-table.has-1 .cmpd-photo { max-width: 420px; }
+  .cmpd-photo .photo { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .cmpd-photo .photo-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: #CBC6BD; }
+  .cmpd-photo .photo-empty .icon { width: 30px; height: 30px; }
+  .cmpd-reference {
+    position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+    background: var(--app-brand); color: #FFFFFF; font: 700 13px/1.5 var(--app-font);
+  }
+  .cmpd-reference .icon { width: 13px; height: 13px; fill: currentColor; }
+  .cmpd-item .cmpm-remove { top: 10px; right: 10px; width: 32px; height: 32px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); }
+  .cmpd-item .cmpm-remove::after { inset: -6px; }
+  .cmpd-item .cmpm-remove .icon { width: 14px; height: 14px; }
+  .cmpd-item .cmpm-remove:hover { background: var(--d-hover); }
+  .cmpd-title { display: block; margin-top: 12px; color: var(--app-navy); font: 700 18px/1.35 var(--app-font); text-decoration: none; overflow-wrap: anywhere; }
+  .cmpd-title:hover { color: var(--app-navy); text-decoration: underline; }
+  .cmpd-item:has(.stretched:focus-visible) { outline: 3px solid var(--app-brand); outline-offset: -3px; }
+  .cmpd-city { display: block; margin-top: 2px; color: var(--app-text-dark); font: 400 14px/1.5 var(--app-font); overflow-wrap: anywhere; }
+  .cmpd-item .cmpm-make-reference { display: inline-block; margin-top: 4px; padding: 2px 0; color: var(--app-brand); font: 700 14px/1.5 var(--app-font); }
+  .cmpd-item .cmpm-make-reference::after { inset: -2px -4px; }
+  .cmpd-item .cmpm-make-reference:hover { text-decoration: underline; }
+
+  /* Lignes : filet en haut ; critère de 15 demi-gras (16 · 24 de marge) ; cases de 16 · 18, valeur de 16 gras (prix de
+     18 très gras), « est. » de 13, écart en pastille de 24 (rayon 8, 13 gras) à côté, ou dessous s'il manque de place. */
+  .cmpd-table tbody tr { border-top: 1px solid var(--app-border); }
+  .cmpd-table tbody th { padding: 16px 24px; color: var(--app-navy); font: 600 15px/1.5 var(--app-font); }
+  .cmpd-table tbody td { padding: 16px 18px; border-left: 1px solid var(--app-border); vertical-align: middle; }
+  .cmpd-table tbody td.is-reference { border-left-color: var(--cmpd-reference-line); }
+  /* « Notre analyse » : en haut de sa case (les biens n'ont pas le même nombre de notes). */
+  .cmpd-table tr.is-analysis > * { padding-top: 18px; padding-bottom: 18px; vertical-align: top; }
+  .cmpd-cell { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; }
+  .cmpd-table .cmpm-value { align-items: baseline; gap: 6px; }
+  .cmpd-table .cmpm-value-text {
+    overflow: visible; color: var(--app-navy); font: 700 16px/1.5 var(--app-font); font-variant-numeric: tabular-nums; white-space: normal; overflow-wrap: anywhere;
+  }
+  .cmpd-table tr.is-price .cmpm-value-text { font-size: 18px; font-weight: 800; }
+  .cmpd-table .cmpm-estimate { color: var(--app-text-dark); font: 500 13px/1.5 var(--app-font); }
+  .cmpd-table .cmpm-missing { color: var(--app-text-dark); font: 400 15px/1.5 var(--app-font); }
+  .cmpd-table .cmpm-energy { width: auto; min-width: 28px; height: 24px; padding: 0 9px; border-radius: 8px; font: 700 14px/1 var(--app-font); }
+  .cmpd-table .cmpm-delta {
+    --tone-bg: #F1F0EC; --tone-ink: #5D6470;
+    height: 24px; padding: 0 8px; border-radius: 8px; background: var(--tone-bg); color: color-mix(in srgb, var(--tone-ink) 82%, #000000);
+    font: 700 13px/1 var(--app-font); font-variant-numeric: tabular-nums;
+  }
+  .cmpd-table .cmpm-delta.is-favorable { --tone-bg: #E3F2E8; --tone-ink: #2F7A4E; background: var(--tone-bg); color: color-mix(in srgb, var(--tone-ink) 82%, #000000); }
+  .cmpd-table .cmpm-delta.is-unfavorable { --tone-bg: #FCE9E9; --tone-ink: #C2413E; background: var(--tone-bg); color: color-mix(in srgb, var(--tone-ink) 82%, #000000); }
+  /* « Notre analyse » : notes de 15, coche verte ou triangle rouge de 17 au trait (8 entre les notes). */
+  .cmpd-table .cmpm-notes { gap: 8px; }
+  .cmpd-table .cmpm-notes li { gap: 8px; color: var(--app-navy); font: 400 15px/1.4 var(--app-font); overflow-wrap: normal; }
+  .cmpd-table .cmpm-notes .icon { width: 17px; height: 17px; margin-top: 1px; stroke-width: 2.4; }
+  .cmpd-table .cmpm-notes .icon :first-child { fill: none; }
+  .cmpd-table .cmpm-notes .icon :not(:first-child) { stroke: currentColor; }
+  .cmpd-table .cmpm-no-gap { color: var(--app-text-dark); font: 400 15px/1.4 var(--app-font); }
+}

@@ -117,25 +117,17 @@ body { padding-bottom: calc(var(--tabbar-height) + var(--tabbar-bottom)); }
 /* Écrans de l'app sans barre d'onglets (hidesTabBar : Mon projet, une demande de visite…) : HidesTabBar. */
 body:has([data-hides-tab-bar]) { padding-bottom: 0; }
 body:has([data-hides-tab-bar]) .tabbar { display: none; }
-/* À partir de 1024 px : le fond blanc et le filet sur toute la largeur de la fenêtre, les cinq boutons (mesures de
-   l'app) dans un groupe centré de la largeur de la colonne. */
-@media (min-width: 1024px) {
-  .tabbar { padding-inline: calc(50% - var(--app-column) / 2); }
-}
+/* À partir de 1024 px, plus de barre d'onglets : l'en-tête de l'ordinateur la remplace (cadre-ordinateur.css). */
 
 /* Pied de page du web (Aide, Confidentialité, Mentions légales, Conditions, Contact) : au bas de chaque page, au-dessus
-   de la barre d'onglets, sur toutes les largeurs (la loi veut les mentions légales faciles à trouver). */
+   de la barre d'onglets (la loi veut les mentions légales faciles à trouver) ; à partir de 1024 px, le pied de page de
+   l'ordinateur le remplace (cadre-ordinateur.css). */
 .footer { border-top: 1px solid var(--border); background: var(--card); margin-top: 48px; }
 .footer .wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 24px; padding-top: 20px; padding-bottom: 28px; }
 .footer nav { display: flex; flex-wrap: wrap; gap: 6px 20px; }
 .footer a { color: var(--text); text-decoration: none; font-size: 15px; }
 .footer a:hover { color: var(--blue); text-decoration: underline; }
 .footer p { margin: 0; color: var(--text-secondary); font-size: 14px; }
-/* À partir de 1024 px : à la largeur du conteneur de la page, la colonne, ou le grand conteneur d'une page `wide`. */
-@media (min-width: 1024px) {
-  .footer .wrap { max-width: var(--app-column); }
-  .page-wide .footer .wrap { max-width: var(--app-wide); }
-}
 
 /* Cartes, boutons, puces */
 .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); }
@@ -389,21 +381,7 @@ body.map-is-open { overflow: hidden; }
   .map-column.is-open .maplibregl-ctrl-top-right { display: none; }
 }
 
-/* Ordinateur (à partir de 1024 px) : Votre recherche du téléphone dans le grand conteneur (1180, ses marges de 16
-   comprises), ses cartes sur 2 colonnes, puis 3 à partir de 1080 px. La carte plein écran comme sur le téléphone : sa
-   ligne du haut, ses commandes et son panneau du bas centrés sur la colonne de 720 (--map-side : 14 du bord de la
-   colonne). */
-@media (min-width: 1024px) {
-  .search-column { width: 100%; max-width: var(--app-wide); margin: 0 auto; }
-  .search-column .results-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .map-column { --map-side: max(14px, calc((100% - var(--app-column)) / 2 + 14px)); }
-  .map-app-top { left: var(--map-side); right: var(--map-side); }
-  .map-column.is-open .map-tools { right: var(--map-side); }
-  .map-column.is-open .maplibregl-ctrl-top-right { right: calc(var(--map-side) - 10px); }
-}
-@media (min-width: 1080px) {
-  .search-column .results-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
+/* Ordinateur (à partir de 1024 px) : la liste et la carte côte à côte, toujours visibles (recherche-ordinateur.css). */
 
 /* ——— Filtres (SearchFiltersSheet de l'app) : plein écran sur téléphone et sur ordinateur, fenêtre centrée entre les
    deux (761 à 1023 px) ——— */

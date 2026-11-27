@@ -69,6 +69,14 @@ export function rubberBanded(value: number, minimum: number, maximum: number, re
   return value;
 }
 
+/**
+ * Sous le titre du panneau (et, sur ordinateur, sous le nombre de biens de la liste) : « Dans votre zone dessinée », sinon
+ * le lieu de la recherche (« Lyon et alentours »), rien sans lieu.
+ */
+export function mapPanelSubtitle(place: string, drawnZone: boolean): string {
+  return drawnZone ? 'Dans votre zone dessinée' : place;
+}
+
 /** Titre du panneau : pas de « 0 bien » pendant le premier chargement (n° 51) ; zone dessinée : « 6 biens ». */
 export function mapPanelTitle(count: number, loading: boolean, drawnZone: boolean): string {
   if (count === 0 && loading) return 'Recherche des biens…';

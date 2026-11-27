@@ -6,6 +6,7 @@ import { OfflineState } from '../components/OfflineState';
 import { ListingPhoto } from '../components/PhotoPager';
 import { useRailScroll } from '../components/useRailScroll';
 import { editableProjectStore, loadEditableProject } from '../lib/account/projectEditor';
+import { useDesktop } from '../lib/desktop';
 import { useSession, useStore } from '../lib/account/session';
 import { clearCompare, COMPARE_MAX, removeFromCompare, setCompareReference, useCompare } from '../lib/compare';
 import {
@@ -18,11 +19,13 @@ import { fetchListing, ListingNotFound, UUID_PATTERN, type ListingRow } from '..
 import { listingModeFromParams, listingPath, PATHS, searchModePath } from '../lib/paths';
 import { AlertDialog } from './listing/Dialogs';
 import '../styles/comparer-app.css';
+import '../styles/comparer-ordinateur.css';
 
 // « Comparer » (/comparer/), comme l'écran Comparer de l'app (Features/Compare/CompareView.swift) : les biens choisis
 // en colonnes (trois au plus, gardés dans l'onglet), les critères de leur nature, les écarts au bien de référence et
 // « Notre analyse ». L'écran plein écran de l'app (sans barre d'onglets) : colonne des critères figée de 96 et colonnes
-// de 128 qui défilent de côté ; à partir de 1024 px, dans le grand conteneur (1180 px).
+// de 128 qui défilent de côté ; à partir de 1024 px (maquette 09-comparer.html), un vrai tableau dans le conteneur commun
+// du site, une colonne par bien (comparer-ordinateur.css). Un seul des deux tableaux est affiché, avec les mêmes données.
 
 /** Biens lus sur le serveur, par identifiant ; `null` : annonce introuvable ; `'error'` : lecture ratée. */
 type Loaded = Map<string, ListingRow | null | 'error'>;
@@ -135,7 +138,7 @@ function ClearDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
 // MARK: - Écran (CompareView.swift)
 
 /** Case d'un bien (CompareView.cell) : valeur en 13 gras et « est. », ou « Non renseigné » ; écart en pastille. */
-function PhoneCell({ row, index, now }: { row: ComparisonRow; index: number; now: Date }) {
+function ValueCell({ row, index, now }: { row: ComparisonRow; index: number; now: Date }) {
   const value: ComparisonValue | null = row.values[index];
   const delta = row.deltas[index];
   return (
@@ -157,7 +160,7 @@ function PhoneCell({ row, index, now }: { row: ComparisonRow; index: number; now
   );
 }
 
-function PhoneAnalysis({ analysis, year }: { analysis: ComparisonAnalysis; year: number }) {
+function AnalysisNotes({ analysis, year }: { analysis: ComparisonAnalysis; year: number }) {
   if (!analysis.strengths.length && !analysis.warnings.length) return <p className="cmpm-no-gap">Pas d'écart marquant.</p>;
   return (
     <ul className="cmpm-notes">
@@ -225,12 +228,12 @@ function PhoneCompareTable({ comparison, mode }: { comparison: Comparison; mode:
                 {comparison.rows.map((row) => (
                   <div key={row.criterion} className="cmpm-cell">
                     <dt className="visually-hidden">{CRITERION_LABELS[row.criterion].text}</dt>
-                    <dd><PhoneCell row={row} index={index} now={now} /></dd>
+                    <dd><ValueCell row={row} index={index} now={now} /></dd>
                   </div>
                 ))}
                 <div className="cmpm-analysis" style={{ height: analysisHeight }}>
                   <dt className="visually-hidden">Notre analyse</dt>
-                  <dd><PhoneAnalysis analysis={comparison.analyses[index]} year={year} /></dd>
+                  <dd><AnalysisNotes analysis={comparison.analyses[index]} year={year} /></dd>
                 </div>
               </dl>
             </li>
@@ -241,14 +244,79 @@ function PhoneCompareTable({ comparison, mode }: { comparison: Comparison; mode:
   );
 }
 
-/** Écran Comparer : plein écran comme dans l'app (domiaFullScreenCover), la barre d'onglets masquée. */
-function PhoneCompare({ mode }: { mode: SearchMode | null }) {
+/**
+ * Tableau de l'ordinateur (maquette 09-comparer.html) : un vrai tableau, une colonne par bien. En-tête de colonne : la
+ * photo (« Référence » sur le bien de référence, la croix qui le retire), le titre (lien vers la fiche), la ville et
+ * « Prendre en référence » ; puis une ligne par critère de la nature des biens (son nom en en-tête de ligne) et « Notre
+ * analyse ». Mêmes cases, mêmes écarts et mêmes actions que le tableau du téléphone.
+ */
+function DesktopCompareTable({ comparison, mode }: { comparison: Comparison; mode: SearchMode | null }) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const reference = comparison.referenceIndex;
+  const count = comparison.items.length;
+  const tone = (index: number) => (index === reference ? 'is-reference' : undefined);
+  return (
+    <div className="cmpd-card">
+      <table className={`cmpd-table has-${count}`}>
+        <caption className="visually-hidden">{count === 1 ? 'Comparaison d’un bien' : `Comparaison de ${count} biens`}</caption>
+        <colgroup>
+          <col className="cmpd-criteria-col" />
+          {comparison.items.map((item) => <col key={item.id} />)}
+        </colgroup>
+        <thead>
+          <tr>
+            <th scope="col" className="cmpd-criteria-head">Critères</th>
+            {comparison.items.map((item, index) => (
+              <th key={item.id} scope="col" className={`cmpd-item${index === reference ? ' is-reference' : ''}`}>
+                <span className="cmpd-photo">
+                  <ListingPhoto photo={item.photo} />
+                  {index === reference && <span className="cmpd-reference"><Icon name="star" />Référence</span>}
+                  <button type="button" className="cmpm-remove" onClick={() => removeFromCompare(item.id)} aria-label="Retirer de la comparaison" title="Retirer de la comparaison">
+                    <Icon name="x" />
+                  </button>
+                </span>
+                <a className="cmpd-title stretched" href={listingPath(item.id, mode)}>{item.title}</a>
+                <span className="cmpd-city">{item.city}</span>
+                {index !== reference && (
+                  <button type="button" className="cmpm-make-reference" onClick={() => setCompareReference(item.id)}>Prendre en référence</button>
+                )}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {comparison.rows.map((row) => (
+            <tr key={row.criterion} className={`is-${row.criterion}`}>
+              <th scope="row">{CRITERION_LABELS[row.criterion].text}</th>
+              {comparison.items.map((item, index) => (
+                <td key={item.id} className={tone(index)}><div className="cmpd-cell"><ValueCell row={row} index={index} now={now} /></div></td>
+              ))}
+            </tr>
+          ))}
+          <tr className="is-analysis">
+            <th scope="row">Notre analyse</th>
+            {comparison.items.map((item, index) => (
+              <td key={item.id} className={tone(index)}><AnalysisNotes analysis={comparison.analyses[index]} year={year} /></td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
+ * Écran Comparer : plein écran comme dans l'app (domiaFullScreenCover), la barre d'onglets masquée. Ordinateur : la
+ * page du site (en-tête et pied de page), dans le conteneur commun, avec le tableau de l'ordinateur.
+ */
+function CompareScreen({ mode, desktop }: { mode: SearchMode | null; desktop: boolean }) {
   const { comparison, retry, empty, unavailable, waiting } = useComparisonScreen(mode);
   const [confirmClear, setConfirmClear] = useState(false);
   const discover = mode ? searchModePath(mode) : PATHS.search;
 
   return (
-    <div className="cmpm">
+    <div className={desktop ? 'cmpm cmpd site-container' : 'cmpm'}>
       <HidesTabBar />
       <header className="cmpm-header">
         <div className="cmpm-titles">
@@ -277,7 +345,7 @@ function PhoneCompare({ mode }: { mode: SearchMode | null }) {
           {comparison.isMixed && (
             <p className="cmpm-mixed"><Icon name="info" />Biens de natures différentes : seuls les critères communs sont comparés.</p>
           )}
-          <PhoneCompareTable comparison={comparison} mode={mode} />
+          {desktop ? <DesktopCompareTable comparison={comparison} mode={mode} /> : <PhoneCompareTable comparison={comparison} mode={mode} />}
           {comparison.items.length < COMPARE_MAX && (
             <a className="cmpm-add" href={discover}>
               <Icon name="plus" />
@@ -295,10 +363,12 @@ function PhoneCompare({ mode }: { mode: SearchMode | null }) {
 
 export function ComparePage() {
   useRailScroll();
+  const desktop = useDesktop();
   const mode = useMemo(() => listingModeFromParams(new URLSearchParams(window.location.search)), []);
+  // Ordinateur : « Favoris » en cours dans l'en-tête, comme la maquette (Comparer s'ouvre depuis les favoris).
   return (
-    <Page section="search" wide>
-      <PhoneCompare mode={mode} />
+    <Page section={desktop ? 'favorites' : 'search'} wide>
+      <CompareScreen mode={mode} desktop={desktop} />
     </Page>
   );
 }

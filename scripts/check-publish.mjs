@@ -5,8 +5,9 @@
 // l'app (SupabaseListingRepository.publish) : l'annonce en brouillon, l'adresse exacte, les photos (sans métadonnées),
 // puis la mise en ligne. Sans compte : l'invitation à se connecter. Sur toutes les largeurs : l'assistant plein écran de
 // l'app, sans barre d'onglets (en-tête, barre d'étapes, barre du bas, brouillon, publication, modification depuis Mes
-// annonces et depuis la fiche, confirmation en pleine page), dans la colonne de 720 px à partir de 1024 px, avec les
-// mêmes écritures. Captures pour Romain : publier-*.png.
+// annonces et depuis la fiche, confirmation en pleine page) ; à partir de 1024 px, la mise en page de l'ordinateur
+// (maquette 12 : l'en-tête simple et la barre du bas sur toute la largeur, l'étape au milieu, « Quitter » et « Continuer »
+// à droite), avec les mêmes écritures. Captures pour Romain : publier-*.png.
 // Lancer après la construction : node scripts/check-publish.mjs [dossier construit, docs/ par défaut] [dossier des captures]
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
@@ -530,6 +531,12 @@ async function open(context, path, name) {
 }
 
 const CONTINUE = '.dpub .dsc-action-buttons .dsc-button-primary';
+/**
+ * Carte d'une catégorie à l'étape 1 : sur ordinateur (≥ 1024 px), l'icône et le titre seuls, son nom est le titre ;
+ * en dessous, le titre puis le sous-titre (« Résidentiel, Logement ou terrain »).
+ */
+const categoryTile = (page, title) => page.getByRole('button',
+  page.viewportSize().width >= 1024 ? { name: title, exact: true } : { name: new RegExp(`^${title},`) });
 /** Adresse introuvable, comme l'app (PublishValidation). */
 const ADDRESS_NOT_FOUND = 'Veuillez renseigner une adresse valide.';
 /**
@@ -881,8 +888,8 @@ try {
   }
 
   // 3. Publier de bout en bout, à 1440 px, avec un compte sans prénom : les sept étapes, deux photos (l'une avec sa
-  //    position GPS), le prénom demandé, un refus du serveur, puis la mise en ligne. L'écran du téléphone, élargi dans la
-  //    colonne de 720 px : l'en-tête, l'étape, la barre du bas et la confirmation à la largeur de la colonne.
+  //    position GPS), le prénom demandé, un refus du serveur, puis la mise en ligne. La mise en page de l'ordinateur
+  //    (maquette 12) : l'en-tête et la barre du bas sur toute la largeur, l'étape au milieu, la confirmation aussi.
   {
     const N = 'publier';
     const state = newState({ firstName: '' });
@@ -891,9 +898,10 @@ try {
     const page = await open(context, '/publier/', N);
     await page.waitForSelector('.dpub .dpub-category-grid');
     expectSame(N, 'en-tête', await head(page), ['Publier une annonce', 'Étape 1 sur 7 · Catégorie']);
-    // Comme l'app : Résidentiel, Location, Investissement, Hôtels, avec leurs sous-titres courts.
+    // Comme l'app : Résidentiel, Location, Investissement, Hôtels ; sur ordinateur, sans leurs sous-titres courts.
     expectSame(N, 'avant le choix', [await page.locator('.ppub-pill').count(), await page.locator(CONTINUE).isDisabled(),
-      await page.$$eval('.dpub-category-tile .dpub-category-title', (els) => els.map((el) => el.textContent))], [0, true, ['Résidentiel', 'Location', 'Investissement', 'Hôtels']]);
+      await page.$$eval('.dpub-category-tile .dpub-category-title', (els) => els.map((el) => el.textContent)), await page.locator('.dpub-category-subtitle').count()],
+    [0, true, ['Résidentiel', 'Location', 'Investissement', 'Hôtels'], 0]);
     /** Place de l'assistant : la colonne, la largeur de l'étape, de l'en-tête et de la barre du bas. */
     const layout = () => page.evaluate(() => {
       const rect = (selector) => document.querySelector(selector).getBoundingClientRect();
@@ -911,31 +919,38 @@ try {
         overflowX: document.documentElement.scrollWidth - innerWidth,
       };
     });
-    // La colonne de 720 px (--app-column) au milieu de la fenêtre, les 16 px de marge de l'écran comprises : 688 px pour
-    // l'étape, la ligne de l'en-tête, la barre d'étapes et les boutons du bas ; ni barre d'onglets ni autre en-tête.
-    expectSame(N, 'colonne', await layout(), { column: [360, 720], step: 688, head: [720, 688, 688], bar: [720, 688], around: 0, overflowX: 0 });
-    // Les mesures de l'écran du téléphone : en-tête collé en haut (ronds de 36, titre de 20), barre d'étapes (traits de
-    // 4, 6 pour l'étape en cours, zones de 44), barre du bas blanche collée en bas de la fenêtre, « Continuer » atténué
-    // sans catégorie, la flèche devant le mot.
-    expectSame(N, 'écran du téléphone', await page.evaluate(() => {
+    // L'en-tête et la barre du bas sur toute la largeur de la fenêtre, la ligne de l'en-tête et la barre d'étapes dans le
+    // conteneur (1200 px au plus, 32 px de marge) ; l'étape au milieu (896 px de contenu) ; « Continuer » seul à droite ;
+    // ni barre d'onglets ni autre en-tête.
+    expectSame(N, 'colonne', await layout(), { column: [0, 1440], step: 896, head: [1440, 1200, 1200], bar: [1440, 240], around: 0, overflowX: 0 });
+    // Les mesures de la maquette 12 : en-tête blanc collé en haut (le logo sans lien, le titre de 17, « Étape 1 sur 7 ·
+    // Catégorie » de 13, « Quitter » de 42 à la place de la croix, la flèche cachée), barre d'étapes (traits de 5, 7 pour
+    // l'étape en cours, zones de 25), barre du bas blanche collée en bas de la fenêtre, « Continuer » de 240 × 54 atténué
+    // sans catégorie ; pas de pied de page du site.
+    expectSame(N, 'écran de l\'ordinateur', await page.evaluate(() => {
       const one = (selector) => document.querySelector(selector);
       const size = (el) => [Math.round(el.getBoundingClientRect().width), Math.round(el.getBoundingClientRect().height)];
       const bar = one('.dpub .dsc-action-bar');
+      const brand = one('.ppub-head .ppub-brand');
       return {
-        head: [getComputedStyle(one('.ppub-head')).position, Math.round(one('.ppub-head').getBoundingClientRect().top)],
+        head: [getComputedStyle(one('.ppub-head')).position, Math.round(one('.ppub-head').getBoundingClientRect().top), getComputedStyle(one('.ppub-head')).backgroundColor],
+        brand: [brand?.textContent ?? null, brand?.closest('a') ?? null, brand ? Math.round(brand.getBoundingClientRect().left) : null],
         rounds: [size(one('.ppub-back')), size(one('.dpub-close'))],
+        quit: [one('.dpub-close').textContent.trim(), one('.dpub-close').getAttribute('aria-label')],
         title: [getComputedStyle(one('.ppub-titles h1')).fontSize, getComputedStyle(one('.ppub-titles p')).fontSize],
         segments: [...document.querySelectorAll('.dpub-progress > * > span')].map((el) => Math.round(el.getBoundingClientRect().height)),
         zones: [...document.querySelectorAll('.dpub-progress > *')].map((el) => Math.round(el.getBoundingClientRect().height)),
         bar: [getComputedStyle(bar).position, Math.round(innerHeight - bar.getBoundingClientRect().bottom), getComputedStyle(bar).backgroundColor],
         buttons: [...bar.querySelectorAll('.dsc-action-buttons > .dsc-button')]
-          .map((el) => [...size(el), el.firstElementChild?.tagName.toLowerCase() ?? null, el.textContent.trim(), getComputedStyle(el).opacity]),
+          .map((el) => [...size(el), Math.round(el.getBoundingClientRect().right), el.textContent.trim(), getComputedStyle(el).opacity]),
+        footer: [...document.querySelectorAll('.site-footer, .footer')].filter((el) => el.getClientRects().length > 0).length,
       };
     }), {
-      head: ['sticky', 0], rounds: [[36, 36], [36, 36]], title: ['20px', '13px'], segments: [6, 4, 4, 4, 4, 4, 4], zones: [44, 44, 44, 44, 44, 44, 44],
-      bar: ['sticky', 0, 'rgb(255, 255, 255)'], buttons: [[688, 52, 'svg', 'Continuer', '0.5']],
+      head: ['sticky', 0, 'rgb(255, 255, 255)'], brand: ['NIDΛLONidalo', null, 152], rounds: [[0, 0], [102, 42]], quit: ['Quitter', 'Quitter la publication'],
+      title: ['17px', '13px'], segments: [7, 5, 5, 5, 5, 5, 5], zones: [25, 25, 25, 25, 25, 25, 25],
+      bar: ['sticky', 0, 'rgb(255, 255, 255)'], buttons: [[240, 54, 1168, 'Continuer', '0.5']], footer: 0,
     });
-    await page.getByRole('button', { name: /^Résidentiel,/ }).click();
+    await categoryTile(page, 'Résidentiel').click();
     await page.getByRole('button', { name: 'Appartement', exact: true }).click();
     const chosen = async () => [await textOf(page, '.dpub-category-tile[aria-pressed="true"] .dpub-category-title'), await textOf(page, '.dpub-types-grid [aria-pressed="true"]')];
     expectSame(N, 'catégorie choisie', [...await chosen(), await page.locator('.ppub-pill[aria-label="Enregistrer en brouillon"]').count(),
@@ -950,8 +965,8 @@ try {
     expectSame(N, 'fenêtre étroite', [...await chosen(), await textOf(page, '.ppub-titles h1'), narrow.column, narrow.step, narrow.bar, narrow.around],
       ['Résidentiel', 'Appartement', 'Publier une annonce', [0, 800], 640, [800, 640], 0]);
     await page.setViewportSize({ width: 1440, height: 900 });
-    await columnWidth(720);
-    expectSame(N, 'saisie gardée', [...await chosen(), (await layout()).column], ['Résidentiel', 'Appartement', [360, 720]]);
+    await columnWidth(1440);
+    expectSame(N, 'saisie gardée', [...await chosen(), (await layout()).column], ['Résidentiel', 'Appartement', [0, 1440]]);
     await shot(page, 'publier-1-categorie.png');
     expectSame(N, 'saisie gardée après la capture', await chosen(), ['Résidentiel', 'Appartement']);
     await page.click(CONTINUE);
@@ -1032,14 +1047,13 @@ try {
     await imagesLoaded(page, '.dpub-photo img', 2, `${N} : photos choisies`);
     expectSame(N, 'photos choisies', [await page.$$eval('.dpub-photo img', (els) => els.map((img) => [img.naturalWidth, img.naturalHeight])), await textOf(page, '.dpub-photo-main')],
       [[[1024, 2048], [1400, 800]], 'Principale']);
-    // La grille du téléphone, élargie : trois colonnes à 8 px d'écart, « Principale » de 20, menu rond de 28 ; le menu
-    // « … » de 220 px.
+    // Sur ordinateur : quatre colonnes à 10 px d'écart, « Principale » de 20, menu rond de 28 ; le menu « … » de 220 px.
     expectSame(N, 'grille des photos', await page.evaluate(() => {
       const photos = [...document.querySelectorAll('.dpub-photo')];
       const rect = (el) => el.getBoundingClientRect();
       return [getComputedStyle(document.querySelector('.dpub-photos')).gridTemplateColumns.split(' ').length, Math.round(rect(photos[1]).left - rect(photos[0]).right),
         Math.round(rect(photos[0]).width), Math.round(rect(document.querySelector('.dpub-photo-main')).height), Math.round(rect(document.querySelector('.dpub-photo-menu')).width)];
-    }), [3, 8, 211, 20, 28]);
+    }), [4, 10, 204, 20, 28]);
     await page.getByRole('button', { name: 'Options de la photo 2' }).click();
     expectSame(N, 'menu de la photo', await page.$eval('.dpub-photo .dsc-menu-list', (menu) => [Math.round(menu.getBoundingClientRect().width),
       [...menu.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent.trim())]), [220, ['Photo principale', 'Déplacer avant', 'Supprimer']]);
@@ -1149,23 +1163,24 @@ try {
       await page.$$eval('.dpub-success-actions a', (links) => links.map((link) => [link.textContent.trim(), link.getAttribute('href')]))],
     ['Annonce publiée', '« Appartement 3 pièces – Lyon » est en ligne : visible par tous dans la recherche, sur la carte et sur votre profil.',
       [['Voir l\'annonce', `/annonce/?id=${listingId}`], ['Mes annonces', '/compte/?vue=annonces'], ['Fermer', '/']]]);
-    // Confirmation : la page entière du téléphone dans la colonne (24 px de marge), la coche verte de 64, les trois
-    // boutons en bas de la fenêtre.
+    // Confirmation sur ordinateur : l'en-tête réduit au logo, puis toute la largeur jusqu'en bas de la fenêtre ; la coche
+    // verte de 64 ; les trois liens de 54 dans la barre du bas, « Voir l'annonce » (240) à droite de la colonne de 896 px.
     expectSame(N, 'confirmation : écran', await page.evaluate(() => {
       const rect = (el) => el.getBoundingClientRect();
       const success = document.querySelector('.dpub-success');
       const actions = [...document.querySelectorAll('.dpub-success-actions a')];
       return {
-        page: [Math.round(rect(success).left), Math.round(rect(success).top), Math.round(rect(success).width), Math.round(rect(success).height) >= innerHeight],
+        page: [Math.round(rect(success).left), Math.round(rect(success).top), Math.round(rect(success).width), Math.round(rect(success).bottom) >= innerHeight],
+        head: [...document.querySelectorAll('.dpub .ppub-head')].map((el) => [el.textContent, el.querySelectorAll('button, a, h1').length]),
         check: [Math.round(rect(document.querySelector('.dpub-success-check')).width), getComputedStyle(document.querySelector('.dpub-success-check')).color],
-        actions: actions.map((el) => [el.textContent.trim(), Math.round(rect(el).height)]),
+        actions: actions.map((el) => [el.textContent.trim(), Math.round(rect(el).height), Math.round(rect(el).right)]),
         width: Math.round(rect(actions[0]).width),
         bottom: Math.round(innerHeight - rect(actions.at(-1)).bottom),
-        around: [...document.querySelectorAll('.tabbar, .topbar')].filter((el) => el.getClientRects().length > 0).length,
+        around: [...document.querySelectorAll('.tabbar, .topbar, .site-footer')].filter((el) => el.getClientRects().length > 0).length,
       };
     }), {
-      page: [360, 0, 720, true], check: [64, 'rgb(87, 121, 101)'], actions: [['Voir l\'annonce', 52], ['Mes annonces', 52], ['Fermer', 17]], width: 672,
-      bottom: 24, around: 0,
+      page: [0, 77, 1440, true], head: [['NIDΛLONidalo', 0]], check: [64, 'rgb(87, 121, 101)'],
+      actions: [['Voir l\'annonce', 54, 1168], ['Mes annonces', 54, 916], ['Fermer', 54, 716]], width: 240, bottom: 16, around: 0,
     });
     await shot(page, 'publier-publiee.png');
     // Plus rien à enregistrer : quitter la page ne demande rien.
@@ -1183,7 +1198,7 @@ try {
     await mock(context, state);
     const page = await open(context, '/publier/', N);
     await page.waitForSelector('.dpub .dpub-category-grid');
-    await page.getByRole('button', { name: /^Résidentiel,/ }).click();
+    await categoryTile(page, 'Résidentiel').click();
     await page.getByRole('button', { name: 'Maison', exact: true }).click();
     // « Brouillon » trop tôt : la fenêtre de l'app, comme sur téléphone ; rien d'envoyé, rien dans la barre du bas.
     await page.click('.ppub-pill[aria-label="Enregistrer en brouillon"]');
@@ -1387,7 +1402,7 @@ try {
     const prompts = unloadPrompts.length;
 
     // Étapes 1 et 2 remplies, étape 3 ouverte.
-    await page.getByRole('button', { name: /^Résidentiel,/ }).click();
+    await categoryTile(page, 'Résidentiel').click();
     await page.getByRole('button', { name: 'Appartement', exact: true }).click();
     await page.click(CONTINUE);
     await waitStep(page, 2, 'Informations principales', N);
@@ -1398,12 +1413,21 @@ try {
     await amount(page, 'Prix de vente').fill('320000');
     await page.click(CONTINUE);
     await waitStep(page, 3, 'Caractéristiques', N);
-    expectSame(N, 'barre : zones de 44 px', await page.$$eval('.dpub-progress > *', (els) => els.map((el) => Math.round(el.getBoundingClientRect().height))), [44, 44, 44, 44, 44, 44, 44]);
+    // Ordinateur (à partir de 1024 px, tablettes comprises) : la barre d'étapes de la maquette 12 (zones de 25 px) et pas
+    // de flèche en haut (« Retour », en bas, fait la même chose).
+    const computer = await page.evaluate(() => matchMedia('(min-width: 1024px)').matches);
+    const zone = computer ? 25 : 44;
+    expectSame(N, `barre : zones de ${zone} px`, await page.$$eval('.dpub-progress > *', (els) => els.map((el) => Math.round(el.getBoundingClientRect().height))), Array(7).fill(zone));
 
-    // La flèche du haut : l'étape d'avant, sans question, saisie gardée.
-    await page.click('.ppub-back');
+    // La flèche du haut (sur ordinateur, cachée : « Retour ») : l'étape d'avant, sans question, saisie gardée.
+    if (computer) {
+      expectSame(N, 'flèche cachée', await page.locator('.ppub-back').isVisible(), false);
+      await page.click('.dpub .dsc-action-buttons .dsc-button-light');
+    } else {
+      await page.click('.ppub-back');
+    }
     await waitStep(page, 2, 'Informations principales', N);
-    expectSame(N, 'flèche : étape 2', [await dialogs(), await amount(page, 'Prix de vente').inputValue(), await page.getByRole('combobox', { name: 'Ville' }).inputValue()], [0, '320 000', 'Lyon']);
+    expectSame(N, computer ? 'Retour : étape 2' : 'flèche : étape 2', [await dialogs(), await amount(page, 'Prix de vente').inputValue(), await page.getByRole('combobox', { name: 'Ville' }).inputValue()], [0, '320 000', 'Lyon']);
     // La barre : toute étape déjà atteinte s'ouvre d'un clic, avant ou après celle en cours.
     await bar(3).click();
     await waitStep(page, 3, 'Caractéristiques', N);
@@ -1557,10 +1581,11 @@ try {
     await context.close();
   }
 
-  // 8. Étape 1 comme l'app (PublishFlowView.categoryStep), à 1440 et 1024 px : « Que souhaitez-vous publier ? » sans carte
-  //    autour, les quatre catégories en cartes de 112 px (deux colonnes, 10 px d'écart), la catégorie choisie bordée de
-  //    2 px à sa couleur avec sa pastille cochée ; « Type de bien » (« Type d'actif ») en tuiles de 54 px au moins, avec
-  //    les icônes de l'app ; Hôtels : le texte d'information, sans types. Puis le glissement d'une étape à l'autre :
+  // 8. Étape 1 comme l'app (PublishFlowView.categoryStep), à 1440 et 1024 px, dans la mise en page de la maquette 12 :
+  //    « Que souhaitez-vous publier ? » de 34 sans carte autour, les quatre catégories sur une ligne (cartes de 137 px,
+  //    14 px d'écart, l'icône et le titre sans sous-titre, le titre pour nom), la catégorie choisie bordée de 2 px à sa couleur avec sa pastille cochée ; « Type de bien »
+  //    (« Type d'actif ») en tuiles de 64 px, trois par ligne, avec les icônes de l'app ; Hôtels : le texte
+  //    d'information, sans types. Puis le glissement d'une étape à l'autre :
   //    l'étape arrive par la droite en avançant (par la gauche en revenant) pendant que la copie de l'étape quittée part
   //    de l'autre côté, sans débordement de la page ; un double clic sur « Continuer » n'avance que d'une étape ; avec
   //    « Réduire les animations », un fondu seul.
@@ -1573,10 +1598,10 @@ try {
     await page.waitForSelector('.dpub .dpub-category-grid');
     expectSame(N, 'titre et cartes', [await textOf(page, '.dpub-category-head h2'), await textOf(page, '.dpub-category-head p'),
       await page.getByRole('heading', { name: 'Que souhaitez-vous publier ?', exact: true }).count(),
-      await page.$$eval('.dpub-category-tile', (els) => els.map((el) => [el.getAttribute('aria-label'), el.getAttribute('aria-pressed')])),
+      await page.$$eval('.dpub-category-tile', (els) => els.map((el) => [el.getAttribute('aria-label'), el.textContent, el.getAttribute('aria-pressed')])),
       await page.locator('.dpub .dsc-card').count(), await page.locator('.dpub-types').count()],
     ['Que souhaitez-vous publier ?', 'Choisissez la catégorie, puis le type de bien.', 1,
-      [['Résidentiel, Logement ou terrain', 'false'], ['Location, Bien à louer', 'false'], ['Investissement, Bien loué, immeuble', 'false'], ['Hôtels, Hôtel à vendre', 'false']],
+      [['Résidentiel', 'Résidentiel', 'false'], ['Location', 'Location', 'false'], ['Investissement', 'Investissement', 'false'], ['Hôtels', 'Hôtels', 'false']],
       0, 0]);
     /** Libellés et premiers traits des icônes des types proposés, ou le texte d'information (Hôtels). */
     const types = () => page.evaluate(() => {
@@ -1594,7 +1619,7 @@ try {
     const LAND = 'M10 10v.2';
     const SHOP = 'M15 21v-5';
     const OFFICE = 'M12 12h.0';
-    await page.getByRole('button', { name: /^Investissement,/ }).click();
+    await categoryTile(page, 'Investissement').click();
     expectSame(N, 'Investissement', await types(), {
       title: 'Type d\'actif', group: true,
       tiles: [['Appartement loué', FLAT], ['Maison locative', HOUSE], ['Immeuble de rapport', 'M12 10h.0'], ['Immeuble mixte, logements et commerces', 'M12.83 2.'],
@@ -1606,14 +1631,14 @@ try {
     expectSame(N, 'type manquant', [await errorsOf(page), (await head(page))[1]], [['Choisissez le type de bien.'], 'Étape 1 sur 7 · Catégorie']);
     await page.getByRole('button', { name: 'Immeuble mixte, logements et commerces', exact: true }).click();
     expectSame(N, 'immeuble mixte choisi', [await errorsOf(page), await textOf(page, '.dpub-type-tile[aria-pressed="true"] .dpub-type-detail')], [[], 'logements et commerces']);
-    await page.getByRole('button', { name: /^Location,/ }).click();
+    await categoryTile(page, 'Location').click();
     expectSame(N, 'Location', await types(), {
       title: 'Type de bien', group: true,
       tiles: [['Appartement', FLAT], ['Maison', HOUSE], ['Parking ou box', 'rect'], ['Terrain', LAND], ['Local commercial', SHOP], ['Bureaux', OFFICE]],
     });
-    await page.getByRole('button', { name: /^Hôtels,/ }).click();
+    await categoryTile(page, 'Hôtels').click();
     expectSame(N, 'Hôtels', await types(), { info: 'Hôtel à vendre : murs et fonds, murs seuls ou fonds seul, à préciser à l\'étape « Caractéristiques ».' });
-    await page.getByRole('button', { name: /^Résidentiel,/ }).click();
+    await categoryTile(page, 'Résidentiel').click();
     expectSame(N, 'Résidentiel', await types(), { title: 'Type de bien', group: true, tiles: [['Appartement', FLAT], ['Maison', HOUSE], ['Terrain', LAND]] });
     await page.getByRole('button', { name: 'Appartement', exact: true }).click();
     await page.waitForTimeout(700);
@@ -1625,9 +1650,11 @@ try {
       const type = document.querySelector('.dpub-type-tile[aria-pressed="true"]');
       const typeTiles = [...document.querySelectorAll('.dpub-type-tile')];
       const label = document.querySelector('.dpub-types-title');
+      const heading = document.querySelector('.dpub-category-head h2');
       return {
+        title: [getComputedStyle(heading).fontSize, getComputedStyle(heading).fontWeight],
         tiles: tiles.map((el) => [Math.round(rect(el).width), Math.round(rect(el).height), getComputedStyle(el).borderRadius]),
-        gaps: [Math.round(rect(tiles[1]).left - rect(tiles[0]).right), Math.round(rect(tiles[2]).top - rect(tiles[0]).bottom),
+        gaps: [Math.round(rect(tiles[1]).left - rect(tiles[0]).right), Math.round(rect(tiles[3]).top - rect(tiles[0]).top),
           Math.round(rect(typeTiles[1]).left - rect(typeTiles[0]).right)],
         chosen: [getComputedStyle(chosen, '::before').boxShadow, getComputedStyle(chosen).boxShadow, getComputedStyle(chosen.querySelector('.dpub-category-check')).opacity],
         other: [getComputedStyle(other, '::before').boxShadow, getComputedStyle(other.querySelector('.dpub-category-check')).opacity],
@@ -1638,16 +1665,17 @@ try {
           getComputedStyle(type.querySelector('.dpub-type-title')).color],
       };
     });
-    // Deux tuiles et un écart de 10 px dans les 688 px de la colonne (720 px, ses marges comprises).
+    // Quatre cartes sur une ligne et 14 px d'écart dans les 896 px de l'étape, aux mêmes largeurs à 1440 et 1024 px.
     expectSame(N, 'cartes et tuiles', look, {
-      tiles: [[339, 112, '22px'], [339, 112, '22px'], [339, 112, '22px'], [339, 112, '22px']],
-      gaps: [10, 10, 8],
-      chosen: ['rgb(60, 92, 176) 0px 0px 0px 2px inset', 'rgba(60, 92, 176, 0.18) 0px 4px 20px 0px', '1'],
+      title: ['34px', '800'],
+      tiles: [[214, 137, '20px'], [214, 137, '20px'], [214, 137, '20px'], [214, 137, '20px']],
+      gaps: [14, 0, 14],
+      chosen: ['rgb(60, 92, 176) 0px 0px 0px 2px inset', 'rgba(60, 92, 176, 0.14) 0px 10px 26px 0px', '1'],
       other: ['rgb(236, 234, 230) 0px 0px 0px 1px inset', '0'],
       icon: ['rgb(238, 242, 250)', 'rgb(60, 92, 176)'],
-      types: [[54, '16px'], [54, '16px'], [54, '16px']],
-      label: ['Type de bien', 'uppercase', '12px', 'rgb(154, 162, 170)'],
-      type: ['rgb(238, 242, 250)', 'rgb(60, 92, 176) 0px 0px 0px 2px inset', 'rgb(255, 255, 255)', 'rgb(60, 92, 176)'],
+      types: [[64, '16px'], [64, '16px'], [64, '16px']],
+      label: ['Type de bien', 'uppercase', '13px', 'rgb(91, 101, 113)'],
+      type: ['color(srgb 0.969412 0.974431 0.987608)', 'rgb(60, 92, 176) 0px 0px 0px 2px inset', 'rgb(255, 255, 255)', 'rgb(47, 74, 146)'],
     });
     await shot(page, `publier-categorie-${width}.png`);
     if (width !== 1440) {
@@ -1655,7 +1683,8 @@ try {
       continue;
     }
 
-    // Le glissement vers l'étape 2 : pris juste après le clic, pendant le mouvement, coupé aux bords de la colonne.
+    // Le glissement vers l'étape 2 : pris juste après le clic, pendant le mouvement, coupé aux bords de l'étape (960 px,
+    // ses marges comprises).
     const motion = () => page.evaluate(() => {
       const steps = document.querySelector('.dpub-steps');
       const box = document.querySelector('.dpub-step');
@@ -1675,7 +1704,7 @@ try {
     await page.click(CONTINUE);
     expectSame(N, 'glissement en avançant', await motion(), {
       sliding: true, box: 'dpub-step is-entering is-forward', copy: ['dpub-step-copy is-forward', 'Que souhaitez-vous publier ?', 0],
-      exit: ['true', true, 'fixed'], clip: ['clip', 360, 720], animations: ['ppub-step-from-right', 'ppub-step-to-left', 'app-fade-in'], overflow: 0,
+      exit: ['true', true, 'fixed'], clip: ['clip', 240, 960], animations: ['ppub-step-from-right', 'ppub-step-to-left', 'app-fade-in'], overflow: 0,
     });
     await waitStep(page, 2, 'Informations principales', N);
     expectSame(N, 'après le glissement', [await page.locator('.dpub-step').getAttribute('class'), await page.locator('.dpub-step-exit > *').count(),
@@ -1683,7 +1712,7 @@ try {
     await page.click('.dpub .dsc-action-buttons .dsc-button-light');
     expectSame(N, 'glissement en revenant', await motion(), {
       sliding: true, box: 'dpub-step is-entering is-back', copy: ['dpub-step-copy is-back', 'Adresse du bien', 0],
-      exit: ['true', true, 'fixed'], clip: ['clip', 360, 720], animations: ['ppub-step-from-left', 'ppub-step-to-right', 'app-fade-in'], overflow: 0,
+      exit: ['true', true, 'fixed'], clip: ['clip', 240, 960], animations: ['ppub-step-from-left', 'ppub-step-to-right', 'app-fade-in'], overflow: 0,
     });
     await waitStep(page, 1, 'Catégorie', N);
     // Deux clics rapides : une seule étape (le second attend la fin du changement, sans vérifier l'étape 2).
@@ -1698,7 +1727,7 @@ try {
     await mock(reduced, newState());
     const calm = await open(reduced, '/publier/', `${N} réduit`);
     await calm.waitForSelector('.dpub .dpub-category-grid');
-    await calm.getByRole('button', { name: /^Résidentiel,/ }).click();
+    await categoryTile(calm, 'Résidentiel').click();
     await calm.getByRole('button', { name: 'Appartement', exact: true }).click();
     await calm.click(CONTINUE);
     expectSame(`${N} réduit`, 'fondu seul', await calm.evaluate(() => {

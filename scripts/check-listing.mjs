@@ -560,17 +560,24 @@ async function common(page, name, { phone }) {
     const tabbar = document.querySelector('.tabbar');
     if (tabbar && getComputedStyle(tabbar).display !== 'none') found.push('la barre d’onglets du site est visible sur la fiche');
     const bar = document.querySelector('.action-bar');
-    // Capsules Duo (2 px au-dessus de la zone sûre, 10 px sans) ou barre blanche de sa propre annonce (en bas), à
-    // toutes les tailles.
-    if (!bar) found.push('pas de barre d’actions');
-    else {
-      const box = (bar.querySelector('.duo-row') ?? bar).getBoundingClientRect();
-      if (getComputedStyle(bar).position !== 'fixed' || box.bottom > window.innerHeight || box.bottom < window.innerHeight - 80) found.push(`barre d’actions mal placée (bas à ${Math.round(box.bottom)} px)`);
+    // Téléphone et tablette : capsules Duo (2 px au-dessus de la zone sûre, 10 px sans) ou barre blanche de sa propre
+    // annonce (en bas).
+    if (phone) {
+      if (!bar) found.push('pas de barre d’actions');
+      else {
+        const box = (bar.querySelector('.duo-row') ?? bar).getBoundingClientRect();
+        if (getComputedStyle(bar).position !== 'fixed' || box.bottom > window.innerHeight || box.bottom < window.innerHeight - 80) found.push(`barre d’actions mal placée (bas à ${Math.round(box.bottom)} px)`);
+      }
     }
-    // Ordinateur : l'écran du téléphone, avec le retour, le partage, le cœur et « Comparer » posés sur la photo ; plus
-    // rien de l'ancienne fiche de l'ordinateur (deux colonnes, mosaïque, outils, lien de retour au-dessus).
+    // Ordinateur (version ordinateur, maquettes 05 et 06) : le retour, « Partager », « Favori » et « Comparer » en haut
+    // de la fiche ; le prix et les actions de la barre du bas dans la colonne de droite (plus de barre du bas, ni de
+    // boutons, points ou compteur sur la photo) ; rien de l'ancienne fiche de l'ordinateur (mosaïque, outils, lien de
+    // retour de l'ancienne version).
     if (!phone) {
-      if (!document.querySelector('.gallery-bar .gallery-back') || !document.querySelector('.gallery-actions .gallery-heart')) found.push('retour ou cœur absents de la photo');
+      if (bar) found.push('barre d’actions du téléphone affichée sur ordinateur');
+      if (!document.querySelector('.listing-head .gallery-back') || !document.querySelector('.listing-tools .listing-tool-heart')) found.push('retour ou « Favori » absents de l’en-tête de la fiche');
+      if (document.querySelector('.gallery-bar, .gallery-dots, .gallery-counter')) found.push('boutons, points ou compteur posés sur la photo');
+      if (!document.querySelector('.listing-aside .price-card .hc-price-value')) found.push('pas de prix dans la colonne de droite');
       if (document.querySelector('.dl, .dl-aside, .dl-tools, .listing-top, .listing-back-link, .gallery-all')) found.push('un reste de l’ancienne fiche de l’ordinateur est affiché');
     }
     for (const img of document.querySelectorAll('img.photo')) if (img.complete && img.naturalWidth === 0) found.push(`photo non chargée ${img.src}`);
@@ -1115,18 +1122,19 @@ async function checkOwnerBar(page, name) {
 }
 
 /**
- * Pastille « Demander » : 32 px, comme « Agenda » à côté d'elle, 13 px gras, aux couleurs des pastilles de la fiche (à
- * toutes les tailles : sur ordinateur aussi, l'écran du téléphone).
+ * Pastille « Demander » : 32 px, comme « Agenda » à côté d'elle, 13 px gras, aux couleurs des pastilles de la fiche
+ * (sous 1024 px). Sur ordinateur (maquette 05), « Demander une visite » sous le texte de la carte : 38 px, 14 px gras.
  */
 const PHONE_PILL = '32 13px 700 rgb(238, 242, 250) rgb(60, 92, 176)';
+const DESKTOP_PILL = '38 14px 700 rgb(238, 242, 250) rgb(47, 74, 146)';
 
 /** Pastille « Demander » de la carte « Aucune visite prévue » (agendaCard de l'app) : la capsule d'« Agenda ». */
-async function checkVisitRequestPill(page, name, selector, look) {
+async function checkVisitRequestPill(page, name, selector, look, text = 'Demander') {
   const pill = await page.$eval(selector, (el) => {
     const style = getComputedStyle(el);
     return `${el.tagName} ${el.textContent} | ${el.getAttribute('aria-label')} | ${Math.round(el.getBoundingClientRect().height)} ${style.fontSize} ${style.fontWeight} ${style.backgroundColor} ${style.color}`;
   }).catch(() => null);
-  expect(name, 'pastille « Demander »', pill, `BUTTON Demander | Demander une visite | ${look}`);
+  expect(name, 'pastille « Demander »', pill, `BUTTON ${text} | Demander une visite | ${look}`);
 }
 
 /** Réponse du serveur quand la conversation est refusée (start_listing_conversation) : son message, en français. */
@@ -1160,28 +1168,34 @@ async function checkConversationFailures(context, suffix, { message, offer, list
     window.dotsAfter = null;
     button.addEventListener('click', () => { clicked = performance.now(); }, { capture: true, once: true });
     new MutationObserver((records, observer) => {
-      if (clicked !== null && button.querySelector('.duo-dots')) {
+      if (clicked !== null && button.querySelector('.duo-dots, .price-card-dots')) {
         window.dotsAfter = performance.now() - clicked;
         observer.disconnect();
       }
     }).observe(button, { childList: true, subtree: true });
   }, message);
   await page.click(message);
-  await page.waitForSelector(`${message} .duo-dots`, { timeout: 5000 }).catch(() => problems.push(`${name}: pas de points dans la bulle pendant l'ouverture`));
+  await page.waitForSelector(`${message} :is(.duo-dots, .price-card-dots)`, { timeout: 5000 }).catch(() => problems.push(`${name}: pas de points dans la bulle pendant l'ouverture`));
   const dotsAfter = await page.evaluate(() => window.dotsAfter);
   if (dotsAfter === null || dotsAfter < 140 || dotsAfter > 1500) problems.push(`${name}: points ${dotsAfter === null ? 'absents' : `${Math.round(dotsAfter)} ms`} après le clic (0,15 s attendues)`);
   await page.waitForTimeout(400);
-  // Les trois points sautillent, décalés (pas avec « Réduire les animations »).
-  expect(name, 'points qui sautillent', await page.evaluate(() => window.duoEffects.filter((effect) => effect.kind === 'point').length), 3);
-  // Le bas de l'écran (sur ordinateur, de la colonne de 720 px), avec la bulle et ses points.
+  // Les trois points sautillent, décalés (pas avec « Réduire les animations ») : ceux de la bulle Duo (téléphone), ou
+  // ceux du bouton de la colonne de droite (ordinateur).
   const viewport = page.viewportSize();
-  const column = viewport.width >= 1024 ? 720 : viewport.width;
-  await page.screenshot({ path: join(out, `duo-points-${suffix}.png`), clip: { x: (viewport.width - column) / 2, y: viewport.height - 140, width: column, height: 140 } });
+  if (viewport.width >= 1024) {
+    expect(name, 'trois points', await page.$$eval(`${message} .price-card-dots i`, (dots) => dots.filter((dot) => getComputedStyle(dot).animationName !== 'none').length), 3);
+    const card = await page.locator('.listing-aside .price-card').boundingBox();
+    await page.screenshot({ path: join(out, `duo-points-${suffix}.png`), clip: card ?? { x: 0, y: 0, width: viewport.width, height: 140 } });
+  } else {
+    expect(name, 'points qui sautillent', await page.evaluate(() => window.duoEffects.filter((effect) => effect.kind === 'point').length), 3);
+    // Le bas de l'écran, avec la bulle et ses points.
+    await page.screenshot({ path: join(out, `duo-points-${suffix}.png`), clip: { x: 0, y: viewport.height - 140, width: viewport.width, height: 140 } });
+  }
   release();
   expect(name, 'titre de l’alerte', await dialogTitle(page), title);
   expect(name, 'message du serveur', await page.textContent('dialog[open] .alert-body p'), REFUSED_CONVERSATION.message);
   expect(name, 'boutons de l’alerte', await page.$$eval('dialog[open] .alert-actions .btn', (els) => els.map((el) => el.textContent.trim()).join(' | ')), 'OK');
-  if (await page.$('.duo-dots')) problems.push(`${name}: les points restent après l'échec`);
+  if (await page.$('.duo-dots, .price-card-dots')) problems.push(`${name}: les points restent après l'échec`);
   expect(name, 'adresse après l’échec', page.url(), address);
   await page.screenshot({ path: join(out, `${name}.png`) });
   await expectAlertStays(page, name, title);
@@ -1225,10 +1239,10 @@ async function checkConversationFailures(context, suffix, { message, offer, list
 }
 
 /**
- * Fiche sur ordinateur (étape 7 du site comme l'app) : l'écran du téléphone dans la colonne de 720 px au centre de la
- * fenêtre. La galerie prend toute la largeur de la colonne, à la proportion de l'app (390 × 325, donc 720 × 600) ; le
- * contenu est à 16 px de ses bords (688 px) ; la barre du bas (Duo ou sa propre annonce) est à la largeur de la
- * colonne, et la page garde dessous la place de cette barre, sans bande vide.
+ * Fiche sur ordinateur (version ordinateur, maquettes 05 et 06) : dans le conteneur du site (1136 px de contenu au plus,
+ * centré), l'en-tête de la fiche, les photos sur toute la largeur (440 px de haut pour 1136, 420 pour une seule photo
+ * ou un hôtel), puis les sections à gauche et la colonne de 320 px à droite, 28 px plus loin, à la même hauteur, collée
+ * sous l'en-tête du site ; plus de place gardée sous la page pour une barre du bas.
  */
 async function checkWideListing(page, name) {
   const m = await page.evaluate(() => {
@@ -1236,22 +1250,85 @@ async function checkWideListing(page, name) {
       const el = document.querySelector(selector);
       if (!el) return null;
       const r = el.getBoundingClientRect();
-      const style = getComputedStyle(el);
-      return { left: r.left, width: r.width, height: r.height, inner: r.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) };
+      return { left: r.left, top: r.top, width: r.width, height: r.height };
     };
+    const aside = document.querySelector('.listing-aside');
     return {
-      client: document.documentElement.clientWidth, gallery: box('.listing-gallery-wrap .gallery'), body: box('.listing-body'), bar: box('.action-bar'),
-      owner: Boolean(document.querySelector('.owner-bar')), padding: getComputedStyle(document.body).paddingBottom,
+      client: document.documentElement.clientWidth, head: box('.listing-head'), gallery: box('.listing-desk .gallery-strip'), main: box('.listing-main'),
+      price: box('.listing-aside .price-card'), single: Boolean(document.querySelector('.listing-desk :is(.gallery-one, .gallery-empty), .listing-desk-hotel')),
+      sticky: aside ? `${getComputedStyle(aside).position} ${getComputedStyle(aside).top}` : null, padding: getComputedStyle(document.body).paddingBottom,
     };
   });
   const near = (a, b) => Math.abs(a - b) <= 0.6;
-  const left = (m.client - 720) / 2;
-  if (!m.gallery || !near(m.gallery.left, left) || !near(m.gallery.width, 720) || !near(m.gallery.height, 600)) {
-    problems.push(`${name}: galerie ${JSON.stringify(m.gallery)} au lieu de 720 × 600 px à ${left} px du bord`);
+  const width = Math.min(1136, m.client - 64);
+  const left = (m.client - width) / 2;
+  const height = (width * (m.single ? 420 : 440)) / 1136;
+  if (!m.head || !near(m.head.left, left) || !near(m.head.width, width)) problems.push(`${name}: en-tête de la fiche ${JSON.stringify(m.head)} au lieu de ${width} px à ${left} px du bord`);
+  if (!m.gallery || !near(m.gallery.left, left) || !near(m.gallery.width, width) || !near(m.gallery.height, height)) {
+    problems.push(`${name}: photos ${JSON.stringify(m.gallery)} au lieu de ${width} × ${height} px à ${left} px du bord`);
   }
-  if (!m.body || !near(m.body.left, left) || !near(m.body.width, 720) || !near(m.body.inner, 688)) problems.push(`${name}: contenu ${JSON.stringify(m.body)} au lieu de 688 px dans la colonne de 720 px`);
-  if (!m.bar || !near(m.bar.left, left) || !near(m.bar.width, 720)) problems.push(`${name}: barre du bas ${JSON.stringify(m.bar)} au lieu de 720 px à ${left} px du bord`);
-  expect(name, 'place gardée sous la page pour la barre du bas', m.padding, m.owner ? '60px' : '66px');
+  if (!m.main || !near(m.main.left, left) || !near(m.main.width, width - 348)) problems.push(`${name}: sections ${JSON.stringify(m.main)} au lieu de ${width - 348} px à ${left} px du bord`);
+  if (!m.price || !m.main || !near(m.price.left, left + width - 320) || !near(m.price.width, 320) || !near(m.price.top, m.main.top)) {
+    problems.push(`${name}: colonne de droite ${JSON.stringify(m.price)} au lieu de 320 px à ${left + width - 320} px du bord, à la hauteur des sections`);
+  }
+  // 96 px sous le haut de la fenêtre (l'en-tête de 73 px, puis 23 px), moins la marge qui garde l'ombre du prix.
+  expect(name, 'colonne de droite collée sous l’en-tête', m.sticky, 'sticky 72px');
+  expect(name, 'place gardée sous la page', m.padding, '0px');
+}
+
+/**
+ * Ordinateur : « Envoyer un message » et « Appeler » de la barre Duo dans la carte du prix (maquette 05), sur toute sa
+ * largeur (320 px moins 24 px de marge et 1 px de bord de chaque côté : 270 px), 52 px de haut, 10 px entre eux ; l'indice de « Envoyer un message » lu par les lecteurs d'écran.
+ */
+async function checkAsideContacts(page, name, { seller }) {
+  await page.mouse.move(1, 1);
+  const m = await page.evaluate(() => {
+    const card = document.querySelector('.listing-aside .price-card');
+    const buttons = card ? [...card.querySelectorAll('.price-card-actions > :is(a, button)')] : [];
+    const message = card?.querySelector('.price-card-message');
+    const hint = message ? document.getElementById(message.getAttribute('aria-describedby') ?? '') : null;
+    return {
+      names: buttons.map((el) => el.textContent.trim()),
+      boxes: buttons.map((el) => { const r = el.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }),
+      gap: buttons.length === 2 ? Math.round(buttons[1].getBoundingClientRect().top - buttons[0].getBoundingClientRect().bottom) : null,
+      colors: buttons.map((el) => `${getComputedStyle(el).backgroundColor} ${getComputedStyle(el).color}`),
+      hint: hint?.textContent ?? null, hintHidden: hint ? hint.getBoundingClientRect().width <= 1 : null,
+    };
+  });
+  expectJSON(name, 'boutons de la colonne de droite', m.names, ['Envoyer un message', 'Appeler']);
+  expectJSON(name, 'taille des boutons de la colonne de droite', m.boxes, [[270, 52], [270, 52]]);
+  expect(name, 'écart entre les boutons de la colonne de droite', m.gap, 10);
+  expectJSON(name, 'couleurs des boutons de la colonne de droite', m.colors, ['rgb(60, 92, 176) rgb(255, 255, 255)', 'rgb(255, 255, 255) rgb(47, 74, 146)']);
+  expect(name, 'indice de « Envoyer un message »', m.hint, `Ouvre la conversation avec le ${seller}`);
+  if (m.hintHidden !== true) problems.push(`${name}: l'indice de « Envoyer un message » est affiché`);
+}
+
+/** Ordinateur : au défilement, la colonne de droite reste sous l'en-tête du site (le prix à 96 px du haut de la fenêtre). */
+async function checkStickyPrice(page, name, { shot = null } = {}) {
+  await page.evaluate(() => window.scrollTo({ top: 1200, behavior: 'instant' }));
+  await page.waitForTimeout(300);
+  const m = await page.evaluate(() => ({ scroll: Math.round(window.scrollY), top: Math.round(document.querySelector('.listing-aside .price-card')?.getBoundingClientRect().top ?? -1) }));
+  if (m.scroll < 600) problems.push(`${name}: la fiche ne défile que de ${m.scroll} px`);
+  expect(name, 'prix collé sous l’en-tête au défilement', m.top, 96);
+  if (shot) await page.screenshot({ path: join(out, shot) });
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+}
+
+/** Sa propre annonce sur ordinateur : « Voir les demandes » et « Gérer l'annonce » dans la carte du prix, sans barre du bas. */
+async function checkOwnerButtons(page, name) {
+  await page.mouse.move(1, 1);
+  const m = await page.evaluate(() => ({
+    bar: Boolean(document.querySelector('.owner-bar, .duo-bar, .duo-capsule, .price-card-message, .price-card-call')),
+    buttons: [...document.querySelectorAll('.listing-aside .price-card .owner-bar-button')].map((el) => {
+      const r = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return [el.textContent.trim(), `${Math.round(r.width)} × ${Math.round(r.height)} ${style.borderRadius} ${style.fontWeight} ${style.fontSize} ${style.backgroundColor} ${style.color}`];
+    }),
+  }));
+  if (m.bar) problems.push(`${name}: barre du bas ou boutons de contact affichés sur sa propre annonce`);
+  expectJSON(name, 'boutons de sa propre annonce', m.buttons, [
+    ['Voir les demandes', '270 × 52 14px 700 16px rgb(238, 242, 250) rgb(60, 92, 176)'], ['Gérer l\'annonce', '270 × 52 14px 700 16px rgb(60, 92, 176) rgb(255, 255, 255)'],
+  ]);
 }
 
 /** Écran de la colonne de 720 px (visite, demandes de visite, comparaison) : textes, débordements, colonne centrée de 688 px (720 avec ses marges de 16). */
@@ -1276,8 +1353,8 @@ async function checkColumn(page, name, selector) {
 }
 
 /**
- * « Faire une offre » sur ordinateur : la feuille du téléphone devient une fenêtre de 520 px au centre (rayon 24,
- * 760 px de haut au plus), au-dessus de la fiche ; rien n'y déborde.
+ * « Faire une offre » sur ordinateur (maquette 07) : la feuille du téléphone devient une fenêtre de 560 px au centre
+ * (24 px des bords au moins, rayon 26, 760 px de haut au plus), au-dessus de la fiche ; rien n'y déborde.
  */
 async function checkOfferWindow(page, name) {
   const m = await page.evaluate(() => {
@@ -1294,8 +1371,9 @@ async function checkOfferWindow(page, name) {
   const [vw, vh] = m.viewport;
   const [left, top, width, height] = m.box;
   const near = (a, b) => Math.abs(a - b) <= 1;
-  if (!near(width, 520) || !near(left, (vw - 520) / 2) || !near(top, (vh - height) / 2) || height > Math.min(760, vh - 48) + 0.5 || m.radius !== '24px') {
-    problems.push(`${name}: fenêtre de l’offre ${JSON.stringify(m.box)} (rayon ${m.radius}) au lieu de 520 px au centre, de rayon 24`);
+  const wanted = Math.min(560, vw - 48);
+  if (!near(width, wanted) || !near(left, (vw - wanted) / 2) || !near(top, (vh - height) / 2) || height > Math.min(760, vh - 48) + 0.5 || m.radius !== '26px') {
+    problems.push(`${name}: fenêtre de l’offre ${JSON.stringify(m.box)} (rayon ${m.radius}) au lieu de ${wanted} px au centre, de rayon 26`);
   }
   if (!m.listing) problems.push(`${name}: la fiche n’est plus sous la fenêtre de l’offre`);
   await checkPhoneScreen(page, name);
@@ -1406,21 +1484,20 @@ try {
   await checkWideListing(page, 'vente-ordinateur');
   expect('vente-ordinateur', 'titre de la page', await page.title(), 'Appartement lumineux avec balcon à Lyon 3e · Nidalo');
   expect('vente-ordinateur', 'retour', `${await page.getAttribute('.gallery-back', 'title')} ${await page.getAttribute('.gallery-back', 'href')}`, 'Chercher un bien /recherche/');
-  expect('vente-ordinateur', 'boutons de la photo', await page.$$eval('.gallery-actions .gallery-action', (els) => els.map((el) => el.getAttribute('aria-label')).join(' | ')),
-    'Partager l\'annonce | Ajouter aux favoris | Ajouter à la comparaison');
+  // Les boutons ronds de la photo du téléphone, avec leur libellé, en haut à droite de la fiche (maquette 05).
+  expect('vente-ordinateur', 'boutons de l’en-tête', await page.$$eval('.listing-tools .listing-tool', (els) => els.map((el) => `${el.textContent.trim()} (${el.title})`).join(' | ')),
+    'Partager (Partager l\'annonce) | Favori (Ajouter aux favoris) | Comparer (Ajouter à la comparaison)');
   expect('vente-ordinateur', 'catégorie', await page.textContent('.hc-category'), 'VENTE');
   expect('vente-ordinateur', 'titre', await page.textContent('.hc-title'), 'Appartement lumineux avec balcon');
   expect('vente-ordinateur', 'lieu', await page.textContent('.hc-location'), 'Lyon 3e (69003)');
   // Le nom public tel que le serveur l'envoie (public_name, déjà réglé selon « Afficher mon nom complet »), sans être
   // raccourci une deuxième fois (n° 24).
   expect('vente-ordinateur', 'interlocuteur', await page.textContent('.publisher-head'), /Claire Essai.*Particulier.*Sur Nidalo depuis mars 2025.*1 annonce en ligne/);
-  // La barre Duo de l'app (« Appeler », « Envoyer un message »), au milieu de la colonne ; la visite se demande avec
-  // « Demander » sur la carte « Aucune visite prévue », comme dans l'app.
-  expect('vente-ordinateur', 'boutons de la barre', await page.$$eval('.action-bar .duo-capsule', (els) => els.map((el) => el.getAttribute('aria-label')).join(' | ')), 'Appeler | Envoyer un message');
-  await checkDuoArrival(page, 'vente-ordinateur');
-  await checkDuo(page, 'vente-ordinateur', { seller: 'vendeur' });
+  // Les actions de la barre Duo (« Envoyer un message », « Appeler ») dans la colonne de droite, sous le prix ; la visite
+  // se demande avec « Demander une visite » sur la carte « Aucune visite prévue ».
+  await checkAsideContacts(page, 'vente-ordinateur', { seller: 'vendeur' });
   expect('vente-ordinateur', 'carte des visites', await page.textContent('.visit-card .visit-text'), 'Aucune visite prévueDemandez une visite au vendeur ou à l\'agence.');
-  await checkVisitRequestPill(page, 'vente-ordinateur', '.visit-card .visit-request', PHONE_PILL);
+  await checkVisitRequestPill(page, 'vente-ordinateur', '.visit-card .visit-request', DESKTOP_PILL, 'Demander une visite');
   expect('vente-ordinateur', 'offre', await page.textContent('.header-card button.hc-offer'), 'Faire une offre');
   await page.screenshot({ path: join(out, 'vente-ordinateur.png') });
   await page.screenshot({ path: join(out, 'vente-ordinateur-long.png'), fullPage: true });
@@ -1433,45 +1510,48 @@ try {
   await page.screenshot({ path: join(out, 'vente-ordinateur-visionneuse.png') });
   await page.keyboard.press('Escape');
   await page.waitForSelector('dialog.viewer-dialog[open]', { state: 'detached' });
-  // La deuxième photo de la galerie (après défilement) ouvre la visionneuse sur elle.
-  await page.$eval('.gallery-strip', (strip) => strip.scrollTo({ left: strip.clientWidth }));
-  await page.waitForFunction(() => document.querySelector('.gallery-counter')?.textContent === '2/2');
+  // La deuxième photo de la grille ouvre la visionneuse sur elle ; « Voir les 2 photos », sur la première.
   await page.click('.gallery-page >> nth=1');
   await page.waitForSelector('dialog.viewer-dialog[open]');
   expect('vente-ordinateur', 'compteur de la deuxième photo', await page.textContent('.viewer-counter'), '2/2');
   await page.click('.viewer-close');
   await page.waitForSelector('dialog.viewer-dialog[open]', { state: 'detached' });
+  expect('vente-ordinateur', 'bouton des photos', (await page.textContent('.gallery-more')).trim(), 'Voir les 2 photos');
+  await page.click('.gallery-more');
+  await page.waitForSelector('dialog.viewer-dialog[open]');
+  expect('vente-ordinateur', 'compteur après « Voir les 2 photos »', await page.textContent('.viewer-counter'), '1/2');
+  await page.click('.viewer-close');
+  await page.waitForSelector('dialog.viewer-dialog[open]', { state: 'detached' });
   await expectSignIn(page, 'vente-ordinateur', 'Faire une offre', '.header-card .hc-offer');
-  await page.click('.duo-bar .duo-call');
+  await page.click('.price-card-call');
   expect('vente-ordinateur', 'fenêtre du téléphone', await dialogTitle(page), 'Numéro non disponible');
   expect('vente-ordinateur', 'message sans numéro', await page.textContent('dialog[open] .alert-body p'), 'Ce vendeur ne communique pas son numéro. Écrivez-lui sur Nidalo.');
   await page.screenshot({ path: join(out, 'vente-ordinateur-sans-numero.png') });
   await expectAlertStays(page, 'vente-ordinateur', 'Numéro non disponible');
   await closeAlert(page);
-  await page.click('.duo-bar .duo-call');
+  await page.click('.price-card-call');
   await dialogTitle(page);
   // « Envoyer un message » de la fenêtre : la même action que le bouton, donc la connexion d'abord.
   await expectSignIn(page, 'vente-ordinateur', 'Envoyer un message (fenêtre sans numéro)', 'dialog[open] .alert-actions .btn-primary');
-  await expectSignIn(page, 'vente-ordinateur', 'Envoyer un message', '.duo-bar .duo-message');
+  await expectSignIn(page, 'vente-ordinateur', 'Envoyer un message', '.price-card-message');
   await page.click('.visit-card .visit-request');
   await page.waitForSelector('dialog.signin-sheet[open] .signin-card', { timeout: 5000 }).catch(() => problems.push('vente-ordinateur: « Demander » n\'ouvre pas la connexion'));
   await page.screenshot({ path: join(out, 'vente-ordinateur-connexion.png') });
   await page.keyboard.press('Escape');
   await page.waitForSelector('dialog.signin-sheet[open]', { state: 'detached' });
   if (page.url() !== `${base}/annonce/?id=${SALE}`) problems.push(`vente-ordinateur: adresse ${page.url()} après la connexion refermée`);
-  await expectSignIn(page, 'vente-ordinateur', 'Ajouter aux favoris', '.gallery-heart');
+  await expectSignIn(page, 'vente-ordinateur', 'Ajouter aux favoris', '.listing-tool-heart');
   // « Signaler l'annonce », sous la note des risques : la connexion d'abord, comme dans l'app.
   await expectSignIn(page, 'vente-ordinateur', 'Signaler l\'annonce', '.listing-report');
-  await page.click('.gallery-action[aria-label="Partager l\'annonce"]');
+  await page.click('.listing-tool[aria-label="Partager l\'annonce"]');
   // Le message du bas de l'app (showToast), le même qu'au téléphone.
   await page.waitForSelector('.app-toast:not(.is-leaving)');
   expect('vente-ordinateur', 'message du partage', await page.textContent('.app-toast-text'), 'Lien de l’annonce copié');
   expect('vente-ordinateur', 'lien copié', await page.evaluate(() => navigator.clipboard.readText()), `${base}/annonce/?id=${SALE}`);
   await page.waitForSelector('.app-toast', { state: 'detached', timeout: 6000 }).catch(() => problems.push('vente-ordinateur: le message du partage ne disparaît pas'));
   await checkMap(page, 'vente-ordinateur', { coordinate: [45.7597, 4.8491], approximate: true, shots: true });
-  // Repli en ronds au défilement, puis l'appui (le pointeur glisse hors de la capsule : rien ne s'ouvre).
-  await checkDuoFold(page, 'vente-ordinateur', { shot: 'duo-repliee-ordinateur.png' });
-  await checkDuoPress(page, 'vente-ordinateur', { shot: 'duo-appui-ordinateur.png' });
+  // Au défilement, le prix et ses actions restent à l'écran (plus de barre Duo sur ordinateur).
+  await checkStickyPrice(page, 'vente-ordinateur', { shot: 'prix-colle-ordinateur.png' });
   await page.close();
 
   // Adresse d'un écran ouverte sans compte : la fiche, puis la connexion (l'écran s'ouvrira une fois connecté).
@@ -1498,8 +1578,8 @@ try {
   await checkWideListing(page, 'partage-ordinateur');
   await checkHiddenStreet(page, 'partage-ordinateur');
   // Sans compte, le serveur ne donne pas le numéro de l'agence : « Appeler » ouvre la fenêtre sans numéro.
-  if (await page.$('a.duo-call')) problems.push('partage-ordinateur: un numéro est affiché sans compte');
-  await page.click('.gallery-action[aria-label="Partager l\'annonce"]');
+  if (await page.$('a.price-card-call')) problems.push('partage-ordinateur: un numéro est affiché sans compte');
+  await page.click('.listing-tool[aria-label="Partager l\'annonce"]');
   await page.waitForFunction(() => !!window.sharedData);
   // Espaces insécables des nombres (Intl) ramenées à des espaces simples pour la comparaison.
   const shared = await page.evaluate(() => Object.fromEntries(Object.entries(window.sharedData).map(([key, value]) => [key, String(value).replace(/[  ]/g, ' ')])));
@@ -1510,7 +1590,7 @@ try {
   });
   if (await page.$('.app-toast')) problems.push('partage-ordinateur: le lien est copié alors que le navigateur a partagé');
   // Trois photos : la visionneuse s'ouvre sur la photo cliquée et ses flèches passent d'une photo à l'autre ; la
-  // troisième photo de la galerie (après défilement) l'ouvre sur elle.
+  // troisième photo de la grille l'ouvre sur elle.
   await page.click('.gallery-page >> nth=0');
   await page.waitForSelector('dialog.viewer-dialog[open]');
   expect('partage-ordinateur', 'compteur de la première photo', await page.textContent('.viewer-counter'), '1/3');
@@ -1521,8 +1601,6 @@ try {
   if (!(await page.$('.viewer-arrow[aria-label="Photo suivante"]:disabled'))) problems.push('partage-ordinateur: « Photo suivante » reste active sur la dernière photo');
   await page.keyboard.press('Escape');
   await page.waitForSelector('dialog.viewer-dialog[open]', { state: 'detached' });
-  await page.$eval('.gallery-strip', (strip) => strip.scrollTo({ left: 2 * strip.clientWidth }));
-  await page.waitForFunction(() => document.querySelector('.gallery-counter')?.textContent === '3/3');
   await page.click('.gallery-page >> nth=2');
   await page.waitForSelector('dialog.viewer-dialog[open]');
   expect('partage-ordinateur', 'compteur de la troisième photo', await page.textContent('.viewer-counter'), '3/3');
@@ -1548,7 +1626,7 @@ try {
   // La ligne « Cash-flow » est partie (demande du 17/11) : l'apport change le reste sous la barre du mois type.
   await checkSegment(page, 'investissement-ordinateur', { group: 'Apport', result: '.month-bar-flow' });
   await checkMonthBar(page, 'investissement-ordinateur', { rentCaption: 'Loyer encaissé' });
-  await expectSignIn(page, 'investissement-ordinateur', 'Envoyer un message (agence)', '.duo-bar .duo-message');
+  await expectSignIn(page, 'investissement-ordinateur', 'Envoyer un message (agence)', '.price-card-message');
   await page.close();
 
   // Location meublée, adresse exacte, sans photo.
@@ -1564,10 +1642,10 @@ try {
   expect('location-ordinateur', 'interlocuteur sans profil', await page.textContent('.publisher-head'), /Particulier/);
   // Location : « propriétaire » au lieu de « vendeur » (n° 74), dans l'indice de « Envoyer un message », la carte des
   // visites, l'interlocuteur et la fenêtre sans numéro.
-  await checkDuo(page, 'location-ordinateur', { seller: 'propriétaire' });
+  await checkAsideContacts(page, 'location-ordinateur', { seller: 'propriétaire' });
   expect('location-ordinateur', 'carte des visites', await page.textContent('.visit-card .visit-text'), 'Aucune visite prévueDemandez une visite au propriétaire ou à l\'agence.');
   expect('location-ordinateur', 'bouton de l’interlocuteur', await page.textContent('.publisher .btn-primary'), 'Contacter le propriétaire');
-  await page.click('.duo-bar .duo-call');
+  await page.click('.price-card-call');
   expect('location-ordinateur', 'fenêtre du téléphone', await dialogTitle(page), 'Numéro non disponible');
   expect('location-ordinateur', 'message sans numéro', await page.textContent('dialog[open] .alert-body p'), 'Ce propriétaire ne communique pas son numéro. Écrivez-lui sur Nidalo.');
   await closeAlert(page);
@@ -1587,7 +1665,7 @@ try {
     },
   });
   await ready(page, 'partage-location-ordinateur');
-  await page.click('.gallery-action[aria-label="Partager l\'annonce"]');
+  await page.click('.listing-tool[aria-label="Partager l\'annonce"]');
   await page.waitForFunction(() => !!window.sharedData);
   expectJSON('partage-location-ordinateur', 'partage', await page.evaluate(() => Object.fromEntries(Object.entries(window.sharedData).map(([key, value]) => [key, String(value).replace(/[\u00a0\u202f]/g, ' ')]))), {
     title: 'Studio meublé à Lyon 7e · 690 €/mois charges comprises',
@@ -2361,7 +2439,7 @@ try {
   let mark = calls.length;
   page = await open(member, `/annonce/?id=${FICHE}`, 'fiche-connecte');
   await ready(page, 'fiche-connecte');
-  await page.waitForSelector('.duo-bar a.duo-call');
+  await page.waitForSelector('.price-card a.price-card-call');
   await common(page, 'fiche-connecte', { phone: false });
   await checkWideListing(page, 'fiche-connecte');
   await checkHiddenStreet(page, 'fiche-connecte');
@@ -2375,29 +2453,29 @@ try {
   expect('fiche-connecte', 'titre de la page', await page.title(), 'Appartement 3 pièces à Lyon 2e · Nidalo');
   expect('fiche-connecte', 'catégorie', await page.textContent('.hc-category'), 'VENTE');
   expect('fiche-connecte', 'lieu', await page.textContent('.hc-location'), 'Lyon 2e (69002)');
-  expect('fiche-connecte', 'prix', (await page.textContent('.hc-price')).replace(/[  ]/g, ' '), '238 000 €3 839 €/m²');
+  // Sur ordinateur, le rendement brut de la carte « Rentabilité » suit le prix au m² (maquette 05).
+  expect('fiche-connecte', 'prix', (await page.textContent('.hc-price')).replace(/[  ]/g, ' '), '238 000 €3 839 €/m²·7,8 % brut');
   expect('fiche-connecte', 'chiffres clés', await page.$$eval('.hc-fact', (els) => els.map((el) => el.textContent.replace(/[  ]/g, ' ').trim()).join(' | ')), 'Surface62 m² | Pièces3 | Chambres2 | Étage2e');
   expect('fiche-connecte', 'carte de rentabilité', await page.textContent('.spec-card .spec-header h2'), 'Rentabilité');
   expect('fiche-connecte', 'offre', await page.textContent('.header-card button.hc-offer'), 'Faire une offre');
-  expect('fiche-connecte', 'boutons', await page.$$eval('.action-bar .duo-capsule', (els) => els.map((el) => el.getAttribute('aria-label')).join(' | ')), 'Appeler | Envoyer un message');
-  await checkDuo(page, 'fiche-connecte', { seller: 'vendeur' });
+  await checkAsideContacts(page, 'fiche-connecte', { seller: 'vendeur' });
   // Avec un compte, le numéro de l'agence : « Appeler » l'appelle.
-  expect('fiche-connecte', 'appel', await page.getAttribute('.duo-bar a.duo-call', 'href'), 'tel:0639984567');
+  expect('fiche-connecte', 'appel', await page.getAttribute('.price-card a.price-card-call', 'href'), 'tel:0639984567');
   expect('fiche-connecte', 'carte des visites', await page.textContent('.visit-card .visit-text'), 'Aucune visite prévueDemandez une visite au vendeur ou à l\'agence.');
-  await checkVisitRequestPill(page, 'fiche-connecte', '.visit-card .visit-request', PHONE_PILL);
+  await checkVisitRequestPill(page, 'fiche-connecte', '.visit-card .visit-request', DESKTOP_PILL, 'Demander une visite');
   if (await page.$('.visit-card a, a.visit-card')) problems.push('fiche-connecte: la carte « Aucune visite prévue » est un lien');
 
-  // Le cœur de la photo : le favori de l'app (favorites), ajouté puis retiré.
+  // « Favori » de l'en-tête (le cœur de la photo sur téléphone) : le favori de l'app (favorites), ajouté puis retiré.
   mark = calls.length;
-  await page.click('.gallery-heart');
-  await page.waitForSelector('.gallery-heart[aria-pressed="true"]');
+  await page.click('.listing-tool-heart');
+  await page.waitForSelector('.listing-tool-heart[aria-pressed="true"]');
   const favorite = once('fiche-connecte', mark, 'favorites', (call) => call.method === 'POST');
   if (favorite) {
     expectJSON('fiche-connecte', 'favori ajouté', favorite.body, { listing_id: FICHE });
     expect('fiche-connecte', 'favori sans doublon', favorite.search, '?on_conflict=user_id,listing_id');
   }
-  await page.click('.gallery-heart');
-  await page.waitForSelector('.gallery-heart[aria-pressed="false"]');
+  await page.click('.listing-tool-heart');
+  await page.waitForSelector('.listing-tool-heart[aria-pressed="false"]');
   const unfavorite = once('fiche-connecte', mark, 'favorites', (call) => call.method === 'DELETE');
   if (unfavorite) expect('fiche-connecte', 'favori retiré', unfavorite.search, `?listing_id=eq.${FICHE}`);
 
@@ -2534,7 +2612,7 @@ try {
 
   // « Envoyer un message » : la conversation de l'annonce (la même), puis Messages.
   mark = calls.length;
-  await page.click('.duo-bar .duo-message');
+  await page.click('.price-card-message');
   await waitForAddress(page, `${base}/messages/?c=${conversationId(1)}`);
   const messageStart = once('message', mark, 'rpc/start_listing_conversation');
   if (messageStart) expectJSON('message', 'arguments de start_listing_conversation', messageStart.body, { p_listing_id: FICHE });
@@ -2545,7 +2623,7 @@ try {
 
   // La conversation ne s'ouvre pas (n° 68) : les mêmes alertes que sur téléphone.
   await checkConversationFailures(member, 'ordinateur', {
-    message: '.duo-bar .duo-message', offer: '.header-card .hc-offer', listing: '.header-card .hc-price-value', retryConversation: conversationId(2),
+    message: '.price-card-message', offer: '.header-card .hc-offer', listing: '.header-card .hc-price-value', retryConversation: conversationId(2),
   });
 
   // Adresses des écrans ouvertes directement, avec le compte.
@@ -2600,9 +2678,9 @@ try {
   await ready(page, 'mon-annonce');
   await common(page, 'mon-annonce', { phone: false });
   await checkWideListing(page, 'mon-annonce');
-  await checkOwnerBar(page, 'mon-annonce');
-  expect('mon-annonce', 'boutons', await page.$$eval('.action-bar .owner-bar-button', (els) => els.map((el) => el.textContent.trim()).join(' | ')), 'Voir les demandes | Gérer l\'annonce');
-  if (await page.$('.hc-offer, .duo-capsule, .visit-card, .visit-request')) problems.push('mon-annonce: offre, message, appel ou visite proposés sur sa propre annonce');
+  await checkOwnerButtons(page, 'mon-annonce');
+  expect('mon-annonce', 'boutons', await page.$$eval('.price-card .owner-bar-button', (els) => els.map((el) => el.textContent.trim()).join(' | ')), 'Voir les demandes | Gérer l\'annonce');
+  if (await page.$('.hc-offer, .duo-capsule, .price-card-message, .price-card-call, .visit-card, .visit-request')) problems.push('mon-annonce: offre, message, appel ou visite proposés sur sa propre annonce');
   if (await page.$('.listing-report')) problems.push('mon-annonce: « Signaler l\'annonce » sur sa propre annonce');
   for (const table of ['rpc/my_offers', 'rpc/my_visit_requests', 'agenda_visits', 'rpc/start_listing_conversation']) {
     if (since(mark, table).length) problems.push(`mon-annonce: ${table} demandé pour sa propre annonce`);
@@ -2620,7 +2698,7 @@ try {
   await page.screenshot({ path: join(out, 'mon-annonce-demandes-1440.png') });
   await page.click('.app-requests .app-page-header .app-round');
   await waitForAddress(page, `${base}/annonce/?id=${MINE}`);
-  await page.waitForSelector('.action-bar .owner-bar-button');
+  await page.waitForSelector('.price-card .owner-bar-button');
   // « Gérer l'annonce » ouvre la modification de l'annonce, comme l'app (le dépôt, page /publier/).
   await page.click('.owner-bar-button >> nth=1');
   await waitForAddress(page, `${base}/publier/?annonce=${MINE}`);
@@ -2631,7 +2709,7 @@ try {
   if (await page.$('.dl-screen')) problems.push('mon-annonce-visite: demande de visite sur sa propre annonce');
   await page.close();
 
-  // « Comparer » de la photo : trois biens au plus, gardés dans l'onglet ; le toast et « Voir » mènent à /comparer/.
+  // « Comparer » de l'en-tête (de la photo sur téléphone) : trois biens au plus, gardés dans l'onglet ; le toast et « Voir » mènent à /comparer/.
   page = await open(member, `/annonce/?id=${FICHE}`, 'comparer');
   for (const [target, text, action, pressed] of [
     [FICHE, 'Ajouté à la comparaison', 'Voir', 'true'],
@@ -2641,13 +2719,13 @@ try {
   ]) {
     if (target !== FICHE) await page.goto(`${base}/annonce/?id=${target}`, { waitUntil: 'networkidle' });
     await ready(page, 'comparer');
-    await page.click('.gallery-compare');
+    await page.click('.listing-tool-compare');
     // Le message du bas de l'app (showToast) : son bouton mène à /comparer/.
     await page.waitForFunction((wanted) => document.querySelector('.app-toast:not(.is-leaving) .app-toast-text')?.textContent === wanted, text, { timeout: 5000 })
       .catch(() => {});
     expect('comparer', `toast de ${target.slice(-2)}`, await page.textContent('.app-toast:not(.is-leaving) .app-toast-text'), text);
     expect('comparer', `bouton du toast de ${target.slice(-2)}`, await page.textContent('.app-toast:not(.is-leaving) .app-toast-action'), action);
-    expect('comparer', `Comparer de ${target.slice(-2)}`, await page.getAttribute('.gallery-compare', 'aria-pressed'), pressed);
+    expect('comparer', `Comparer de ${target.slice(-2)}`, await page.getAttribute('.listing-tool-compare', 'aria-pressed'), pressed);
     if (target === FICHE) {
       await page.waitForTimeout(400);
       await page.screenshot({ path: join(out, 'comparer-toast-1440.png') });
@@ -2656,27 +2734,36 @@ try {
   expectJSON('comparer', 'comparaison gardée dans l’onglet', JSON.parse(await page.evaluate(() => sessionStorage.getItem('nidalo.comparer'))), { ids: [FICHE, SALE, LEASED], referenceId: FICHE });
   await page.click('.app-toast:not(.is-leaving) .app-toast-action');
   await waitForAddress(page, `${base}/comparer/`);
-  await page.waitForSelector('.cmpm-columns');
+  await page.waitForSelector('.cmpd-table');
   await page.waitForLoadState('networkidle');
   expect('comparer', 'titre de la page', await page.title(), 'Comparer · Nidalo');
-  expect('comparer', 'biens comparés', await page.$$eval('.cmpm-column .cmpm-title', (els) => els.map((el) => el.textContent).join(' | ')), 'Appartement 3 pièces | Appartement lumineux avec balcon | T2 vendu loué près du métro');
-  expect('comparer', 'référence', await page.$$eval('.cmpm-column', (els) => els.map((el) => (el.classList.contains('is-reference') ? 'R' : '-')).join('')), 'R--');
-  // Étape 7b : l'écran Comparer du téléphone dans le grand conteneur (1180), sans barre d'onglets ; rien ne déborde
-  // (texte mesuré lui-même : les zones de toucher agrandies par ::after dépassent exprès de leur bouton).
-  expectJSON('comparer', 'grand conteneur [en-tête, tableau, centrés, barre d\'onglets, débordements]', await page.evaluate(() => {
+  // Étape 4 (maquette 09-comparer.html) : un vrai tableau, une colonne par bien (en-têtes de colonne), une ligne par
+  // critère (en-têtes de ligne).
+  expect('comparer', 'biens comparés', await page.$$eval('.cmpd-item .cmpd-title', (els) => els.map((el) => el.textContent).join(' | ')), 'Appartement 3 pièces | Appartement lumineux avec balcon | T2 vendu loué près du métro');
+  expect('comparer', 'référence', await page.$$eval('.cmpd-item', (els) => els.map((el) => (el.classList.contains('is-reference') ? 'R' : '-')).join('')), 'R--');
+  expectJSON('comparer', 'tableau [légende, en-têtes de colonne, en-têtes de ligne = lignes, « Référence », Favoris en cours]', await page.evaluate(() => [
+    document.querySelector('.cmpd-table caption')?.textContent, [...document.querySelectorAll('.cmpd-table thead th[scope="col"]')].map((th) => th.querySelector('.cmpd-title')?.textContent ?? th.textContent),
+    document.querySelectorAll('.cmpd-table tbody th[scope="row"]').length === document.querySelectorAll('.cmpd-table tbody tr').length,
+    document.querySelector('.cmpd-item.is-reference .cmpd-reference')?.textContent, document.querySelector('.site-header-nav a[aria-current="page"]')?.getAttribute('href') ?? null,
+  ]), ['Comparaison de 3 biens', ['Critères', 'Appartement 3 pièces', 'Appartement lumineux avec balcon', 'T2 vendu loué près du métro'], true, 'Référence', '/favoris/']);
+  // Étape 4 : dans le conteneur commun (1200 px au plus, marges de 32), sans barre d'onglets, sous l'en-tête de
+  // l'ordinateur (étape 0) ; rien ne déborde (texte mesuré lui-même : les zones de toucher agrandies par ::after
+  // dépassent exprès de leur bouton).
+  expectJSON('comparer', 'conteneur commun [en-tête, tableau, centrés, barre d\'onglets, en-tête de l\'ordinateur, débordements]', await page.evaluate(() => {
     const box = (selector) => document.querySelector(selector).getBoundingClientRect();
     const bad = ['NaN', 'undefined', 'null', 'Infinity', '[object'].filter((text) => document.body.innerText.includes(text));
     const textWidth = (el) => { const range = document.createRange(); range.selectNodeContents(el); return range.getBoundingClientRect().width; };
-    const clipped = [...document.querySelectorAll('.cmpm button, .cmpm a, .cmpm-value-text, .cmpm-city')].filter((el) => textWidth(el) > el.getBoundingClientRect().width + 1)
+    const clipped = [...document.querySelectorAll('.cmpm button, .cmpm a, .cmpm-value-text, .cmpd-city')].filter((el) => textWidth(el) > el.getBoundingClientRect().width + 1)
       .map((el) => el.textContent.trim().slice(0, 40));
     return [Math.round(box('.cmpm-header').width), Math.round(box('.cmpm-content').width), ['.cmpm-header', '.cmpm-content'].every((selector) => Math.abs(box(selector).left + box(selector).width / 2 - innerWidth / 2) <= 1),
-      getComputedStyle(document.querySelector('.tabbar')).display, document.documentElement.scrollWidth - innerWidth, bad, clipped];
-  }), [1180, 1180, true, 'none', 0, [], []]);
+      document.querySelector('.tabbar') ? getComputedStyle(document.querySelector('.tabbar')).display : 'none',
+      getComputedStyle(document.querySelector('.site-header')).position, document.documentElement.scrollWidth - innerWidth, bad, clipped];
+  }), [1136, 1136, true, 'none', 'sticky', 0, [], []]);
   await fullShot(page, '2-comparer-1440.png');
   await page.click('.cmpm-make-reference >> nth=0');
-  expect('comparer', 'nouvelle référence', await page.$$eval('.cmpm-column', (els) => els.map((el) => (el.classList.contains('is-reference') ? 'R' : '-')).join('')), '-R-');
-  await page.click('.cmpm-column >> nth=2 >> .cmpm-remove');
-  await page.waitForFunction(() => document.querySelectorAll('.cmpm-column').length === 2);
+  expect('comparer', 'nouvelle référence', await page.$$eval('.cmpd-item', (els) => els.map((el) => (el.classList.contains('is-reference') ? 'R' : '-')).join('')), '-R-');
+  await page.click('.cmpd-item >> nth=2 >> .cmpm-remove');
+  await page.waitForFunction(() => document.querySelectorAll('.cmpd-item').length === 2);
   if (!(await page.$('.cmpm-add'))) problems.push('comparer: « Ajouter un bien » absent avec deux biens');
   await page.click('.cmpm-clear');
   expect('comparer', 'fenêtre pour vider', await dialogTitle(page), 'Vider la comparaison ?');
@@ -2690,8 +2777,8 @@ try {
   // Une annonce qui n'existe plus quitte la comparaison ; un serveur qui ne répond pas laisse « Réessayer » et le bien.
   await page.evaluate(([gone, kept]) => sessionStorage.setItem('nidalo.comparer', JSON.stringify({ ids: [gone, kept], referenceId: gone })), [UNKNOWN, FICHE]);
   await page.reload({ waitUntil: 'networkidle' });
-  await page.waitForSelector('.cmpm-columns');
-  expect('comparer-introuvable', 'biens comparés', await page.$$eval('.cmpm-column .cmpm-title', (els) => els.map((el) => el.textContent).join(' | ')), 'Appartement 3 pièces');
+  await page.waitForSelector('.cmpd-table');
+  expect('comparer-introuvable', 'biens comparés', await page.$$eval('.cmpd-item .cmpd-title', (els) => els.map((el) => el.textContent).join(' | ')), 'Appartement 3 pièces');
   expectJSON('comparer-introuvable', 'annonce retirée de la comparaison', JSON.parse(await page.evaluate(() => sessionStorage.getItem('nidalo.comparer'))), { ids: [FICHE], referenceId: FICHE });
   await page.close();
   page = await open(member, '/comparer/', 'comparer-erreur', {
@@ -2701,7 +2788,7 @@ try {
   await page.waitForSelector('.cmpm-center .app-offline');
   // L'état commun « Pas de connexion Internet » de l'app (n° 64).
   expect('comparer-erreur', 'message', await page.textContent('.cmpm-center .app-offline h2'), 'Pas de connexion Internet');
-  if (await page.$('.cmpm-columns')) problems.push('comparer-erreur: tableau affiché sans aucun bien');
+  if (await page.$('.cmpd-table, .cmpm-columns')) problems.push('comparer-erreur: tableau affiché sans aucun bien');
   const brokenBefore = brokenRequests;
   await page.click('.cmpm-center .app-offline-retry');
   for (let i = 0; i < 30 && brokenRequests <= brokenBefore; i += 1) await page.waitForTimeout(100);
@@ -2747,7 +2834,7 @@ try {
     await common(page, name, { phone: false });
     await checkWideListing(page, name);
     await checkHiddenStreet(page, name);
-    await checkDuo(page, name, { seller: 'vendeur' });
+    await checkAsideContacts(page, name, { seller: 'vendeur' });
     expect(name, 'état de l’offre', await page.textContent('.header-card a.hc-offer'), 'Offre en attente');
     expect(name, 'visite confirmée', await page.textContent('.visit-card .visit-title'), /^\S+ \d{1,2} \S+ · 18h00$/);
     expect(name, 'carte des visites', await page.textContent('.visit-card .visit-subtitle'), 'Visite prévue · Visite confirmée');
@@ -2760,11 +2847,8 @@ try {
     await page.waitForTimeout(500);
     await page.screenshot({ path: join(out, `${name}-haut.png`) });
     await fullShot(page, `2-fiche-${width}.png`);
-    // En bas de la page, la barre Duo reste en bas de la fenêtre, à la largeur de la colonne.
-    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-    await page.waitForTimeout(200);
-    const bar = await page.$eval('.duo-bar', (el) => { const r = el.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width), Math.round(innerHeight - r.bottom)]; });
-    expectJSON(name, 'barre Duo en bas de la page', bar, [(width - 720) / 2, 720, 0]);
+    // Au défilement, le prix et ses actions restent sous l'en-tête du site (plus de barre Duo sur ordinateur).
+    await checkStickyPrice(page, name, { shot: `${name}-defilee.png` });
     await page.close();
     await context.close();
   }

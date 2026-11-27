@@ -136,11 +136,9 @@
 .map-column.is-open.is-zone-drawing .results-map-attribution { bottom: calc(76px + env(safe-area-inset-bottom)); }
 .map-column.is-open.is-zone-proposal .results-map-attribution { bottom: calc(162px + env(safe-area-inset-bottom)); }
 
-/* ——— Ordinateur (à partir de 1024 px) : le bandeau, la carte de validation et la pastille sur la colonne de 720 au
-   milieu de l'écran (--map-side, app.css) ; survol à la souris. ——— */
+/* ——— Ordinateur (à partir de 1024 px) : survol à la souris ; la place du bandeau, de la carte de validation et de la
+   pastille dans la colonne de la carte : recherche-ordinateur.css. ——— */
 @media (min-width: 1024px) {
-  .zone-banner, .zone-card { left: var(--map-side); right: var(--map-side); }
-  .zone-chip { left: var(--map-side); }
   .zone-banner-cancel:hover, .zone-tool:not(.is-selected):hover { opacity: 0.8; }
   .zone-size:not([aria-disabled="true"]):hover { background: #F7F6F3; }
   .zone-restart:hover { background: #E4EAF6; }

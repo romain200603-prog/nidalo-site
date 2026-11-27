@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import type { HeaderFact } from '../../lib/listing/rows';
 import {
@@ -11,6 +12,56 @@ import { ExtraIcon } from './icons';
 
 /** Espaces fines comme la maquette (le prix et le prix au m² de l'app). */
 const narrow = (text: string) => text.replace(/[  ]/g, ' ');
+
+/**
+ * Prix et prix au m² (ou « /mois hors charges ») du résumé ; `extra` : ce que l'ordinateur ajoute sur la même ligne
+ * (le rendement brut de la carte « Rentabilité »).
+ */
+export function PriceLine({ price, priceSecondary, extra = null }: { price: string; priceSecondary: string | null; extra?: ReactNode }) {
+  return (
+    <p className="hc-price">
+      <span className="hc-price-value">{narrow(price)}</span>
+      {priceSecondary && <span className="hc-price-secondary">{priceSecondary.replace(/ /g, ' ')}</span>}
+      {extra}
+    </p>
+  );
+}
+
+/** « Faire une offre », ou l'état d'une offre en attente ou acceptée, qui ouvre sa conversation. */
+export function OfferAction({ onOffer, offerState = null, offerBusy = false }: {
+  onOffer: (() => void) | null;
+  offerState?: { label: string; href: string } | null;
+  offerBusy?: boolean;
+}) {
+  if (!onOffer) return null;
+  return offerState ? (
+    <a className="hc-offer" href={offerState.href}>
+      <Icon name="handshake" />
+      {offerState.label}
+    </a>
+  ) : (
+    <button type="button" className="hc-offer" onClick={onOffer} disabled={offerBusy}>
+      <Icon name="handshake" />
+      Faire une offre
+    </button>
+  );
+}
+
+/** Chiffres clés de l'en-tête (surface, pièces, étage…) ; sans chiffre, la marge du bas de la carte. */
+export function HeaderFacts({ facts }: { facts: HeaderFact[] }) {
+  return facts.length > 0 ? (
+    <dl className="hc-facts">
+      {facts.map((fact) => (
+        <div key={fact.caption} className="hc-fact">
+          <dt>{fact.caption}</dt>
+          <dd data-fit="0.8">{fact.value}</dd>
+        </div>
+      ))}
+    </dl>
+  ) : (
+    <div className="hc-end" />
+  );
+}
 
 export function HeaderCard({ category, price, priceSecondary, priceNote, condition, title, location, facts, onOffer, offerState = null, offerBusy = false }: {
   category: string;
@@ -33,40 +84,16 @@ export function HeaderCard({ category, price, priceSecondary, priceNote, conditi
   return (
     <section ref={ref} className="top-card header-card" aria-labelledby="annonce-titre">
       <p className="hc-category">{category}</p>
-      <p className="hc-price">
-        <span className="hc-price-value">{narrow(price)}</span>
-        {priceSecondary && <span className="hc-price-secondary">{priceSecondary.replace(/ /g, ' ')}</span>}
-      </p>
+      <PriceLine price={price} priceSecondary={priceSecondary} />
       {priceNote && <p className="hc-price-note">{priceNote}</p>}
-      {onOffer && (offerState ? (
-        <a className="hc-offer" href={offerState.href}>
-          <Icon name="handshake" />
-          {offerState.label}
-        </a>
-      ) : (
-        <button type="button" className="hc-offer" onClick={onOffer} disabled={offerBusy}>
-          <Icon name="handshake" />
-          Faire une offre
-        </button>
-      ))}
+      <OfferAction onOffer={onOffer} offerState={offerState} offerBusy={offerBusy} />
       {condition && <p className="hc-condition">{condition}</p>}
       <h1 id="annonce-titre" className="hc-title">{title}</h1>
       <p className="hc-location">
         <Icon name="pin" />
         {location}
       </p>
-      {facts.length > 0 ? (
-        <dl className="hc-facts">
-          {facts.map((fact) => (
-            <div key={fact.caption} className="hc-fact">
-              <dt>{fact.caption}</dt>
-              <dd data-fit="0.8">{fact.value}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : (
-        <div className="hc-end" />
-      )}
+      <HeaderFacts facts={facts} />
     </section>
   );
 }
@@ -76,7 +103,7 @@ export function HeaderCard({ category, price, priceSecondary, priceNote, conditi
  * demande envoyée, dont toute la carte ouvre la demande ; sinon « Aucune visite prévue » avec la pastille « Demander »
  * (la visite se demande ici depuis que la barre du bas n'a plus « Visiter »), qui demande un compte comme avant.
  */
-export function VisitCard({ upcoming = null, request = null, now, isRental, onRequest }: {
+export function VisitCard({ upcoming = null, request = null, now, isRental, onRequest, requestLabel = 'Demander' }: {
   upcoming?: AgendaVisit | null;
   request?: VisitRequestRow | null;
   now: Date;
@@ -84,6 +111,8 @@ export function VisitCard({ upcoming = null, request = null, now, isRental, onRe
   isRental: boolean;
   /** « Demander » : le formulaire de demande de visite (connexion d'abord si besoin). */
   onRequest: () => void;
+  /** Texte de la pastille ; sur ordinateur, « Demander une visite » (son nom pour les lecteurs d'écran). */
+  requestLabel?: string;
 }) {
   const icon = <span className="visit-icon" aria-hidden="true"><ExtraIcon name="calendar" /></span>;
   const text = (title: string, subtitle: string) => (
@@ -115,7 +144,7 @@ export function VisitCard({ upcoming = null, request = null, now, isRental, onRe
     <section className="top-card visit-card" aria-label="Visites">
       {icon}
       {text('Aucune visite prévue', `Demandez une visite au ${isRental ? 'propriétaire' : 'vendeur'} ou à l'agence.`)}
-      <button type="button" className="visit-agenda visit-request" onClick={onRequest} aria-label="Demander une visite">Demander</button>
+      <button type="button" className="visit-agenda visit-request" onClick={onRequest} aria-label="Demander une visite">{requestLabel}</button>
     </section>
   );
 }

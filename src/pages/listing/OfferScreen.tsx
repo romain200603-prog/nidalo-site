@@ -14,7 +14,7 @@ import { offerYields, type Profitability } from '../../lib/listing/profitability
 // Dans Messages, la même feuille répond à une offre (contre-offre, counter_offer), comme l'app.
 // Pour une vente avec un loyer (carte « Rentabilité » de la fiche), la rentabilité suit le montant tapé (offerYields).
 
-export function OfferScreen({ conversationId, title, price, parent = null, profitability = null, onClose, onSent }: {
+export function OfferScreen({ conversationId, title, price, parent = null, profitability = null, heading = 'h1', onClose, onSent }: {
   conversationId: string;
   /** Titre et prix du bien enregistrés avec la conversation (ListingSnapshot). */
   title: string;
@@ -23,6 +23,8 @@ export function OfferScreen({ conversationId, title, price, parent = null, profi
   parent?: { id: string; amount: number } | null;
   /** Entrées de la carte « Rentabilité » de la fiche : la rentabilité au montant proposé s'affiche sous le montant. */
   profitability?: Profitability | null;
+  /** Niveau du titre : h2 dans Messages sur ordinateur, où la liste (et son h1) reste à côté. */
+  heading?: 'h1' | 'h2';
   onClose: () => void;
   /** Offre enregistrée : la fiche relit les offres et revient. */
   onSent: () => Promise<void>;
@@ -79,13 +81,14 @@ export function OfferScreen({ conversationId, title, price, parent = null, profi
   const gap = amount !== null && price > 0 ? amount / price - 1 : null;
   const yields = useMemo(() => (profitability ? offerYields(profitability, price, amount) : null), [profitability, price, amount]);
   const described = [gap !== null ? 'offre-ecart' : null, yields ? 'offre-rentabilite' : null].filter(Boolean).join(' ');
+  const Heading = heading;
 
   return (
     <div className="wrap wrap-narrow dl-screen dl-offer-screen">
       {/* Dans la feuille de la fiche (téléphone), l'en-tête sert aussi à la tirer vers le bas pour la fermer. */}
       <header className="dl-screen-head" data-sheet-grab="">
         <div className="dl-screen-titles">
-          <h1 tabIndex={-1}>{parent ? 'Faire une contre-offre' : 'Faire une offre'}</h1>
+          <Heading tabIndex={-1}>{parent ? 'Faire une contre-offre' : 'Faire une offre'}</Heading>
           <p>{title} · prix affiché {formatPrice(price)}</p>
         </div>
         <button type="button" className="dl-screen-close" onClick={onClose} aria-label="Fermer" title="Fermer">

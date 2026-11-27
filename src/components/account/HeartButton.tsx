@@ -7,7 +7,12 @@ import '../../styles/pieces-app.css';
  * Ajouter demande un compte (la fenêtre de connexion s'ouvre) ; retirer, jamais.
  * Styles : `heart-photo` (rond blanc sur une photo), `heart-plain` (sans fond), ou la classe d'un autre bouton.
  */
-export function HeartButton({ listingId, className = 'heart-button heart-photo' }: { listingId: string; className?: string }) {
+export function HeartButton({ listingId, className = 'heart-button heart-photo', text }: {
+  listingId: string;
+  className?: string;
+  /** Libellé visible (« Favori » de la fiche sur ordinateur) : il nomme le bouton, l'état est dans aria-pressed. */
+  text?: string;
+}) {
   const favorites = useFavorites();
   const active = favorites.items.some((item) => item.listing_id === listingId);
   const label = active ? 'Retirer des favoris' : 'Ajouter aux favoris';
@@ -16,7 +21,7 @@ export function HeartButton({ listingId, className = 'heart-button heart-photo' 
       type="button"
       className={`${className}${active ? ' is-active' : ''}`}
       aria-pressed={active}
-      aria-label={label}
+      aria-label={text ? undefined : label}
       title={label}
       onClick={(event) => {
         event.preventDefault();
@@ -25,6 +30,7 @@ export function HeartButton({ listingId, className = 'heart-button heart-photo' 
       }}
     >
       <HeartIcon filled={active} ready={favorites.status === 'ready'} />
+      {text && <span>{text}</span>}
     </button>
   );
 }
