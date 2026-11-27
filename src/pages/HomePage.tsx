@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { BrandMark } from '../components/BrandMark';
 import { HomeListingCard } from '../components/HomeListingCard';
 import { Icon } from '../components/Icon';
 import type { IconName } from '../components/iconPaths';
@@ -25,13 +26,18 @@ import type { PlaceSuggestion } from '../lib/places';
 import { chosenFromSuggestion, defaultDraft, paramsFromDraft, search, switchMode, type Result, type SearchDraft } from '../lib/search';
 import { loadProjectSearch, loadViewedListings, SIMILAR_LIMIT } from '../lib/homeDesktop';
 import { recentlyViewedIds } from '../lib/recentlyViewed';
+import { useDesktop } from '../lib/desktop';
+import { HomeComputerBlocks, HomeHero } from './home/ComputerBlocks';
 import '../styles/accueil-app.css';
+import '../styles/accueil-ordinateur.css';
 
 // Accueil de l'app (Features/Home : HomeView.swift, HomeCategoryCard.swift, HomeSections.swift), à toutes les
 // largeurs : barre du haut sans fond (logo, nom, cloche), carte des catégories dont les filtres s'ouvrent dans la carte,
 // « Reprendre ma recherche », puis les sections de biens réels, toutes avec la grande carte de l'app (HomeListingCard,
-// version 1.0.1) et la pastille de leur section. À partir de 1024 px, le même écran élargi au grand conteneur (1180 px),
-// sous le bandeau bleu de l'accueil (accueil-app.css).
+// version 1.0.1) et la pastille de leur section. À partir de 1024 px (maquettes 01 et 03 de la version ordinateur,
+// accueil-ordinateur.css) : l'en-tête du site remplace la barre du haut ; au-dessus de la carte des catégories, le haut
+// de page (pages/home/ComputerBlocks.tsx) ; les mêmes sections, puis les trois blocs du bas. Mêmes données, mêmes
+// actions ; sous 1024 px, rien ne change.
 
 const MODES: SearchMode[] = ['buy', 'rent', 'invest', 'hotel'];
 
@@ -191,8 +197,7 @@ function HomeTopBar({ unread }: { unread: number }) {
   return (
     <div className="home-app-top">
       <h1 className="home-app-brand">
-        <img className="home-app-logo" src="/assets/logo-maison.svg" width={32} height={27} alt="" />
-        <span className="home-app-word" aria-hidden="true">NID{'\u039B'}LO</span>
+        <BrandMark prefix="home-app" />
         <span className="visually-hidden">Nidalo</span>
       </h1>
       <a className="home-app-bell" href={accountPath('notifications')} aria-label={notificationsLabel(unread)}>
@@ -222,6 +227,7 @@ type CategoryCardProps = {
  * courbe de l'app ; avec « Réduire les animations », sans mouvement.
  */
 function HomeCategoryCard({ mode, draft, changeMode, update, choosePlace, startSearch, openFilters }: CategoryCardProps) {
+  const desktop = useDesktop();
   const filtersId = useId();
   const [open, setOpen] = useState(false);
   const [entering, setEntering] = useState(false);
@@ -291,6 +297,27 @@ function HomeCategoryCard({ mode, draft, changeMode, update, choosePlace, startS
   const shown = open || leavingTop !== null;
   const fields = categoryFields(draft);
   const hint = categoryMoreHint(mode);
+  const more = (
+    <button type="button" className="home-more" onClick={openFilters} aria-label={`Plus de critères : ${hint}`}>
+      <Icon name="sliders" />
+      <span className="home-more-title">Plus de critères</span>
+      <span className="home-more-hint">{hint}</span>
+      <Icon name="chevronRight" className="icon home-more-chevron" />
+    </button>
+  );
+  const submit = (
+    <button type="submit" className="home-search-button">
+      <Icon name="search" />
+      <span className="home-search-title">{categorySearchTitle(mode)}</span>
+      <Icon name="arrowRight" />
+    </button>
+  );
+  const reduce = (
+    <button type="button" className="home-collapse" onClick={() => collapse(true)} aria-label="Réduire les filtres">
+      <Icon name="chevronUp" />
+      Réduire
+    </button>
+  );
   return (
     <form ref={card} className="home-category" role="search" aria-label="Rechercher un bien" onSubmit={startSearch}>
       <ModeTabs mode={mode} onChange={changeMode} accordion={{ open, controls: filtersId, onToggle: toggle }} />
@@ -319,21 +346,21 @@ function HomeCategoryCard({ mode, draft, changeMode, update, choosePlace, startS
               <CriterionTile key={`${mode}-${tile.id}`} tile={tile} onApply={update} />
             ))}
           </div>
-          <button type="button" className="home-more" onClick={openFilters} aria-label={`Plus de critères : ${hint}`}>
-            <Icon name="sliders" />
-            <span className="home-more-title">Plus de critères</span>
-            <span className="home-more-hint">{hint}</span>
-            <Icon name="chevronRight" className="icon home-more-chevron" />
-          </button>
-          <button type="submit" className="home-search-button">
-            <Icon name="search" />
-            <span className="home-search-title">{categorySearchTitle(mode)}</span>
-            <Icon name="arrowRight" />
-          </button>
-          <button type="button" className="home-collapse" onClick={() => collapse(true)} aria-label="Réduire les filtres">
-            <Icon name="chevronUp" />
-            Réduire
-          </button>
+          {/* Ordinateur : « Plus de critères », « Réduire » et la recherche sur une ligne, dans cet ordre (maquette 03) ;
+              téléphone : les mêmes boutons, « Réduire » en dernier, comme l'app. */}
+          {desktop ? (
+            <div className="home-category-actions">
+              {more}
+              {reduce}
+              {submit}
+            </div>
+          ) : (
+            <>
+              {more}
+              {submit}
+              {reduce}
+            </>
+          )}
         </div>
       )}
     </form>
@@ -397,6 +424,7 @@ type PhoneHomeProps = CategoryCardProps & {
 };
 
 function PhoneHome({ mode, draft, drafts, feed, feedStatus, onRetryFeed, extras, changeMode, update, choosePlace, startSearch, openFilters }: PhoneHomeProps) {
+  const desktop = useDesktop();
   const session = useSession();
   const userId = session.status === 'signedIn' ? session.userId : null;
   const saved = useStore(savedSearchesStore);
@@ -426,7 +454,8 @@ function PhoneHome({ mode, draft, drafts, feed, feedStatus, onRetryFeed, extras,
   const highlightsOf = (row: ListingRow) => highlightsFor(row, null);
   return (
     <div className="home-app">
-      <HomeTopBar unread={unread} />
+      {/* Ordinateur : l'en-tête du site porte le logo et la cloche ; le haut de page (et son titre h1) les remplace. */}
+      {desktop ? <HomeHero /> : <HomeTopBar unread={unread} />}
       <HomeCategoryCard mode={mode} draft={draft} changeMode={changeMode} update={update} choosePlace={choosePlace}
         startSearch={startSearch} openFilters={openFilters} />
       {resume && <ResumeSearchCard item={resume} />}
@@ -520,6 +549,7 @@ function PhoneHome({ mode, draft, drafts, feed, feedStatus, onRetryFeed, extras,
           </section>
         )}
       </div>
+      {desktop && <HomeComputerBlocks hotel={sections ? feed?.hotel ?? null : null} />}
     </div>
   );
 }
@@ -628,7 +658,7 @@ export function HomePage() {
       // une coupure de connexion le dit, comme l'app.
       .catch((error: unknown) => {
         if (cancelled) return;
-        setFeed({ opportunities: [], newest: [], priceDrops: [] });
+        setFeed({ opportunities: [], newest: [], priceDrops: [], hotel: null });
         setFeedOffline(isOfflineFailure(error));
       })
       .finally(() => { if (!cancelled) setFeedLoading(false); });

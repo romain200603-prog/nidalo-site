@@ -1,7 +1,7 @@
-/* Page Messages : une vraie messagerie, avec les écrans de l'app iPhone à toutes les largeurs. Une seule colonne, comme
-   dans l'app : la liste, puis la conversation poussée par-dessus avec une flèche retour ; la page occupe la fenêtre
-   au-dessus de la barre d'onglets, chaque écran avec son propre défilement. À partir de 1024 px, ces écrans dans la
-   colonne de 720 px au centre (--app-column), le fond de la page de chaque côté. */
+/* Page Messages : une vraie messagerie, avec les écrans de l'app iPhone. Sous 1024 px, une seule colonne, comme dans
+   l'app : la liste, puis la conversation poussée par-dessus avec une flèche retour ; la page occupe la fenêtre
+   au-dessus de la barre d'onglets, chaque écran avec son propre défilement. À partir de 1024 px, la liste et la
+   conversation côte à côte (messages-ordinateur.css). */
 
 /* Les écrans « Faire une offre » et « Demande de visite » de la fiche s'ouvrent aussi dans la conversation : leurs
    styles, communs avec la page d'une annonce, sont repris ici par @import (ecrans-fiche-telephone.css). */
@@ -682,10 +682,5 @@ body:has(.dm.is-thread) { padding-bottom: 0; }
 body:has(.dm.is-thread) .tabbar { display: none; }
 body:has(.dm.is-thread) .page-fill { height: 100vh; height: 100dvh; }
 
-/* ——— À partir de 1024 px : les mêmes écrans dans la colonne de 720 px au centre, barres du haut et du bas comprises,
-   le fond de la page de chaque côté ——— */
-@media (min-width: 1024px) {
-  .dm { width: 100%; max-width: var(--app-column); margin: 0 auto; }
-  /* « Faire une offre » à la largeur de la colonne (720, 688 de contenu), comme sur la page d'une annonce. */
-  .dm-offer-host .wrap-narrow { max-width: none; }
-}
+/* ——— À partir de 1024 px : la liste et la conversation côte à côte (messages-ordinateur.css, version ordinateur,
+   étape 5) ——— */

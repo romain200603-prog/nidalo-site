@@ -9,9 +9,9 @@ import { Modal } from './Dialogs';
 import { ExtraIcon } from './icons';
 
 // Galerie de la fiche (ListingDetailView.swift 270–365) et visionneuse plein écran (ListingPhotoViewer.swift,
-// MediaPager.swift) : photo de 325 de haut sous la barre d'état (sur ordinateur, la largeur de la colonne et la même
-// proportion), photos à faire défiler, points et compteur « 2/8 » ; Retour, Partager, Favori et Comparer en ronds
-// blancs de 44 posés dessus. Toucher (ou cliquer) une photo l'ouvre en grand, avec ses flèches et celles du clavier ;
+// MediaPager.swift) : photo de 325 de haut sous la barre d'état, photos à faire défiler, points et compteur « 2/8 » ;
+// Retour, Partager, Favori et Comparer en ronds blancs de 44 posés dessus (sur ordinateur, les photos en grille et
+// « Voir les N photos », les quatre boutons dans l'en-tête de la fiche). Toucher (ou cliquer) une photo l'ouvre en grand, avec ses flèches et celles du clavier ;
 // en fermant, la galerie montre la dernière photo vue.
 
 function scrollToPage(el: HTMLElement | null, index: number, smooth: boolean) {
@@ -253,7 +253,7 @@ function CompareRound({ listingId, onClick }: { listingId: string; onClick: () =
   );
 }
 
-export function Gallery({ photos, propertyType, onShare, onCompare, listingId, back }: {
+export function Gallery({ photos, propertyType, onShare, onCompare, listingId, back, desktop = false }: {
   photos: PhotoRow[];
   /** Type du bien : la teinte d'une annonce sans photo. */
   propertyType: string;
@@ -264,6 +264,11 @@ export function Gallery({ photos, propertyType, onShare, onCompare, listingId, b
   listingId: string;
   /** Retour, posé sur la photo. */
   back: { href: string; label: string; onClick?: (event: MouseEvent<HTMLAnchorElement>) => void };
+  /**
+   * Ordinateur (fiche-ordinateur.css) : les photos en grille, sans points ni compteur, et « Voir les N photos » qui ouvre
+   * la visionneuse ; Retour, Partager, Favori et Comparer sont dans l'en-tête de la fiche (DesktopLayout.tsx).
+   */
+  desktop?: boolean;
 }) {
   const strip = useRef<HTMLDivElement>(null);
   const [page, setPage] = useState(0);
@@ -297,7 +302,7 @@ export function Gallery({ photos, propertyType, onShare, onCompare, listingId, b
           </button>
         ))}
       </div>
-      {count > 1 && (
+      {count > 1 && !desktop && (
         <>
           <div className="gallery-dots" aria-hidden="true">
             {photos.map((photo, index) => <span key={photo.id} className={index === page ? 'on' : undefined} />)}
@@ -305,18 +310,25 @@ export function Gallery({ photos, propertyType, onShare, onCompare, listingId, b
           <span className="gallery-counter" aria-hidden="true">{page + 1}/{count}</span>
         </>
       )}
-      <div className="gallery-bar">
-        <a className="gallery-back" href={back.href} onClick={back.onClick} aria-label="Retour" title={back.label}>
-          <Icon name="chevronLeft" />
-        </a>
-        <div className="gallery-actions">
-          <button type="button" className="gallery-action" onClick={onShare} aria-label="Partager l'annonce" title="Partager l'annonce">
-            <ExtraIcon name="shareUp" />
-          </button>
-          <HeartButton listingId={listingId} className="gallery-action gallery-heart" />
-          {onCompare && <CompareRound listingId={listingId} onClick={onCompare} />}
+      {desktop ? count > 1 && (
+        <button type="button" className="gallery-more" onClick={() => setViewer(0)}>
+          <Icon name="layoutGrid" />
+          Voir les {count} photos
+        </button>
+      ) : (
+        <div className="gallery-bar">
+          <a className="gallery-back" href={back.href} onClick={back.onClick} aria-label="Retour" title={back.label}>
+            <Icon name="chevronLeft" />
+          </a>
+          <div className="gallery-actions">
+            <button type="button" className="gallery-action" onClick={onShare} aria-label="Partager l'annonce" title="Partager l'annonce">
+              <ExtraIcon name="shareUp" />
+            </button>
+            <HeartButton listingId={listingId} className="gallery-action gallery-heart" />
+            {onCompare && <CompareRound listingId={listingId} onClick={onCompare} />}
+          </div>
         </div>
-      </div>
+      )}
       <PhotoViewer
         photos={photos}
         propertyType={propertyType}

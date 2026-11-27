@@ -23,6 +23,19 @@ export function SpecCard({ children, labelledBy, className }: { children: ReactN
   return <section ref={ref} className={`spec-card ${className ?? ''}`} aria-labelledby={labelledBy}>{children}</section>;
 }
 
+/**
+ * Les chiffres (`main`) et leur détail (`side`) d'une carte : sur ordinateur, côte à côte quand la carte a la place
+ * (fiche-ordinateur.css) ; sur téléphone, deux blocs sans marge ni bord, les uns sous les autres comme avant.
+ */
+export function SpecSplit({ main, side }: { main: ReactNode; side: ReactNode }) {
+  return (
+    <div className="spec-split">
+      <div className="spec-split-main">{main}</div>
+      <div className="spec-split-side">{side}</div>
+    </div>
+  );
+}
+
 /** Titre de carte 24/30 et sous-titre 14,5/20, sans pastille d'icône (titre de section de l'app). */
 export function SpecCardHeader({ id, title, subtitle }: { id: string; title: string; subtitle: string }) {
   return (

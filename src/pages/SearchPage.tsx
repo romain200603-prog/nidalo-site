@@ -26,16 +26,18 @@ import { highlightsFor } from '../lib/highlights';
 import type { SearchMode } from '../lib/labels';
 import { listingPath, PATHS } from '../lib/paths';
 import { canGrow, circle, distanceMeters, isUsable as isUsableZone, largestLoop, rounded, scaled, SCALE_STEP, simplified, smoothed } from '../lib/drawnZone';
-import { sortedForMap, type MapPanelHeight, type MapSort } from '../lib/mapPanel';
+import { mapPanelSubtitle, sortedForMap, type MapPanelHeight, type MapSort } from '../lib/mapPanel';
 import type { Coordinate, PlaceSuggestion } from '../lib/places';
 import { isOfflineFailure, SEARCH_LOAD_ERROR } from '../lib/loadFailure';
 import { recentlyViewedIds } from '../lib/recentlyViewed';
+import { useDesktop } from '../lib/desktop';
 import {
   activeFilterCount, boxAround, chosenFromSuggestion, defaultDraft, draftFromParams, drawnZoneOf, effectiveSort, filterChips,
   locationFor, paramsFromDraft, placeLabel, search, SORT_LABELS, sortOptions, type BoundingBox, type Result, type SearchDraft,
   type SortOrder, switchMode,
 } from '../lib/search';
 import '../styles/recherche-app.css';
+import '../styles/recherche-ordinateur.css';
 
 /** `offline` : la demande n'a pas pu partir (LoadFailure.isOffline de l'app) : « Pas de connexion Internet ». */
 type Failure = { offline: boolean };
@@ -99,9 +101,10 @@ const LIST_PAGE = 100;
 /**
  * Fin de la liste : les biens suivants dès qu'elle approche de l'écran. Ils sont déjà lus (tous les résultats sont
  * en mémoire, pour la carte) : ils s'affichent aussitôt, sans la petite roue de l'app. Remonté à chaque page affichée,
- * l'observateur repart et relance la suite si la fin est encore visible.
+ * l'observateur repart et relance la suite si la fin est encore visible. `pane` (ordinateur) : la liste défile dans sa
+ * colonne, à côté de la carte ; la fin est guettée dans cette colonne, avec la même avance.
  */
-function ListEnd({ onReach }: { onReach: () => void }) {
+function ListEnd({ onReach, pane = null }: { onReach: () => void; pane?: string | null }) {
   const ref = useRef<HTMLDivElement>(null);
   const reach = useRef(onReach);
   reach.current = onReach;
@@ -114,15 +117,30 @@ function ListEnd({ onReach }: { onReach: () => void }) {
     }
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) reach.current();
-    }, { rootMargin: '0px 0px 600px 0px' });
+    }, { root: pane ? element.closest(pane) : null, rootMargin: '0px 0px 600px 0px' });
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [pane]);
   return <div ref={ref} className="results-end" aria-hidden="true" />;
+}
+
+/** « Réduire les animations » : la liste va au bien choisi sans défiler en douceur. */
+function reducedMotion(): boolean {
+  try {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
 }
 
 export function SearchPage() {
   useRailScroll();
+  /**
+   * Ordinateur (≥ 1024 px) : la liste et la carte côte à côte, toujours visibles (recherche-ordinateur.css). Les mêmes
+   * critères, recherches et actions ; seuls changent la place des éléments et ce qui n'a de sens qu'avec la carte en
+   * plein écran du téléphone (capsule « Carte », ligne du haut et panneau du bas de la carte).
+   */
+  const desktop = useDesktop();
   const [draft, setDraft] = useState<SearchDraft>(readDraft);
   const [placeText, setPlaceText] = useState(draft.place);
   /**
@@ -235,9 +253,10 @@ export function SearchPage() {
     window.history.replaceState(window.history.state, '', query ? `?${query}` : window.location.pathname);
   }, [mapOpen]);
 
-  // La carte en plein écran se ferme avec Échap (pas celui qui referme les suggestions de lieu ou les filtres).
+  // La carte en plein écran se ferme avec Échap (pas celui qui referme les suggestions de lieu ou les filtres). Sur
+  // ordinateur, la carte est à côté de la liste : rien à fermer, l'adresse garde « vue=carte » si elle l'a.
   useEffect(() => {
-    if (!mapOpen) return;
+    if (!mapOpen || desktop) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !event.defaultPrevented && !document.querySelector('dialog[open]')) setMapOpen(false);
     };
@@ -247,7 +266,7 @@ export function SearchPage() {
       window.removeEventListener('keydown', onKey);
       document.body.classList.remove('map-is-open');
     };
-  }, [mapOpen]);
+  }, [mapOpen, desktop]);
 
   // Ajustement d'une zone : la même recherche avec la zone proposée à la place du lieu, 250 ms après le dernier − ou +
   // (le calcul en cours est abandonné) ; la carte n'est pas recadrée.
@@ -270,21 +289,30 @@ export function SearchPage() {
     };
   }, [proposalZone, key]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Carte fermée : le tracé ou l'ajustement en cours s'arrête (la zone d'avant reste).
+  // Carte fermée : le tracé ou l'ajustement en cours s'arrête (la zone d'avant reste). Sur ordinateur, la carte ne se
+  // ferme pas.
   useEffect(() => {
-    if (!mapOpen) setZoneEditing(null);
-  }, [mapOpen]);
+    if (!mapOpen && !desktop) setZoneEditing(null);
+  }, [mapOpen, desktop]);
 
   // Le bouton qui avait le focus a disparu (crayon qui change de forme, bandeau, carte de validation ou pastille
-  // refermés) : le focus du clavier va au bouton « Voir les biens » pendant l'ajustement, au crayon sinon.
+  // refermés) : le focus du clavier va au bouton « Voir les biens » pendant l'ajustement, au crayon sinon. La carte de
+  // l'ordinateur est toujours affichée.
   const zonePosed = drawnZoneOf(draft) !== null;
   useEffect(() => {
-    if (!mapOpen || (document.activeElement && document.activeElement !== document.body)) return;
+    if ((!mapOpen && !desktop) || (document.activeElement && document.activeElement !== document.body)) return;
     const target = zoneEditing?.step === 'proposal' ? '.map-column .zone-commit' : '.map-column .zone-pencil';
     document.querySelector<HTMLElement>(target)?.focus({ preventScroll: true });
   }, [zoneEditing?.step, zonePosed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => window.clearTimeout(drawHintTimer.current), []);
+
+  // Ordinateur : le bien choisi sur la carte est encadré dans la liste, qui défile jusqu'à lui s'il est hors de vue.
+  useEffect(() => {
+    if (!desktop || selectedId === null) return;
+    document.querySelector('.search-results .listing-card.is-selected')
+      ?.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
+  }, [selectedId, desktop]);
 
   const chips = filterChips(draft);
   const filterCount = activeFilterCount(draft);
@@ -404,6 +432,31 @@ export function SearchPage() {
   const proposalLoading = proposalZone !== null && proposalFound?.zone !== proposalZone;
   /** Biens montrés sur la carte : pendant l'ajustement, ceux de la zone proposée (les précédents jusqu'au calcul fini). */
   const mapResults = proposalZone ? (proposalFound?.results ?? results) : results;
+  /** « Agrandir la zone » du panneau de la carte (zone dessinée sans aucun bien) ; `null` quand il n'est pas proposé. */
+  const growZone = loading || !postedZone || !canGrow(postedZone) ? null : () => proposeZone(scaled(postedZone, SCALE_STEP), 'Ajustez votre zone');
+  /** Ordinateur : sous le nombre de biens, ce que dit le panneau de la carte (« Dans votre zone dessinée », le lieu). */
+  const subtitle = mapPanelSubtitle(placeLabel(draft), postedZone !== null);
+
+  const modeTabs = (
+    <ModeTabs mode={draft.mode} onChange={(mode) => {
+      if (mode === draft.mode) return;
+      byMode.current[draft.mode] = draft;
+      apply(switchMode(draft, mode, byMode.current[mode]));
+    }} className="mode-tabs-search" />
+  );
+
+  // Tri : « Triées par pertinence » et son chevron sous le nombre (téléphone) ; sur ordinateur, « Pertinence » entre ses
+  // flèches et son chevron, après « Enregistrer » (maquette 04). Le menu natif, transparent, les couvre.
+  const sortSelect = (
+    <label className="sort-select">
+      {desktop && <Icon name="arrowUpDown" />}
+      <span aria-hidden="true">{desktop ? SORT_LABELS[sort] : `Triées par ${SORT_LABELS[sort].toLowerCase()}`}</span>
+      <Icon name="chevronDown" />
+      <select aria-label="Tri" value={sort} onChange={(event) => apply({ ...draft, sort: event.target.value as SortOrder })}>
+        {sortOptions(draft.mode).map((option) => <option key={option} value={option}>{SORT_LABELS[option]}</option>)}
+      </select>
+    </label>
+  );
 
   const placeField = () => (
     <PlaceField
@@ -427,26 +480,27 @@ export function SearchPage() {
   );
 
   return (
-    <Page section="search" wide>
+    // Ordinateur : la page tient dans la fenêtre, sans pied de page (la liste défile dans sa colonne).
+    <Page section="search" wide fill={desktop}>
       <div className="search-layout">
         <div className="search-column">
-          {/* Une seule ligne en haut, qui ne défile pas : retour, lieu, filtres (SearchPlaceField). */}
+          {/* Une seule ligne en haut, qui ne défile pas : retour, lieu, filtres (SearchPlaceField). Sur ordinateur, le
+              bandeau blanc de la maquette : retour, catégories, lieu, « Filtres ». */}
           <div className="search-app-top">
             <a className="search-back" href={PATHS.home} onClick={leaveSearch} aria-label="Retour">
               <span className="search-back-circle"><Icon name="arrowLeft" /></span>
             </a>
+            {desktop && modeTabs}
             {placeField()}
-            <FiltersButton count={filterCount} onClick={() => setFiltersOpen(true)} />
+            <FiltersButton count={filterCount} onClick={() => setFiltersOpen(true)} label={desktop ? 'Filtres' : undefined} />
           </div>
           <div className="search-head">
             <h1 className="visually-hidden">Votre recherche</h1>
-            <ModeTabs mode={draft.mode} onChange={(mode) => {
-              if (mode === draft.mode) return;
-              byMode.current[draft.mode] = draft;
-              apply(switchMode(draft, mode, byMode.current[mode]));
-            }} className="mode-tabs-search" />
-            {/* Critères actifs : le libellé ouvre les filtres, la croix retire le critère. */}
+            {!desktop && modeTabs}
+            {/* Critères actifs : le libellé ouvre les filtres, la croix retire le critère. Sur ordinateur, la zone dessinée
+                en tête de la rangée (sur le téléphone, elle est sur la carte). */}
             <div className="chips-row">
+              {desktop && postedZone && <ZoneChip onOpen={() => setFiltersOpen(true)} onRemove={clearZone} withIcon />}
               <CriterionChipsRow chips={chips} onOpen={() => setFiltersOpen(true)}
                 onRemove={(id) => {
                   const chip = chips.find((c) => c.id === id);
@@ -455,59 +509,63 @@ export function SearchPage() {
             </div>
           </div>
 
-          <p className="visually-hidden" aria-live="polite">{statusText}</p>
-          {showsHeader && (
-            <div className="results-head">
-              <div className="results-count">
-                <h2>{countText}</h2>
-                {/* « Triées par pertinence » et son chevron ; le menu natif, transparent, les couvre. */}
-                <label className="sort-select">
-                  <span aria-hidden="true">Triées par {SORT_LABELS[sort].toLowerCase()}</span>
-                  <Icon name="chevronDown" />
-                  <select aria-label="Tri" value={sort} onChange={(event) => apply({ ...draft, sort: event.target.value as SortOrder })}>
-                    {sortOptions(draft.mode).map((option) => <option key={option} value={option}>{SORT_LABELS[option]}</option>)}
-                  </select>
-                </label>
+          {/* Les résultats ; sur ordinateur, la colonne de gauche, qui défile seule. */}
+          <div className="search-results">
+            <p className="visually-hidden" aria-live="polite">{statusText}</p>
+            {showsHeader && (
+              <div className="results-head">
+                <div className="results-count">
+                  <h2>{countText}</h2>
+                  {desktop ? (subtitle ? <p className="results-subtitle">{subtitle}</p> : null) : sortSelect}
+                </div>
+                <SaveSearchButton saved={savedSearch !== null} onOpen={openSave} />
+                {desktop && sortSelect}
               </div>
-              <SaveSearchButton saved={savedSearch !== null} onOpen={openSave} />
-            </div>
-          )}
+            )}
 
-          {/* Chargement sans bien à montrer : la roue grise de l'app (ProgressView), 32 sous les critères ; avec des biens,
-              ils restent jusqu'aux suivants. « Recherche… » pour les lecteurs d'écran (ligne cachée au-dessus). */}
-          {loading && results.length === 0 && <div className="search-loading" aria-hidden="true"><span className="spinner" /></div>}
-          {/* Échec : « Pas de connexion Internet » sans réseau, sinon « Erreur » et le texte de l'app (SearchViewModel). */}
-          {!loading && failure && (failure.offline
-            ? <OfflineState onRetry={() => setAttempt((a) => a + 1)} className="search-failure" />
-            : <LoadErrorState title="Erreur" message={SEARCH_LOAD_ERROR} onRetry={() => setAttempt((a) => a + 1)} className="search-failure" />)}
-          {!loading && !failure && results.length === 0 && (
-            <SearchNoResults
-              draft={draft}
-              savedSearch={savedSearch}
-              onApply={apply}
-              onAlert={openSave}
-              onEnableAlert={enableAlert}
-              onClear={() => apply(defaultDraft(draft.mode))}
-            />
-          )}
-          {results.length > 0 && (
-            <>
-              <div className="results-list">
-                {results.slice(0, listCount).map(({ row, highlights }) => (
-                  <ListingCard key={row.id} row={row} content={cardContent(row, draft.mode, highlights)}
-                    selected={row.id === selectedId} headingLevel="h3" showsBadge alreadySeen={seen.has(row.id)} />
-                ))}
-              </div>
-              {results.length > listCount && <ListEnd key={listCount} onReach={() => setListCount((count) => count + LIST_PAGE)} />}
-            </>
-          )}
+            {/* Chargement sans bien à montrer : la roue grise de l'app (ProgressView), 32 sous les critères ; avec des biens,
+                ils restent jusqu'aux suivants. « Recherche… » pour les lecteurs d'écran (ligne cachée au-dessus). */}
+            {loading && results.length === 0 && <div className="search-loading" aria-hidden="true"><span className="spinner" /></div>}
+            {/* Échec : « Pas de connexion Internet » sans réseau, sinon « Erreur » et le texte de l'app (SearchViewModel). */}
+            {!loading && failure && (failure.offline
+              ? <OfflineState onRetry={() => setAttempt((a) => a + 1)} className="search-failure" />
+              : <LoadErrorState title="Erreur" message={SEARCH_LOAD_ERROR} onRetry={() => setAttempt((a) => a + 1)} className="search-failure" />)}
+            {!loading && !failure && results.length === 0 && (
+              <SearchNoResults
+                draft={draft}
+                savedSearch={savedSearch}
+                onApply={apply}
+                onAlert={openSave}
+                onEnableAlert={enableAlert}
+                onClear={() => apply(defaultDraft(draft.mode))}
+                // Ordinateur : « Agrandir la zone » du panneau de la carte du téléphone, ici avec les pistes ; caché pendant le
+                // tracé et l'ajustement, comme le panneau qui glisse alors hors de l'écran.
+                onGrowZone={desktop && postedZone && !zoneEditing ? growZone : null}
+              />
+            )}
+            {results.length > 0 && (
+              <>
+                <div className="results-list">
+                  {results.slice(0, listCount).map(({ row, highlights }) => (
+                    <ListingCard key={row.id} row={row} content={cardContent(row, draft.mode, highlights)}
+                      selected={row.id === selectedId} headingLevel="h3" showsBadge alreadySeen={seen.has(row.id)} />
+                  ))}
+                </div>
+                {results.length > listCount && (
+                  <ListEnd key={listCount} onReach={() => setListCount((count) => count + LIST_PAGE)} pane={desktop ? '.search-results' : null} />
+                )}
+              </>
+            )}
+          </div>
         </div>
 
-        <div className={`map-column${mapOpen ? ' is-open' : ''}${zoneEditing ? ` is-editing-zone is-zone-${zoneEditing.step}` : postedZone ? ' has-zone' : ''}${panelHeight === 'large' && !zoneEditing ? ' is-panel-large' : ''}${editingPlace ? ' is-editing-place' : ''}`}
+        {/* La carte : plein écran sur le téléphone (« Carte »), toujours à droite de la liste sur ordinateur. */}
+        <div className={`map-column${mapOpen && !desktop ? ' is-open' : ''}${zoneEditing ? ` is-editing-zone is-zone-${zoneEditing.step}` : postedZone ? ' has-zone' : ''}${panelHeight === 'large' && !zoneEditing && !desktop ? ' is-panel-large' : ''}${editingPlace && !desktop ? ' is-editing-place' : ''}`}
           aria-hidden={undefined}>
           {/* La ligne du haut de la carte de l'app (MapTabView), sans catégories ni critères : retour (vers la liste), lieu,
-              filtres et leur nombre. Pendant le tracé ou l'ajustement, le bandeau de la zone la remplace. */}
-          {!zoneEditing && (
+              filtres et leur nombre. Pendant le tracé ou l'ajustement, le bandeau de la zone la remplace. Sur ordinateur, le
+              bandeau du haut de la page tient ce rôle. */}
+          {!zoneEditing && !desktop && (
             <div className="map-app-top">
               <button type="button" className="map-back" aria-label="Retour" onClick={() => setMapOpen(false)}>
                 <Icon name="arrowLeft" />
@@ -516,7 +574,7 @@ export function SearchPage() {
               <FiltersButton count={filterCount} floating onClick={() => setFiltersOpen(true)} />
             </div>
           )}
-          {!zoneEditing && postedZone && <ZoneChip onOpen={() => setFiltersOpen(true)} onRemove={clearZone} />}
+          {!zoneEditing && postedZone && !desktop && <ZoneChip onOpen={() => setFiltersOpen(true)} onRemove={clearZone} />}
           <Suspense fallback={<div className="results-map" aria-busy="true" />}>
             <ResultsMap
               results={mapResults}
@@ -534,6 +592,7 @@ export function SearchPage() {
               onVisibleArea={(box) => { visibleArea.current = box; }}
               tools={<ZonePencil menu={zoneMenu} editing={zoneEditing !== null} onStart={startDrawing} />}
               onMarkerTap={tapMarker}
+              bottomPanel={!desktop}
             />
           </Suspense>
           {/* Bandeau du tracé, en haut de l'écran mais après la carte dans la page : depuis le crayon, Tab mène à « Zone
@@ -547,8 +606,8 @@ export function SearchPage() {
             />
           )}
           {/* Le panneau du bas de l'app (MapBottomPanel), qui glisse hors de l'écran pendant le tracé et l'ajustement
-              d'une zone. */}
-          {mapOpen && (
+              d'une zone. Sur ordinateur, la liste est à côté de la carte : pas de panneau. */}
+          {mapOpen && !desktop && (
             <MapBottomPanel
               results={sortedForMap(mapResults, mapSort)}
               mode={draft.mode}
@@ -557,7 +616,7 @@ export function SearchPage() {
               loading={loading}
               offline={failure?.offline === true}
               onRetry={() => setAttempt((a) => a + 1)}
-              onGrowZone={loading || !postedZone || !canGrow(postedZone) ? null : () => proposeZone(scaled(postedZone, SCALE_STEP), 'Ajustez votre zone')}
+              onGrowZone={growZone}
               sort={mapSort}
               onSortChange={setMapSort}
               selectedId={selectedId}
@@ -584,12 +643,15 @@ export function SearchPage() {
         </div>
       </div>
 
-      {/* « Carte » : capsule bleu marine flottante, 14 au-dessus de la barre d'onglets. */}
-      <button type="button" className={`map-open${showsMapButton ? '' : ' is-hidden'}`} onClick={() => setMapOpen(true)}
-        aria-label="Afficher sur la carte" aria-hidden={showsMapButton ? undefined : true} tabIndex={showsMapButton ? undefined : -1}>
-        <Icon name="map" />
-        Carte
-      </button>
+      {/* « Carte » : capsule bleu marine flottante, 14 au-dessus de la barre d'onglets ; pas sur ordinateur, où la carte
+          est toujours affichée. */}
+      {!desktop && (
+        <button type="button" className={`map-open${showsMapButton ? '' : ' is-hidden'}`} onClick={() => setMapOpen(true)}
+          aria-label="Afficher sur la carte" aria-hidden={showsMapButton ? undefined : true} tabIndex={showsMapButton ? undefined : -1}>
+          <Icon name="map" />
+          Carte
+        </button>
+      )}
 
       <SaveSearchSheet open={saveOpen} draft={draft} onClose={() => setSaveOpen(false)} />
 
@@ -603,8 +665,9 @@ export function SearchPage() {
           Object.assign(byMode.current, drafts);
           apply(next);
         }}
-        // Ouverts depuis la carte, pas de « Voir sur la carte » (comme l'app).
-        onShowMap={mapOpen ? undefined : (next, drafts) => {
+        // Ouverts depuis la carte, pas de « Voir sur la carte » (comme l'app) ; sur ordinateur non plus : la carte est
+        // déjà à côté de la liste.
+        onShowMap={mapOpen || desktop ? undefined : (next, drafts) => {
           setFiltersOpen(false);
           Object.assign(byMode.current, drafts);
           apply(next);

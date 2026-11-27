@@ -9,7 +9,7 @@ import { badgeText, cardContent, cardLocation, formatCardPrice, formatFact, leas
 import type { SearchMode } from '../lib/labels';
 import { sortedPhotos } from '../lib/listings';
 import {
-  MAP_PANEL_HEIGHTS, MAP_SORT_LABELS, mapPanelTitle, mapSortOptions, panelHeight, rubberBanded, snapTarget, type MapPanelHeight,
+  MAP_PANEL_HEIGHTS, MAP_SORT_LABELS, mapPanelSubtitle, mapPanelTitle, mapSortOptions, panelHeight, rubberBanded, snapTarget, type MapPanelHeight,
   type MapSort,
 } from '../lib/mapPanel';
 import { listingPath } from '../lib/paths';
@@ -313,7 +313,7 @@ export function MapBottomPanel({
 
   const index = Math.max(0, results.findIndex((r) => r.row.id === (centeredId ?? selectedId)));
   const title = mapPanelTitle(results.length, loading, drawnZone);
-  const subtitle = drawnZone ? 'Dans votre zone dessinée' : place;
+  const subtitle = mapPanelSubtitle(place, drawnZone);
   const showsGrow = drawnZone && results.length === 0 && !loading && !offline && onGrowZone !== null;
   const collapsed = height === 'compact';
 

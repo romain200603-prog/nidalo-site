@@ -5,6 +5,8 @@ import '../styles/account.css';
 import '../styles/messages.css';
 // Morceaux de l'app : réponses, transferts, réactions, liste (demande du 17/11).
 import '../styles/messages-app.css';
+// Ordinateur (à partir de 1024 px) : la liste et la conversation côte à côte (version ordinateur, étape 5).
+import '../styles/messages-ordinateur.css';
 
-// Messages : /messages/(?c=…) ; la liste, puis la conversation par-dessus, comme l'app à toutes les largeurs.
+// Messages : /messages/(?c=…) ; la liste, puis la conversation par-dessus, comme l'app ; côte à côte à partir de 1024 px.
 mount(<MessagesPage />);

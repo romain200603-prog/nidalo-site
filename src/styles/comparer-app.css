@@ -144,8 +144,4 @@
 .cmpm-notes .icon :not(:first-child) { stroke: #FFFFFF; }
 .cmpm-no-gap { margin: 0; color: var(--app-text-secondary); font: 400 12px/15px var(--app-font); }
 
-/* Ordinateur (à partir de 1024 px) : l'en-tête et le tableau dans le grand conteneur (1180) ; les colonnes gardent leurs
-   128 et la carte la largeur du conteneur, comme l'app sur un grand écran. */
-@media (min-width: 1024px) {
-  .cmpm-header, .cmpm-content { width: 100%; max-width: var(--app-wide); margin-left: auto; margin-right: auto; }
-}
+/* Ordinateur (à partir de 1024 px) : comparer-ordinateur.css (version ordinateur, étape 4), un vrai tableau. */

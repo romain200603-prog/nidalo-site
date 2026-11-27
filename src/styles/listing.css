@@ -44,11 +44,7 @@ body.page-listing-ready:has(.listing-screen .screen-bottom-bar) { padding-bottom
 .listing-main > :not(.listing-category) { order: 4; margin-top: 14px; }
 .listing-main > .listing-report { margin-top: 6px; }
 
-/* Ordinateur : l'écran du téléphone dans la colonne de 720 px (16 sur les côtés), la galerie sur toute sa largeur. */
-@media (min-width: 1024px) {
-  .listing-gallery-wrap { max-width: var(--app-column); margin: 0 auto; }
-  .listing-body { max-width: var(--app-column); }
-}
+/* Ordinateur (à partir de 1024 px) : fiche-ordinateur.css. */
 
 /* ——— Galerie ———
    Téléphone : 325 de haut sous la barre d'état (la photo monte sous l'heure, ignoresSafeArea), points de 7 à 14 du
@@ -85,13 +81,6 @@ div.gallery-page { cursor: default; }
 @media (prefers-reduced-motion: reduce) {
   .gallery-action, .gallery-back { transition: opacity 0.12s ease-out; }
   .gallery-action:active, .gallery-back:active { transform: none; }
-}
-
-/* Ordinateur : la largeur de la colonne, à la proportion de l'app (390 × 325 sur l'iPhone, soit 720 × 600) ; au
-   clavier, le contour d'une photo choisie se voit à l'intérieur de la galerie. */
-@media (min-width: 1024px) {
-  .gallery { height: auto; aspect-ratio: 390 / 325; }
-  .gallery-page:focus-visible { outline-offset: -3px; }
 }
 
 /* Visionneuse plein écran (ListingPhotoViewer) : fond noir, compteur 15 gras dans une capsule blanche à 16 % (34 de
@@ -169,10 +158,6 @@ a.visit-card { color: inherit; text-decoration: none; }
 .duo-fade { position: absolute; left: 0; right: 0; bottom: 0; height: 112px; background: linear-gradient(rgba(250, 249, 246, 0), rgba(250, 249, 246, 0.7) 50%, rgba(250, 249, 246, 0.94)); pointer-events: none; }
 /* Tablette : les capsules gardent la largeur de l'ancienne barre (520 px), au centre. */
 .duo-bar .duo-row { max-width: 520px; margin: 0 auto; }
-/* Ordinateur : la barre et son dégradé à la largeur de la colonne de 720 px, les capsules au centre (520 px). */
-@media (min-width: 1024px) {
-  .duo-bar { left: calc(50% - var(--app-column) / 2); right: calc(50% - var(--app-column) / 2); }
-}
 
 .duo-row {
   --duo-morph: cubic-bezier(0.32, 0.72, 0, 1);
@@ -260,12 +245,6 @@ a.visit-card { color: inherit; text-decoration: none; }
 .owner-bar {
   position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; display: flex; gap: 10px;
   padding: 8px max(16px, (100% - 520px) / 2) calc(6px + env(safe-area-inset-bottom)); background: #FFFFFF; box-shadow: 0 -2px 20px rgba(36, 45, 56, 0.06);
-}
-@media (min-width: 1024px) {
-  .owner-bar {
-    left: calc(50% - var(--app-column) / 2); right: calc(50% - var(--app-column) / 2);
-    padding-left: calc((var(--app-column) - 520px) / 2); padding-right: calc((var(--app-column) - 520px) / 2);
-  }
 }
 .owner-bar-button {
   flex: 1 1 0; min-width: 0; min-height: 46px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0;

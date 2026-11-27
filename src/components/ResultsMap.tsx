@@ -75,11 +75,13 @@ function showZone(map: MapLibreMap, zone: Coordinate[] | null | undefined, satel
 /**
  * Marges du cadrage des biens, d'une zone ou de la France (MapTabView.searchedRegion de l'app) : sous la ligne du haut et
  * la hauteur d'une vignette, au-dessus du panneau du bas en hauteur moyenne (362 + 30, + 60 pour la France), à gauche
- * des commandes ; ramenées à la hauteur de la carte sur un écran bas.
+ * des commandes ; ramenées à la hauteur de la carte sur un écran bas. Sans panneau ni ligne du haut sur la carte
+ * (`panel` faux, ordinateur) : la hauteur d'une vignette en haut, la mention des sources en bas.
  */
-function framePadding(map: MapLibreMap, kind: 'results' | 'zone' | 'france') {
+function framePadding(map: MapLibreMap, kind: 'results' | 'zone' | 'france', panel: boolean) {
   const { clientHeight: height } = map.getContainer();
-  const [top, left, bottom, right] = kind === 'zone' ? [124, 40, 392, 80] : kind === 'france' ? [66, 16, 452, 16] : [126, 50, 392, 80];
+  const [top, left, bottom, right] = !panel ? (kind === 'france' ? [40, 16, 40, 16] : [96, kind === 'zone' ? 40 : 50, 40, 80])
+    : kind === 'zone' ? [124, 40, 392, 80] : kind === 'france' ? [66, 16, 452, 16] : [126, 50, 392, 80];
   const scale = Math.min(1, Math.max(0, height - 80) / (top + bottom));
   return { top: Math.round(top * scale), left, bottom: Math.round(bottom * scale), right };
 }
@@ -124,6 +126,11 @@ type Props = {
    * sélectionner le bien (et `center()` pour centrer la carte sur lui) et ouvrir son annonce.
    */
   onMarkerTap?: (id: string, center: () => void) => void;
+  /**
+   * Le panneau du bas de la carte couvre le bas de l'écran (téléphone, par défaut) : cadrages et bien centré au-dessus
+   * de lui. Faux sur ordinateur, où la liste est à côté de la carte : toute la carte.
+   */
+  bottomPanel?: boolean;
 };
 
 function coordinateOf(result: Result): Coordinate | null {
@@ -148,7 +155,7 @@ function boundsOf(points: Coordinate[]): LngLatBounds | null {
 
 export function ResultsMap({
   results, showsYield, selectedId, onSelect, frame, onUserMove, className, zone, searchedZone, drawTool = null, onDrawZone,
-  onDrawCircle, onDrawTooSmall, onVisibleArea, tools, onMarkerTap,
+  onDrawCircle, onDrawTooSmall, onVisibleArea, tools, onMarkerTap, bottomPanel = true,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -261,14 +268,14 @@ export function ResultsMap({
     const map = mapRef.current;
     if (!map || !ready) return;
     const apply = () => {
-      const padding = framePadding(map, frame.zone ? 'zone' : 'results');
+      const padding = framePadding(map, frame.zone ? 'zone' : 'results', bottomPanel);
       if (frame.box) {
         map.fitBounds(frame.box, { padding, duration: 0, maxZoom: 15 });
         return;
       }
       const bounds = boundsOf(frame.points);
       if (bounds) map.fitBounds(bounds, { padding, duration: 0, maxZoom: 14 });
-      else map.fitBounds(FRANCE, { padding: framePadding(map, 'france'), duration: 0 });
+      else map.fitBounds(FRANCE, { padding: framePadding(map, 'france', bottomPanel), duration: 0 });
     };
     if (map.getContainer().clientWidth > 0 && map.getContainer().clientHeight > 0) {
       pendingFrame.current = null;
@@ -356,11 +363,11 @@ export function ResultsMap({
     const box = searchedZone ? zoneBox(searchedZone) : null;
     if (box && map) {
       map.fitBounds([box.southWest.longitude, box.southWest.latitude, box.northEast.longitude, box.northEast.latitude],
-        { padding: framePadding(map, 'zone'), duration: 350 });
+        { padding: framePadding(map, 'zone', bottomPanel), duration: 350 });
       return;
     }
     const bounds = boundsOf(results.flatMap((r) => { const c = coordinateOf(r); return c ? [c] : []; }));
-    if (bounds && map) map.fitBounds(bounds, { padding: framePadding(map, 'results'), maxZoom: 14, duration: 350 });
+    if (bounds && map) map.fitBounds(bounds, { padding: framePadding(map, 'results', bottomPanel), maxZoom: 14, duration: 350 });
   }
 
   // MARK: Tracé (handleDraw de l'app) : un seul pointeur, capturé ; le trait commence après un petit déplacement (un
@@ -530,9 +537,10 @@ export function ResultsMap({
                     onMarkerTap(row.id, () => {
                       if (!coordinate || !map) return;
                       // Au centre de la carte, comme l'app ; sur un écran plus bas que l'iPhone, le pied de la vignette
-                      // reste 20 au-dessus du panneau en hauteur moyenne (362), sans passer sous la ligne du haut.
+                      // reste 20 au-dessus du panneau en hauteur moyenne (362), sans passer sous la ligne du haut. Sans
+                      // panneau (ordinateur) : au centre.
                       const height = map.getContainer().clientHeight;
-                      const y = Math.max(124, Math.min(height / 2, height - 362 - 20));
+                      const y = bottomPanel ? Math.max(124, Math.min(height / 2, height - 362 - 20)) : height / 2;
                       map.easeTo({ center: [coordinate.longitude, coordinate.latitude], offset: [0, Math.min(0, y - height / 2)], duration: reducedMotion() ? 0 : 350 });
                     });
                   }}

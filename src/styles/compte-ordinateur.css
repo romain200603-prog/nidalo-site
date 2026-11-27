@@ -1,0 +1,108 @@
+/* Mon compte sur ordinateur (version ordinateur, étape 6 ; maquette 11-mon-compte.html) : dans le conteneur commun du
+   site, le grand titre en haut, puis deux colonnes. À gauche (300 px) : la carte du profil, son action dessinée en
+   bouton sur toute la largeur ; les trois chiffres d'un compte professionnel ; « Mon dossier immobilier » en carte ;
+   « Se déconnecter » et « Supprimer mon compte ». À droite : les groupes de l'app dans son ordre, chacun sous son petit
+   titre en capitales, ses lignes en cartes sur une grille (trois par rangée à 1440 et 1280, deux à 1024). Seulement à
+   partir de 1024 px (Hub.tsx ne pose .app-space-groups et la carte du dossier qu'à partir de là) : en dessous,
+   compte-app.css, account.css et pieces-app.css restent seuls et rien ne change. Mesures de la maquette à 1440 px ;
+   couleurs et police du site ; gris des textes : --app-text-dark (#5B6571, contraste AA) à la place du #68707C de la
+   maquette. Les écrans de Mon compte (Mes informations, Mon agenda…) gardent leur colonne de 720 px (account.css) ;
+   dans Mon projet immobilier, les quatre sortes y perdent leur sous-titre (étape 8). */
+
+@media (min-width: 1024px) {
+  /* ——— Page : le conteneur commun (1200 px au plus, 32 de chaque côté), 40 au-dessus du titre, 72 sous le contenu
+     avant le pied de page fin ——— */
+  .page:has(> main > .account-page > .app-space) { --site-footer-gap: 72px; }
+  .account-page:has(> .app-space) { max-width: var(--site-width); padding: 40px var(--site-gutter) 0; }
+
+  /* ——— Deux colonnes : 300 à gauche, 28 d'écart, le reste à droite. Chaque élément de gauche a sa rangée ; les
+     groupes de droite les couvrent toutes, et la dernière rangée (1fr) prend ce qui dépasse : les cartes de gauche
+     restent l'une sous l'autre, sans s'étirer ——— */
+  .app-space {
+    display: grid; grid-template-columns: 300px minmax(0, 1fr); grid-template-rows: repeat(6, auto) 1fr; align-items: start;
+    column-gap: 28px; padding-bottom: 0;
+  }
+
+  /* ——— Titre : 34 très gras, sur les deux colonnes, 28 au-dessus d'elles. Sans la cloche ronde du téléphone : celle
+     de l'en-tête du site mène à la même page, avec le même point rouge (notificationsStore) ——— */
+  .app-space > .app-space-header { grid-column: 1 / -1; grid-row: 1; margin-bottom: 28px; padding: 0; }
+  .app-space .app-space-header h1 { font: 800 34px/1.15 var(--app-font); letter-spacing: -0.02em; }
+  .app-space .app-space-header .app-round { display: none; }
+
+  /* ——— Colonne de gauche : 16 entre les cartes ———
+     Carte du profil : marges 22, photo (ou initiale) de 60, nom 18 gras, e-mail ou ligne de l'agence 14, pastille du
+     type de compte ; dessous, à 18, l'action de la carte dessinée en bouton de 44 (coins 12, 15 demi-gras). La carte
+     reste un seul lien. */
+  .app-space > .space-profile { grid-column: 1; grid-row: 2; flex-wrap: wrap; gap: 18px 14px; padding: 22px; }
+  .app-space .space-profile-photo { width: 60px; height: 60px; }
+  .app-space .space-profile-text { gap: 0; }
+  .app-space .space-profile-name { font-size: 18px; line-height: 27px; }
+  .app-space .space-profile-line { color: var(--app-text-dark); font-size: 14px; line-height: 21px; }
+  .app-space .space-profile-badge { margin-top: 6px; font-size: 12px; }
+  .app-space .space-profile-action {
+    flex: 1 0 100%; justify-content: center; height: 44px; margin-left: 0; border-color: var(--d-field-border); border-radius: 12px;
+    font-size: 15px; font-weight: 600;
+  }
+
+  /* Espace professionnel : ses trois chiffres sous la carte du profil, aux coins des cartes de la colonne. */
+  .app-space > .pro-stats { grid-column: 1; grid-row: 3; margin-top: 16px; border-radius: 22px; }
+
+  /* « Mon dossier immobilier » : la ligne du site en carte (marges 22, coins 22), son titre de 17 gras comme celui de
+     la carte de la maquette. */
+  .app-space > .space-dossier { grid-column: 1; grid-row: 4; margin-top: 16px; }
+  .space-dossier .app-row { gap: 14px; min-height: 0; padding: 22px; }
+  .space-dossier .app-row-title { font-size: 17px; font-weight: 700; line-height: 24px; white-space: normal; }
+  .space-dossier .app-row-tile { width: 44px; height: 44px; }
+  .space-dossier .app-row-tile .icon { width: 21px; height: 21px; }
+  .space-dossier .app-row-chevron { width: 18px; height: 18px; }
+
+  /* « Se déconnecter » : bouton blanc de 46 bordé de rose (coins 12), le rouge du site en 15 demi-gras, 6 du bord de
+     la colonne ; « Supprimer mon compte » centré 8 plus bas, en 14 souligné, comme dans la maquette. */
+  .app-space > .logout-button {
+    grid-column: 1; grid-row: 5; gap: 8px; height: 46px; margin: 20px 6px 0; border-color: #F0D5D5; border-radius: 12px; font-size: 15px; font-weight: 600;
+  }
+  .app-space > .logout-button .icon { width: 17px; height: 17px; }
+  .app-space > .delete-account-link {
+    grid-column: 1; grid-row: 6; justify-self: center; margin-top: 8px; color: var(--app-text-dark); font: 400 14px/21px var(--app-font);
+    text-decoration: underline;
+  }
+
+  /* ——— Colonne de droite : les groupes, 32 entre eux ; petit titre de 13 gras en capitales espacées, 12 au-dessus des
+     cartes ——— */
+  .app-space > .app-space-groups { display: flex; grid-column: 2; grid-row: 2 / -1; flex-direction: column; gap: 32px; min-width: 0; }
+  .app-space .app-space-groups .app-menu-group { gap: 12px; margin-top: 0; }
+  .app-space-groups .app-section-label { padding-left: 0; color: var(--app-text-dark); font: 700 13px/1.5 var(--app-font); letter-spacing: 0.08em; }
+
+  /* Lignes en cartes : grille de cartes de 260 px au moins, 12 entre elles (trois par rangée à 1440 et 1280, deux à
+     1024) ; carte blanche bordée (coins 18, marges 16), carré d'icône de 44, titre 16 demi-gras, sous-titre 14,
+     chevron de 18. Les cartes d'une rangée ont la même hauteur. */
+  .app-space-groups .app-group {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; overflow: visible; border: 0; border-radius: 0;
+    background: none;
+  }
+  .app-space-groups .app-group > li { display: flex; min-width: 0; }
+  .app-space-groups .app-group > li + li::before { content: none; }
+  .app-space-groups .app-row {
+    position: relative; gap: 14px; min-height: 0; padding: 16px; border: 1px solid var(--app-border); border-radius: 18px; background: #FFFFFF;
+  }
+  .app-space-groups .app-row-tile { width: 44px; height: 44px; }
+  .app-space-groups .app-row-tile .icon { width: 21px; height: 21px; }
+  .app-space-groups .app-row-text { gap: 0; }
+  .app-space-groups .app-row-title { font-size: 16px; line-height: 24px; white-space: normal; }
+  .app-space-groups .app-row-subtitle { color: var(--app-text-dark); font-size: 14px; font-weight: 400; line-height: 21px; white-space: normal; }
+  .app-space-groups .app-row-chevron { width: 18px; height: 18px; }
+  /* Pastille d'un compteur (Mes contacts, Mes visites) : sur le coin haut droit du carré d'icône, cerclée de blanc,
+     pour laisser au titre toute la largeur de la carte. */
+  .app-space-groups .app-row-badge { position: absolute; top: calc(50% - 31px); left: 43px; margin: 0; box-shadow: 0 0 0 2px #FFFFFF; }
+  .app-space-groups .app-row:focus-visible { outline-offset: 2px; border-radius: 18px; }
+
+  /* ——— Mon projet immobilier (la page de l'app dans sa colonne) : les quatre sortes sans sous-titre
+     (ProjectEditor.tsx), chaque carte à la hauteur de son icône et de son titre, sans vide à la place de la ligne ——— */
+  .dsc-project-screen .dsc-kind { min-height: 0; }
+}
+
+/* Survol (souris) : la carte se détache d'un filet plus marqué ; « Se déconnecter » se teinte de rose. */
+@media (min-width: 1024px) and (hover: hover) {
+  .app-space-groups a.app-row:hover { border-color: #DCD9D2; background: #FFFFFF; }
+  .app-space > .logout-button:hover { background: #FDF6F5; }
+}

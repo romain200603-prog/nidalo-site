@@ -1,6 +1,6 @@
 /* Messagerie avec les morceaux de l'app iPhone : réponses, transferts et réactions (MessageInteractionViews.swift),
-   liste des conversations (MessagesView.swift), recherche (MessagingSearchView.swift). Chaque écran copie l'app, à
-   toutes les largeurs (à partir de 1024 px, dans la colonne de 720 px : messages.css). Police de l'app (Inter). */
+   liste des conversations (MessagesView.swift), recherche (MessagingSearchView.swift). Chaque écran copie l'app ; à
+   partir de 1024 px, la liste et la conversation côte à côte (messages-ordinateur.css). Police de l'app (Inter). */
 
 /* ——— Liste ——— */
 .dm-side-title { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -671,7 +671,7 @@ a.dm-banner:hover .dm-banner-title { text-decoration: underline; }
 
 /* ——— Groupes et communautés (GroupInfoView.swift, NewGroupView.swift, CommunityViews.swift,
    CommunityInviteViews.swift, BroadcastView.swift) : mêmes mesures à toutes les largeurs ; les écrans poussés sont dans
-   la colonne de la page (à partir de 1024 px, celle de 720 px), les feuilles au centre à partir de 1024 px. ——— */
+   la colonne de la page (à partir de 1024 px, la place de la conversation), les feuilles au centre à partir de 1024 px. ——— */
 
 /* En-tête d'un groupe : la ligne blanche de l'app (chevron de 24, avatar de 36, + bleu, ⋮ gris). */
 .dm-head.is-group .dm-head-who:active { opacity: 0.55; transition: opacity 0.15s ease-out; }
@@ -974,11 +974,9 @@ button.dmg-member-line { cursor: pointer; }
 .dmg-page > .dmg-body { padding: 8px 16px 24px; }
 .dmg-inner { padding-top: 16px; }
 @media (min-width: 1024px) {
-  /* Feuilles au centre : marges de la fenêtre (22 px). */
+  /* Feuilles au centre : marges de la fenêtre (22 px). Les écrans poussés gardent leur colonne de 640 px, centrée dans
+     la place de la conversation (messages-ordinateur.css). */
   .dmg-sheet .dmg-step { padding: 12px 22px 18px; }
-  /* Écrans poussés à la largeur de la colonne de 720 px (688 de contenu), comme les détails. */
-  .dmg-page > .dmg-body { width: 100%; }
-  .dmg-page .dmg-step { padding-left: 16px; padding-right: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .dmg-toast { animation: dmg-fade-in 0.2s ease-in-out; }

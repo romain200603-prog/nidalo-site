@@ -1,5 +1,6 @@
 /* Accueil de l'app (Features/Home : HomeView.swift, HomeCategoryCard.swift, HomeSections.swift) et sa carte d'annonce
-   (HomeListingCard, dans toutes les rangées), à toutes les largeurs ; élargi à partir de 1024 px. 1 pt de l'app = 1 px
+   (HomeListingCard, dans toutes les rangées), à toutes les largeurs ; à partir de 1024 px, la version ordinateur
+   (accueil-ordinateur.css) s'y ajoute. 1 pt de l'app = 1 px
    ici ; ombres : flou CSS = 2 × le rayon SwiftUI ; « systemApp » de l'app = police système (--app-font-system),
    « manrope » = --app-font (Inter dans l'app : « heavy » y est le gras, 700). */
 
@@ -117,22 +118,13 @@
 .home-city .icon { width: 14px; height: 14px; color: var(--app-brand); }
 
 /* 761–1023 px (iPhone couché, tablette) : la carte et les titres sur une colonne de 688 px au milieu, les
-   rangées de cartes sur toute la largeur de l'écran, la première carte alignée sur la colonne. */
-@media (min-width: 761px) {
+   rangées de cartes sur toute la largeur de l'écran, la première carte alignée sur la colonne. À partir de 1024 px :
+   accueil-ordinateur.css. */
+@media (min-width: 761px) and (max-width: 1023px) {
   .home-category { max-width: 688px; margin-left: auto; margin-right: auto; }
   .home-resume { width: 100%; max-width: 688px; margin-left: auto; margin-right: auto; }
   .home-section-header { width: 100%; max-width: 720px; margin-left: auto; margin-right: auto; }
   .home-app-carousel { padding-left: max(16px, calc((100% - 688px) / 2)); padding-right: max(16px, calc((100% - 688px) / 2)); }
-}
-
-/* ——— Ordinateur (à partir de 1024 px) : le même écran dans le grand conteneur (1180, ses marges de 16 comprises), sur
-   le fond de la page comme dans l'app (son accueil n'a plus de bandeau bleu : homeBanner n'y sert plus) ; titres, carte
-   et « Reprendre ma recherche » alignés sur la première carte de chaque rangée. Les rangées restent des rangées qui
-   défilent dans le conteneur et montrent plus de cartes (molette, souris ou clavier : useRailScroll). ——— */
-@media (min-width: 1024px) {
-  .home-app-top, .home-category, .home-resume { width: calc(100% - 32px); max-width: calc(var(--app-wide) - 32px); margin-left: auto; margin-right: auto; }
-  .home-section-header { max-width: var(--app-wide); }
-  .home-app-carousel { width: 100%; max-width: var(--app-wide); margin-left: auto; margin-right: auto; padding-left: 16px; padding-right: 16px; }
 }
 
 /* ——— Sans réseau (HomeView.feedContent) : « Pas de connexion Internet » 24 sous la carte, à la place des sections

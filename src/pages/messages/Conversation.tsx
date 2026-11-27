@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import { LoadErrorState, OfflineState } from '../../components/OfflineState';
 import { useStore } from '../../lib/account/session';
+import { useDesktop } from '../../lib/desktop';
 import { formatArea, formatPrice } from '../../lib/format';
 import { answerOffer, canMakeOffer, offerErrorMessage, offersIn, type OfferAction, type OfferRow } from '../../lib/listing/offers';
 import { profitabilityFor } from '../../lib/listing/profitability';
@@ -35,8 +36,9 @@ import { Thread, ThreadLoading } from './Thread';
 // retour rond, l'avatar de 38 (point vert « en ligne »), le nom et sa pastille PRO ou Particulier, « En ligne » en vert
 // ou le sous-titre, puis la capsule Appeler | « … » (le téléphone reste, en gris sans numéro partagé) ; la carte de
 // l'annonce flotte dessous (photo de 40, « Lyon 2e · 62 m² », prix et « Voir › »). Puis les messages, les réponses
-// proposées selon le contexte et la barre d'écriture. Le même écran à toutes les largeurs (à partir de 1024 px, dans
-// la colonne de 720 px) : la demande de visite passe par « Détails » et la fiche, comme dans l'app.
+// proposées selon le contexte et la barre d'écriture. Le même écran à toutes les largeurs : la demande de visite passe
+// par « Détails » et la fiche, comme dans l'app. À partir de 1024 px (messages-ordinateur.css), à côté de la liste :
+// pas de flèche retour, avatar de 46, « Voir l'annonce », et « Faire une offre » titré en h2 (le h1 est « Messages »).
 
 type Screen = { kind: 'offer'; parent: OfferRow | null };
 
@@ -59,6 +61,7 @@ export function ConversationPane({ conversation, thread, offers, visitRequests, 
   me: string | null;
 }) {
   const [screen, setScreen] = useState<Screen | null>(null);
+  const desktop = useDesktop();
   const [declined, setDeclined] = useState<OfferRow | null>(null);
   const [confirmation, setConfirmation] = useState<{ offer: OfferRow; action: 'accept' | 'withdraw' } | null>(null);
   const [proposing, setProposing] = useState<ConversationVisitRequest | null>(null);
@@ -134,6 +137,7 @@ export function ConversationPane({ conversation, thread, offers, visitRequests, 
             price={listing.price}
             parent={screen.parent ? { id: screen.parent.id, amount: Number(screen.parent.amount) } : null}
             profitability={profitability}
+            heading={desktop ? 'h2' : 'h1'}
             onClose={() => setScreen(null)}
             onSent={async () => {
               // Comme OfferStore.make : offres puis conversations relues, et la feuille se referme.
@@ -262,9 +266,10 @@ function DirectHeader({ conversation, online, isBlocked, onCall, onBlock, onRepo
 }) {
   const counterpart = conversation.counterpart;
   const hasPhone = !!counterpart.phone?.trim();
+  const desktop = useDesktop();
   const who = (
     <>
-      <ConversationAvatar conversation={conversation} size={38} fontSize={13} online={online} />
+      <ConversationAvatar conversation={conversation} size={desktop ? 46 : 38} fontSize={desktop ? 15 : 13} online={online} />
       <span className="dm-head-text">
         <span className="dm-head-name">
           <span className="dm-head-title">{counterpart.name}</span>
@@ -311,6 +316,7 @@ function GroupHeader({ conversation, me, onReport }: { conversation: Conversatio
   const manages = !conversation.hasLeft && role !== null && role !== 'member';
   const openInfo = () => navigate({ conversationId: conversation.id, view: conversation.communityId ? 'communaute' : 'groupe' });
   const count = conversation.members.length;
+  const desktop = useDesktop();
   return (
     <header className="dm-head is-group">
       <BackToList />
@@ -321,7 +327,7 @@ function GroupHeader({ conversation, me, onReport }: { conversation: Conversatio
         aria-label={info}
         aria-description={`${conversation.counterpart.name}, ${count} ${count > 1 ? 'membres' : 'membre'}`}
       >
-        <ConversationAvatar conversation={conversation} size={36} fontSize={12.5} />
+        <ConversationAvatar conversation={conversation} size={desktop ? 46 : 36} fontSize={desktop ? 15 : 12.5} />
         <span className="dm-head-text">
           <span className="dm-head-name"><span className="dm-head-title">{conversation.counterpart.name}</span></span>
           <span className="dm-head-sub"><span>{conversation.hasLeft ? 'Vous avez quitté le groupe' : groupSummary(conversation.members)}</span></span>
@@ -356,6 +362,7 @@ function GroupHeader({ conversation, me, onReport }: { conversation: Conversatio
  */
 function ListingBanner({ listing }: { listing: ListingSnapshot }) {
   const rows = useStore(listingStore);
+  const desktop = useDesktop();
   const state = rows.get(listing.listingId.toLowerCase());
   const opens = state?.status === 'ready';
   const price = `${formatPrice(listing.price)}${listing.transaction === 'rent' ? '/mois' : ''}`;
@@ -369,7 +376,7 @@ function ListingBanner({ listing }: { listing: ListingSnapshot }) {
       </span>
       <span className="dm-banner-end">
         <span className="dm-banner-price">{keepNumbersTogether(price)}</span>
-        {opens && <span className="dm-banner-link"><span>Voir</span><Icon name="chevronRight" /></span>}
+        {opens && <span className="dm-banner-link"><span>{desktop ? 'Voir l’annonce' : 'Voir'}</span><Icon name="chevronRight" /></span>}
       </span>
     </>
   );

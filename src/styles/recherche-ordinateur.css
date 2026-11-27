@@ -1,0 +1,235 @@
+/* Votre recherche sur ordinateur (version ordinateur, étape 2 ; maquette 04-resultats-liste-carte.html) : sous l'en-tête
+   du site, un bandeau blanc sur toute la largeur (retour, catégories, lieu, « Filtres », puis la zone dessinée et les
+   critères actifs) ; dessous, jusqu'au bas de la fenêtre, la liste à gauche (58 %, elle défile seule, cartes sur 2
+   colonnes tant qu'une carte garde 280 px) et la carte à droite (42 %, 360 px au moins), toujours visibles ; pas de pied
+   de page. Seulement à partir de 1024 px : en dessous, recherche-app.css, app.css et carte-*.css restent seuls et rien ne
+   change. Mesures de la maquette à 1440 px ; couleurs et police du site (pieces-app.css, app.css, ordinateur.css) ; gris
+   des textes : --app-text-dark (#5B6571, contraste AA) à la place du #68707C de la maquette. Toutes les règles commencent
+   par .search-layout (ou la page qui le contient) : elles passent devant celles du téléphone. */
+
+@media (min-width: 1024px) {
+  /* ——— La page tient dans la fenêtre (une fenêtre très basse la fait défiler sous l'en-tête, qui reste collé) ——— */
+  .page:has(> main > .search-layout) { height: 100vh; height: 100dvh; min-height: 560px; overflow: clip; }
+  .page:has(> main > .search-layout) > main { display: flex; flex-direction: column; min-height: 0; }
+  .page-fill:has(> main > .search-layout) > .site-header { position: sticky; }
+  main > .search-layout {
+    flex: 1; min-height: 0;
+    grid-template-columns: minmax(0, 58fr) minmax(360px, 42fr); grid-template-rows: auto auto minmax(0, 1fr);
+  }
+  .search-layout .search-column { display: contents; }
+
+  /* ——— Bandeau du haut, première ligne : 14 au-dessus, 12 dessous, 24 des bords, 12 entre les éléments ——— */
+  .search-layout .search-app-top {
+    grid-column: 1 / -1; grid-row: 1; position: relative; top: auto; z-index: 3; flex-wrap: wrap; gap: 12px;
+    margin: 0; padding: 14px 24px 12px; background: #FFFFFF;
+  }
+  /* Retour (la page d'où l'on vient sur le site, sinon l'accueil) : carré blanc de 48 à filet, comme « Filtres ». */
+  .search-layout .search-back {
+    width: 48px; height: 48px; border: 1px solid var(--d-field-border); border-radius: 14px; background: #FFFFFF; color: var(--app-navy);
+  }
+  .search-layout .search-back-circle { width: auto; height: auto; border-radius: 0; background: none; }
+  .search-layout .search-back-circle .icon { width: 19px; height: 19px; }
+  .search-layout .search-back:hover { background: var(--d-hover); }
+  .search-layout .search-back:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; border-radius: 14px; }
+  .search-layout .search-back:focus-visible .search-back-circle { outline: none; }
+
+  /* Catégories : capsule grise (4 dedans, rayon 14) ; chaque catégorie 40 de haut, icône de 18 de sa couleur et nom de
+     15 ; la catégorie choisie en bleu, en blanc. Les mêmes boutons que sur le téléphone (flèches du clavier comprises). */
+  .search-layout .search-app-top .mode-tabs-search {
+    display: flex; flex: none; gap: 4px; margin: 0; padding: 4px; border-radius: 14px; background: var(--d-hover);
+  }
+  .search-layout .search-app-top .mode-tab {
+    flex-direction: row; gap: 8px; height: 40px; padding: 0 14px; border-radius: 11px; font-family: var(--app-font);
+    transition: background-color var(--app-duration) var(--app-ease);
+  }
+  .search-layout .search-app-top .mode-tile { width: auto; height: auto; border-radius: 0; background: none; box-shadow: none; }
+  .search-layout .search-app-top .mode-tile .icon { width: 18px; height: 18px; }
+  .search-layout .search-app-top .mode-name { margin: 0; overflow: visible; color: var(--app-navy); font: 500 15px/1 var(--app-font); }
+  .search-layout .search-app-top .mode-underline { display: none; }
+  .search-layout .search-app-top .mode-tab[aria-checked="true"] { background: var(--app-brand); }
+  .search-layout .search-app-top .mode-tab[aria-checked="true"] .mode-tile { background: none; box-shadow: none; color: #FFFFFF; }
+  .search-layout .search-app-top .mode-tab[aria-checked="true"] .mode-name { color: #FFFFFF; font-weight: 600; }
+  .search-layout .search-app-top .mode-tab:not([aria-checked="true"]):hover { background: #FFFFFF; }
+  .search-layout .search-app-top .mode-tab:active .mode-tile { transform: none; }
+  .search-layout .search-app-top .mode-tab:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+  .search-layout .search-app-top .mode-tab:focus-visible .mode-tile { outline: none; }
+
+  /* Lieu : toute la place qui reste (240 au moins avant de passer à la ligne), 48 de haut, fond de page, filet, rayon
+     14, loupe de 19, texte de 15. Ses suggestions juste dessous, sur la largeur du champ, par-dessus la liste et la carte. */
+  .search-layout .search-app-top .place-field-app { flex: 1 1 240px; min-width: 240px; }
+  .search-layout .search-app-top .place-field-app input {
+    padding-left: 45px; border-color: var(--d-field-border); border-radius: 14px; background: var(--app-page); font-size: 15px;
+  }
+  .search-layout .search-app-top .place-field-app input:not(.is-idle)::placeholder { color: var(--app-text-dark); }
+  .search-layout .search-app-top .place-field-app input:focus { border-color: var(--app-brand); background: #FFFFFF; }
+  .search-layout .search-app-top .place-field-app .place-field-icon { left: 16px; top: 14.5px; width: 19px; height: 19px; color: var(--app-text-dark); }
+  .search-layout .search-app-top .place-field-idle { left: 45px; font-size: 15px; }
+  .search-layout .search-app-top .place-field-app .place-list { top: 54px; left: 0; right: 0; }
+
+  /* « Filtres » : bouton blanc de 48 à filet, réglages de 19, nom de 15 demi-gras, le nombre de critères dans sa pastille
+     bleue juste après. */
+  .search-layout .search-app-top .filters-button.app-filters-button.has-label {
+    width: auto; gap: 8px; padding: 0 16px; border: 1px solid var(--d-field-border); border-radius: 14px; background: #FFFFFF;
+    color: var(--app-navy); font: 600 15px/1 var(--app-font);
+  }
+  .search-layout .search-app-top .filters-button.has-label .icon { width: 19px; height: 19px; }
+  .search-layout .search-app-top .filters-button.has-label .filters-count { position: static; min-width: 22px; height: 22px; padding: 0 6px; font-size: 12px; }
+  .search-layout .search-app-top .filters-button.has-label:hover { background: var(--d-hover); }
+  .search-layout .search-app-top .filters-button.has-label:focus-visible { border-radius: 14px; }
+
+  /* ——— Seconde ligne : la zone dessinée puis les critères actifs (pastilles de 36), sur plusieurs lignes au besoin ;
+     sans pastille, le bandeau s'arrête sous la première ligne. ——— */
+  .search-layout .search-head {
+    grid-column: 1 / -1; grid-row: 2; position: relative; z-index: 2; background: #FFFFFF; border-bottom: 1px solid var(--app-border);
+  }
+  .search-layout .search-head .chips-row { flex-wrap: wrap; gap: 8px; margin: 0; padding: 0 24px 14px; overflow: visible; }
+  .search-layout .search-head .criterion-chips { flex-wrap: wrap; overflow: visible; }
+  .search-layout .search-head .zone-chip { position: static; }
+  .search-layout .search-head .criterion-chip { height: 36px; border-color: var(--d-field-border); }
+  .search-layout .search-head .criterion-chip-label { gap: 8px; height: 34px; padding-left: 14px; color: var(--app-navy); font: 600 14px/1 var(--app-font); }
+  .search-layout .search-head .criterion-chip-remove { width: 38px; height: 34px; padding-left: 6px; color: var(--app-navy); }
+  .search-layout .search-head .criterion-chip-cross { width: 26px; height: 26px; }
+  .search-layout .search-head .criterion-chip-cross .icon { width: 13px; height: 13px; }
+  .search-layout .search-head .criterion-chip:hover { background: var(--app-page); }
+  .search-layout .search-head .criterion-chip-remove:hover .criterion-chip-cross { background: #E8E5DF; }
+  /* Zone dessinée : crayon de 16 et texte bleus, filet bleu pâle, croix dans un rond bleu très clair. */
+  .search-layout .search-head .zone-chip .criterion-chip { border-color: var(--d-blue-line); }
+  .search-layout .search-head .zone-chip .criterion-chip-label { color: var(--app-brand-pressed); }
+  .search-layout .search-head .zone-chip .criterion-chip-remove { color: var(--app-brand-pressed); }
+  .search-layout .search-head .zone-chip .criterion-chip-cross { background: var(--app-brand-soft); }
+  .search-layout .search-head .zone-chip .criterion-chip:hover { background: #F7F9FD; }
+  .search-layout .search-head .zone-chip .criterion-chip-remove:hover .criterion-chip-cross { background: #E0E7F5; }
+  .search-layout .search-head .criterion-chip-icon { flex: none; width: 16px; height: 16px; }
+
+  /* ——— Liste : la colonne de gauche, qui défile seule (22 au-dessus, 24 des bords) ——— */
+  .search-layout .search-results {
+    grid-column: 1; grid-row: 3; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+    padding: 22px 24px 32px; color: var(--app-navy); container: search-results / inline-size;
+  }
+  /* Nombre de biens (26 très gras) et le lieu ou la zone dessous (15 gris) ; « Enregistrer » et le tri à droite (42 de
+     haut, rayon 12). */
+  .search-layout .search-results .results-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0; padding: 0; border: 0; }
+  .search-layout .search-results .results-count { flex: 1 1 auto; gap: 2px; min-width: 0; }
+  .search-layout .search-results .results-head h2 { color: var(--app-navy); font: 800 26px/1.2 var(--app-font); letter-spacing: -0.02em; }
+  .search-layout .search-results .results-subtitle { margin: 0; color: var(--app-text-dark); font: 400 15px/1.5 var(--app-font); }
+  .search-layout .search-results .save-search-button { gap: 8px; height: 42px; margin: 0; padding: 0 14px; font-size: 15px; }
+  .search-layout .search-results .save-search-button .icon { width: 17px; height: 17px; }
+  .search-layout .search-results .save-search-button:not(.is-saved):hover { background: #E4EAF6; }
+  .search-layout .search-results .results-head .sort-select {
+    flex: none; align-self: auto; gap: 8px; height: 42px; margin: 0; padding: 0 14px; border: 1px solid var(--d-field-border); border-radius: 12px;
+    background: #FFFFFF; color: var(--app-navy); font: 600 15px/1 var(--app-font);
+  }
+  .search-layout .search-results .results-head .sort-select .icon { width: 17px; height: 17px; }
+  .search-layout .search-results .results-head .sort-select .icon:last-of-type { width: 15px; height: 15px; }
+  .search-layout .search-results .results-head .sort-select:hover { background: var(--d-hover); }
+  .search-layout .search-results .results-head .sort-select:has(select:focus-visible) { outline: 3px solid var(--app-brand); outline-offset: 2px; border-radius: 12px; }
+
+  /* Cartes : une colonne, deux dès que chacune garde 280 px (16 entre elles), 18 sous l'en-tête. */
+  .search-layout .search-results .results-list { grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 18px; }
+  @container search-results (min-width: 576px) {
+    .search-layout .search-results .results-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  /* Carte de la maquette : rayon 20, photo de 210 ; « Nouveau » et le rendement à 12 du coin (13 gras), « Déjà vue » en
+     bas à gauche (capsule bleu marine à 72 %), cœur et Comparer dans des ronds blancs de 38 ; dessous, 16 × 18 de marge,
+     catégorie en petites capitales grises, titre de 18, lieu de 14, prix de 22 très gras, indicateurs sur le fond de
+     page (rayon 12). Le bien choisi sur la carte : un liseré bleu de 2 autour de sa carte. */
+  .search-layout .search-results .listing-card { border-radius: 20px; }
+  .search-layout .search-results .listing-card.is-selected {
+    border-color: var(--app-brand); box-shadow: 0 0 0 2px var(--app-brand), 0 10px 28px rgba(36, 45, 56, 0.08);
+  }
+  .search-layout .search-results .listing-card-photo { aspect-ratio: auto; height: 210px; }
+  .search-layout .search-results .listing-card-badges { left: 12px; top: 12px; }
+  .search-layout .search-results .yield-chip { gap: 5px; height: 26px; padding: 0 10px; font-size: 13px; }
+  .search-layout .search-results .yield-chip .icon { width: 14px; height: 14px; }
+  .search-layout .search-results .listing-badge-pill { height: 26px; padding: 0 10px; font-size: 13px; }
+  .search-layout .search-results .already-seen-tag {
+    left: 12px; bottom: 12px; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px; background: rgba(36, 45, 56, 0.72); font-size: 13px;
+  }
+  .search-layout .search-results .already-seen-tag .icon { width: 14px; height: 14px; }
+  .search-layout .search-results .heart-photo, .search-layout .search-results .compare-toggle-badge {
+    width: 38px; height: 38px; background: #FFFFFF; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  }
+  .search-layout .search-results .heart-photo { top: 10px; right: 10px; }
+  .search-layout .search-results .compare-toggle-badge { right: 10px; bottom: 10px; }
+  .search-layout .search-results .compare-toggle-badge.is-active { background: var(--app-brand); }
+  .search-layout .search-results .heart-photo .icon, .search-layout .search-results .compare-toggle-badge .icon { width: 18px; height: 18px; }
+  .search-layout .search-results .listing-card-body { gap: 0; padding: 16px 18px 18px; }
+  .search-layout .search-results .listing-card-top .tag {
+    height: auto; padding: 0; border-radius: 0; background: none; color: var(--app-text-dark); font: 700 12px/1.5 var(--app-font);
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .search-layout .search-results .listing-card-top .chevron { color: var(--app-text-dark); }
+  .search-layout .search-results .listing-card-title { margin: 6px 0 2px; font: 700 18px/1.3 var(--app-font); }
+  .search-layout .search-results .listing-card-place { gap: 6px; margin: 0; color: var(--app-text-dark); font: 400 14px/1.5 var(--app-font); }
+  .search-layout .search-results .listing-card-place .icon { width: 15px; height: 15px; }
+  .search-layout .search-results .listing-card-price { margin: 8px 0 0; }
+  .search-layout .search-results .listing-card-price strong { font: 800 22px/1.3 var(--app-font); letter-spacing: -0.01em; }
+  .search-layout .search-results .listing-card-price span { color: var(--app-text-dark); font-size: 14px; }
+  .search-layout .search-results .facts-panel { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: var(--app-page); }
+  .search-layout .search-results .fact-label { font-size: 12px; }
+  .search-layout .search-results .fact-value { font-size: 13.5px; }
+
+  /* Aucune annonce dans une zone dessinée : « Agrandir la zone » (le bouton du panneau de la carte du téléphone), bleu,
+     avant l'alerte ; les pistes au survol. */
+  .search-layout .search-results .no-results-grow {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 52px; margin-top: 14px;
+    border: 0; border-radius: 12px; background: var(--app-brand); color: #FFFFFF; font: 600 15px/1.2 var(--app-font); cursor: pointer;
+  }
+  .search-layout .search-results .no-results-grow .icon { width: 18px; height: 18px; }
+  .search-layout .search-results .no-results-grow:hover { background: var(--app-brand-pressed); }
+  .search-layout .search-results .no-results-grow:focus-visible { outline: 3px solid var(--app-brand); outline-offset: 2px; }
+  .search-layout .search-results .no-results-hint:hover { background: var(--d-hover); }
+
+  /* ——— Carte : la colonne de droite, filet à gauche ; ses commandes en haut à droite (48, rayon 16), le zoom dessous,
+     la mention des sources en bas à droite. ——— */
+  .search-layout .map-column {
+    display: block; position: relative; z-index: 0; grid-column: 2; grid-row: 3; min-width: 0; min-height: 0; overflow: hidden;
+    border-left: 1px solid var(--app-border); background: #F2F0EC; container: search-map / inline-size;
+  }
+  .search-layout .map-column .results-map { position: absolute; inset: 0; width: auto; height: auto; min-height: 0; }
+  .search-layout .map-column .map-tools { top: 16px; right: 16px; gap: 10px; }
+  .search-layout .map-column .map-round { width: 48px; height: 48px; border-radius: 16px; color: var(--app-navy); box-shadow: 0 4px 16px rgba(36, 45, 56, 0.14); }
+  .search-layout .map-column .map-round.is-active { background: var(--app-brand); color: #FFFFFF; }
+  .search-layout .map-column .map-round:not(.is-active):not([disabled]):hover { background: #F7F6F3; }
+  .search-layout .map-column .map-round.is-active:hover { background: var(--app-brand-pressed); }
+  /* Zoom sous les trois commandes, au-dessus des vignettes des biens (toujours cliquable). */
+  .search-layout .map-column .maplibregl-ctrl-top-right { z-index: 3; top: 180px; right: 8px; }
+  .search-layout .map-column .results-map-attribution {
+    left: auto; right: 8px; bottom: 6px; max-width: calc(100% - 16px); padding: 1px 6px; border-radius: 4px;
+    background: rgba(255, 255, 255, 0.85); color: var(--app-text-dark); font-size: 11px;
+  }
+
+  /* ——— Zone dessinée sur la carte : le bandeau en haut à gauche (16 des bords, sa largeur, à gauche des commandes),
+     « Annuler » en capsule bleu très clair ; « Zone autour du centre de la carte » (au clavier) sous le bandeau ; l'outil
+     en bas au centre ; la carte de validation en bas (16 des bords) ; la mention des sources au-dessus d'eux. ——— */
+  .search-layout .zone-banner {
+    top: 16px; left: 16px; right: auto; width: max-content; max-width: calc(100% - 96px); height: auto; min-height: 54px; gap: 12px;
+    padding: 10px 10px 10px 16px; box-shadow: 0 8px 24px rgba(38, 45, 55, 0.16);
+  }
+  .search-layout .zone-banner-cancel {
+    min-width: 0; min-height: 34px; margin-left: 2px; padding: 0 12px; border-radius: 10px; background: var(--app-brand-soft);
+    color: var(--app-brand); font: 700 14px/34px var(--app-font);
+  }
+  .search-layout .zone-banner-cancel:hover { opacity: 1; background: #E4EAF6; }
+  .search-layout .zone-banner-cancel:focus-visible { border-radius: 10px; }
+  .search-layout .zone-banner-center:focus {
+    left: 0; right: auto; top: calc(100% + 8px); bottom: auto; height: 44px; padding: 0 14px; background: #FFFFFF;
+    box-shadow: 0 4px 16px rgba(36, 45, 56, 0.14); white-space: nowrap;
+  }
+  .search-layout .zone-tools { bottom: 16px; }
+  .search-layout .zone-card {
+    left: 16px; right: 16px; bottom: 16px; gap: 12px; padding: 14px 16px; border-radius: 18px; box-shadow: 0 10px 28px rgba(38, 45, 55, 0.18);
+  }
+  .search-layout .zone-card-count { font-size: 16px; }
+  .search-layout .zone-size { width: 40px; height: 40px; border-color: var(--d-field-border); border-radius: 12px; }
+  .search-layout .zone-restart, .search-layout .zone-commit { min-height: 44px; }
+  .search-layout .map-column.is-zone-drawing .results-map-attribution { bottom: 76px; }
+  .search-layout .map-column.is-zone-proposal .results-map-attribution { bottom: 148px; }
+  /* Carte étroite (moins de 560 px : 1280 px de fenêtre et moins) : le bandeau sur toute la largeur, les commandes et
+     le zoom dessous, pendant le tracé et l'ajustement. */
+  @container search-map (max-width: 559.98px) {
+    .search-layout .zone-banner { right: 16px; width: auto; max-width: none; }
+    .search-layout .map-column.is-editing-zone .map-tools { top: 82px; }
+    .search-layout .map-column.is-editing-zone .maplibregl-ctrl-top-right { top: 246px; }
+  }
+}

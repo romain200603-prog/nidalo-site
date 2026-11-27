@@ -154,7 +154,8 @@ export function SavedSearchesList({ embedded = false, counts: provided }: {
           : count.total === 0 ? 'Aucun résultat pour l\'instant'
             : count.total === 1 ? 'Voir le résultat' : `Voir les ${count.total} résultats`;
         return (
-          <article key={item.id} className={embedded ? 'saved-search space-card' : 'saved-search app-card is-nidalo'}>
+          // `data-mode` (Vos favoris) : la teinte de la catégorie sur ordinateur (favoris-ordinateur.css).
+          <article key={item.id} className={embedded ? 'saved-search space-card' : 'saved-search app-card is-nidalo'} data-mode={embedded ? mode : undefined}>
             <div className="saved-search-top">
               {/* Page de Mon compte : icône dans un carré teinté de 40, comme l'app (isNidalo). */}
               <span className={embedded ? 'tinted-icon' : 'saved-search-tile'}><Icon name={icon} /></span>

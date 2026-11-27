@@ -1,0 +1,75 @@
+/* Écran de connexion sur ordinateur (maquette 13-connexion.html), à partir de 1024 px ; en dessous, connexion-app.css
+   seul, sans aucun changement. Même écran que l'app, mêmes éléments dans le même ordre : seules leur taille et leur
+   place changent.
+   - Page (Mon compte, Favoris, Messages, Publier sans compte) : le fond clair sur toute la fenêtre, le contenu dans une
+     colonne de 440 px centrée en largeur et en hauteur (la fenêtre défile si elle est trop basse) ; la croix, ronde de
+     48, en haut à droite de la fenêtre ; « Retour » au même endroit à gauche.
+   - Accueil : le lancement en boucle de l'app (AuthLaunchLoop, mêmes images, même image immobile) à la place du logo et
+     de la rangée des 4 catégories de la maquette, puis le titre, la phrase, Apple, Google et l'e-mail (56 de haut),
+     « Nouveau sur Nidalo ? » et les mentions.
+   - Étapes par e-mail : le titre sur le fond clair, la feuille blanche en carte, dans la même colonne.
+   - Fenêtre d'une action (SignInSheet) : la même mise en page dans une fenêtre de 600 px au centre.
+   Les mouvements entre les étapes (authMotion.ts) gardent leurs repères : la scène couvre toute la hauteur et la largeur
+   de la colonne, la copie du contenu qui s'en va se place sur la marge de la feuille. */
+
+@media (min-width: 1024px) {
+  /* Contraste AA des textes : les gris trop pâles de l'app (libellés et exemples des champs, « ou », attente de
+     « Renvoyer ») prennent les gris de l'app qui passent ; le rouge des messages est un peu plus sombre. */
+  .auth { --auth-muted: #646B76; --auth-tertiary: #6B7280; --auth-red: #C53F3F; }
+  .auth-field.is-focused input::placeholder { color: #6B7280; }
+  /* Niveau du mot de passe : sa couleur (posée par le code), assombrie de 28 % pour le texte seulement. */
+  .auth-gauge-label { filter: brightness(0.72); }
+
+  /* ——— Présentations ——— */
+
+  .signin-sheet {
+    width: min(600px, calc(100vw - 48px)); height: min(820px, calc(100dvh - 40px)); margin: auto; border-radius: 28px;
+    box-shadow: 0 24px 64px rgba(36, 45, 56, 0.28);
+  }
+  /* La colonne n'est plus un repère : la croix et le retour se placent sur la fenêtre (ou la fenêtre de l'action). */
+  .auth-column { position: static; max-width: 440px; }
+  .auth-bar {
+    position: absolute; inset: 28px 32px auto; z-index: 3; height: auto; padding: 0; background: none; pointer-events: none;
+  }
+  .auth.is-dialog .auth-bar { inset: 24px 24px auto; }
+  .auth-bar .auth-round { pointer-events: auto; }
+  .auth-round { width: 48px; height: 48px; box-shadow: 0 2px 8px rgba(38, 45, 55, 0.06); }
+
+  /* La scène garde toute la hauteur (les étapes montent depuis le bas de la fenêtre) ; l'écran affiché y est centré.
+     Elle ne coupe qu'en hauteur : l'anneau du focus des boutons pleine largeur et l'ombre de la feuille débordent de la
+     colonne sans être coupés. */
+  .auth-stage { padding: 24px 0; }
+  @supports (overflow: clip) { .auth-stage { overflow-x: visible; } }
+  /* Fenêtre trop basse : l'élément qui prend le focus vient à 24 px du bord, son anneau entier dans la fenêtre. */
+  .signin-card { scroll-padding-block: 24px; }
+  .auth.is-dialog .auth-stage { padding: 16px 0; }
+  .auth-layer { flex: 0 0 auto; margin: auto 0; }
+
+  /* ——— Accueil ——— */
+
+  .auth-welcome { padding: 0; }
+  /* Le lancement : le groupe de l'app (144 de haut, comme le logo, les pavés et le nom de la maquette) en haut de sa
+     zone, puis 64 jusqu'au titre ; la zone dépasse 176, le groupe garde donc sa taille. */
+  .auth-loop-zone { flex: none; height: 208px; margin: 0; }
+  .auth-loop { top: 0; margin-top: 0; }
+  .auth-welcome-head { padding: 0; }
+  .auth-hero-title { font-size: 40px; font-weight: 800; line-height: 1.12; letter-spacing: -0.025em; }
+  .auth-hero-subtitle { margin-top: 14px; font-size: 17px; font-weight: 400; line-height: 1.55; }
+  .auth-hero-space { display: none; }
+  .auth-welcome-actions > .auth-providers { --gap: 32px; gap: 12px; }
+  .auth-welcome .auth-provider { min-height: 56px; }
+  .auth-welcome-actions > .auth-error { --gap: 14px; }
+  .auth-welcome-actions > .auth-switch { --gap: 22px; font-size: 16px; }
+  .auth-welcome-actions > .auth-mentions { --gap: 22px; font-size: 13px; line-height: 1.6; }
+
+  /* ——— Étapes par e-mail ——— */
+
+  .auth-step-head { padding: 0 0 28px; }
+  /* Titre sur deux lignes équilibrées : « Confirmez votre adresse e-mail » ne se coupe pas au trait d'union. */
+  .auth-step-title { font-size: 34px; font-weight: 800; line-height: 1.15; letter-spacing: -0.02em; text-wrap: balance; }
+  .auth-step-subtitle { margin-top: 10px; font-size: 17px; font-weight: 400; line-height: 1.55; }
+  .auth-sheet, .auth-sheet.is-signup {
+    padding: 32px; border: 1px solid var(--auth-border); border-radius: 24px; box-shadow: 0 12px 32px rgba(38, 45, 55, 0.06);
+  }
+  .auth .auth-content-ghost { top: 32px; left: 32px; right: 32px; }
+}

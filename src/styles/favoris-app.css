@@ -126,9 +126,4 @@
 }
 @keyframes fav-panel-fade { from { opacity: 0; } }
 
-/* Ordinateur (à partir de 1024 px, étape 7b) : la page du téléphone dans le grand conteneur (page `wide`), ses cartes
-   en grille (account.css) ; les recherches enregistrées 2 par ligne sur toute la largeur, au lieu de la colonne de 720. */
-@media (min-width: 1024px) {
-  .favorites-wrap .favorites-searches { max-width: none; }
-  .favorites-searches .saved-searches.is-embedded { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
+/* Ordinateur (à partir de 1024 px) : favoris-ordinateur.css (version ordinateur, étape 4), sans onglets. */

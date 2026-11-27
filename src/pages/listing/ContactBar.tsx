@@ -8,7 +8,8 @@ import '../../styles/pieces-app.css';
 
 // Barre de contact « Duo » de l'annonce d'un autre (ListingContactBar.swift, demande de Romain du 19 novembre 2026) :
 // « Appeler » (capsule blanche) et « Envoyer un message » (capsule bleue, « Message » si le libellé n'y tient pas).
-// Flottante en bas de l'écran sur un dégradé (sur ordinateur, à la largeur de la colonne), avec l'arrivée en ronds qui
+// Flottante en bas de l'écran sur un dégradé (sous 1024 px ; sur ordinateur, ses deux actions sont dans la colonne de
+// droite de la fiche, DesktopLayout.tsx), avec l'arrivée en ronds qui
 // montent puis se déplient, le reflet une fois, et le repli en ronds quand on descend la fiche ; l'appui qui
 // s'enfonce, la sonnerie et les ondes d'« Appeler », la bulle qui grossit et les trois points si la conversation
 // tarde plus de 0,15 s. « Réduire les animations » (prefers-reduced-motion) : comme l'app, barre dépliée en fondu, sans reflet,

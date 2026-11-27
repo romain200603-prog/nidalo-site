@@ -199,13 +199,16 @@ export function ZonePencil({ menu, editing, onStart }: { menu: MenuItem[] | null
   );
 }
 
-/** « Zone dessinée » et sa croix, qui l'efface : la même pastille que les autres critères (son libellé ouvre les filtres). */
-export function ZoneChip({ onOpen, onRemove }: { onOpen: () => void; onRemove: () => void }) {
+/**
+ * « Zone dessinée » et sa croix, qui l'efface : la même pastille que les autres critères (son libellé ouvre les filtres).
+ * `withIcon` : le crayon avant le libellé (sur ordinateur, dans la rangée des critères).
+ */
+export function ZoneChip({ onOpen, onRemove, withIcon = false }: { onOpen: () => void; onRemove: () => void; withIcon?: boolean }) {
   const hint = useId();
   return (
     <div className="zone-chip">
       <ul className="criterion-chips" aria-label="Zone">
-        <CriterionChip label={DRAWN_ZONE_LABEL} onOpen={onOpen} onRemove={onRemove} hintId={hint} />
+        <CriterionChip label={DRAWN_ZONE_LABEL} onOpen={onOpen} onRemove={onRemove} hintId={hint} icon={withIcon ? 'pencil' : undefined} />
       </ul>
       <span id={hint} hidden>Ouvre les filtres</span>
     </div>

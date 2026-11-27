@@ -4,9 +4,10 @@ import '../styles/account.css';
 // Les cartes, champs et choix des écrans de Mon compte (ecrans-compte.css, dans le même ordre
 // qu'avant), puis ceux propres à la publication.
 import '../styles/ecrans-compte.css';
-// L'assistant plein écran de l'app, sur toutes les largeurs (à partir de 1024 px, élargi dans la colonne de 720 px),
-// mis en dernier pour l'emporter sur les mesures des cartes et des champs de Mon compte (.dsc).
+// L'assistant plein écran de l'app, sur toutes les largeurs, mis après pour l'emporter sur les mesures des cartes et des
+// champs de Mon compte (.dsc) ; puis, à partir de 1024 px, sa mise en page de l'ordinateur (maquette 12).
 import '../styles/publier-telephone.css';
+import '../styles/publier-ordinateur.css';
 
 // Publier : /publier/(?annonce=…), sur ordinateur comme sur téléphone.
 mount(<PublishPage />);

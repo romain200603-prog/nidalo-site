@@ -12,6 +12,7 @@ import {
   type InvestmentCriteria, type Project, type ProjectLocation, type RentalCriteria, type ResidentialCriteria,
 } from '../../lib/account/projectEditor';
 import { useStore } from '../../lib/account/session';
+import { useDesktop } from '../../lib/desktop';
 import { formatFraction, formatPrice } from '../../lib/format';
 import { PROPERTY_TYPE_LABELS, SEARCH_MODES, type PropertyType } from '../../lib/labels';
 import { scopeLabel, type HotelScope } from '../../lib/listingJson';
@@ -26,7 +27,8 @@ import { AppSection, ScreenHeader, Spinner } from './parts';
 
 // « Mon projet immobilier » (Features/Profile/ProjectEditorView.swift et DesignSystem/Components/FormControls.swift),
 // la page de l'app sur toutes les largeurs : les quatre parcours aux critères propres, le résumé qui suit la saisie,
-// « Montrer mon projet à mes contacts » et l'avancement du projet. Comme l'app, tout porte sur une copie, enregistrée
+// « Montrer mon projet à mes contacts » et l'avancement du projet. Sur ordinateur (≥ 1024 px), les quatre sortes sans
+// leur sous-titre : l'icône et le titre, qui nomme seul la carte. Comme l'app, tout porte sur une copie, enregistrée
 // d'un coup par « Enregistrer mon projet » (upsert de real_estate_projects, lib/account/projectEditor).
 
 const SCOPES: HotelScope[] = ['wallsAndBusiness', 'wallsOnly', 'businessOnly'];
@@ -516,6 +518,7 @@ function Editor({ saved }: { saved: Project }) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const stepsId = useId();
+  const desktop = useDesktop();
 
   const issues = projectIssues(draft.criteria, draft.kind);
   const hasIssues = Object.keys(issues).length > 0;
@@ -575,11 +578,12 @@ function Editor({ saved }: { saved: Project }) {
           {KIND_DISPLAY_ORDER.map((kind) => {
             const selected = draft.kind === kind;
             return (
-              <button key={kind} type="button" className="dsc-kind" aria-pressed={selected} aria-label={`${PROJECT_KIND_LABELS[kind]}, ${KIND_SUBTITLES[kind]}`}
+              <button key={kind} type="button" className="dsc-kind" aria-pressed={selected}
+                aria-label={desktop ? PROJECT_KIND_LABELS[kind] : `${PROJECT_KIND_LABELS[kind]}, ${KIND_SUBTITLES[kind]}`}
                 onClick={() => setDraft((current) => changeKind(current, kind))}>
                 <Icon name={KIND_ICONS[kind]} />
                 <span className="dsc-kind-title">{PROJECT_KIND_LABELS[kind]}</span>
-                <span className="dsc-kind-subtitle">{KIND_SUBTITLES[kind]}</span>
+                {!desktop && <span className="dsc-kind-subtitle">{KIND_SUBTITLES[kind]}</span>}
                 {selected && <span className="dsc-kind-check" aria-hidden="true"><Icon name="check" /></span>}
               </button>
             );

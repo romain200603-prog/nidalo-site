@@ -1,8 +1,8 @@
 /* Écran de connexion de l'app (Features/Account/AuthView.swift et AuthLaunchLoop.swift), mesures de l'app (1 pt = 1 px).
    Accueil : le lancement en boucle, « Votre prochain bien commence ici. », Apple, Google et l'e-mail ; étapes par
    e-mail : le titre sur le fond clair et la feuille blanche en bas. Sur toutes les largeurs : plein écran, sans barre
-   d'onglets ni pied de page (dans la colonne de 720 px à partir de 1024 px) ; fenêtre d'une action : le même écran,
-   dans une fenêtre de 480 px au centre à partir de 1024 px. */
+   d'onglets ni pied de page ; fenêtre d'une action : le même écran. À partir de 1024 px, la mise en page de l'ordinateur
+   (maquette 13) : connexion-ordinateur.css. */
 
 .auth {
   --auth-blue: #3A5BAE;
@@ -47,17 +47,10 @@
 html:has(.auth.is-page:not([hidden] *)) { overflow: hidden; }
 body:has(.auth.is-page:not([hidden] *)) { padding-bottom: 0; }
 body:has(.auth.is-page:not([hidden] *)) :is(.tabbar, .footer, .phone-page-head) { display: none; }
-/* À partir de 1024 px : l'écran du téléphone dans la colonne de 720 px, centrée sur son fond ; le lancement en boucle
-   couvre la largeur de la colonne. */
-@media (min-width: 1024px) {
-  .auth.is-page .auth-column { max-width: var(--app-column); }
-}
-/* Fenêtre d'une action (favori, recherche enregistrée…) : plein écran sous 1024 px, 480 px au centre à partir de 1024 px. */
+/* Fenêtre d'une action (favori, recherche enregistrée…) : plein écran sous 1024 px ; au centre à partir de 1024 px
+   (connexion-ordinateur.css). */
 .signin-sheet { width: 100vw; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: #FAF9F6; color: #1F2430; overflow: hidden; overscroll-behavior: contain; }
 .signin-sheet::backdrop { background: rgba(36, 45, 56, 0.45); }
-@media (min-width: 1024px) {
-  .signin-sheet { width: 480px; height: min(760px, calc(100dvh - 48px)); margin: auto; border-radius: 28px; box-shadow: 0 24px 64px rgba(36, 45, 56, 0.28); }
-}
 .auth.is-dialog { height: 100%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: none; }
 /* Téléphone : la présentation plein écran de l'app (fullScreenCover) monte du bas, sans voile sur la page dessous ;
    ordinateur : la fenêtre apparaît comme les autres fenêtres ; fondu seul si « Réduire les animations ». */

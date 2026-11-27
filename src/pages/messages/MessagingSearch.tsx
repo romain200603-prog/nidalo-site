@@ -4,6 +4,7 @@ import type { IconName } from '../../components/iconPaths';
 import { PageHeader } from '../../components/PageHeader';
 import { loadSavedSearches, MODE_TITLES, modeOf, placeLabelOf, savedSearchesStore, type SavedSearch } from '../../lib/account/savedSearches';
 import { useStore } from '../../lib/account/session';
+import { useDesktop } from '../../lib/desktop';
 import { looksLikePhoneNumber, matchesWords, normalizedPhoneNumber } from '../../lib/messages/format';
 import { alphabetical, contactMatches, contactsFrom, sectionLetter, type Contact, type Conversation } from '../../lib/messages/inbox';
 import {
@@ -44,6 +45,7 @@ export function MessagingSearch({ conversations, me, onCancel }: { conversations
   const recents = recentState.owner === owner ? recentState.items : loadRecentSearches(owner);
   const contacts = contactsFrom(conversations, professionals.value);
   const text = query.trim();
+  const desktop = useDesktop();
 
   useEffect(() => {
     loadProfessionals();
@@ -113,6 +115,8 @@ export function MessagingSearch({ conversations, me, onCancel }: { conversations
 
   return (
     <div className={`dm-msearch${shown ? ' is-shown' : ''}`}>
+      {/* Ordinateur : la conversation ouverte reste à côté ; le titre de la page (masqué) reste celui de Messages. */}
+      {desktop && <h1 className="dm-visually-hidden">Messages</h1>}
       <div className="dm-msearch-bar">
         <label className="dm-msearch-field">
           <Icon name="search" />

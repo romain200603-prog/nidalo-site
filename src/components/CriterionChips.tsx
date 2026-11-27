@@ -1,5 +1,6 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
+import type { IconName } from './iconPaths';
 import '../styles/pieces-app.css';
 
 // Pastille de critère et bouton des filtres de l'app (DesignSystem/Components/CriterionChips.swift), les mêmes
@@ -11,18 +12,21 @@ export type Criterion = { id: string; label: string };
  * Critère actif : capsule blanche, libellé, croix dans un rond gris. Toucher le libellé ouvre les filtres (`onOpen`) ;
  * toucher la croix retire le critère. Sans `onOpen` (la page des filtres elle-même), seule la croix agit.
  */
-export function CriterionChip({ label, onOpen, onRemove, hintId, className = '' }: {
+export function CriterionChip({ label, onOpen, onRemove, hintId, icon, className = '' }: {
   label: string;
   onOpen?: () => void;
   onRemove: () => void;
   /** Élément « Ouvre les filtres », lu après le libellé (accessibilityHint de l'app). */
   hintId?: string;
+  /** Pictogramme avant le libellé (la zone dessinée sur ordinateur, maquette 04). */
+  icon?: IconName;
   className?: string;
 }) {
   return (
     <li className={`criterion-chip ${className}`.trim()}>
       {onOpen ? (
         <button type="button" className="criterion-chip-label" onClick={onOpen} aria-label={`Critère ${label}`} aria-describedby={hintId}>
+          {icon && <Icon name={icon} className="icon criterion-chip-icon" />}
           {label}
         </button>
       ) : (
@@ -94,17 +98,20 @@ export function CriterionChipsRow({ chips, onOpen, onRemove, label = 'Critères'
 /**
  * Bouton des filtres (FiltersButton) : carré gris de 48, icône réglages, pastille bleue du nombre de critères.
  * `floating` : sur la carte, fond blanc et ombre des boutons de la carte.
+ * `label` : son nom écrit après l'icône (« Filtres », sur ordinateur), le nombre de critères juste après.
  */
-export function FiltersButton({ count, onClick, floating = false, className = '' }: {
+export function FiltersButton({ count, onClick, floating = false, label, className = '' }: {
   count: number;
   onClick: () => void;
   floating?: boolean;
+  label?: string;
   className?: string;
 }) {
   return (
-    <button type="button" className={`filters-button app-filters-button${floating ? ' is-floating' : ''} ${className}`.trim()} onClick={onClick}
+    <button type="button" className={`filters-button app-filters-button${floating ? ' is-floating' : ''}${label ? ' has-label' : ''} ${className}`.trim()} onClick={onClick}
       aria-label={count > 0 ? `Filtres avancés, ${count} actifs` : 'Filtres avancés'}>
       <Icon name="sliders" />
+      {label && <span className="filters-label" aria-hidden="true">{label}</span>}
       {count > 0 && <span className="filters-count" aria-hidden="true">{count}</span>}
     </button>
   );

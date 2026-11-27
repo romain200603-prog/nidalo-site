@@ -10,7 +10,7 @@ import { ExtraIcon } from './icons';
 import { MonthTypeBar } from './MonthTypeBar';
 import {
   BADGES, SPEC_COLORS, SpecBanner, SpecBarRow, SpecBlockTitle, SpecBoxValue, SpecCard, SpecCardHeader, SpecFootnote,
-  SpecNote, SpecResultBox, SpecSegmentRow, SpecSimulator, SpecTotalRow, SpecValueBox, SpecValueCaption, type Badge,
+  SpecNote, SpecResultBox, SpecSegmentRow, SpecSimulator, SpecSplit, SpecTotalRow, SpecValueBox, SpecValueCaption, type Badge,
 } from './Spec';
 
 // Bloc propre à la catégorie, en haut de la fiche (ListingCategorySections.swift et ListingTopCards.swift) :
@@ -132,21 +132,24 @@ export function HotelSection({ figures }: { figures: HotelPerformance }) {
       <SpecCard labelledBy="rentabilite-hoteliere">
         <SpecCardHeader id="rentabilite-hoteliere" title="Rentabilité hôtelière"
           subtitle="Estimée à partir des performances indiquées par le vendeur" />
-        <SpecBanner hotel left={{ label: 'Chiffre d’affaires annuel', value: cardEuros(figures.annualRevenue) }}
-          right={{ label: 'EBITDA', value: cardEuros(figures.ebitda) }} />
-        {margin !== null && (
-          <SpecValueBox title="Marge EBITDA" subtitle={`${cardEuros(figures.ebitda)} / ${cardEuros(figures.annualRevenue)}`}>
-            <SpecBoxValue text={cardPercent(margin, 1)} />
-          </SpecValueBox>
-        )}
-        <SpecBlockTitle title="Votre performance" legend={[['Entrées', blue], ['Sorties', orange]]} />
-        <div className="spec-rows">
-          <SpecBarRow tight label="Chiffre d’affaires mensuel" detail="(moy.)" amount={cardEuros(figures.monthlyRevenue, true)} ratio={1} color={blue} />
-          <SpecBarRow tight label="Charges d’exploitation" detail="(est.)" amount={cardEuros(figures.monthlyCharges.negated(), true)}
-            ratio={ratio(figures.monthlyCharges, figures.monthlyRevenue)} color={orange} />
-        </div>
-        <SpecTotalRow label="EBITDA mensuel" detail="(moy.)" amount={cardEuros(figures.monthlyEbitda, true)}
-          color={figures.monthlyEbitda.gte(0) ? green : red} />
+        <SpecSplit main={<>
+          <SpecBanner hotel left={{ label: 'Chiffre d’affaires annuel', value: cardEuros(figures.annualRevenue) }}
+            right={{ label: 'EBITDA', value: cardEuros(figures.ebitda) }} />
+          {margin !== null && (
+            <SpecValueBox title="Marge EBITDA" subtitle={`${cardEuros(figures.ebitda)} / ${cardEuros(figures.annualRevenue)}`}>
+              <SpecBoxValue text={cardPercent(margin, 1)} />
+            </SpecValueBox>
+          )}
+        </>} side={<>
+          <SpecBlockTitle title="Votre performance" legend={[['Entrées', blue], ['Sorties', orange]]} />
+          <div className="spec-rows">
+            <SpecBarRow tight label="Chiffre d’affaires mensuel" detail="(moy.)" amount={cardEuros(figures.monthlyRevenue, true)} ratio={1} color={blue} />
+            <SpecBarRow tight label="Charges d’exploitation" detail="(est.)" amount={cardEuros(figures.monthlyCharges.negated(), true)}
+              ratio={ratio(figures.monthlyCharges, figures.monthlyRevenue)} color={orange} />
+          </div>
+          <SpecTotalRow label="EBITDA mensuel" detail="(moy.)" amount={cardEuros(figures.monthlyEbitda, true)}
+            color={figures.monthlyEbitda.gte(0) ? green : red} />
+        </>} />
       </SpecCard>
 
       <SpecCard labelledBy="indicateurs-cles">
@@ -214,22 +217,24 @@ export function ProfitabilityCard({ view, choice, options, onChange }: {
   return (
     <SpecCard labelledBy="rentabilite">
       <SpecCardHeader id="rentabilite" title="Rentabilité" subtitle={view.source} />
-      <SpecBanner left={{ label: 'Rendement brut', value: view.grossYield }} right={{ label: 'Rendement net', value: view.netYield }} />
-      <SpecValueBox title="Cash-flow mensuel" subtitle={view.financing}>
-        <SpecBoxValue text={view.cashFlowText} color={cashInk} />
-        <SpecValueCaption icon={positive ? <ExtraIcon name="arrowUpRight" /> : <Icon name="arrowDownRight" />}
-          text={positive ? 'Autofinancé' : 'Effort d’épargne'} color={cashInk} />
-      </SpecValueBox>
-
-      <SpecBlockTitle title="Votre mois type" />
-      <MonthTypeBar bar={bar} cashFlow={view.cashFlow} rentCaption={rentCaption} />
-      <div className="spec-rows spec-month-rows">
-        {view.rows.map((row) => (
-          <SpecBarRow key={row.id} label={row.label} detail={row.info} badge={row.badge ? ROW_BADGES[row.badge] : null} amount={cardEuros(row.amount, true)}
-            showsBar={false} amountColor={isRent(row) ? green : navy}
-            marker={isRent(row) ? MONTH_COLORS.collectedRent : bar.segmentKind(row.id) ? MONTH_COLORS[row.id] : ''} />
-        ))}
-      </div>
+      <SpecSplit main={<>
+        <SpecBanner left={{ label: 'Rendement brut', value: view.grossYield }} right={{ label: 'Rendement net', value: view.netYield }} />
+        <SpecValueBox title="Cash-flow mensuel" subtitle={view.financing}>
+          <SpecBoxValue text={view.cashFlowText} color={cashInk} />
+          <SpecValueCaption icon={positive ? <ExtraIcon name="arrowUpRight" /> : <Icon name="arrowDownRight" />}
+            text={positive ? 'Autofinancé' : 'Effort d’épargne'} color={cashInk} />
+        </SpecValueBox>
+      </>} side={<>
+        <SpecBlockTitle title="Votre mois type" />
+        <MonthTypeBar bar={bar} cashFlow={view.cashFlow} rentCaption={rentCaption} />
+        <div className="spec-rows spec-month-rows">
+          {view.rows.map((row) => (
+            <SpecBarRow key={row.id} label={row.label} detail={row.info} badge={row.badge ? ROW_BADGES[row.badge] : null} amount={cardEuros(row.amount, true)}
+              showsBar={false} amountColor={isRent(row) ? green : navy}
+              marker={isRent(row) ? MONTH_COLORS.collectedRent : bar.segmentKind(row.id) ? MONTH_COLORS[row.id] : ''} />
+          ))}
+        </div>
+      </>} />
       {view.notes.length > 0 && (
         <div className="spec-notes">
           {view.notes.map((note) => <SpecNote key={note} text={note} />)}

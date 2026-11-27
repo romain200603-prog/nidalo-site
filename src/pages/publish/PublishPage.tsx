@@ -7,6 +7,7 @@ import { isNewAccount } from '../../lib/account/auth';
 import { accountStore, formFor, loadAccount, publicName, saveProfile, type Account } from '../../lib/account/profile';
 import { useSession, useStore } from '../../lib/account/session';
 import { UUID_PATTERN } from '../../lib/listings';
+import { useDesktop } from '../../lib/desktop';
 import { accountPath, listingPath, PATHS, publishPath } from '../../lib/paths';
 import { locateAddress, PlaceSearchError } from '../../lib/places';
 import {
@@ -27,14 +28,16 @@ import { DescriptionStep, ReviewStep, SuccessView } from './FinalSteps';
 import { FinanceStep } from './FinanceStep';
 import { ADDRESS_NOT_FOUND, ADDRESS_OFFLINE, CategoryStep, FeaturesStep, MainStep } from './MainSteps';
 import { MediaStep } from './MediaStep';
-import { CheckCircleFill, PhoneHeader } from './PhoneParts';
+import { CheckCircleFill, PhoneHeader, PublishBrand } from './PhoneParts';
 import { StepSlide } from './StepSlide';
 
 // « Publier une annonce » (Features/Publish/PublishFlowView.swift) : les sept étapes de l'app, « Brouillon » à chaque
 // étape, la vérification, puis la confirmation. /publier/?annonce=… reprend un brouillon ou modifie une annonce déjà
 // publiée (« Enregistrer », jamais de brouillon). Tout s'écrit dans les tables de l'app (lib/publish/save).
 // Sur toutes les largeurs, l'assistant plein écran de l'app, sans barre d'onglets : l'en-tête et la barre d'étapes en
-// haut, « Retour » et « Continuer » en bas ; à partir de 1024 px, dans la colonne de 720 px. Sans compte, la connexion
+// haut, « Retour » et « Continuer » en bas. À partir de 1024 px (maquette 12-publier-etape-1.html, publier-ordinateur.css) :
+// l'en-tête simple sur toute la largeur (logo, titre, étape, « Brouillon », « Quitter », barre d'étapes), l'étape au
+// milieu, la barre du bas avec « Continuer » à droite ; les mêmes éléments, les mêmes actions. Sans compte, la connexion
 // d'abord. La saisie reste la même quand la fenêtre change de largeur.
 
 export function PublishPage() {
@@ -263,6 +266,7 @@ function PublishFlow({ start, account, listingId, photosFirst }: { start: Start;
   const slide = useRef<StepSlide>(null);
   /** « Enregistrer les modifications » tient sur une ligne : il rapetisse jusqu'à 80 % (minimumScaleFactor de l'app). */
   const actionBar = useFitTexts<HTMLDivElement>();
+  const desktop = useDesktop();
 
   const update: Update = useCallback((change) => setDraft((current) => change(current)), []);
   const changed = hasChanges(draft, saved);
@@ -513,6 +517,8 @@ function PublishFlow({ start, account, listingId, photosFirst }: { start: Start;
   if (published) {
     return (
       <div className="dsc dpub">
+        {/* Ordinateur : l'en-tête simple de l'assistant, réduit au logo (la confirmation a son propre titre et ses liens). */}
+        {desktop && <div className="ppub-head"><div className="ppub-head-row"><PublishBrand /></div></div>}
         <SuccessView listingId={published.id} title={published.title} editing={editing} back={back} />
       </div>
     );
@@ -548,6 +554,8 @@ function PublishFlow({ start, account, listingId, photosFirst }: { start: Start;
   }
 
   const closeLabel = editing ? 'Fermer la modification' : 'Fermer la publication';
+  /** Ordinateur : la croix est le bouton « Quitter » de la maquette, avec le nom de la question qu'il ouvre. */
+  const quitLabel = editing ? 'Quitter la modification' : 'Quitter la publication';
   /** La flèche revient à l'étape précédente, comme « Retour » ; à la première étape, elle ferme. */
   const stepBack = () => {
     if (index === 0) leave();
@@ -588,7 +596,7 @@ function PublishFlow({ start, account, listingId, photosFirst }: { start: Start;
   return (
     <div className="dsc dpub dpub-flow">
       <PhoneHeader title={title} subtitle={subtitle} backLabel={index === 0 ? closeLabel : 'Étape précédente'} onBack={stepBack}
-        action={headAction} closeLabel={closeLabel} onClose={leave} progress={progressBar} />
+        action={headAction} closeLabel={closeLabel} quitLabel={quitLabel} onClose={leave} progress={progressBar} />
       {notice && <div className="dsc-saved" role="status"><CheckCircleFill />{notice}</div>}
 
       <StepSlide ref={slide} index={index}>{stepView}</StepSlide>
@@ -613,8 +621,9 @@ function PublishFlow({ start, account, listingId, photosFirst }: { start: Start;
             <button type="button" className={`dsc-button dsc-button-primary${draft.category === null && draft.propertyType === null ? ' is-dimmed' : ''}`}
               onClick={() => { if (!slide.current?.isSliding) void goForward(); }} disabled={(draft.category === null && draft.propertyType === null) || resolving}>
               {resolving ? <span className="spinner dsc-button-spinner" role="status" aria-label="Recherche de l'adresse" />
-                // L'app montre la flèche devant le mot (Label).
-                : <><Icon name="chevronRight" />Continuer</>}
+                // L'app montre la flèche devant le mot (Label) ; sur ordinateur, la flèche de la maquette, après le mot
+                // (publier-ordinateur.css).
+                : <><Icon name={desktop ? 'arrowRight' : 'chevronRight'} />Continuer</>}
             </button>
           )}
         </div>

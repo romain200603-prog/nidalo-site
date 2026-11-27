@@ -1,5 +1,5 @@
 /* Votre recherche de l'app (Features/Search : SearchView.swift, SaveSearchSheet.swift, SearchNoResults.swift), à toutes
-   les largeurs ; à partir de 1024 px, dans le grand conteneur (app.css).
+   les largeurs ; à partir de 1024 px, la liste et la carte côte à côte (recherche-ordinateur.css).
    1 pt de l'app = 1 px ici ; ombres : flou CSS = 2 × le rayon SwiftUI ; « manrope » de l'app = --app-font. */
 
 /* ——— Écran ——— */
@@ -11,6 +11,7 @@
   position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 8px;
   margin: 0 -16px; padding: calc(8px + env(safe-area-inset-top)) 16px 4px; background: var(--app-page);
 }
+/* Ordinateur : la première ligne du bandeau du haut, sous l'en-tête du site (recherche-ordinateur.css). */
 .search-back { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px; color: var(--app-navy); -webkit-tap-highlight-color: transparent; }
 .search-back-circle { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: var(--app-segment); }
 .search-back-circle .icon { width: 18px; height: 18px; }

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import { LargeHeader } from '../../components/LargeHeader';
-import { MenuGroup, type MenuRowItem } from '../../components/MenuRows';
+import { GroupCard, MenuGroup, MenuRow, type MenuRowItem } from '../../components/MenuRows';
 import { RoundButton } from '../../components/RoundButton';
 import { AlertDialog } from '../listing/Dialogs';
 import { agendaItems, agendaStore, itemsIn, loadAgenda } from '../../lib/account/agenda';
@@ -20,6 +20,7 @@ import { agendaSubtitle, onlineSubtitle, savedSearchesSubtitle, viewedSubtitle }
 import { loadTeam, memberAgency, ROLE_LABELS, teamStore, teamSubtitle } from '../../lib/account/team';
 import { currentUserId, useStore } from '../../lib/account/session';
 import { notificationsLabel } from '../../lib/badges';
+import { useDesktop } from '../../lib/desktop';
 import { requestsInTab, type DetailRequestRow } from '../../lib/listing/requestDetail';
 import { parisDay } from '../../lib/listing/views';
 import { fetchVisitRequests } from '../../lib/listing/visits';
@@ -29,11 +30,15 @@ import { recentlyViewedIds } from '../../lib/recentlyViewed';
 import { SpaceProfileCard } from './parts';
 import { soonPath } from './Screens';
 import '../../styles/compte-app.css';
+import '../../styles/compte-ordinateur.css';
 
 // Mon compte (Features/Profile/ProfileView.swift) : l'espace particulier ou l'espace professionnel, comme l'app.
 // Grand titre et cloche, carte du profil, puis les groupes de l'app dans son ordre, avec ses lignes, ses icônes et
 // ses textes ; chaque ligne mène à l'écran que le site a déjà. Ce qui reste sur l'iPhone n'est pas ajouté : la carte
 // « Mon dossier immobilier » du particulier (son pourcentage vient des documents de l'iPhone), « Alertes sur cet iPhone ».
+// À partir de 1024 px (maquette 11-mon-compte.html, compte-ordinateur.css) : le titre, puis deux colonnes ; à gauche la
+// carte du profil, les chiffres de l'agence, « Mon dossier immobilier » en carte, « Se déconnecter » et « Supprimer mon
+// compte » ; à droite les groupes, leurs lignes en cartes. Mêmes lignes, mêmes liens, mêmes lectures.
 
 type Dialog = 'logout' | null;
 
@@ -129,36 +134,44 @@ function IndividualSpace({ account, securityRows, settingsRows }: SpaceProps & {
   const now = new Date();
   const upcoming = itemsIn(agendaItems(agenda, currentUserId(), now), 'upcoming', now);
   const online = listings.status === 'ready' ? listings.items.filter((row) => ONLINE_STATUSES.includes(row.status)).length : 0;
+  const desktop = useDesktop();
+  // « Mon dossier immobilier » : la ligne du site, gardée (l'app a une carte à la place, avec les documents de l'iPhone).
+  // Sur ordinateur, la même ligne en carte dans la colonne de gauche, à la place de sa ligne dans le groupe.
+  const dossier: MenuRowItem = { icon: 'folderCheck', title: 'Mon dossier immobilier', tint: 'teal', href: soonPath('dossier') };
   return (
     <>
+      {/* Sur ordinateur, « Modifier » est dessiné en bouton sous la carte, avec le libellé de la maquette. */}
       <SpaceProfileCard
         name={account.profile.display_name}
         line={account.email}
         badge="Particulier"
         photo={account.profile.avatar_path}
         href={accountPath('informations')}
+        action={desktop ? 'Modifier mon profil' : undefined}
       />
-      <MenuGroup title="Mon espace" rows={[
-        { icon: 'calendarBlank', title: 'Mon agenda', tint: 'blue', href: accountPath('agenda'),
-          subtitle: agendaSubtitle(upcoming.length, upcoming.filter((item) => item.status === 'toConfirm').length) },
-        { icon: 'search', title: 'Mes recherches', tint: 'blue', href: accountPath('recherches'),
-          subtitle: savedSearchesSubtitle(searches.status === 'ready' ? searches.items.length : 0) },
-        { icon: 'eye', title: 'Biens consultés', tint: 'blue', href: accountPath('consultes'), subtitle: viewedSubtitle(recentlyViewedIds().length) },
-        { icon: 'target', title: 'Mon projet', tint: 'green', href: accountPath('projet'),
-          subtitle: project.status === 'ready' ? projectSubtitle(project.project) || null : null },
-        { icon: 'home', title: 'Mes annonces', tint: 'blue', href: accountPath('annonces'), subtitle: onlineSubtitle(online) },
-      ]} />
-      {/* « Mon dossier immobilier » : la ligne du site, gardée (l'app a une carte à la place, avec les documents de l'iPhone). */}
-      <MenuGroup title="Contrats et location" rows={[
-        { icon: 'fileText', title: 'Mon bail de location', tint: 'teal', href: soonPath('bail') },
-        { icon: 'euro', title: 'Quittances de loyer', tint: 'teal', href: soonPath('quittances') },
-        { icon: 'clipboardCheck', title: 'États des lieux', tint: 'teal', href: soonPath('etats') },
-        { icon: 'tag', title: 'Offres et compromis', tint: 'amber', href: soonPath('offres') },
-        { icon: 'filePenLine', title: 'Documents à signer', tint: 'amber', href: soonPath('signature') },
-        { icon: 'folderCheck', title: 'Mon dossier immobilier', tint: 'teal', href: soonPath('dossier') },
-      ]} />
-      <MenuGroup title="Compte et sécurité" rows={securityRows} />
-      <MenuGroup title="Paramètres et assistance" rows={settingsRows} />
+      {desktop && <DossierCard row={dossier} />}
+      <SpaceGroups desktop={desktop}>
+        <MenuGroup title="Mon espace" rows={[
+          { icon: 'calendarBlank', title: 'Mon agenda', tint: 'blue', href: accountPath('agenda'),
+            subtitle: agendaSubtitle(upcoming.length, upcoming.filter((item) => item.status === 'toConfirm').length) },
+          { icon: 'search', title: 'Mes recherches', tint: 'blue', href: accountPath('recherches'),
+            subtitle: savedSearchesSubtitle(searches.status === 'ready' ? searches.items.length : 0) },
+          { icon: 'eye', title: 'Biens consultés', tint: 'blue', href: accountPath('consultes'), subtitle: viewedSubtitle(recentlyViewedIds().length) },
+          { icon: 'target', title: 'Mon projet', tint: 'green', href: accountPath('projet'),
+            subtitle: project.status === 'ready' ? projectSubtitle(project.project) || null : null },
+          { icon: 'home', title: 'Mes annonces', tint: 'blue', href: accountPath('annonces'), subtitle: onlineSubtitle(online) },
+        ]} />
+        <MenuGroup title="Contrats et location" rows={[
+          { icon: 'fileText', title: 'Mon bail de location', tint: 'teal', href: soonPath('bail') },
+          { icon: 'euro', title: 'Quittances de loyer', tint: 'teal', href: soonPath('quittances') },
+          { icon: 'clipboardCheck', title: 'États des lieux', tint: 'teal', href: soonPath('etats') },
+          { icon: 'tag', title: 'Offres et compromis', tint: 'amber', href: soonPath('offres') },
+          { icon: 'filePenLine', title: 'Documents à signer', tint: 'amber', href: soonPath('signature') },
+          ...(desktop ? [] : [dossier]),
+        ]} />
+        <MenuGroup title="Compte et sécurité" rows={securityRows} />
+        <MenuGroup title="Paramètres et assistance" rows={settingsRows} />
+      </SpaceGroups>
     </>
   );
 }
@@ -186,6 +199,10 @@ function ProSpace({ securityRows, settingsRows }: SpaceProps) {
   const name = (member?.agency_name ?? agency?.agency_name)?.trim() || 'Votre agence';
   const line = member ? `${ROLE_LABELS[member.role]} de l'équipe` : agency?.email?.trim() || agency?.city?.trim() || 'Fiche agence à compléter';
   const online = myListings.filter((row) => ONLINE_STATUSES.includes(row.status)).length;
+  const desktop = useDesktop();
+  // Le dossier reste dans l'app iPhone (documents chiffrés sur l'iPhone) : l'écran « bientôt » du site. Sur ordinateur,
+  // la ligne en carte dans la colonne de gauche, comme pour le particulier.
+  const dossier: MenuRowItem = { icon: 'folderCheck', title: 'Mon dossier immobilier', tint: 'blue', href: soonPath('dossier') };
   const [toHandle, setToHandle] = useState(0);
   useEffect(() => {
     let alive = true;
@@ -211,33 +228,45 @@ function ProSpace({ securityRows, settingsRows }: SpaceProps) {
         <div><strong>{contactItems.length}</strong><span>Contacts</span></div>
         <div><strong>{activeSalesCount(saleRows)}</strong><span>Ventes en cours</span></div>
       </div>
-      <MenuGroup title="Mon activité professionnelle" rows={[
-        { icon: 'home', title: 'Mes annonces', tint: 'blue', subtitle: listingsCountText(myListings), href: accountPath('annonces') },
-        { icon: 'scrollText', title: 'Mes mandats', tint: 'blue', subtitle: mandatesSubtitle(mandateRows, parisDay(new Date())), href: MANDATES_PATH },
-        { icon: 'handshake', title: 'Mes ventes', tint: 'blue', subtitle: salesSubtitle(saleRows), href: SALES_PATH },
-        { icon: 'users', title: 'Mes contacts', tint: 'blue', subtitle: contactsSubtitle(contactItems), badge: newContacts, badgeTone: 'brand', href: CONTACTS_PATH },
-        { icon: 'calendarBlank', title: 'Agenda des visites', tint: 'blue', href: accountPath('agenda') },
-        // « Mes visites » : demandes envoyées et reçues ; la pastille compte celles qui attendent une réponse.
-        { icon: 'calendarCheck', title: 'Mes visites', tint: 'blue', badge: toHandle, badgeTone: 'brand', href: accountPath('visites') },
-        { icon: 'trend', title: 'Mes opportunités', tint: 'blue', subtitle: opportunitiesSubtitle(opportunityRows), href: OPPORTUNITIES_PATH },
-      ]} />
-      <MenuGroup title="Outils professionnels" rows={[
-        // Le dossier reste dans l'app iPhone (documents chiffrés sur l'iPhone) : l'écran « bientôt » du site.
-        { icon: 'folderCheck', title: 'Mon dossier immobilier', tint: 'blue', href: soonPath('dossier') },
-        { icon: 'chartColumn', title: 'Statistiques', tint: 'blue', href: accountPath('statistiques') },
-        { icon: 'userPlus', title: 'Gestion des équipes', tint: 'blue', subtitle: teamSubtitle(team), href: TEAM_PATH },
-        { icon: 'megaphone', title: 'Outils de diffusion', tint: 'blue', href: accountPath('diffusion') },
-        { icon: 'building2', title: 'Profil agence', tint: 'blue', subtitle: agency || member ? null : 'À compléter', href: AGENCY_PATH },
-        { icon: 'creditCard', title: 'Abonnement Nidalo Pro', tint: 'blue', href: soonPath('abonnement') },
-      ]} />
-      <MenuGroup title="Compte et sécurité" rows={[
-        // Seul le gérant modifie la fiche de l'agence : un membre de l'équipe n'a pas cette ligne.
-        ...(member ? [] : [{ icon: 'badgeCheck' as const, title: 'Informations de l\'agence', href: AGENCY_FORM_PATH }]),
-        // Seul chemin de l'espace professionnel vers « Mes informations », membres de l'équipe compris (n° 117).
-        { icon: 'circleUser', title: 'Mes informations', href: accountPath('informations') },
-        ...securityRows,
-      ]} />
-      <MenuGroup title="Paramètres et assistance" rows={settingsRows} />
+      {desktop && <DossierCard row={dossier} />}
+      <SpaceGroups desktop={desktop}>
+        <MenuGroup title="Mon activité professionnelle" rows={[
+          { icon: 'home', title: 'Mes annonces', tint: 'blue', subtitle: listingsCountText(myListings), href: accountPath('annonces') },
+          { icon: 'scrollText', title: 'Mes mandats', tint: 'blue', subtitle: mandatesSubtitle(mandateRows, parisDay(new Date())), href: MANDATES_PATH },
+          { icon: 'handshake', title: 'Mes ventes', tint: 'blue', subtitle: salesSubtitle(saleRows), href: SALES_PATH },
+          { icon: 'users', title: 'Mes contacts', tint: 'blue', subtitle: contactsSubtitle(contactItems), badge: newContacts, badgeTone: 'brand', href: CONTACTS_PATH },
+          { icon: 'calendarBlank', title: 'Agenda des visites', tint: 'blue', href: accountPath('agenda') },
+          // « Mes visites » : demandes envoyées et reçues ; la pastille compte celles qui attendent une réponse.
+          { icon: 'calendarCheck', title: 'Mes visites', tint: 'blue', badge: toHandle, badgeTone: 'brand', href: accountPath('visites') },
+          { icon: 'trend', title: 'Mes opportunités', tint: 'blue', subtitle: opportunitiesSubtitle(opportunityRows), href: OPPORTUNITIES_PATH },
+        ]} />
+        <MenuGroup title="Outils professionnels" rows={[
+          ...(desktop ? [] : [dossier]),
+          { icon: 'chartColumn', title: 'Statistiques', tint: 'blue', href: accountPath('statistiques') },
+          { icon: 'userPlus', title: 'Gestion des équipes', tint: 'blue', subtitle: teamSubtitle(team), href: TEAM_PATH },
+          { icon: 'megaphone', title: 'Outils de diffusion', tint: 'blue', href: accountPath('diffusion') },
+          { icon: 'building2', title: 'Profil agence', tint: 'blue', subtitle: agency || member ? null : 'À compléter', href: AGENCY_PATH },
+          { icon: 'creditCard', title: 'Abonnement Nidalo Pro', tint: 'blue', href: soonPath('abonnement') },
+        ]} />
+        <MenuGroup title="Compte et sécurité" rows={[
+          // Seul le gérant modifie la fiche de l'agence : un membre de l'équipe n'a pas cette ligne.
+          ...(member ? [] : [{ icon: 'badgeCheck' as const, title: 'Informations de l\'agence', href: AGENCY_FORM_PATH }]),
+          // Seul chemin de l'espace professionnel vers « Mes informations », membres de l'équipe compris (n° 117).
+          { icon: 'circleUser', title: 'Mes informations', href: accountPath('informations') },
+          ...securityRows,
+        ]} />
+        <MenuGroup title="Paramètres et assistance" rows={settingsRows} />
+      </SpaceGroups>
     </>
   );
+}
+
+/** Ordinateur : les groupes dans la colonne de droite (compte-ordinateur.css). Sur téléphone, tels quels. */
+function SpaceGroups({ desktop, children }: { desktop: boolean; children: ReactNode }) {
+  return desktop ? <div className="app-space-groups">{children}</div> : <>{children}</>;
+}
+
+/** Ordinateur : « Mon dossier immobilier » en carte dans la colonne de gauche (maquette 11), la même ligne et le même lien. */
+function DossierCard({ row }: { row: MenuRowItem }) {
+  return <GroupCard className="space-dossier"><li><MenuRow {...row} /></li></GroupCard>;
 }

@@ -222,12 +222,16 @@ const box = (page, selector) => page.evaluate((s) => {
 const texts = (page, selector) => page.$$eval(selector, (els) => els.map((el) => el.textContent.replace(/[\s  ]+/g, ' ').trim()));
 const focused = (page) => page.evaluate(() => document.activeElement?.textContent.replace(/[\s  ]+/g, ' ').trim() || document.activeElement?.getAttribute('aria-label') || document.activeElement?.tagName);
 
-/** Carte ouverte et prête, avec ses biens. */
-async function mapReady(page, name, { markers = true } = {}) {
-  await page.waitForSelector('.map-column.is-open .map-canvas[data-ready="oui"]', { timeout: 15000 })
+/**
+ * Carte ouverte et prête, avec ses biens. `beside` : sur ordinateur, la carte est toujours affichée à côté de la liste
+ * (jamais « ouverte » en plein écran).
+ */
+async function mapReady(page, name, { markers = true, beside = false } = {}) {
+  const column = beside ? '.search-layout .map-column' : '.map-column.is-open';
+  await page.waitForSelector(`${column} .map-canvas[data-ready="oui"]`, { timeout: 15000 })
     .catch(() => problems.push(`${name} : la carte ne s'affiche pas`));
   if (markers) {
-    await page.waitForSelector('.map-column.is-open .map-marker, .map-column.is-open .map-cluster', { timeout: 15000 })
+    await page.waitForSelector(`${column} .map-marker, ${column} .map-cluster`, { timeout: 15000 })
       .catch(() => problems.push(`${name} : aucun bien sur la carte`));
   }
   await page.waitForTimeout(400);
@@ -589,41 +593,47 @@ if (!before) {
   const state = newState();
   const { context, page } = await open(DESKTOP, state);
   await page.goto(`${base}/recherche/?mode=buy&vue=carte`);
-  await mapReady(page, N);
+  await mapReady(page, N, { beside: !before });
   await page.screenshot({ path: join(out, 'carte-ordinateur.png') });
   if (!before) {
-    // Tracé à la souris (étape 7b : l'écran du téléphone, élargi) : le bandeau à la place de la ligne du haut, sur la
-    // colonne de 720 (14 de ses bords), sans zoom ; l'outil en bas au centre, à 12 px du bas de la fenêtre (la carte
-    // couvre la barre d'onglets).
+    // Tracé à la souris (version ordinateur, étape 2 : la carte à droite de la liste) : le bandeau en haut à gauche de la
+    // carte (16 de ses bords, à gauche des commandes), sans zoom ; l'outil en bas au centre de la carte, à 16 px du bas
+    // de la fenêtre. Mesures depuis le bord de la carte (sous le filet de la colonne).
+    const pane = await box(page, '.map-column .results-map');
+    const paneCenter = [pane[0] + pane[2] / 2, pane[1] + pane[3] / 2];
     await page.click('.zone-pencil');
     await page.waitForSelector('.zone-banner');
     const banner = await box(page, '.zone-banner');
     const tools = await box(page, '.zone-tools');
+    const mapTools = await box(page, '.map-column .map-tools');
     expectSame(N, 'tracé', {
-      text: tidy(await page.textContent('.zone-banner-text')), center: Math.round(banner[0] + banner[2] / 2), width: banner[2], top: await page.locator('.map-app-top').count(),
-      zoom: await page.$eval('.map-column .maplibregl-ctrl-top-right', (el) => getComputedStyle(el).visibility), tools: [Math.round(tools[0] + tools[2] / 2), 900 - tools[1] - tools[3]],
-    }, { text: 'Tracez votre zone à la souris', center: 720, width: 692, top: 0, zoom: 'hidden', tools: [720, 12] });
+      text: tidy(await page.textContent('.zone-banner-text')), banner: [banner[0] - pane[0], banner[1] - pane[1]], beside: banner[0] + banner[2] <= mapTools[0] - 16,
+      top: await page.locator('.map-app-top').count(), zoom: await page.$eval('.map-column .maplibregl-ctrl-top-right', (el) => getComputedStyle(el).visibility),
+      tools: [Math.abs(tools[0] + tools[2] / 2 - paneCenter[0]) <= 1, 900 - tools[1] - tools[3]],
+    }, { text: 'Tracez votre zone à la souris', banner: [16, 16], beside: true, top: 0, zoom: 'hidden', tools: [true, 16] });
     await page.screenshot({ path: join(out, 'zone-trace-ordinateur.png') });
-    // La molette ne bouge pas la carte pendant le tracé.
+    // La molette (au-dessus de la carte) ne bouge pas la carte pendant le tracé.
     const shown = await anchors(page);
-    await page.mouse.move(700, 500);
+    await page.mouse.move(paneCenter[0], paneCenter[1]);
     await page.mouse.wheel(0, -400);
     await page.waitForTimeout(400);
     expectSame(N, 'molette pendant le tracé', JSON.stringify(await anchors(page)) === JSON.stringify(shown), true);
     const target = shown[0];
-    const loop = ellipse(Math.min(Math.max(target.x, 260), 1180), Math.min(Math.max(target.y, 330), 600), 160, 120);
+    // La boucle autour du premier bien, dans la carte (hors du bandeau, des commandes et de l'outil).
+    const loop = ellipse(Math.min(Math.max(target.x, pane[0] + 175), pane[0] + pane[2] - 245), Math.min(Math.max(target.y, pane[1] + 210), 600), 160, 120);
     await mouseStroke(page, loop, () => page.screenshot({ path: join(out, 'zone-trace-en-cours-ordinateur.png') }));
     await page.waitForSelector('.zone-card');
     await expectCard(page, N);
     const card = await box(page, '.zone-card');
-    expectSame(N, 'carte de validation sur la colonne, en bas', [Math.round(card[0] + card[2] / 2), card[2], 900 - card[1] - card[3]], [720, 692, 8]);
+    expectSame(N, 'carte de validation en bas de la carte [gauche, largeur, bas]', [card[0] - pane[0], card[2], 900 - card[1] - card[3]], [16, pane[2] - 32, 16]);
     await page.screenshot({ path: join(out, 'zone-validation-ordinateur.png') });
-    // Échap : rien n'est posé, la ligne du haut revient ; la molette zoome de nouveau.
+    // Échap : rien n'est posé, la carte reste à côté de la liste ; la molette zoome de nouveau.
     await page.keyboard.press('Escape');
     await page.waitForSelector('.zone-card', { state: 'detached', timeout: 3000 }).catch(() => problems.push(`${N} : Échap ne referme pas l'ajustement`));
-    expectSame(N, 'Échap', [new URL(page.url()).searchParams.has('dessin'), await page.locator('.map-app-top').count(), await page.locator('.map-column.is-open').count()], [false, 1, 1]);
+    expectSame(N, 'Échap', [new URL(page.url()).searchParams.has('dessin'), await page.locator('.map-app-top, .map-column.is-open').count(),
+      await page.$eval('.map-column', (el) => getComputedStyle(el).display), new URL(page.url()).searchParams.get('vue')], [false, 0, 'block', 'carte']);
     const still = await anchors(page);
-    await page.mouse.move(700, 500);
+    await page.mouse.move(paneCenter[0], paneCenter[1]);
     await page.mouse.wheel(0, -400);
     await page.waitForTimeout(600);
     expectTrue(N, 'molette après le tracé : la carte zoome de nouveau', JSON.stringify(await anchors(page)) !== JSON.stringify(still));
@@ -658,45 +668,46 @@ if (!before) {
   }
   // Zone sur une ville (photo et plan), sur une grande région, et sans bien, ouvertes par l'adresse.
   await page.goto(`${base}/recherche/?mode=buy&vue=carte&dessin=${dessin(HEXAGON)}`);
-  await mapReady(page, N);
+  await mapReady(page, N, { beside: !before });
   await page.screenshot({ path: join(out, 'zone-ville-ordinateur.png') });
   if (!before) {
     const hexagon = HEXAGON.map(([latitude, longitude]) => ({ latitude, longitude }));
-    // La pastille sous la ligne du haut (64 du haut de la fenêtre), au bord de la colonne de 720 (14 dedans).
+    // La pastille en tête des critères, sous la première ligne du bandeau (73 + 74 du haut de la fenêtre, 24 du bord).
     expectSame(N, 'zone sur une ville : biens, pastille', [await shownCount(page), await box(page, '.zone-chip .criterion-chip').then((b) => b && b.slice(0, 2))],
-      [salesInside(hexagon), [374, 64]]);
+      [salesInside(hexagon), [24, 147]]);
     await page.click('.map-round[aria-label="Vue plan"]');
     await page.waitForTimeout(500);
     await page.screenshot({ path: join(out, 'zone-ville-plan-ordinateur.png') });
     await page.goto(`${base}/recherche/?mode=buy&vue=carte&dessin=${dessin(REGION)}`);
-    await mapReady(page, N);
+    await mapReady(page, N, { beside: true });
     expectSame(N, 'zone sur une région', await shownCount(page), salesInside(REGION.map(([latitude, longitude]) => ({ latitude, longitude }))));
     await page.screenshot({ path: join(out, 'zone-region-ordinateur.png') });
     await page.goto(`${base}/recherche/?mode=buy&vue=carte&dessin=${dessin(EMPTY_ZONE)}`);
-    await mapReady(page, N, { markers: false });
+    await mapReady(page, N, { markers: false, beside: true });
     expectSame(N, 'zone sans bien', [await shownCount(page), await page.$eval('.map-round[aria-label="Recadrer sur les biens trouvés"]', (el) => el.disabled)], [0, false]);
     await page.screenshot({ path: join(out, 'zone-vide-ordinateur.png') });
   }
   await context.close();
 }
 
-// MARK: - Ordinateur 1024 : le bandeau sur la colonne, au-dessus des commandes
+// MARK: - Ordinateur 1024 : la carte étroite, le bandeau sur toute sa largeur, au-dessus des commandes
 
 if (!before) {
   const N = 'carte 1024';
   const { context, page } = await open({ viewport: { width: 1024, height: 768 } }, newState());
   await page.goto(`${base}/recherche/?mode=buy&vue=carte&dessin=${dessin(HEXAGON)}`);
-  await mapReady(page, N);
+  await mapReady(page, N, { beside: true });
   await page.screenshot({ path: join(out, 'zone-ville-1024.png') });
   await page.click('.zone-pencil');
   await page.click('.zone-menu [role="menuitem"]:has-text("Ajuster la taille")');
   await page.waitForSelector('.zone-card');
   await cardCount(page, N);
+  const pane = await box(page, '.map-column .results-map');
   const banner = await box(page, '.zone-banner');
   const tools = await box(page, '.map-column .map-tools');
   const zoom = await box(page, '.map-column .maplibregl-ctrl-top-right');
   expectTrue(N, 'bandeau au-dessus des commandes et du zoom', banner[1] + banner[3] <= Math.min(tools[1], zoom[1]) - 10, JSON.stringify([banner, tools, zoom]));
-  expectSame(N, 'bandeau sur la colonne de 720', [banner[0], banner[2]], [166, 692]);
+  expectSame(N, 'bandeau sur la largeur de la carte (16 de ses bords)', [banner[0] - pane[0], banner[2]], [16, pane[2] - 32]);
   expectSame(N, 'bandeau', tidy(await page.textContent('.zone-banner-text')), 'Ajustez votre zone');
   await page.screenshot({ path: join(out, 'zone-ajuster-1024.png') });
   await context.close();
